@@ -1,6 +1,7 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Setup script voor LLmWiki-KennisBank
 # Maakt de vault-directorystructuur aan en kopieert scripts/templates
+# Vereist bash (niet sh): bash setup.sh
 
 set -e
 

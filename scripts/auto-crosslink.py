@@ -215,6 +215,10 @@ def main() -> None:
         print("Gebruik: python3 auto-crosslink.py bestand1.md [bestand2.md ...]")
         sys.exit(1)
 
+    if not GRAPH_PATH.exists():
+        print(f"graph.json niet gevonden ({GRAPH_PATH}) — crosslink overgeslagen")
+        sys.exit(0)
+
     node_map, links = load_graph(GRAPH_PATH)
 
     for arg in sys.argv[1:]:
