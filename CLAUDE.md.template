@@ -1,0 +1,85 @@
+# KennisBank — Claude context
+
+## About
+Vault owner: [YOUR NAME]
+
+This is a personal knowledge management system built on top of Claude Code.
+Raw session logs go into `01-raw/sessies/`, compiled knowledge lives in `02-wiki/`.
+
+## Vault structure
+
+| Directory | Contents |
+|-----------|---------|
+| `00-inbox/` | Unprocessed files — run `/intake` to process |
+| `01-raw/sessies/` | Session logs (`raw-sessie-YYYY-MM-DD-topic.md`) |
+| `02-wiki/` | Compiled wiki articles |
+| `03-projecten/` | Project-specific notes |
+| `04-templates/` | Article and log templates |
+| `05-bronnen/` | Source materials and references |
+| `06-claude/` | Claude-internal context files (this file lives here too) |
+| `07-media/` | Media descriptions and asset metadata |
+| `08-archive/` | Archived articles |
+
+## Active projects
+[YOUR PROJECTS — one line each, with a short description]
+
+## Session protocol
+
+At the start of a session:
+1. Read this file.
+2. Check `02-wiki/index.md` if it exists.
+3. Check memory index via:
+   ```bash
+   MEMORY=$(ls ~/.claude/projects/*/memory/MEMORY.md 2>/dev/null | head -1)
+   [ -n "$MEMORY" ] && cat "$MEMORY"
+   ```
+
+At the end of a session: run `/sessielog`.
+
+## Lazy hierarchy reading pattern
+
+Before searching the web or reasoning from scratch, check three layers:
+
+**Layer 1 — Memory index** (always):
+```bash
+MEMORY=$(ls ~/.claude/projects/*/memory/MEMORY.md 2>/dev/null | head -1)
+[ -n "$MEMORY" ] && cat "$MEMORY"
+```
+
+**Layer 2 — KennisBank wiki** (always):
+```bash
+cat ~/KennisBank/02-wiki/index.md 2>/dev/null | head -100
+grep -ril "[keyword]" ~/KennisBank/02-wiki/ 2>/dev/null | head -10
+```
+
+**Layer 3 — Earlier research** (when relevant):
+```bash
+ls ~/Claude/research/ 2>/dev/null | grep -i "[topic-slug]"
+```
+
+Note what is already known. Research fills the gaps, not the whole picture.
+
+## graphify (optional)
+
+If you use the graphify skill to build a knowledge graph over this vault, the output lands in `~/KennisBank/graphify-out/graph.json`. The `auto-crosslink.py` script reads from it to add backlinks to wiki articles. Without graphify, crosslinking is skipped silently.
+
+To build the graph: run `/graphify` in a session (requires the graphify skill to be installed in `~/.claude/skills/`).
+
+## Key learnings file (optional)
+
+If you maintain a central learnings file (e.g. `~/Claude/learnings.md`), set the path here:
+
+```
+LEARNINGS_FILE=~/Claude/learnings.md
+```
+
+The `/sessielog` command will append Do-Not-Repeat entries and technical patterns to this file.
+
+## Language
+
+Commands follow prompt language. Session logs use the language of the session. Wiki articles use the language of the source material. Mixed-language vaults work fine.
+
+## Rules
+- No em dashes.
+- Factual claims need citations (APA7).
+- Session log "New knowledge" section: declarative present tense. Not "we discovered X" but just the knowledge itself.
