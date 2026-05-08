@@ -83,7 +83,9 @@ check_executable() {
   elif [ -x "$path" ]; then
     report_pass "$name" "$path"
   else
-    report_warn "$name" "$path exists but is not executable (chmod +x)"
+    # Scripts are invoked via 'python3 path' so the executable bit is cosmetic.
+    # Report INFO instead of WARN to avoid alarming users with old installs.
+    report_info "$name" "$path (not chmod +x, but invoked via python3 so harmless)"
   fi
 }
 

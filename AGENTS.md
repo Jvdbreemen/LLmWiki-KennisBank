@@ -237,6 +237,25 @@ grep -rn "KennisBank" commands/ skills/ scripts/
 
 Patch every match to the new path, or warn the user that the default path remains baked into command bodies.
 
-## 10. Notes on this file
+## 10. Optional: backfill the vault
+
+If the user has existing Claude history on disk, offer to run `/import` after the install completes and they have read `POST-INSTALL.md`. Do not run it yourself unattended; it writes many files into `$HOME/KennisBank/01-raw/sessies/` and the user should choose the source.
+
+Four sources are supported:
+
+1. `cc`: Claude Code session history under `$HOME/.claude/projects/*.jsonl`. Lowest-risk, already on disk.
+2. `claudeai <path>`: a claude.ai export bundle (`conversations.json` or `.zip`).
+3. `folder <path> [prefix]`: generic recursive markdown/text import from any path.
+4. `cowork`: alias for `folder` with auto-detected Mac desktop Claude (Cowork) data.
+
+Rules:
+
+- Always run with `--dry-run --verbose` first. Show the user the count of new files that would be written, and ask for confirmation before the real run.
+- Never pass `--force` without explicit user instruction. The importers are idempotent and skip existing files; `--force` is for reimport only.
+- Errors in the JSON output should be reported, not aborted on. The importer continues past unreadable files.
+
+Suggest `/import cc` as the first source to try, then `/wiki` once the raw logs are in place.
+
+## 11. Notes on this file
 
 This file lives at the repo root. Its peer for humans is `README.md`. If you change behavior in `setup.sh` or the install paths, update both. Keep this file terse, declarative, and operational.

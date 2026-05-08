@@ -82,4 +82,4 @@ Configureer het pad in ~/KennisBank/CLAUDE.md (zie `LEARNINGS_FILE`). Als het pa
 - Welke wiki-artikelen nieuw of bijgewerkt zijn
 - Tiling-resultaten (of "overgeslagen — installeer nomic-embed-text")
 - Welke learnings-entries toegevoegd zijn (of "overgeslagen — geen learnings-bestand geconfigureerd")
-- Als Decision Log entries aanwezig: "ADR-check: verdienen deze beslissingen een ADR? Gebruik /adr in het betreffende project."
+- Als Decision Log entries aanwezig: overweeg of deze beslissingen een ADR (Architecture Decision Record) verdienen in het betreffende project. Als je een /adr workflow gebruikt: draai die nu.

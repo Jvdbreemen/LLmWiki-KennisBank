@@ -213,6 +213,37 @@ The skill runs up to three rounds of web search and fetch (max 15 sources), writ
 
 ---
 
+## Step 9: Optional: backfill old sessions
+
+If you have Claude history from before you installed this layer, `/import` can pull it into `$HOME/KennisBank/01-raw/sessies/` so `/wiki` can compile it. Four sources are supported:
+
+1. `cc`: Claude Code session history under `$HOME/.claude/projects/*.jsonl`. Lowest-risk, already on disk; start here.
+2. `claudeai <path>`: a claude.ai export bundle (`conversations.json` or the surrounding `.zip`).
+3. `folder <path> [prefix]`: any folder with markdown or text files; recursive.
+4. `cowork`: auto-detected Mac desktop Claude (Cowork) data.
+
+Try `/import cc` first. The command runs a dry-run, shows you what would be imported, asks for confirmation, then runs for real:
+
+```
+/import cc
+```
+
+Expected output (abbreviated):
+
+```
+Dry-run: 42 sessions found, 42 new, 0 skipped, 0 errors.
+Doorgaan met import? y
+Done. imported: 42, skipped: 0, errors: 0.
+Pad: $HOME/KennisBank/01-raw/sessies/
+Tip: run /wiki om kennis uit deze imports te compileren.
+```
+
+After the import finishes, run `/wiki` so the new raw logs become wiki articles.
+
+If something goes wrong (no sessions found, errors on individual files, claude.ai zip not parsing), see `TROUBLESHOOTING.md`.
+
+---
+
 ## Maintenance rhythm
 
 Three cadences keep the system healthy:

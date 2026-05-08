@@ -17,14 +17,19 @@ Every Claude session produces a session log. The `/wiki` command compiles logs i
 | Component | Purpose |
 |-----------|---------|
 | `commands/sessielog.md` | `/sessielog` command: write session log + compile wiki candidates |
+| `commands/sessiestart.md` | `/sessiestart` command: vault briefing at session start |
 | `commands/wiki.md` | `/wiki` command: compile raw logs into wiki articles |
 | `commands/intake.md` | `/intake` command: process files dropped in `00-inbox/` |
 | `commands/stale.md` | `/stale` command: detect and update stale wiki articles |
+| `commands/import.md` | `/import` command: orchestrates the three importers |
 | `skills/autoresearch/` | `/autoresearch` skill: iterative multi-round web research |
 | `scripts/auto-crosslink.py` | Add backlinks based on knowledge graph (graphify integration) |
 | `scripts/stale-check.py` | Detect wiki articles older than threshold with newer session logs |
 | `scripts/intake-scan.py` | Scan inbox and classify files by type |
 | `scripts/semantic-tiling.py` | Detect near-duplicate articles via Ollama embeddings |
+| `scripts/import-cc-history.py` | Import Claude Code session history |
+| `scripts/import-claudeai-export.py` | Import claude.ai export bundle |
+| `scripts/import-folder.py` | Recursive import from any markdown/txt folder |
 | `templates/tpl-sessie-log.md` | Session log template |
 | `templates/tpl-wiki-artikel.md` | Wiki article template |
 | `vault-structure/README.md` | Documentation of the vault directory layout |
@@ -100,9 +105,11 @@ cp skills/autoresearch/SKILL.md ~/.claude/skills/autoresearch/
 | Command | Arguments | What it does |
 |---------|-----------|--------------|
 | `/sessielog` | none | Writes session log, compiles wiki candidates, runs semantic tiling |
+| `/sessiestart` | none | Read vault context, memory, wiki status, suggest next actions |
 | `/wiki` | optional topic | Compiles raw logs (last 7 days) into wiki articles |
 | `/intake` | none | Processes files in `~/KennisBank/00-inbox/` |
 | `/stale` | none | Detects articles older than 60 days with newer session data |
+| `/import` | source [path] | Bulk-import old sessions: cc, claudeai, folder, cowork, all |
 | `/autoresearch` | topic | Multi-round web research, saves to `~/Claude/research/` |
 
 ## Vault structure
@@ -124,6 +131,16 @@ cp skills/autoresearch/SKILL.md ~/.claude/skills/autoresearch/
   graphify-out/    Knowledge graph output (optional)
 ```
 
+## Migrating from older Claude tooling
+
+The `/import` command lets you backfill the vault from existing Claude history before you started using this wiki layer. It handles Claude Code session JSONL files under `~/.claude/projects/`, claude.ai export bundles, Mac desktop Claude (Cowork) conversation data, and any generic markdown or text folder. Each importer writes raw session files into `~/KennisBank/01-raw/sessies/` in the same format `/sessielog` produces, so `/wiki` can compile them afterwards.
+
+- `/import cc`: pull from Claude Code's local session history
+- `/import claudeai ~/Downloads/claude-export.zip`: pull from a claude.ai export bundle
+- `/import cowork`: auto-detect and pull from Mac desktop Claude data
+
+See [POST-INSTALL.md](POST-INSTALL.md) for first-time use.
+
 ## Memory path
 
 Commands in this system detect your Claude memory file automatically:
@@ -138,15 +155,16 @@ Your memory files live under `~/.claude/projects/`. The path segment is a slug o
 
 1. Edit `~/KennisBank/CLAUDE.md` after setup. Replace `[YOUR NAME]` and `[YOUR PROJECTS]` with your own.
 2. The commands are in Dutch by default (they follow prompt language). Change section headings if you prefer English.
-3. To change the stale threshold (default 60 days): edit `THRESHOLD_DAYS` in `stale-check.py` or pass `--days N` on the CLI.
-4. To change the research output path from `~/Claude/research/` to something else, edit two places:
+3. To change the stale threshold (default 60 days): pass `--days N` on the CLI, or change the `default=60` in the `argparse` block of `stale-check.py`.
+4. `auto-crosslink.py` has two tunables at the top of the file: `MIN_CONFIDENCE` (default `0.75`) and `MAX_NEW_LINKS` (default `5`). Lower confidence to get more links, raise it to be stricter.
+5. To change the research output path from `~/Claude/research/` to something else, edit two places:
    - `setup.sh`: change the `RESEARCH` variable
    - `skills/autoresearch/SKILL.md`: change the output path in the "Output aanmaken" section and the report
-5. Semantic tiling requires Ollama:
+6. Semantic tiling requires Ollama:
    ```bash
    ollama pull nomic-embed-text
    ```
-5. To enable the `/autoresearch` trigger in Claude Code, add this to your global `~/.claude/CLAUDE.md`:
+7. To enable the `/autoresearch` trigger in Claude Code, add this to your global `~/.claude/CLAUDE.md`:
    ```
    # autoresearch
    - **autoresearch** (`~/.claude/skills/autoresearch/SKILL.md`) - multi-round research with lazy hierarchy check. Output to `~/Claude/research/`. Trigger: `/autoresearch`
