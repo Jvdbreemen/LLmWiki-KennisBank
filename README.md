@@ -43,18 +43,33 @@ The setup creates two root directories:
 
 Both paths are configurable — see [Customization](#customization).
 
+## Documentation
+
+| File | For |
+|------|-----|
+| [AGENTS.md](AGENTS.md) | AI coding agents (Claude Code, Cursor, Aider) installing this on a user's behalf |
+| [POST-INSTALL.md](POST-INSTALL.md) | First-session walkthrough after `setup.sh` finishes |
+| [CONFIGURATION.md](CONFIGURATION.md) | Every configurable knob: paths, thresholds, models |
+| [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | Symptom / cause / fix for common problems |
+| [OBSIDIAN.md](OBSIDIAN.md) | Open the vault in Obsidian, recommended free plugins |
+| [vault-structure/README.md](vault-structure/README.md) | Directory-by-directory reference |
+
 ## Installation
 
 ```bash
 git clone https://github.com/Jvdbreemen/LLmWiki-KennisBank.git
 cd LLmWiki-KennisBank
-bash setup.sh
+bash setup.sh           # interactive
+bash setup.sh --yes     # non-interactive (recommended for AI agents)
+bash scripts/doctor.sh  # verify install
 ```
 
 The setup script will:
 1. Create the vault directory structure under `~/KennisBank/`
 2. Copy scripts and templates into place
-3. Ask whether to install commands and the autoresearch skill into `~/.claude/`
+3. Ask whether to install commands and the autoresearch skill into `~/.claude/` (skipped with `--yes`)
+
+After install, run `bash scripts/doctor.sh` to verify, then read [POST-INSTALL.md](POST-INSTALL.md) for the first-session walkthrough.
 
 ### Manual installation
 
