@@ -197,7 +197,7 @@ The inbox should be empty and the new files should be in `01-raw/`.
 
 ## Step 7: Optional: graphify
 
-If you have the [graphify](https://github.com/Jvdbreemen/graphify) skill installed in `$HOME/.claude/skills/graphify/`, you can build a knowledge graph over the vault. Run `/graphify` in a session inside `$HOME/KennisBank/`. The output lands in `$HOME/KennisBank/graphify-out/graph.json`, and the next time `/sessielog` runs it will use that file to add `[[backlinks]]` to your wiki articles via `auto-crosslink.py`. Without graphify, that step is silently skipped; everything else still works.
+If you have a graphify skill installed in `$HOME/.claude/skills/graphify/` (one reference implementation lives at https://github.com/Jvdbreemen/graphify, any compatible knowledge-graph tool works), you can build a knowledge graph over the vault. Run `/graphify` in a session inside `$HOME/KennisBank/`. The output lands in `$HOME/KennisBank/graphify-out/graph.json`, and the next time `/sessielog` runs it will use that file to add `[[backlinks]]` to your wiki articles via `auto-crosslink.py`. Without graphify, that step is silently skipped; everything else still works.
 
 ---
 

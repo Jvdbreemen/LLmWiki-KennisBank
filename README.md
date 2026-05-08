@@ -30,6 +30,7 @@ Every Claude session produces a session log. The `/wiki` command compiles logs i
 | `scripts/import-cc-history.py` | Import Claude Code session history |
 | `scripts/import-claudeai-export.py` | Import claude.ai export bundle |
 | `scripts/import-folder.py` | Recursive import from any markdown/txt folder |
+| `scripts/doctor.sh` | Health-check script: verifies vault, scripts, commands, skill |
 | `templates/tpl-sessie-log.md` | Session log template |
 | `templates/tpl-wiki-artikel.md` | Wiki article template |
 | `vault-structure/README.md` | Documentation of the vault directory layout |
