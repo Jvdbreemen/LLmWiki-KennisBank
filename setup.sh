@@ -22,6 +22,10 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# Maak lege globs veilig: een patroon zonder matches expandeert nu naar niets
+# in plaats van naar de letterlijke string. Voorkomt cp-fouten onder set -e.
+shopt -s nullglob
+
 # CLI argumenten parsen
 ASSUME_YES=0
 NO_COMMANDS=0
@@ -76,7 +80,6 @@ done
 
 # copy_file SRC DST
 # Kopieert SRC naar DST. Als FORCE=1, overschrijft. Anders, slaat over als DST bestaat.
-# Zet CLAUDE_MD_CREATED=1 als $VAULT/CLAUDE.md daadwerkelijk werd aangemaakt of overschreven.
 copy_file() {
   local src="$1"
   local dst="$2"
@@ -86,9 +89,6 @@ copy_file() {
   fi
   cp "$src" "$dst"
   echo "  gekopieerd: $dst"
-  if [ "$dst" = "$VAULT/CLAUDE.md" ]; then
-    CLAUDE_MD_CREATED=1
-  fi
 }
 
 VAULT="$HOME/KennisBank"
@@ -119,10 +119,16 @@ for f in templates/*.md; do
 done
 
 # CLAUDE.md (alleen als nog niet aanwezig, tenzij --force)
-CLAUDE_MD_CREATED=0
+if [ -f "$VAULT/CLAUDE.md" ]; then
+  claude_md_was_present=1
+else
+  claude_md_was_present=0
+fi
 copy_file CLAUDE.md.template "$VAULT/CLAUDE.md"
-if [ "$CLAUDE_MD_CREATED" = "1" ]; then
+if [ "$claude_md_was_present" = "0" ] && [ -f "$VAULT/CLAUDE.md" ]; then
   echo "CLAUDE.md aangemaakt in $VAULT  -  vul [YOUR NAME] en [YOUR PROJECTS] in."
+elif [ "$claude_md_was_present" = "1" ] && [ "$FORCE" = "1" ]; then
+  echo "WAARSCHUWING: bestaande CLAUDE.md overschreven met template. Eventuele aanpassingen zijn verloren."
 fi
 
 # Commands and skill (with confirmation, of via flags)
