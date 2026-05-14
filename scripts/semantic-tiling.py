@@ -10,12 +10,16 @@ Vereist: ollama met nomic-embed-text model
   ollama pull nomic-embed-text
 """
 
+import os
 import sys
 import json
 import math
 import hashlib
 import subprocess
 from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _frontmatter import split_frontmatter  # noqa: E402
 
 WIKI_DIR = Path.home() / "KennisBank" / "02-wiki"
 CACHE_FILE = Path.home() / "KennisBank" / ".claude" / "embeddings-cache.json"
@@ -28,12 +32,9 @@ THRESHOLD_REVIEW = 0.80
 def get_text(path: Path) -> str:
     try:
         content = path.read_text(encoding="utf-8")
-        # Strip YAML frontmatter
-        if content.startswith("---"):
-            end = content.find("---", 3)
-            if end != -1:
-                content = content[end + 3:].strip()
-        return content[:4000]  # Cap at ~4k chars for embedding
+        # Strip YAML frontmatter (anchored fence; avoids horizontal-rule false positives)
+        _, body = split_frontmatter(content)
+        return body.strip()[:4000]  # Cap at ~4k chars for embedding
     except Exception:
         return ""
 
