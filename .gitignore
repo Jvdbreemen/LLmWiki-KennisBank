@@ -2,3 +2,8 @@
 __pycache__/
 .DS_Store
 embeddings-cache.json
+graphify-out/
+.venv/
+.idea/
+.vscode/
+*.egg-info/

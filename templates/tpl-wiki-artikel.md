@@ -2,7 +2,7 @@
 title: "{{onderwerp}}"
 type: wiki
 tags: [{{tags}}]
-status: actief
+status: concept
 created: {{date}}
 updated: {{date}}
 author: claude
