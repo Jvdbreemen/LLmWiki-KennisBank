@@ -258,15 +258,26 @@ def main() -> int:
             tmpdir = Path(tmpdir_obj)
             try:
                 with zipfile.ZipFile(src) as zf:
-                    # zip-slip guard: ensure no member escapes tmpdir
+                    # zip-slip + symlink guard: ensure no member escapes tmpdir
+                    # and no member is a symlink (defensive against future
+                    # zipfile.extractall changes / platform quirks).
                     tmpdir_abs = os.path.abspath(tmpdir)
                     for member in zf.namelist():
+                        info = zf.getinfo(member)
+                        # Unix file type lives in the upper 4 bits of external_attr.
+                        # 0o120000 == S_IFLNK (symlink).
+                        mode = (info.external_attr >> 16) & 0o170000
+                        if mode == 0o120000:
+                            raise ValueError(f"refused: zip member is a symlink: {member!r}")
                         member_path = os.path.abspath(os.path.join(tmpdir_abs, member))
                         if not (member_path == tmpdir_abs or member_path.startswith(tmpdir_abs + os.sep)):
                             raise ValueError(f"refused: zip member escapes target dir: {member!r}")
                     zf.extractall(tmpdir)
             except zipfile.BadZipFile as e:
                 print(f"[error] kan zip niet openen: {e}", file=sys.stderr)
+                return 2
+            except ValueError as e:
+                print(f"[error] {e}", file=sys.stderr)
                 return 2
             conv_json = locate_conversations_json(tmpdir)
         else:
