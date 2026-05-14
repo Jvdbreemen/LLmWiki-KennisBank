@@ -26,6 +26,7 @@ Gebruik:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -247,7 +248,16 @@ def render_body(meta: dict, imported_at: str) -> str:
 
 def target_path(out_dir: Path, meta: dict) -> Path:
     slug = slugify(meta["first_user_text"])
-    return out_dir / f"raw-sessie-{meta['date']}-{slug}.md"
+    # Append stable 8-char suffix so same-date same-title sessions don't collide.
+    session_id = (meta.get("session_id") or "").strip()
+    if session_id:
+        suffix = re.sub(r"[^a-z0-9]", "", session_id.lower())[:8]
+    else:
+        suffix = ""
+    if not suffix:
+        seed = f"{meta.get('date','')}{meta.get('first_user_text','')[:200]}"
+        suffix = hashlib.sha1(seed.encode("utf-8")).hexdigest()[:8]
+    return out_dir / f"raw-sessie-{meta['date']}-{slug}-{suffix}.md"
 
 
 def main() -> int:
