@@ -14,14 +14,19 @@
 #   -y, --yes          beantwoord alle prompts met ja
 #   --no-commands      sla het kopiëren van commands over (heeft voorrang op --yes)
 #   --no-skill         sla het kopiëren van de autoresearch skill over (heeft voorrang op --yes)
+#   -f, --force        overschrijf bestaande bestanden
 #   -h, --help         toon usage en stop
 
 set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR"
 
 # CLI argumenten parsen
 ASSUME_YES=0
 NO_COMMANDS=0
 NO_SKILL=0
+FORCE=0
 
 usage() {
   cat <<'USAGE'
@@ -31,12 +36,14 @@ Opties:
   -y, --yes          beantwoord alle prompts met ja (niet-interactief)
   --no-commands      sla het kopiëren van commands over
   --no-skill         sla het kopiëren van de autoresearch skill over
+  -f, --force        overschrijf bestaande bestanden (scripts, templates, commands, skill, CLAUDE.md)
   -h, --help         toon deze hulp en stop
 
 Voorbeelden:
   bash setup.sh
   bash setup.sh --yes
   bash setup.sh --yes --no-skill
+  bash setup.sh --yes --force
 USAGE
 }
 
@@ -51,6 +58,9 @@ while [ $# -gt 0 ]; do
     --no-skill)
       NO_SKILL=1
       ;;
+    -f|--force)
+      FORCE=1
+      ;;
     -h|--help)
       usage
       exit 0
@@ -63,6 +73,23 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+
+# copy_file SRC DST
+# Kopieert SRC naar DST. Als FORCE=1, overschrijft. Anders, slaat over als DST bestaat.
+# Zet CLAUDE_MD_CREATED=1 als $VAULT/CLAUDE.md daadwerkelijk werd aangemaakt of overschreven.
+copy_file() {
+  local src="$1"
+  local dst="$2"
+  if [ -f "$dst" ] && [ "$FORCE" != "1" ]; then
+    echo "  behouden: $dst (bestaat al; gebruik --force om te overschrijven)"
+    return 0
+  fi
+  cp "$src" "$dst"
+  echo "  gekopieerd: $dst"
+  if [ "$dst" = "$VAULT/CLAUDE.md" ]; then
+    CLAUDE_MD_CREATED=1
+  fi
+}
 
 VAULT="$HOME/KennisBank"
 RESEARCH="$HOME/Claude/research"
@@ -81,16 +108,21 @@ mkdir -p "$VAULT/graphify-out"
 mkdir -p "$RESEARCH"
 
 # Scripts
-cp scripts/*.py "$VAULT/.claude/scripts/"
+for f in scripts/*.py; do
+  copy_file "$f" "$VAULT/.claude/scripts/$(basename "$f")"
+done
 chmod +x "$VAULT/.claude/scripts/"*.py
 
 # Templates
-cp templates/*.md "$VAULT/04-templates/"
+for f in templates/*.md; do
+  copy_file "$f" "$VAULT/04-templates/$(basename "$f")"
+done
 
-# CLAUDE.md (only if not already present)
-if [ ! -f "$VAULT/CLAUDE.md" ]; then
-  cp CLAUDE.md.template "$VAULT/CLAUDE.md"
-  echo "CLAUDE.md aangemaakt in $VAULT — vul [YOUR NAME] en [YOUR PROJECTS] in."
+# CLAUDE.md (alleen als nog niet aanwezig, tenzij --force)
+CLAUDE_MD_CREATED=0
+copy_file CLAUDE.md.template "$VAULT/CLAUDE.md"
+if [ "$CLAUDE_MD_CREATED" = "1" ]; then
+  echo "CLAUDE.md aangemaakt in $VAULT  -  vul [YOUR NAME] en [YOUR PROJECTS] in."
 fi
 
 # Commands and skill (with confirmation, of via flags)
@@ -98,14 +130,17 @@ if [ "$NO_COMMANDS" = "1" ]; then
   echo "Commands overgeslagen (--no-commands)."
 elif [ "$ASSUME_YES" = "1" ]; then
   mkdir -p "$CLAUDE_COMMANDS"
-  cp commands/*.md "$CLAUDE_COMMANDS/"
-  echo "Commands gekopieerd naar $CLAUDE_COMMANDS/."
+  for f in commands/*.md; do
+    copy_file "$f" "$CLAUDE_COMMANDS/$(basename "$f")"
+  done
 else
   printf "Commands kopiëren naar %s/? (y/n) " "$CLAUDE_COMMANDS"
   read REPLY
   if [ "$REPLY" = "y" ] || [ "$REPLY" = "Y" ]; then
     mkdir -p "$CLAUDE_COMMANDS"
-    cp commands/*.md "$CLAUDE_COMMANDS/"
+    for f in commands/*.md; do
+      copy_file "$f" "$CLAUDE_COMMANDS/$(basename "$f")"
+    done
   fi
 fi
 
@@ -113,20 +148,19 @@ if [ "$NO_SKILL" = "1" ]; then
   echo "autoresearch skill overgeslagen (--no-skill)."
 elif [ "$ASSUME_YES" = "1" ]; then
   mkdir -p "$CLAUDE_SKILLS/autoresearch"
-  cp skills/autoresearch/SKILL.md "$CLAUDE_SKILLS/autoresearch/"
-  echo "autoresearch skill gekopieerd naar $CLAUDE_SKILLS/autoresearch/."
+  copy_file skills/autoresearch/SKILL.md "$CLAUDE_SKILLS/autoresearch/SKILL.md"
 else
   printf "autoresearch skill kopiëren naar %s/autoresearch/? (y/n) " "$CLAUDE_SKILLS"
   read REPLY
   if [ "$REPLY" = "y" ] || [ "$REPLY" = "Y" ]; then
     mkdir -p "$CLAUDE_SKILLS/autoresearch"
-    cp skills/autoresearch/SKILL.md "$CLAUDE_SKILLS/autoresearch/"
+    copy_file skills/autoresearch/SKILL.md "$CLAUDE_SKILLS/autoresearch/SKILL.md"
   fi
 fi
 
 echo ""
 echo "Klaar. Volgende stappen:"
 echo "0. Verifieer de installatie: bash scripts/doctor.sh"
-echo "1. Bewerk ~/KennisBank/CLAUDE.md — vul je naam en projecten in"
+echo "1. Bewerk ~/KennisBank/CLAUDE.md  -  vul je naam en projecten in"
 echo "2. Voeg /autoresearch toe aan je globale ~/.claude/CLAUDE.md (zie README.md)"
 echo "3. Optioneel: ollama pull nomic-embed-text (voor semantic tiling)"
