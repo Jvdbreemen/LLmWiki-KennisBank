@@ -149,7 +149,7 @@ else
 fi
 
 # 7. Slash commands installed.
-COMMAND_FILES="sessielog wiki intake stale"
+COMMAND_FILES="sessielog wiki intake stale sessiestart import"
 if [ ! -d "$COMMANDS_DIR" ]; then
   report_warn "commands dir" "$COMMANDS_DIR not found (user may have opted out)"
 else

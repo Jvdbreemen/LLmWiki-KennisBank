@@ -95,7 +95,6 @@ The four root paths are declared at the top of `setup.sh`. Scripts and commands 
 - **Read by**: `commands/stale.md` (which calls the script without `--days`, so always uses default).
 - **Effect**: any wiki article whose `updated:` (or `date:`) frontmatter is older than this many days is reported as stale.
 - **To change**: edit the `default=60` argument in `stale-check.py`, or pass `--days` on the command line, or edit `commands/stale.md` to pass `--days` explicitly.
-- **Discrepancy with README**: `README.md` and the user task description refer to a constant named `THRESHOLD_DAYS` in `stale-check.py`. No such constant exists. The default lives only as the `default=60` argparse parameter. The CLI flag `--days` does work as documented.
 
 ---
 
@@ -180,15 +179,17 @@ The four root paths are declared at the top of `setup.sh`. Scripts and commands 
 
 ### Command prose language
 
-- **Default**: Dutch (all four commands and the autoresearch skill are written in Dutch).
+- **Default**: Dutch (all six commands and the autoresearch skill are written in Dutch).
 - **Where set**:
   - `commands/intake.md`
   - `commands/sessielog.md`
   - `commands/stale.md`
   - `commands/wiki.md`
+  - `commands/sessiestart.md`
+  - `commands/import.md`
   - `skills/autoresearch/SKILL.md`
 - **Effect**: section headings, instructions to the model, and report templates are Dutch. The CLAUDE.md template comments that "commands follow prompt language" -- meaning the model adapts user-facing output, but the instruction text itself stays Dutch unless edited.
-- **To change**: rewrite the four `commands/*.md` files and `skills/autoresearch/SKILL.md` in the target language. Filenames (`raw-sessie-...`) and slug conventions referenced in code do not need translating.
+- **To change**: rewrite the six `commands/*.md` files and `skills/autoresearch/SKILL.md` in the target language. Filenames (`raw-sessie-...`) and slug conventions referenced in code do not need translating.
 
 ### Session log filename pattern
 

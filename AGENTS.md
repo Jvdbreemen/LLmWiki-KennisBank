@@ -6,7 +6,7 @@ The human-facing guide is `README.md`. This file is operational. Read it end-to-
 
 ## 1. Purpose
 
-This repo deploys a personal LLM-wiki layer on top of Claude Code, based on Karpathy's LLM Wiki concept. It installs a vault at `$HOME/KennisBank/`, a research output directory at `$HOME/Claude/research/`, four global slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), and one skill (`/autoresearch`).
+This repo deploys a personal LLM-wiki layer on top of Claude Code, based on Karpathy's LLM Wiki concept. It installs a vault at `$HOME/KennisBank/`, a research output directory at `$HOME/Claude/research/`, six global slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`, `/sessiestart`, `/import`), and one skill (`/autoresearch`).
 
 Your job: install this system on the user's machine without breaking their existing Claude Code configuration. You are not refactoring the repo. You are deploying it.
 
@@ -73,7 +73,7 @@ Record this. You will append to it later. Never overwrite.
 
 ## 3. Non-interactive install path
 
-Recommended path once `--yes` is merged (it skips the two interactive prompts in `setup.sh`):
+Recommended path: use the `--yes` flag (available since 0.2.0) to skip the two interactive prompts in `setup.sh`:
 
 ```bash
 bash setup.sh --yes
@@ -81,7 +81,7 @@ bash setup.sh --yes
 
 This installs everything: vault structure, scripts, templates, commands, and the autoresearch skill.
 
-If `--yes` is not yet present in the version you cloned, fall back to the manual path.
+If you are on a pre-0.2.0 clone where `--yes` is missing, fall back to the manual path.
 
 ### Manual path (always works)
 
@@ -149,7 +149,7 @@ ls -l "$HOME/KennisBank/.claude/scripts/"*.py
 ls "$HOME/KennisBank/04-templates/"
 
 # Commands installed
-ls "$HOME/.claude/commands/" | grep -E '^(sessielog|wiki|intake|stale)\.md$'
+ls "$HOME/.claude/commands/" | grep -E '^(sessielog|wiki|intake|stale|sessiestart|import)\.md$'
 
 # Skill installed
 test -f "$HOME/.claude/skills/autoresearch/SKILL.md" && echo OK

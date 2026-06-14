@@ -6,10 +6,14 @@ Gebruik: python3 stale-check.py [--days 60]
 """
 
 import argparse
+import os
 import re
 import sys
 from datetime import date, datetime
 from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _frontmatter import parse_frontmatter as _parse_frontmatter  # noqa: E402
 
 WIKI_DIR = Path.home() / "KennisBank" / "02-wiki"
 SESSIES_DIR = Path.home() / "KennisBank" / "01-raw" / "sessies"
@@ -18,21 +22,8 @@ SESSIE_DATE_RE = re.compile(r"raw-sessie-(\d{4}-\d{2}-\d{2})")
 
 def parse_frontmatter(text: str) -> dict:
     """Extraheer YAML frontmatter uit een markdown-bestand (eenvoudige key: value parser)."""
-    fm = {}
-    if not text.startswith("---"):
-        return fm
-    end = text.find("\n---", 3)
-    if end == -1:
-        return fm
-    block = text[3:end].strip()
-    for line in block.splitlines():
-        if ":" not in line:
-            continue
-        key, _, value = line.partition(":")
-        key = key.strip()
-        value = value.strip().strip('"').strip("'")
-        fm[key] = value
-    return fm
+    data, _ = _parse_frontmatter(text)
+    return data
 
 
 def parse_date(value: str) -> date | None:

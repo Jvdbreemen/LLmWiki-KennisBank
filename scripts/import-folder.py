@@ -39,10 +39,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _frontmatter import parse_frontmatter  # noqa: E402
 
 
 def _utcnow_iso() -> str:
@@ -84,38 +88,6 @@ def slugify(text: str, max_len: int = 50) -> str:
     if not text:
         return "untitled"
     return text[:max_len].rstrip("-") or "untitled"
-
-
-def split_frontmatter(text: str) -> tuple[dict, str]:
-    """Splits YAML frontmatter af. Geeft (fm_dict, body)."""
-    fm: dict = {}
-    body = text
-    if not text.startswith("---"):
-        return fm, body
-    end = text.find("\n---", 3)
-    if end == -1:
-        return fm, body
-    block = text[3:end].lstrip("\n")
-    after = text[end + 4 :]
-    if after.startswith("\n"):
-        after = after[1:]
-    for line in block.splitlines():
-        if not line.strip() or line.lstrip().startswith("#"):
-            continue
-        if ":" not in line:
-            continue
-        key, _, value = line.partition(":")
-        key = key.strip()
-        if not key:
-            continue
-        value = value.strip()
-        # strip surrounding quotes
-        if (value.startswith('"') and value.endswith('"')) or (
-            value.startswith("'") and value.endswith("'")
-        ):
-            value = value[1:-1]
-        fm[key] = value
-    return fm, after
 
 
 def yaml_escape(value: str) -> str:
@@ -219,7 +191,7 @@ def main() -> int:
                 print(f"[err] read {fp}: {e}", file=sys.stderr)
             continue
 
-        existing_fm, body = split_frontmatter(text)
+        existing_fm, body = parse_frontmatter(text)
         date_str = existing_fm.get("date") or existing_fm.get("created") or file_date(fp)
         date_str = str(date_str)[:10]
         if not re.match(r"\d{4}-\d{2}-\d{2}", date_str):

@@ -30,6 +30,13 @@ Elke kennisregel moet leesbaar zijn door een toekomstige sessie zonder context v
 - Taal: volgt de prompt
 - Geen em dashes
 
+### Karpathy-index updaten
+Na het schrijven van het sessie-log:
+```bash
+python3 ~/KennisBank/.claude/scripts/build-karpathy-index.py
+```
+Dit voegt de nieuwe sessie toe aan `~/KennisBank/02-wiki/log.md` (het chronologische index-bestand in `## [YYYY-MM-DD] OPERATION | Title` formaat).
+
 ---
 
 ## Stap 2: Wiki-kandidaten verwerken
