@@ -28,8 +28,14 @@ WIKI_DIR = VAULT_ROOT / "02-wiki"
 CACHE_FILE = VAULT_ROOT / ".claude" / "embeddings-cache.json"
 OLLAMA_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text")
 
-THRESHOLD_ERROR = 0.90
-THRESHOLD_REVIEW = 0.80
+# Drempels zijn modelspecifiek: verschillende embedding-modellen plaatsen
+# documenten in andere cosine-ruimtes. nomic-embed-text spreidt hoog (0,90/0,80
+# werkt); meertalige modellen als qwen3-embedding:8b spreiden merkbaar lager,
+# waar 0,90/0,80 nooit afgaat en lagere drempels (bv. 0,85/0,62) nodig zijn.
+# Configureerbaar via env-vars zodat je per model kunt herijken zonder de code
+# te wijzigen; defaults blijven afgestemd op de nomic-default.
+THRESHOLD_ERROR = float(os.environ.get("TILING_THRESHOLD_ERROR", "0.90"))
+THRESHOLD_REVIEW = float(os.environ.get("TILING_THRESHOLD_REVIEW", "0.80"))
 
 
 def get_text(path: Path) -> str:

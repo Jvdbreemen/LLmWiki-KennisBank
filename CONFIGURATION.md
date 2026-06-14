@@ -108,17 +108,19 @@ The four root paths are declared at the top of `setup.sh`. Scripts and commands 
 - **Effect**: the Ollama model used to compute embeddings via the HTTP API (`POST /api/embeddings`). Ollama has no `ollama embed` CLI subcommand, so embeddings go through the HTTP API.
 - **To change**: set the `OLLAMA_EMBED_MODEL` environment variable (or edit the default). Any model that returns an `embedding` (or `embeddings[0]`) JSON field works. Run `ollama pull <model>` first. For non-English vaults, prefer a multilingual model such as `qwen3-embedding:8b`; `nomic-embed-text` v1.5 is English-only.
 
-### THRESHOLD_ERROR (duplicate threshold)
+### TILING_THRESHOLD_ERROR (duplicate threshold)
 
 - **Default**: `0.90`
-- **Where set**: `scripts/semantic-tiling.py` line 24.
+- **Where set**: `scripts/semantic-tiling.py` (`THRESHOLD_ERROR = float(os.environ.get("TILING_THRESHOLD_ERROR", "0.90"))`).
 - **Effect**: cosine similarity at or above this is reported as `ERROR -- mogelijke duplicaten`.
+- **To change**: set the `TILING_THRESHOLD_ERROR` environment variable. Thresholds are model-specific: `nomic-embed-text` spreads high (0.90 works), but multilingual models such as `qwen3-embedding:8b` spread noticeably lower, where 0.90 never fires. Recalibrate per embedding model (qwen3 sits well at ~0.85).
 
-### THRESHOLD_REVIEW (related threshold)
+### TILING_THRESHOLD_REVIEW (related threshold)
 
 - **Default**: `0.80`
-- **Where set**: `scripts/semantic-tiling.py` line 25.
-- **Effect**: cosine similarity in `[0.80, 0.90)` is reported as `REVIEW -- verwante artikelen`.
+- **Where set**: `scripts/semantic-tiling.py` (`THRESHOLD_REVIEW = float(os.environ.get("TILING_THRESHOLD_REVIEW", "0.80"))`).
+- **Effect**: cosine similarity in `[THRESHOLD_REVIEW, THRESHOLD_ERROR)` is reported as `REVIEW -- verwante artikelen`.
+- **To change**: set the `TILING_THRESHOLD_REVIEW` environment variable. Same model-specific caveat as above (qwen3 sits well at ~0.62).
 
 ### Embedding character cap
 
