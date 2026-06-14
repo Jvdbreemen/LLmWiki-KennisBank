@@ -100,13 +100,13 @@ The four root paths are declared at the top of `setup.sh`. Scripts and commands 
 
 ## 4. Semantic tiling (`scripts/semantic-tiling.py`)
 
-### OLLAMA_MODEL
+### OLLAMA_MODEL / OLLAMA_EMBED_MODEL
 
 - **Default**: `nomic-embed-text`
-- **Where set**: `scripts/semantic-tiling.py` line 22.
+- **Where set**: `scripts/semantic-tiling.py` (`OLLAMA_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text")`).
 - **Read by**: `scripts/semantic-tiling.py` only.
-- **Effect**: the Ollama model used to compute embeddings via `ollama embed --model <OLLAMA_MODEL>`.
-- **To change**: edit the constant. Any model that returns an `embedding` (or `embeddings[0]`) JSON field works. Run `ollama pull <model>` first.
+- **Effect**: the Ollama model used to compute embeddings via the HTTP API (`POST /api/embeddings`). Ollama has no `ollama embed` CLI subcommand, so embeddings go through the HTTP API.
+- **To change**: set the `OLLAMA_EMBED_MODEL` environment variable (or edit the default). Any model that returns an `embedding` (or `embeddings[0]`) JSON field works. Run `ollama pull <model>` first. For non-English vaults, prefer a multilingual model such as `qwen3-embedding:8b`; `nomic-embed-text` v1.5 is English-only.
 
 ### THRESHOLD_ERROR (duplicate threshold)
 
@@ -129,8 +129,8 @@ The four root paths are declared at the top of `setup.sh`. Scripts and commands 
 ### CACHE_FILE
 
 - **Default**: `$HOME/KennisBank/.claude/embeddings-cache.json`
-- **Where set**: `scripts/semantic-tiling.py` line 21.
-- **Effect**: stores embeddings keyed by file path and content hash. Stale entries (files no longer in `02-wiki/`) are pruned on every run.
+- **Where set**: `scripts/semantic-tiling.py` line 24.
+- **Effect**: stores embeddings keyed by file path, content hash, and embedding model. Changing `OLLAMA_EMBED_MODEL` transparently invalidates cached vectors (no manual wipe), since entries from a different model no longer match. Stale entries (files no longer in `02-wiki/`) are pruned on every run.
 
 ### WIKI_DIR
 
