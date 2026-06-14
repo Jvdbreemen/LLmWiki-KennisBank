@@ -113,16 +113,18 @@ Or remove the project-level directory if you never intended it.
 
 ### 3.1 semantic-tiling.py: embedding failed
 
-**Symptom**: `Embedding mislukt. Is nomic-embed-text geïnstalleerd?`
+**Symptom**: `Embedding mislukt via /api/embeddings. Controleer OLLAMA_HOST, ollama serve en OLLAMA_EMBED_MODEL.`
 
-**Cause**: The script calls the Ollama HTTP API at `http://localhost:11434/api/embeddings`. Either Ollama is not installed, the daemon is not running on port 11434, or the model is not pulled. See section 8.
+**Cause**: The script calls the Ollama HTTP API at `${OLLAMA_HOST:-http://localhost:11434}/api/embeddings` and requests the model `${OLLAMA_EMBED_MODEL:-nomic-embed-text}`. Either Ollama is not installed, the daemon is not running, `OLLAMA_HOST` points at the wrong server, or the configured model is not pulled. See section 8.
 
 **Fix**:
 ```bash
-which ollama && ollama list | grep nomic-embed-text
-ollama pull nomic-embed-text
 ollama serve &
-curl -s http://localhost:11434/api/tags >/dev/null && echo "ollama up" || echo "ollama down"
+export OLLAMA_HOST="${OLLAMA_HOST:-http://localhost:11434}"
+export OLLAMA_EMBED_MODEL="${OLLAMA_EMBED_MODEL:-nomic-embed-text}"
+curl -s "$OLLAMA_HOST/api/tags" >/dev/null && echo "ollama up" || echo "ollama down"
+ollama pull "$OLLAMA_EMBED_MODEL"
+ollama list | grep "$OLLAMA_EMBED_MODEL"
 ```
 
 ### 3.2 auto-crosslink.py: graph.json not found
@@ -387,7 +389,8 @@ Or download from `https://ollama.com/download`.
 **Fix**:
 ```bash
 ollama serve &
-curl -s http://localhost:11434/api/tags >/dev/null && echo "ollama up" || echo "ollama down"
+export OLLAMA_HOST="${OLLAMA_HOST:-http://localhost:11434}"
+curl -s "$OLLAMA_HOST/api/tags" >/dev/null && echo "ollama up" || echo "ollama down"
 ```
 On macOS, `/Applications/Ollama.app` also launches the daemon.
 
@@ -405,11 +408,17 @@ ollama list | grep nomic-embed-text
 
 ### 8.4 Wrong model name in script
 
-**Symptom**: You replaced the embedding model and `semantic-tiling.py` fails or returns no embedding.
+**Symptom**: You set `OLLAMA_EMBED_MODEL` to a different model and `semantic-tiling.py` fails or returns no embedding.
 
-**Cause**: `OLLAMA_MODEL` in the script is hardcoded to `nomic-embed-text`. Different models can return different output schemas.
+**Cause**: `semantic-tiling.py` reads `OLLAMA_EMBED_MODEL` and defaults to `nomic-embed-text`. The selected model may not be pulled yet, or it may return a different output schema.
 
-**Fix**: Edit `OLLAMA_MODEL` at the top of `$HOME/KennisBank/.claude/scripts/semantic-tiling.py`. Confirm the new model returns `{"embedding": [...]}` or `{"embeddings": [[...]]}`. Adapt `get_embedding` if it returns something else.
+**Fix**:
+```bash
+export OLLAMA_EMBED_MODEL=qwen3-embedding:8b
+ollama pull "$OLLAMA_EMBED_MODEL"
+ollama list | grep "$OLLAMA_EMBED_MODEL"
+```
+If the model is present but still fails, confirm it returns `{"embedding": [...]}` or `{"embeddings": [[...]]}` and adapt `get_embedding` only if the schema differs.
 
 ### 8.5 Stale embedding cache
 
