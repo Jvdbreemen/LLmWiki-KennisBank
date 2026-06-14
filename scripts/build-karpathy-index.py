@@ -30,6 +30,8 @@ Gebruik:
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import re
 import shutil
 import sys
@@ -38,14 +40,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-# Optionele PyYAML — gebruik indien beschikbaar voor robuuste frontmatter-parsing.
-try:  # pragma: no cover - import-resolutie alleen
-    import yaml  # type: ignore
-
-    _HAS_YAML = True
-except ImportError:  # pragma: no cover
-    yaml = None  # type: ignore
-    _HAS_YAML = False
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _frontmatter import parse_frontmatter  # noqa: E402
 
 
 VAULT_DEFAULT = Path.home() / "KennisBank"
@@ -55,8 +51,8 @@ SESSIES_SUBDIR_DEFAULT = "01-raw/sessies"
 # Bestanden die nooit als artikel meetellen (infra of conventie).
 SKIP_FILENAMES = {"index.md", "log.md", "readme.md"}
 
-# Generieke tags die we niet als categorie willen gebruiken.
-GENERIC_TAGS = {
+# Generieke tags die we niet als categorie willen gebruiken (default-set).
+_DEFAULT_GENERIC_TAGS = {
     "wiki",
     "kennisbank",
     "actief",
@@ -73,8 +69,13 @@ SESSIE_RE = re.compile(r"^raw-sessie-(\d{4}-\d{2}-\d{2})-(.+)\.md$", re.IGNORECA
 # Categorie-regels: lijst van (categorienaam, set van tag-keywords).
 # Volgorde bepaalt prioriteit; eerst-matchende wint per artikel. Categorienamen
 # in NL — gekozen omdat de bestaande vault overwegend Nederlandse tags heeft.
+#
+# Dit is de ingebouwde DEFAULT-taxonomie (Jims persoonlijke set). Een
+# buitenstaander kan deze overschrijven met een `categories.json` naast dit
+# script of in de vault-root; zie load_categories() onderaan dit blok en
+# categories.example.json in de repo-root.
 # ----------------------------------------------------------------------------
-CATEGORY_RULES: list[tuple[str, set[str]]] = [
+_DEFAULT_CATEGORY_RULES: list[tuple[str, set[str]]] = [
     (
         "Claude Code: workflow, skills en subagents",
         {
@@ -250,7 +251,7 @@ CATEGORY_RULES: list[tuple[str, set[str]]] = [
 ]
 
 # Filename-prefix → categorie (laatste vangnet voor wiki-<domain>-... patterns).
-PREFIX_HINTS: dict[str, str] = {
+_DEFAULT_PREFIX_HINTS: dict[str, str] = {
     "wiki-cc-": "Claude Code: workflow, skills en subagents",
     "wiki-claude-code-": "Claude Code: configuratie en model-infrastructuur",
     "wiki-claude-": "Claude Code: configuratie en model-infrastructuur",
@@ -266,79 +267,160 @@ PREFIX_HINTS: dict[str, str] = {
     "wiki-adr-": "ADR en architectuurbeslissingen",
 }
 
-OVERIG_NL = "Overig"
-OVERIG_EN = "Other"
-MEMORY_CATEGORY = "Memory-snapshots"
+_DEFAULT_OVERIG_NL = "Overig"
+_DEFAULT_OVERIG_EN = "Other"
+_DEFAULT_MEMORY_CATEGORY = "Memory-snapshots"
+
+_DEFAULT_NL_HINTS = {
+    "kennisbank",
+    "redactie",
+    "journalistiek",
+    "werkwijze",
+    "lokaal",
+    "publicatie",
+    "ontwerp",
+    "tekstredactie",
+    "actief",
+    "wiki",
+}
+
+
+# ----------------------------------------------------------------------------
+# Taxonomie-configuratie: laad categories.json indien aanwezig, val anders
+# terug op de ingebouwde defaults hierboven.
+#
+# Zoekvolgorde voor categories.json:
+#   1. naast dit script (scripts/categories.json)
+#   2. in de vault-root (<vault-root>/categories.json) — main() herlaadt via
+#      apply_categories(load_categories(extra_paths=[vault_root])) zodra de
+#      vault-root bekend is; de vault-root wint van de script-versie.
+#
+# Het bestand is volledig optioneel; ontbreekt het, dan blijft het gedrag exact
+# zoals voorheen (Jims persoonlijke taxonomie). Elke top-level key is optioneel
+# en valt los terug op zijn default. Schema (zie categories.example.json):
+#   {
+#     "category_rules":  [["Categorienaam", ["tag1", "tag2"]], ...],
+#     "prefix_hints":    {"wiki-foo-": "Categorienaam", ...},
+#     "generic_tags":    ["wiki", "kennisbank", ...],
+#     "nl_hints":        ["kennisbank", "redactie", ...],
+#     "labels": {"overig_nl": "Overig", "overig_en": "Other",
+#                "memory_category": "Memory-snapshots"}
+#   }
+# ----------------------------------------------------------------------------
+
+CATEGORIES_FILENAME = "categories.json"
+
+
+def _coerce_category_rules(raw: Any) -> list[tuple[str, set[str]]] | None:
+    """Valideer en converteer category_rules uit JSON naar interne vorm."""
+    if not isinstance(raw, list):
+        return None
+    rules: list[tuple[str, set[str]]] = []
+    for item in raw:
+        if (
+            not isinstance(item, (list, tuple))
+            or len(item) != 2
+            or not isinstance(item[0], str)
+            or not isinstance(item[1], (list, tuple))
+        ):
+            print(f"[warn] categories.json: ongeldige category_rules-regel overgeslagen: {item!r}", file=sys.stderr)
+            continue
+        name = item[0]
+        keywords = {str(k).strip().lower() for k in item[1] if str(k).strip()}
+        rules.append((name, keywords))
+    return rules
+
+
+def load_categories(extra_paths: list[Path] | None = None) -> dict[str, Any]:
+    """Laad de taxonomie: defaults, optioneel overschreven door categories.json.
+
+    Zoekt categories.json naast dit script en op elk pad in `extra_paths`
+    (bv. de vault-root); de laatste gevonden file wint. Ontbreekt alles, dan
+    worden de ingebouwde defaults teruggegeven. Onbekende/ongeldige keys worden
+    genegeerd met een waarschuwing; gedrag valt per key terug op de default.
+    """
+    config: dict[str, Any] = {
+        "category_rules": list(_DEFAULT_CATEGORY_RULES),
+        "prefix_hints": dict(_DEFAULT_PREFIX_HINTS),
+        "generic_tags": set(_DEFAULT_GENERIC_TAGS),
+        "nl_hints": set(_DEFAULT_NL_HINTS),
+        "overig_nl": _DEFAULT_OVERIG_NL,
+        "overig_en": _DEFAULT_OVERIG_EN,
+        "memory_category": _DEFAULT_MEMORY_CATEGORY,
+    }
+
+    candidates: list[Path] = [Path(__file__).resolve().parent / CATEGORIES_FILENAME]
+    for p in extra_paths or []:
+        candidates.append(p / CATEGORIES_FILENAME)
+
+    for path in candidates:
+        if not path.is_file():
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as e:
+            print(f"[warn] kan {path} niet lezen/parsen, default-taxonomie gebruikt: {e}", file=sys.stderr)
+            continue
+        if not isinstance(data, dict):
+            print(f"[warn] {path} is geen JSON-object, genegeerd.", file=sys.stderr)
+            continue
+
+        rules = _coerce_category_rules(data.get("category_rules"))
+        if rules is not None:
+            config["category_rules"] = rules
+        if isinstance(data.get("prefix_hints"), dict):
+            config["prefix_hints"] = {
+                str(k): str(v) for k, v in data["prefix_hints"].items()
+            }
+        if isinstance(data.get("generic_tags"), list):
+            config["generic_tags"] = {str(t).strip().lower() for t in data["generic_tags"] if str(t).strip()}
+        if isinstance(data.get("nl_hints"), list):
+            config["nl_hints"] = {str(t).strip().lower() for t in data["nl_hints"] if str(t).strip()}
+        labels = data.get("labels")
+        if isinstance(labels, dict):
+            if isinstance(labels.get("overig_nl"), str):
+                config["overig_nl"] = labels["overig_nl"]
+            if isinstance(labels.get("overig_en"), str):
+                config["overig_en"] = labels["overig_en"]
+            if isinstance(labels.get("memory_category"), str):
+                config["memory_category"] = labels["memory_category"]
+
+        print(f"[info] taxonomie geladen uit {path}", file=sys.stderr)
+
+    return config
+
+
+def apply_categories(config: dict[str, Any]) -> None:
+    """Zet de module-globals op basis van een load_categories()-config."""
+    global CATEGORY_RULES, PREFIX_HINTS, GENERIC_TAGS, NL_HINTS
+    global OVERIG_NL, OVERIG_EN, MEMORY_CATEGORY
+    CATEGORY_RULES = config["category_rules"]
+    PREFIX_HINTS = config["prefix_hints"]
+    GENERIC_TAGS = config["generic_tags"]
+    NL_HINTS = config["nl_hints"]
+    OVERIG_NL = config["overig_nl"]
+    OVERIG_EN = config["overig_en"]
+    MEMORY_CATEGORY = config["memory_category"]
+
+
+# Initialiseer module-globals op de defaults (script naast categories.json wint).
+# main() herlaadt met de vault-root erbij zodra die bekend is.
+apply_categories(load_categories())
 
 
 # ----------------------------------------------------------------------------
 # Frontmatter-parsing
 # ----------------------------------------------------------------------------
-
-_FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
-
-
-def _split_frontmatter(text: str) -> tuple[str, str]:
-    """Geef (frontmatter_block, rest) terug; lege frontmatter als geen match."""
-    m = _FRONTMATTER_RE.match(text)
-    if not m:
-        return "", text
-    return m.group(1), text[m.end():]
+#
+# Frontmatter wordt geparsed via de gedeelde stdlib-parser in _frontmatter.py
+# (import bovenaan). Die geeft een (data, body)-tuple terug; we gebruiken hier
+# alleen de data-dict.
 
 
-def _minimal_yaml_parse(block: str) -> dict[str, Any]:
-    """Zeer beperkte YAML-parser: alleen `key: value` en `key: [a, b, c]` lijsten.
-
-    Voor complexere frontmatter (nested, multiline) — gebruik PyYAML als
-    beschikbaar. Deze fallback is robuust genoeg voor onze vault-conventie.
-    """
-    out: dict[str, Any] = {}
-    for raw in block.splitlines():
-        line = raw.rstrip()
-        if not line.strip() or line.lstrip().startswith("#"):
-            continue
-        if ":" not in line:
-            continue
-        key, _, value = line.partition(":")
-        key = key.strip()
-        value = value.strip()
-        if not key:
-            continue
-        # Lijst-literaal `[a, b, c]`
-        if value.startswith("[") and value.endswith("]"):
-            inner = value[1:-1].strip()
-            if not inner:
-                out[key] = []
-            else:
-                items = [
-                    p.strip().strip('"').strip("'")
-                    for p in inner.split(",")
-                ]
-                out[key] = [it for it in items if it]
-            continue
-        # Quoted string strippen
-        if (value.startswith('"') and value.endswith('"')) or (
-            value.startswith("'") and value.endswith("'")
-        ):
-            value = value[1:-1]
-        out[key] = value
-    return out
-
-
-def parse_frontmatter(text: str) -> dict[str, Any]:
-    """Parse YAML-frontmatter; gebruik PyYAML indien aanwezig, anders minimal parser."""
-    block, _ = _split_frontmatter(text)
-    if not block:
-        return {}
-    if _HAS_YAML:
-        try:
-            data = yaml.safe_load(block)  # type: ignore[union-attr]
-            if isinstance(data, dict):
-                return data
-            return {}
-        except Exception as e:  # pragma: no cover - log + fallback
-            print(f"[warn] PyYAML parse-error, fallback minimal: {e}", file=sys.stderr)
-    return _minimal_yaml_parse(block)
+def _parse_frontmatter_dict(text: str) -> dict[str, Any]:
+    """Parse frontmatter en geef alleen de data-dict terug (body genegeerd)."""
+    data, _ = parse_frontmatter(text)
+    return data
 
 
 # ----------------------------------------------------------------------------
@@ -412,22 +494,9 @@ def categorize(filename: str, fm: dict[str, Any], language: str) -> tuple[str, b
 
 
 # ----------------------------------------------------------------------------
-# Taaldetectie (heuristiek op tags-corpus)
+# Taaldetectie (heuristiek op tags-corpus). NL_HINTS wordt gezet door
+# apply_categories() (default-set of categories.json-override).
 # ----------------------------------------------------------------------------
-
-NL_HINTS = {
-    "kennisbank",
-    "redactie",
-    "journalistiek",
-    "werkwijze",
-    "lokaal",
-    "publicatie",
-    "ontwerp",
-    "tekstredactie",
-    "actief",
-    "wiki",
-}
-
 
 def detect_language(all_tags: list[str]) -> str:
     """Sniff dominante taal van het tag-corpus. Default NL voor onze vault."""
@@ -468,7 +537,7 @@ def scan_wiki(wiki_dir: Path) -> tuple[list[dict[str, Any]], str]:
             continue
 
         try:
-            fm = parse_frontmatter(text)
+            fm = _parse_frontmatter_dict(text)
         except Exception as e:
             print(f"[warn] frontmatter parse-error in {fp.name}: {e}", file=sys.stderr)
             fm = {}
@@ -516,7 +585,7 @@ def scan_sessies(sessies_dir: Path) -> list[dict[str, Any]]:
         title = humanize_slug(slug)
         try:
             text = fp.read_text(encoding="utf-8", errors="replace")
-            fm = parse_frontmatter(text)
+            fm = _parse_frontmatter_dict(text)
             fm_title = str(fm.get("title", "")).strip()
             if fm_title:
                 title = fm_title
@@ -695,6 +764,11 @@ def main() -> int:
     if not vault_root.is_dir():
         print(f"[error] vault-root bestaat niet of is geen directory: {vault_root}", file=sys.stderr)
         return 1
+
+    # Herlaad de taxonomie nu de vault-root bekend is: een categories.json in de
+    # vault-root overschrijft (of er een naast het script staat of niet) de
+    # ingebouwde defaults voordat we categoriseren.
+    apply_categories(load_categories(extra_paths=[vault_root]))
 
     articles, language = scan_wiki(wiki_dir)
     if not articles:

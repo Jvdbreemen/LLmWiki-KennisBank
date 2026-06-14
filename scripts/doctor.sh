@@ -6,7 +6,7 @@
 
 set -u
 
-VAULT="$HOME/KennisBank"
+VAULT="${KENNISBANK_VAULT:-$HOME/KennisBank}"
 RESEARCH="$HOME/Claude/research"
 CLAUDE_DIR="$HOME/.claude"
 COMMANDS_DIR="$CLAUDE_DIR/commands"
@@ -178,7 +178,7 @@ else
   if grep -q "/autoresearch" "$GLOBAL_CLAUDE_MD" 2>/dev/null; then
     report_pass "autoresearch trigger" "found in $GLOBAL_CLAUDE_MD"
   else
-    report_warn "autoresearch trigger" "no /autoresearch snippet in $GLOBAL_CLAUDE_MD (see README customization step 5)"
+    report_warn "autoresearch trigger" "no /autoresearch snippet in $GLOBAL_CLAUDE_MD (see README customization step 7)"
   fi
 fi
 

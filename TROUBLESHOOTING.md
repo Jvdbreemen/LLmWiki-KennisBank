@@ -115,13 +115,14 @@ Or remove the project-level directory if you never intended it.
 
 **Symptom**: `Embedding mislukt. Is nomic-embed-text geïnstalleerd?`
 
-**Cause**: The script shells out to `ollama embed --model nomic-embed-text`. Either Ollama is not installed, the daemon is down, or the model is not pulled. See section 8.
+**Cause**: The script calls the Ollama HTTP API at `http://localhost:11434/api/embeddings`. Either Ollama is not installed, the daemon is not running on port 11434, or the model is not pulled. See section 8.
 
 **Fix**:
 ```bash
 which ollama && ollama list | grep nomic-embed-text
 ollama pull nomic-embed-text
 ollama serve &
+curl -s http://localhost:11434/api/tags >/dev/null && echo "ollama up" || echo "ollama down"
 ```
 
 ### 3.2 auto-crosslink.py: graph.json not found

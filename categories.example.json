@@ -1,0 +1,63 @@
+{
+  "_comment": "Example taxonomy for build-karpathy-index.py. Copy to 'categories.json' next to the script (scripts/categories.json) or in your vault root, then edit to taste. Every top-level key is optional; anything you omit falls back to the built-in default. This file ships the current built-in Dutch defaults so you can see the shape. category_rules is an ordered list of [name, [keywords]] pairs; the first rule whose keywords intersect an article's tags wins. prefix_hints is a last-resort filename-prefix to category map. generic_tags are ignored when matching. nl_hints drive Dutch-vs-English language detection of the generated index/log. labels.overig_nl / overig_en are the fallback bucket names; labels.memory_category is the bucket for type: wiki-memory articles.",
+  "category_rules": [
+    [
+      "Claude Code: workflow, skills en subagents",
+      ["claude-code", "skills", "skill", "subagent", "subagents", "agent", "agents", "slash-commands", "commands", "autoresearch", "anatomy", "cozempic", "openwolf", "scheduling", "cron", "routines", "lazy-hierarchy"]
+    ],
+    [
+      "Claude Code: configuratie en model-infrastructuur",
+      ["ccr", "ollama", "jsonl", "mcp", "statusline", "claude-code-router", "api-key", "max-api-key", "ingest", "data-locaties", "claude-projects"]
+    ],
+    [
+      "Vault, Atelier en kennisbank-architectuur",
+      ["vault", "vault-app", "atelier", "kennisbank", "kennismanagement", "rag", "cag", "graphify", "knowledge-management", "monorepo", "three-way-merge", "embeddings", "retrieval", "obsidian", "notion", "memory-palace", "mempalace"]
+    ],
+    [
+      "Quartz, Hugo en static-site publicatie",
+      ["quartz", "hugo", "static-site", "static-sites", "ftp", "deploy", "publicatie", "weboke"]
+    ],
+    [
+      "Frontend, design en visuele systemen",
+      ["frontend", "design", "design-system", "design-tokens", "tailwind", "css", "oklch", "react", "codemirror", "gsap", "d3", "svg", "glassmorphism", "typografie", "design-dtp", "scrollytelling", "scrolly", "ui", "ux"]
+    ],
+    [
+      "Journalistiek: methode, redactie en onderzoek",
+      ["journalistiek", "ai-journalistiek", "eindredactie", "tekstredactie", "factcheck", "interview", "interviewvoorbereiding", "publieksonderzoek", "journalistieke-formats", "lokale-journalistiek", "research", "fieldwork", "redactie", "auteursrecht", "publiekstheorie"]
+    ],
+    [
+      "Tooling, devops en systeembeheer",
+      ["tooling", "devops", "systeembeheer", "macos", "python", "pipx", "fastmcp", "docker", "github", "gh-cli", "tauri", "cli-first", "automation", "pre-publicatie", "secrets", "lightpanda", "headless-browsers", "remotion", "openwolf"]
+    ],
+    [
+      "AV, fotografie en lokale praktijk",
+      ["av-tooling", "fotografie", "foto", "audio", "video", "camera", "hasselblad", "lokaal", "arnhem", "blackhole", "yt-dlp", "after-effects", "kdenlive", "openmontage", "fujifilm"]
+    ],
+    [
+      "ADR en architectuurbeslissingen",
+      ["adr", "architectuur", "decision", "decisions", "architecturele-keuzes", "documentatie"]
+    ]
+  ],
+  "prefix_hints": {
+    "wiki-cc-": "Claude Code: workflow, skills en subagents",
+    "wiki-claude-code-": "Claude Code: configuratie en model-infrastructuur",
+    "wiki-claude-": "Claude Code: configuratie en model-infrastructuur",
+    "wiki-vault-": "Vault, Atelier en kennisbank-architectuur",
+    "wiki-atelier-": "Vault, Atelier en kennisbank-architectuur",
+    "wiki-kennisbank-": "Vault, Atelier en kennisbank-architectuur",
+    "wiki-quartz-": "Quartz, Hugo en static-site publicatie",
+    "wiki-hugo-": "Quartz, Hugo en static-site publicatie",
+    "wiki-design-": "Frontend, design en visuele systemen",
+    "wiki-journalistiek": "Journalistiek: methode, redactie en onderzoek",
+    "wiki-foto-": "AV, fotografie en lokale praktijk",
+    "wiki-av-": "AV, fotografie en lokale praktijk",
+    "wiki-adr-": "ADR en architectuurbeslissingen"
+  },
+  "generic_tags": ["wiki", "kennisbank", "actief", "concept", "index", "snapshot", "claude-memory"],
+  "nl_hints": ["kennisbank", "redactie", "journalistiek", "werkwijze", "lokaal", "publicatie", "ontwerp", "tekstredactie", "actief", "wiki"],
+  "labels": {
+    "overig_nl": "Overig",
+    "overig_en": "Other",
+    "memory_category": "Memory-snapshots"
+  }
+}

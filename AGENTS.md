@@ -133,7 +133,7 @@ Run the doctor script:
 bash scripts/doctor.sh
 ```
 
-Expected output: every check line ends in `OK`. Any `FAIL` is a blocker. Any `WARN` is non-fatal but should be reported in the hand-off.
+Expected output: every check line ends in `[PASS]`. Any `[FAIL]` is a blocker. Any `WARN` is non-fatal but should be reported in the hand-off.
 
 If `scripts/doctor.sh` is missing in the version you cloned, run these manual checks:
 
@@ -206,7 +206,7 @@ Things agents typically get wrong here:
 After install completes, tell the user:
 
 1. The vault is at `$HOME/KennisBank/`. Edit `CLAUDE.md` there to fill in `[YOUR NAME]` and `[YOUR PROJECTS]`.
-2. Four new slash commands are available: `/sessielog`, `/wiki`, `/intake`, `/stale`.
+2. Six new slash commands are available: `/sessielog`, `/wiki`, `/intake`, `/stale`, `/sessiestart`, `/import`.
 3. The `/autoresearch` skill is available; trigger it with `/autoresearch [topic]`.
 4. Research output lands in `$HOME/Claude/research/`.
 5. If Ollama is not installed, semantic tiling is skipped. To enable: `ollama pull nomic-embed-text`.
@@ -217,22 +217,26 @@ Report any pre-flight WARN or skipped optional step. Do not report items as done
 
 ## 9. Customization pointers
 
-If the user wants non-default paths or thresholds, edit these locations.
+If the user wants non-default paths or thresholds, use these levers.
 
-| Setting | File | What to change |
-|---|---|---|
-| Vault path | `setup.sh` | `VAULT="$HOME/KennisBank"` |
-| Vault path (runtime) | `commands/*.md`, `skills/autoresearch/SKILL.md` | Hardcoded `~/KennisBank/...` references |
-| Research output | `setup.sh` | `RESEARCH="$HOME/Claude/research"` |
-| Research output (runtime) | `skills/autoresearch/SKILL.md` | Output paths in "Output aanmaken" and report sections |
-| Stale threshold | `scripts/stale-check.py` | `THRESHOLD_DAYS` constant, or pass `--days N` |
-| Memory file lookup | `CLAUDE.md.template`, `skills/autoresearch/SKILL.md` | The `ls ~/.claude/projects/*/memory/MEMORY.md` glob |
-| Vault `CLAUDE.md` content | `CLAUDE.md.template` | Template copied to vault on install |
+| Setting | How to change |
+|---|---|
+| Vault path (scripts + `doctor.sh`) | Set the `KENNISBANK_VAULT` env var. The Python scripts (`stale-check.py`, `semantic-tiling.py`, `auto-crosslink.py`, `intake-scan.py`) and `doctor.sh` resolve `$KENNISBANK_VAULT` and fall back to `$HOME/KennisBank` (shared helper `scripts/_vaultpath.py`). The importers also accept `--vault`; `build-karpathy-index.py` accepts `--vault-root`. |
+| Vault path (install scaffold) | `setup.sh`: `VAULT="$HOME/KennisBank"` |
+| Vault path (runtime prompt files) | `commands/*.md`, `skills/autoresearch/SKILL.md`: literal `~/KennisBank/...` references (not env-var aware; patch or symlink) |
+| Wiki categories / taxonomy | Ship a `categories.json` next to the script (`scripts/categories.json`) or in the vault root; see `categories.example.json`. Absent it, built-in defaults apply. |
+| Research output | `setup.sh`: `RESEARCH="$HOME/Claude/research"`; runtime paths in `skills/autoresearch/SKILL.md` |
+| Stale threshold | `scripts/stale-check.py`: pass `--days N` (default 60) |
+| Memory file lookup | `CLAUDE.md.template`, `skills/autoresearch/SKILL.md`: the `ls ~/.claude/projects/*/memory/MEMORY.md` glob |
+| Vault `CLAUDE.md` content | `CLAUDE.md.template`: template copied to vault on install |
 
-If the user picks a non-default vault path, do a sweep before declaring done:
+If the user picks a non-default vault path:
+
+1. Set `KENNISBANK_VAULT` so the scripts and `doctor.sh` follow it.
+2. For the prompt files, do a sweep and patch (or symlink `$HOME/KennisBank`):
 
 ```bash
-grep -rn "KennisBank" commands/ skills/ scripts/
+grep -rn "KennisBank" commands/ skills/
 ```
 
 Patch every match to the new path, or warn the user that the default path remains baked into command bodies.
