@@ -102,25 +102,25 @@ The four root paths are declared at the top of `setup.sh`. Scripts and commands 
 
 ### OLLAMA_MODEL / OLLAMA_EMBED_MODEL
 
-- **Default**: `nomic-embed-text`
-- **Where set**: `scripts/semantic-tiling.py` (`OLLAMA_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text")`).
+- **Default**: `qwen3-embedding:8b` (multilingual, 119 languages)
+- **Where set**: `scripts/semantic-tiling.py` (`OLLAMA_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "qwen3-embedding:8b")`).
 - **Read by**: `scripts/semantic-tiling.py` only.
 - **Effect**: the Ollama model used to compute embeddings via the HTTP API (`POST /api/embeddings`). Ollama has no `ollama embed` CLI subcommand, so embeddings go through the HTTP API.
-- **To change**: set the `OLLAMA_EMBED_MODEL` environment variable (or edit the default). Any model that returns an `embedding` (or `embeddings[0]`) JSON field works. Run `ollama pull <model>` first. For non-English vaults, prefer a multilingual model such as `qwen3-embedding:8b`; `nomic-embed-text` v1.5 is English-only.
+- **To change**: set the `OLLAMA_EMBED_MODEL` environment variable (or edit the default). Any model that returns an `embedding` (or `embeddings[0]`) JSON field works. Run `ollama pull <model>` first. The default is multilingual and works for non-English vaults out of the box (`ollama pull qwen3-embedding:8b`, ~4.7 GB). For an English-only vault you can switch to the lighter `nomic-embed-text` (~274 MB) — then also set the thresholds to `0.90` / `0.80` (see below), since `nomic` spreads higher.
 
 ### TILING_THRESHOLD_ERROR (duplicate threshold)
 
-- **Default**: `0.90`
-- **Where set**: `scripts/semantic-tiling.py` (`THRESHOLD_ERROR = float(os.environ.get("TILING_THRESHOLD_ERROR", "0.90"))`).
+- **Default**: `0.85` (tuned for the default `qwen3-embedding:8b`)
+- **Where set**: `scripts/semantic-tiling.py` (`THRESHOLD_ERROR = float(os.environ.get("TILING_THRESHOLD_ERROR", "0.85"))`).
 - **Effect**: cosine similarity at or above this is reported as `ERROR -- mogelijke duplicaten`.
-- **To change**: set the `TILING_THRESHOLD_ERROR` environment variable. Thresholds are model-specific: `nomic-embed-text` spreads high (0.90 works), but multilingual models such as `qwen3-embedding:8b` spread noticeably lower, where 0.90 never fires. Recalibrate per embedding model (qwen3 sits well at ~0.85).
+- **To change**: set the `TILING_THRESHOLD_ERROR` environment variable. Thresholds are model-specific: the default `qwen3-embedding:8b` spreads lower (0.85 fits), while `nomic-embed-text` spreads high and wants `0.90`. Recalibrate per embedding model if you switch.
 
 ### TILING_THRESHOLD_REVIEW (related threshold)
 
-- **Default**: `0.80`
-- **Where set**: `scripts/semantic-tiling.py` (`THRESHOLD_REVIEW = float(os.environ.get("TILING_THRESHOLD_REVIEW", "0.80"))`).
+- **Default**: `0.62` (tuned for the default `qwen3-embedding:8b`)
+- **Where set**: `scripts/semantic-tiling.py` (`THRESHOLD_REVIEW = float(os.environ.get("TILING_THRESHOLD_REVIEW", "0.62"))`).
 - **Effect**: cosine similarity in `[THRESHOLD_REVIEW, THRESHOLD_ERROR)` is reported as `REVIEW -- verwante artikelen`.
-- **To change**: set the `TILING_THRESHOLD_REVIEW` environment variable. Same model-specific caveat as above (qwen3 sits well at ~0.62).
+- **To change**: set the `TILING_THRESHOLD_REVIEW` environment variable. Same model-specific caveat as above (for `nomic-embed-text` use `0.80`).
 
 ### Embedding character cap
 
