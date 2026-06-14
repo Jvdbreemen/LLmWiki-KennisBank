@@ -6,10 +6,14 @@ Gebruik: python3 intake-scan.py
 """
 
 import json
+import os
 import sys
 from pathlib import Path
 
-INBOX = Path.home() / "KennisBank" / "00-inbox"
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _vaultpath import vault_root  # noqa: E402
+
+INBOX = vault_root() / "00-inbox"
 
 FRONTMATTER_MARKER = "---"
 

@@ -157,17 +157,23 @@ Your memory files live under `~/.claude/projects/`. The path segment is a slug o
 ## Customization
 
 1. Edit `~/KennisBank/CLAUDE.md` after setup. Replace `[YOUR NAME]` and `[YOUR PROJECTS]` with your own.
-2. The commands are in Dutch by default (they follow prompt language). Change section headings if you prefer English.
-3. To change the stale threshold (default 60 days): pass `--days N` on the CLI, or change the `default=60` in the `argparse` block of `stale-check.py`.
-4. `auto-crosslink.py` has two tunables at the top of the file: `MIN_CONFIDENCE` (default `0.75`) and `MAX_NEW_LINKS` (default `5`). Lower confidence to get more links, raise it to be stricter.
-5. To change the research output path from `~/Claude/research/` to something else, edit two places:
+2. **Vault path.** The Python scripts and `doctor.sh` honor the `KENNISBANK_VAULT` environment variable (default `~/KennisBank`). To point them at another vault:
+   ```bash
+   export KENNISBANK_VAULT=/path/to/your/KennisBank
+   ```
+   The slash-command prompt files still reference `~/KennisBank` literally; for them, patch the paths or symlink. See [CONFIGURATION.md](CONFIGURATION.md) section 9.
+3. **Wiki categories.** `build-karpathy-index.py` groups articles using a built-in taxonomy. It is fully customizable: drop a `categories.json` next to the script (`~/KennisBank/.claude/scripts/categories.json`) or in your vault root and it overrides the defaults; without one, the defaults apply. Copy [`categories.example.json`](categories.example.json) as a starting point. Every key is optional and falls back to its default.
+4. The commands are in Dutch by default (they follow prompt language). Change section headings if you prefer English.
+5. To change the stale threshold (default 60 days): pass `--days N` on the CLI, or change the `default=60` in the `argparse` block of `stale-check.py`.
+6. `auto-crosslink.py` has two tunables at the top of the file: `MIN_CONFIDENCE` (default `0.75`) and `MAX_NEW_LINKS` (default `5`). Lower confidence to get more links, raise it to be stricter.
+7. To change the research output path from `~/Claude/research/` to something else, edit two places:
    - `setup.sh`: change the `RESEARCH` variable
    - `skills/autoresearch/SKILL.md`: change the output path in the "Output aanmaken" section and the report
-6. Semantic tiling requires Ollama:
+8. Semantic tiling requires Ollama:
    ```bash
    ollama pull nomic-embed-text
    ```
-7. To enable the `/autoresearch` trigger in Claude Code, add this to your global `~/.claude/CLAUDE.md`:
+9. To enable the `/autoresearch` trigger in Claude Code, add this to your global `~/.claude/CLAUDE.md`:
    ```
    # autoresearch
    - **autoresearch** (`~/.claude/skills/autoresearch/SKILL.md`) - multi-round research with lazy hierarchy check. Output to `~/Claude/research/`. Trigger: `/autoresearch`
@@ -196,7 +202,7 @@ python3 scripts/build-karpathy-index.py
 /understand-knowledge
 ```
 
-The detector requires `index.md` (with `## Section` headings + `[[wikilink]]` rows) and `log.md` (with `## [YYYY-MM-DD] OPERATION | Title` entries) inside the wiki directory. `/wiki` does not write those, so `scripts/build-karpathy-index.py` generates them by scanning `02-wiki/` frontmatter and `01-raw/sessies/` filenames. Run it whenever you want to refresh the dashboard. See `scripts/build-karpathy-index.py --help` for flags (`--dry-run`, `--force`, custom paths).
+The detector requires `index.md` (with `## Section` headings + `[[wikilink]]` rows) and `log.md` (with `## [YYYY-MM-DD] OPERATION | Title` entries) inside the wiki directory. `/wiki` does not write those, so `scripts/build-karpathy-index.py` generates them by scanning `02-wiki/` frontmatter and `01-raw/sessies/` filenames. Run it whenever you want to refresh the dashboard. See `scripts/build-karpathy-index.py --help` for flags (`--dry-run`, `--force`, custom paths). The category grouping is customizable via `categories.json` (see Customization, item 3).
 
 ## Credits
 

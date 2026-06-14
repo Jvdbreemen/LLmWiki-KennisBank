@@ -29,28 +29,12 @@ import shutil
 import sys
 import tempfile
 import zipfile
-from datetime import datetime, timezone
 from pathlib import Path
 
-
-def _utcnow_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def _today_iso() -> str:
-    return datetime.now(timezone.utc).date().isoformat()
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _common import _today_iso, _utcnow_iso, print_summary, slugify  # noqa: E402
 
 VAULT_DEFAULT = Path.home() / "KennisBank"
-
-
-def slugify(text: str, max_len: int = 50) -> str:
-    text = (text or "").lower().strip()
-    text = re.sub(r"[^\w\s-]", "", text, flags=re.UNICODE)
-    text = re.sub(r"[\s_]+", "-", text)
-    text = re.sub(r"-+", "-", text).strip("-")
-    if not text:
-        return "untitled"
-    return text[:max_len].rstrip("-") or "untitled"
 
 
 def extract_message_text(msg: dict) -> str:
@@ -367,10 +351,7 @@ def main() -> int:
             "files": files_out,
             "errors_detail": errors_detail,
         }
-        if args.json:
-            print(json.dumps(summary, indent=2, ensure_ascii=False))
-        else:
-            print(f"--- summary: imported={imported} skipped={skipped} errors={errors}")
+        print_summary(summary, args.json)
 
         return 0 if errors == 0 else 1
 
