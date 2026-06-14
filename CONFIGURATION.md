@@ -129,7 +129,7 @@ The four root paths are declared at the top of `setup.sh`. Scripts and commands 
 ### CACHE_FILE
 
 - **Default**: `$HOME/KennisBank/.claude/embeddings-cache.json`
-- **Where set**: `scripts/semantic-tiling.py` line 21.
+- **Where set**: `scripts/semantic-tiling.py` line 24.
 - **Effect**: stores embeddings keyed by file path, content hash, and embedding model. Changing `OLLAMA_EMBED_MODEL` transparently invalidates cached vectors (no manual wipe), since entries from a different model no longer match. Stale entries (files no longer in `02-wiki/`) are pruned on every run.
 
 ### WIKI_DIR
