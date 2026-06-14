@@ -603,7 +603,7 @@ def render_log(sessies: list[dict[str, Any]], language: str, generated_at: str) 
         return text, 1
 
     for s in sessies:
-        lines.append(f"## [{s['date']}] SESSION | {s['title']}")
+        lines.append(f"## [{s['date']}] OPERATION | {s['title']}")
     lines.append("")
     text = "\n".join(lines).rstrip() + "\n"
     return text, len(sessies)

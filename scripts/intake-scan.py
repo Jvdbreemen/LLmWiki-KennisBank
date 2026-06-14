@@ -20,8 +20,9 @@ def detect_type(path: Path) -> str:
     """Detecteer het bestandstype op basis van inhoud en extensie."""
     ext = path.suffix.lower()
 
-    # URL-detectie: bestand bevat één regel die begint met http of https
-    if ext in ("", ".txt", ".url", ".md") or ext not in {
+    # URL-detectie: bestand bevat één regel die begint met http of https.
+    # Alleen tekstuele/onbekende extensies lezen, nooit binaire (pdf, images).
+    if ext in ("", ".txt", ".url", ".md") and ext not in {
         ".pdf", ".jpg", ".jpeg", ".png", ".webp", ".gif"
     }:
         try:

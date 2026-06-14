@@ -112,7 +112,7 @@ cp skills/autoresearch/SKILL.md ~/.claude/skills/autoresearch/
 | `/wiki` | optional topic | Compiles raw logs (last 7 days) into wiki articles |
 | `/intake` | none | Processes files in `~/KennisBank/00-inbox/` |
 | `/stale` | none | Detects articles older than 60 days with newer session data |
-| `/import` | source [path] | Bulk-import old sessions: cc, claudeai, folder, cowork, all |
+| `/import` | `cc` \| `claudeai <path>` \| `folder <path>` \| `cowork` | Bulk-import old sessions: `cc` (Claude Code history), `claudeai <path>` (claude.ai export bundle), `folder <path>` (any markdown/text folder, recursive), `cowork` (auto-detected Mac desktop Claude data) |
 | `/autoresearch` | topic | Multi-round web research, saves to `~/Claude/research/` |
 
 ## Vault structure
@@ -200,7 +200,7 @@ The detector requires `index.md` (with `## Section` headings + `[[wikilink]]` ro
 
 ## Credits
 
-- Pattern: [Andrej Karpathy's LLM Wiki concept](https://x.com/karpathy)
+- Pattern: [Andrej Karpathy's LLM Wiki gist](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
 - Vault/CMS inspiration: [claude-obsidian by AgriciDaniel](https://github.com/AgriciDaniel/claude-obsidian)
 
 ## License

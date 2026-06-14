@@ -8,7 +8,7 @@ If you are an AI agent following this for a human user, do not skip the verifica
 
 ## What just happened
 
-`setup.sh` created `$HOME/KennisBank/` with the full vault layout (`00-inbox`, `01-raw/sessies`, `02-wiki`, `03-projecten`, `04-templates`, `05-bronnen`, `06-claude`, `07-media`, `08-archive`, plus `.claude/scripts` and `graphify-out`). It copied the four Python utility scripts into `$HOME/KennisBank/.claude/scripts/`, dropped the session-log and wiki-article templates into `$HOME/KennisBank/04-templates/`, and wrote a starter `CLAUDE.md` into the vault root from `CLAUDE.md.template`. If you accepted the prompt during setup, it also installed the four slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`) into `$HOME/.claude/commands/` and the `/autoresearch` skill into `$HOME/.claude/skills/autoresearch/`. It also created the research output directory at `$HOME/Claude/research/`.
+`setup.sh` created `$HOME/KennisBank/` with the full vault layout (`00-inbox`, `01-raw/sessies`, `02-wiki`, `03-projecten`, `04-templates`, `05-bronnen`, `06-claude`, `07-media`, `08-archive`, plus `.claude/scripts` and `graphify-out`). It copied the four Python utility scripts into `$HOME/KennisBank/.claude/scripts/`, dropped the session-log and wiki-article templates into `$HOME/KennisBank/04-templates/`, and wrote a starter `CLAUDE.md` into the vault root from `CLAUDE.md.template`. If you accepted the prompt during setup, it also installed the six slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`, `/sessiestart`, `/import`) into `$HOME/.claude/commands/` and the `/autoresearch` skill into `$HOME/.claude/skills/autoresearch/`. It also created the research output directory at `$HOME/Claude/research/`.
 
 Nothing is wired into a running Claude Code session yet. The next steps do that.
 
@@ -40,7 +40,7 @@ LEARNINGS_FILE=$HOME/Claude/learnings.md
 
 ## Step 2: Wire up the autoresearch trigger (optional)
 
-The four core commands work as soon as they are in `$HOME/.claude/commands/`. The `/autoresearch` skill needs one extra hint in your global Claude config so the skill is triggered correctly when you type `/autoresearch [topic]`.
+The six core commands work as soon as they are in `$HOME/.claude/commands/`. The `/autoresearch` skill needs one extra hint in your global Claude config so the skill is triggered correctly when you type `/autoresearch [topic]`.
 
 Append this block to `$HOME/.claude/CLAUDE.md` (create the file if it does not exist):
 
@@ -72,7 +72,7 @@ Expected output (abbreviated):
 [ok] scripts: auto-crosslink.py intake-scan.py semantic-tiling.py stale-check.py
 [ok] templates: tpl-sessie-log.md tpl-wiki-artikel.md
 [ok] CLAUDE.md present
-[ok] commands installed: sessielog wiki intake stale
+[ok] commands installed: sessielog wiki intake stale sessiestart import
 [ok] autoresearch skill installed
 [warn] ollama nomic-embed-text not found (semantic tiling will be skipped)
 [warn] graphify-out/graph.json not present (auto-crosslink will be skipped)
@@ -86,11 +86,11 @@ Manual sanity check, in case you want to see for yourself:
 ```bash
 ls $HOME/KennisBank/
 ls $HOME/KennisBank/.claude/scripts/
-ls $HOME/.claude/commands/ | grep -E '^(sessielog|wiki|intake|stale)\.md$'
+ls $HOME/.claude/commands/ | grep -E '^(sessielog|wiki|intake|stale|sessiestart|import)\.md$'
 ls $HOME/.claude/skills/autoresearch/SKILL.md
 ```
 
-If all four listings show files, the install is wired up.
+If all four `ls` listings show files (the third one should list six command files), the install is wired up.
 
 ---
 
@@ -216,8 +216,8 @@ python3 scripts/build-karpathy-index.py
 
 The build script scans `$HOME/KennisBank/02-wiki/` frontmatter and `$HOME/KennisBank/01-raw/sessies/` filenames, then writes:
 
-- `02-wiki/index.md` — wiki articles grouped into 5–12 categories via `## Section` + `[[wikilink]]` lines
-- `02-wiki/log.md` — chronological session log in `## [YYYY-MM-DD] SESSION | Title` format
+- `02-wiki/index.md` - wiki articles grouped into 5–12 categories via `## Section` + `[[wikilink]]` lines
+- `02-wiki/log.md` - chronological session log in `## [YYYY-MM-DD] OPERATION | Title` format
 
 Re-run after major `/wiki` rounds. Without `--force` the script refuses to overwrite an existing index/log; pass `--force` to rebuild (a `.bak` is kept). Use `--dry-run` to preview.
 
@@ -227,7 +227,7 @@ Then, in a Claude Code session pointed at `$HOME/KennisBank/02-wiki/`, run:
 /understand-knowledge
 ```
 
-After analysis (about 5 minutes for 100+ articles, dispatches up to 3 article-analyzer subagents concurrently), the skill auto-launches `/understand-dashboard`. You will see a graph URL with a `?token=` parameter — open it to browse nodes (articles, topics, entities, claims) and edges (related, categorized_under, builds_on, cites, contradicts, ...).
+After analysis (about 5 minutes for 100+ articles, dispatches up to 3 article-analyzer subagents concurrently), the skill auto-launches `/understand-dashboard`. You will see a graph URL with a `?token=` parameter - open it to browse nodes (articles, topics, entities, claims) and edges (related, categorized_under, builds_on, cites, contradicts, ...).
 
 This is read-only: no vault content is modified beyond the index/log helper files.
 

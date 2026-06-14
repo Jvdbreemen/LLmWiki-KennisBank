@@ -95,7 +95,7 @@ ls -1 ~/KennisBank/01-raw/sessies/ 2>/dev/null | wc -l
 - Toon het aantal bestanden in `~/KennisBank/01-raw/sessies/` voor en na, plus het verschil.
 - Suggereer als afsluiting:
   - "Run `/wiki` om kennis uit deze imports te compileren naar `~/KennisBank/02-wiki/`."
-  - Alleen als er duplicaten of overlap te verwachten zijn: "Run `/sessielog` later met `--force` om duplicates op te ruimen."
+  - Alleen als er duplicaten of overlap te verwachten zijn: "Een latere `/sessielog`-run overschrijft het bestaande log voor die operation."
 
 ## Bevestiging
 
