@@ -6,8 +6,10 @@ Flaggt near-duplicates op basis van cosine similarity.
 
 Gebruik: python3 semantic-tiling.py <pad-naar-artikel>
 
-Vereist: ollama met nomic-embed-text model
+Vereist: ollama met een embedding-model (default: nomic-embed-text).
   ollama pull nomic-embed-text
+Model instelbaar via de OLLAMA_EMBED_MODEL omgevingsvariabele (bv. een
+meertalig model als qwen3-embedding:8b; nomic-embed-text v1.5 is Engels-only).
 """
 
 import os
@@ -24,7 +26,7 @@ from _vaultpath import vault_root  # noqa: E402
 VAULT_ROOT = vault_root()
 WIKI_DIR = VAULT_ROOT / "02-wiki"
 CACHE_FILE = VAULT_ROOT / ".claude" / "embeddings-cache.json"
-OLLAMA_MODEL = "nomic-embed-text"
+OLLAMA_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text")
 
 THRESHOLD_ERROR = 0.90
 THRESHOLD_REVIEW = 0.80
@@ -93,7 +95,7 @@ def get_cached_embedding(path: Path, cache: dict) -> list[float] | None:
     key = str(path)
     h = file_hash(path)
     entry = cache.get(key)
-    if entry and entry.get("hash") == h:
+    if entry and entry.get("hash") == h and entry.get("model") == OLLAMA_MODEL:
         return entry["embedding"]
     # Recompute
     text = get_text(path)
@@ -101,7 +103,7 @@ def get_cached_embedding(path: Path, cache: dict) -> list[float] | None:
         return None
     embedding = get_embedding(text)
     if embedding:
-        cache[key] = {"hash": h, "embedding": embedding}
+        cache[key] = {"hash": h, "model": OLLAMA_MODEL, "embedding": embedding}
     return embedding
 
 
