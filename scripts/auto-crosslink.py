@@ -28,6 +28,9 @@ GRAPH_PATH = VAULT_ROOT / "graphify-out" / "graph.json"
 WIKI_DIR_PREFIX = "02-wiki/"
 MIN_CONFIDENCE = 0.75
 MAX_NEW_LINKS = 5
+# Auto-gegenereerde meta-files: nooit zinvolle "Zie ook"-targets. De index
+# referenceert elk artikel, wat anders een [[index]]-backlink op alles oplevert.
+EXCLUDE_TARGET_STEMS = {"index", "log"}
 
 # ---------------------------------------------------------------------------
 
@@ -45,9 +48,12 @@ def normalize_path(raw: str) -> str:
     """Zet een pad (relatief of absoluut) om naar vault-relatief pad."""
     p = Path(raw).resolve()
     try:
-        return str(p.relative_to(VAULT_ROOT.resolve()))
+        # as_posix() geeft altijd forward slashes, ongeacht het OS (Windows
+        # levert anders backslashes). graph.json node source_file gebruikt altijd
+        # "/", dus zonder dit faalt de node-matching op Windows. Idempotent.
+        return p.relative_to(VAULT_ROOT.resolve()).as_posix()
     except ValueError:
-        return raw
+        return Path(raw).as_posix()
 
 
 def existing_stems(content: str) -> set[str]:
@@ -134,6 +140,8 @@ def process_file(filepath: Path, node_map: dict, links: list, dry_run: bool = Fa
 
         # Stem = bestandsnaam zonder .md
         stem = Path(other_file).stem
+        if stem in EXCLUDE_TARGET_STEMS:
+            continue
         relation = link.get("relation", "zie_ook")
 
         # Per stem de hoogste score bewaren

@@ -42,7 +42,7 @@ Every Claude session produces a session log. The `/wiki` command compiles logs i
 
 - [Claude Code](https://claude.ai/code) (CLI)
 - Python 3.10+
-- [Ollama](https://ollama.com) with `nomic-embed-text` (optional, for semantic deduplication)
+- [Ollama](https://ollama.com) with `qwen3-embedding:8b` (optional, for semantic deduplication; multilingual default. English-only vaults can use the lighter `nomic-embed-text`)
 
 The setup creates two root directories:
 - `~/KennisBank/` — the vault (wiki, logs, templates, scripts)
@@ -169,9 +169,9 @@ Your memory files live under `~/.claude/projects/`. The path segment is a slug o
 7. To change the research output path from `~/Claude/research/` to something else, edit two places:
    - `setup.sh`: change the `RESEARCH` variable
    - `skills/autoresearch/SKILL.md`: change the output path in the "Output aanmaken" section and the report
-8. Semantic tiling requires Ollama:
+8. Semantic tiling requires Ollama (default model is multilingual):
    ```bash
-   ollama pull nomic-embed-text
+   ollama pull qwen3-embedding:8b
    ```
 9. To enable the `/autoresearch` trigger in Claude Code, add this to your global `~/.claude/CLAUDE.md`:
    ```
