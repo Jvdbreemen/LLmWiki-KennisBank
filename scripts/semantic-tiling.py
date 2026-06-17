@@ -35,8 +35,28 @@ OLLAMA_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "qwen3-embedding:8b")
 # dus 0,85/0,62. nomic-embed-text spreidt hoger en wil 0,90/0,80. De defaults
 # hieronder horen bij het default-model (qwen3); wissel je van model, herijk dan
 # via de env-vars zonder de code te wijzigen.
-THRESHOLD_ERROR = float(os.environ.get("TILING_THRESHOLD_ERROR", "0.85"))
-THRESHOLD_REVIEW = float(os.environ.get("TILING_THRESHOLD_REVIEW", "0.62"))
+def _threshold(env_var: str, default: float) -> float:
+    """Lees een cosine-drempel uit een env-var, robuust tegen onzin.
+
+    Accepteert NL-decimaalnotatie (0,85) en spaties; bij een lege of ongeldige
+    waarde valt het terug op de default met een waarschuwing op stderr in plaats
+    van de hele script-import te laten crashen.
+    """
+    raw = os.environ.get(env_var)
+    if raw is None:
+        return default
+    try:
+        return float(raw.strip().replace(",", "."))
+    except ValueError:
+        print(
+            f"waarschuwing: ongeldige {env_var}={raw!r}, val terug op {default}",
+            file=sys.stderr,
+        )
+        return default
+
+
+THRESHOLD_ERROR = _threshold("TILING_THRESHOLD_ERROR", 0.85)
+THRESHOLD_REVIEW = _threshold("TILING_THRESHOLD_REVIEW", 0.62)
 
 
 def get_text(path: Path) -> str:
