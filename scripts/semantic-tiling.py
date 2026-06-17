@@ -6,10 +6,11 @@ Flaggt near-duplicates op basis van cosine similarity.
 
 Gebruik: python3 semantic-tiling.py <pad-naar-artikel>
 
-Vereist: ollama met een embedding-model (default: nomic-embed-text).
-  ollama pull nomic-embed-text
-Model instelbaar via de OLLAMA_EMBED_MODEL omgevingsvariabele (bv. een
-meertalig model als qwen3-embedding:8b; nomic-embed-text v1.5 is Engels-only).
+Vereist: ollama met een embedding-model (default: qwen3-embedding:8b, meertalig).
+  ollama pull qwen3-embedding:8b
+Model instelbaar via de OLLAMA_EMBED_MODEL omgevingsvariabele. De default is
+meertalig (qwen3-embedding:8b, 119 talen); voor een Engels-only vault kun je op
+het lichtere nomic-embed-text terugvallen (zet dan ook de drempels op 0,90/0,80).
 """
 
 import os
@@ -26,10 +27,36 @@ from _vaultpath import vault_root  # noqa: E402
 VAULT_ROOT = vault_root()
 WIKI_DIR = VAULT_ROOT / "02-wiki"
 CACHE_FILE = VAULT_ROOT / ".claude" / "embeddings-cache.json"
-OLLAMA_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text")
+OLLAMA_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "qwen3-embedding:8b")
 
-THRESHOLD_ERROR = 0.90
-THRESHOLD_REVIEW = 0.80
+# Drempels zijn modelspecifiek: verschillende embedding-modellen plaatsen
+# documenten in andere cosine-ruimtes. De default qwen3-embedding:8b spreidt
+# lager en breder (empirisch op een echte wiki: 0,26-0,76, geen paar >= 0,80),
+# dus 0,85/0,62. nomic-embed-text spreidt hoger en wil 0,90/0,80. De defaults
+# hieronder horen bij het default-model (qwen3); wissel je van model, herijk dan
+# via de env-vars zonder de code te wijzigen.
+def _threshold(env_var: str, default: float) -> float:
+    """Lees een cosine-drempel uit een env-var, robuust tegen onzin.
+
+    Accepteert NL-decimaalnotatie (0,85) en spaties; bij een lege of ongeldige
+    waarde valt het terug op de default met een waarschuwing op stderr in plaats
+    van de hele script-import te laten crashen.
+    """
+    raw = os.environ.get(env_var)
+    if raw is None:
+        return default
+    try:
+        return float(raw.strip().replace(",", "."))
+    except ValueError:
+        print(
+            f"waarschuwing: ongeldige {env_var}={raw!r}, val terug op {default}",
+            file=sys.stderr,
+        )
+        return default
+
+
+THRESHOLD_ERROR = _threshold("TILING_THRESHOLD_ERROR", 0.85)
+THRESHOLD_REVIEW = _threshold("TILING_THRESHOLD_REVIEW", 0.62)
 
 
 def get_text(path: Path) -> str:
@@ -135,7 +162,7 @@ def main() -> None:
 
     target_embedding = get_cached_embedding(target, cache)
     if target_embedding is None:
-        print("Embedding mislukt. Is nomic-embed-text geïnstalleerd?", file=sys.stderr)
+        print(f"Embedding mislukt. Is {OLLAMA_MODEL} geïnstalleerd? (ollama pull {OLLAMA_MODEL})", file=sys.stderr)
         sys.exit(1)
 
     errors = []
