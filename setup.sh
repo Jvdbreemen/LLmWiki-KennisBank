@@ -91,7 +91,7 @@ copy_file() {
   echo "  gekopieerd: $dst"
 }
 
-VAULT="$HOME/KennisBank"
+VAULT="${KENNISBANK_VAULT:-$HOME/KennisBank}"
 RESEARCH="$HOME/Claude/research"
 CLAUDE_COMMANDS="$HOME/.claude/commands"
 CLAUDE_SKILLS="$HOME/.claude/skills"
