@@ -213,7 +213,7 @@ if ! command -v ollama >/dev/null 2>&1; then
   report_info "ollama" "not installed (optional, needed for semantic tiling)"
 else
   EMBED_MODEL="${OLLAMA_EMBED_MODEL:-qwen3-embedding:8b}"
-  if ollama list 2>/dev/null | grep -q "$EMBED_MODEL"; then
+  if ollama list 2>/dev/null | grep -qF "$EMBED_MODEL"; then
     report_info "ollama $EMBED_MODEL" "installed"
   else
     report_info "ollama $EMBED_MODEL" "model not pulled (run: ollama pull $EMBED_MODEL)"

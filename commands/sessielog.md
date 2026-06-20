@@ -68,8 +68,9 @@ ollama list 2>/dev/null | grep -E 'qwen3-embedding|nomic-embed-text'
 ```
 Als niet beschikbaar: sla over, rapporteer installatie-instructie (`ollama pull qwen3-embedding:8b`).
 Als beschikbaar: python3 ~/KennisBank/.claude/scripts/semantic-tiling.py [pad-naar-artikel]
-- >= 0.90: mogelijke duplicaat (error)
-- 0.80–0.89: verwant (review)
+- >= 0.85: mogelijke duplicaat (error)  ← drempels voor default `qwen3-embedding:8b`
+- 0.62–0.84: verwant (review)
+(nomic-embed-text spreidt hoger: gebruik dan 0.90 / 0.80, zie CONFIGURATION.md)
 
 ---
 
