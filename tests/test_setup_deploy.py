@@ -24,19 +24,47 @@ def _bash_path(p: Path) -> str:
 
 
 def _find_bash() -> str:
-    """Find a bash that properly forwards environment variables on this platform.
+    """Locate a usable bash for invoking setup.sh, cross-platform.
 
-    On Windows, prefer Git Bash (which respects env vars via subprocess).
-    On macOS/Linux, use the default bash from PATH.
+    macOS/Linux: the PATH bash. Windows: Git Bash, discovered via
+    GIT_INSTALL_ROOT, common per-user/system install paths, or the
+    GitForWindows registry key, explicitly rejecting the System32 WSL/Store
+    bash stub (a different filesystem namespace where /c/... paths break).
+    Skips the test with a clear reason if no suitable bash is found.
     """
-    if sys.platform.startswith("win"):
-        # On Windows, look for Git Bash
-        git_bash = Path("C:/Program Files/Git/bin/bash.exe")
-        if git_bash.exists():
-            return str(git_bash)
-        # Fallback to PATH bash if Git Bash is not installed
-        return "bash"
-    return "bash"
+    if not sys.platform.startswith("win"):
+        return shutil.which("bash") or "bash"
+    candidates = []
+    root = os.environ.get("GIT_INSTALL_ROOT")
+    if root:
+        candidates.append(Path(root) / "bin" / "bash.exe")
+    localapp = os.environ.get("LOCALAPPDATA")
+    if localapp:
+        candidates.append(Path(localapp) / "Programs" / "Git" / "bin" / "bash.exe")
+    for var in ("ProgramFiles", "ProgramFiles(x86)"):
+        base = os.environ.get(var)
+        if base:
+            candidates.append(Path(base) / "Git" / "bin" / "bash.exe")
+    try:
+        import winreg
+        for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+            try:
+                with winreg.OpenKey(hive, r"SOFTWARE\GitForWindows") as key:
+                    install = winreg.QueryValueEx(key, "InstallPath")[0]
+                    candidates.append(Path(install) / "bin" / "bash.exe")
+            except OSError:
+                pass
+    except ImportError:
+        pass
+    for cand in candidates:
+        if cand.is_file():
+            return str(cand)
+    which = shutil.which("bash")
+    if which and "system32" not in which.lower():
+        return which
+    raise unittest.SkipTest(
+        "No Git Bash found (install Git for Windows to run this test)"
+    )
 
 
 class SetupDeployTest(unittest.TestCase):
