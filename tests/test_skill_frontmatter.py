@@ -7,7 +7,8 @@ SKILLS = ["kennisbank-upgrade", "kennisbank-contribute"]
 
 def read_frontmatter(path: Path) -> dict:
     text = path.read_text(encoding="utf-8")
-    assert text.startswith("---"), f"{path} missing frontmatter open"
+    if not text.startswith("---"):
+        raise ValueError(f"{path} missing frontmatter open")
     end = text.index("\n---", 3)
     body = text[3:end]
     fm = {}
