@@ -209,7 +209,7 @@ After install completes, tell the user:
 2. Six new slash commands are available: `/sessielog`, `/wiki`, `/intake`, `/stale`, `/sessiestart`, `/import`.
 3. The `/autoresearch` skill is available; trigger it with `/autoresearch [topic]`.
 4. Research output lands in `$HOME/Claude/research/`.
-5. If Ollama is not installed, semantic tiling is skipped. To enable: `ollama pull nomic-embed-text`.
+5. If Ollama is not installed, semantic tiling is skipped. To enable: `ollama pull qwen3-embedding:8b` (multilingual default; English-only vaults can use the lighter `ollama pull nomic-embed-text`).
 6. To verify any time: `bash scripts/doctor.sh` from the repo clone.
 7. Restart Claude Code (or reload commands) so the new slash commands are picked up.
 
