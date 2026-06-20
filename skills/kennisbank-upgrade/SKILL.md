@@ -45,9 +45,13 @@ Upgrade a deployed vault to the latest **release tag** (never bare main).
    check to scripts only. If any file in any category differs, warn the user
    that local edits exist, point them to the `kennisbank-contribute` skill, and
    ask whether to proceed (local edits will survive only in the backup).
-7. On confirmation, back up: copy `$VAULT/.claude/scripts` to
-   `$VAULT/.claude/scripts.pre-$INSTALLED.bak` (matching the existing `.bak`
-   convention). Back up `$VAULT/04-templates` the same way if templates changed.
+7. On confirmation, back up every deploy-map category that Step 6 found to have
+   local drift, using the `.pre-$INSTALLED.bak` naming convention:
+   - `$VAULT/.claude/scripts` -> `$VAULT/.claude/scripts.pre-$INSTALLED.bak`
+   - `$VAULT/04-templates` -> `$VAULT/04-templates.pre-$INSTALLED.bak`
+   - `$HOME/.claude/commands` -> `$HOME/.claude/commands.pre-$INSTALLED.bak`
+   - `$HOME/.claude/skills/autoresearch` -> `$HOME/.claude/skills/autoresearch.pre-$INSTALLED.bak`
+   Only back up a category if it actually has drift; skip clean ones.
 8. `git -C "$REPO" -c advice.detachedHead=false checkout "$LATEST"`.
 9. Copy per the deploy map: `scripts/*.py` and `scripts/*.sh` -> vault scripts;
    `templates/*.md` -> vault templates; `commands/*.md` -> `~/.claude/commands/`;

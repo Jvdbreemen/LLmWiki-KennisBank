@@ -49,7 +49,7 @@ content directories `00-*`..`08-*`, and `.kennisbank-version`.
    repo path. `git -C "$REPO" add` those paths.
 8. Commit with a descriptive message summarizing the change.
 9. `git -C "$REPO" push -u origin "contrib/<slug>"`.
-10. `gh pr create --repo <upstream> --base main --head "contrib/<slug>"` with a
+10. `gh pr create --repo <upstream> --base "$DEFAULT" --head "contrib/<slug>"` with a
     title and body describing the improvement. Report the PR URL.
 
 ## Dry-run
