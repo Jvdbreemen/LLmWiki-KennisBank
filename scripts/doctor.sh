@@ -206,14 +206,17 @@ else
   fi
 fi
 
-# 12. Ollama and nomic-embed-text (optional).
+# 12. Ollama and the embedding model (optional).
+# Default is qwen3-embedding:8b (multilingual); nomic-embed-text is the
+# lighter English-only fallback. Respect OLLAMA_EMBED_MODEL if the user set it.
 if ! command -v ollama >/dev/null 2>&1; then
   report_info "ollama" "not installed (optional, needed for semantic tiling)"
 else
-  if ollama list 2>/dev/null | grep -q "nomic-embed-text"; then
-    report_info "ollama nomic-embed-text" "installed"
+  EMBED_MODEL="${OLLAMA_EMBED_MODEL:-qwen3-embedding:8b}"
+  if ollama list 2>/dev/null | grep -q "$EMBED_MODEL"; then
+    report_info "ollama $EMBED_MODEL" "installed"
   else
-    report_info "ollama nomic-embed-text" "model not pulled (run: ollama pull nomic-embed-text)"
+    report_info "ollama $EMBED_MODEL" "model not pulled (run: ollama pull $EMBED_MODEL)"
   fi
 fi
 

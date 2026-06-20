@@ -74,7 +74,7 @@ Expected output (abbreviated):
 [ok] CLAUDE.md present
 [ok] commands installed: sessielog wiki intake stale sessiestart import
 [ok] autoresearch skill installed
-[warn] ollama nomic-embed-text not found (semantic tiling will be skipped)
+[warn] ollama qwen3-embedding:8b not found (semantic tiling will be skipped)
 [warn] graphify-out/graph.json not present (auto-crosslink will be skipped)
 Done. 0 errors, 2 warnings.
 ```

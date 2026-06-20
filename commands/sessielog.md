@@ -62,11 +62,11 @@ Als er wiki-wijzigingen zijn, schrijf gewijzigde bestanden naar ~/KennisBank/gra
 
 ## Stap 4: Semantische deduplicatie (tiling)
 
-Check of nomic-embed-text beschikbaar is:
+Check of het embedding-model beschikbaar is (default `qwen3-embedding:8b`, meertalig; `nomic-embed-text` is de lichtere Engels-only fallback):
 ```bash
-ollama list 2>/dev/null | grep nomic-embed-text
+ollama list 2>/dev/null | grep -E 'qwen3-embedding|nomic-embed-text'
 ```
-Als niet beschikbaar: sla over, rapporteer installatie-instructie.
+Als niet beschikbaar: sla over, rapporteer installatie-instructie (`ollama pull qwen3-embedding:8b`).
 Als beschikbaar: python3 ~/KennisBank/.claude/scripts/semantic-tiling.py [pad-naar-artikel]
 - >= 0.90: mogelijke duplicaat (error)
 - 0.80–0.89: verwant (review)
@@ -87,6 +87,6 @@ Configureer het pad in ~/KennisBank/CLAUDE.md (zie `LEARNINGS_FILE`). Als het pa
 ## Bevestiging
 - Pad naar het geschreven sessie-log
 - Welke wiki-artikelen nieuw of bijgewerkt zijn
-- Tiling-resultaten (of "overgeslagen — installeer nomic-embed-text")
+- Tiling-resultaten (of "overgeslagen — installeer qwen3-embedding:8b")
 - Welke learnings-entries toegevoegd zijn (of "overgeslagen — geen learnings-bestand geconfigureerd")
 - Als Decision Log entries aanwezig: overweeg of deze beslissingen een ADR (Architecture Decision Record) verdienen in het betreffende project. Als je een /adr workflow gebruikt: draai die nu.
