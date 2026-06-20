@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-06-20
+
+Tooling self-update: the lifecycle skills now manage every skill, not just
+autoresearch. Plus a test-coverage tightening.
+
+### Changed
+
+- **Skills deploy map generalized to `skills/*/`.** `kennisbank-upgrade` now
+  refreshes every installed skill (including `kennisbank-upgrade` and
+  `kennisbank-contribute` themselves), backing up each skill it overwrites;
+  `kennisbank-contribute` can isolate and PR improvements to any repo-known
+  skill. Personal/local-only skills (no `skills/<name>/` counterpart in the
+  repo at BASE) are gated out via `git cat-file -e` and are never contributed.
+- `tests/test_setup_deploy.py` also asserts `autoresearch` is installed, making
+  the deploy test a complete guard for all three skills.
+
 ## [0.6.0] - 2026-06-20
 
 Multilingual embedding default, configurable tiling thresholds, a deploy-gap
@@ -130,7 +146,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/releases/tag/v0.6.1
 [0.6.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/releases/tag/v0.6.0
 [0.5.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/releases/tag/v0.5.0
 [0.4.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/releases/tag/v0.4.0

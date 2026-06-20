@@ -33,7 +33,7 @@ details. This session surfaced two concrete failure modes the design must fix:
   ignored for upgrades).
 - **Cut v0.6.0** so the unreleased qwen3/threshold/doctor fixes (currently past
   the v0.5.0 tag on main) are captured by tag-based upgrade.
-- Contribute scope: **scripts + templates + commands + autoresearch skill**.
+- Contribute scope: **scripts + templates + commands + every skill under skills/*/**
   Personal vault content and config are excluded.
 - **Two separate skills**: `kennisbank-upgrade` and `kennisbank-contribute`.
 
@@ -47,7 +47,7 @@ details. This session surfaced two concrete failure modes the design must fix:
 | `scripts/*.sh`                   | `$VAULT/.claude/scripts/`        | NEW — closes the doctor.sh gap |
 | `templates/*.md`                 | `$VAULT/04-templates/`           |                                |
 | `commands/*.md`                  | `~/.claude/commands/`            | global                         |
-| `skills/autoresearch/SKILL.md`   | `~/.claude/skills/autoresearch/` | global                         |
+| `skills/*/SKILL.md` (each skill dir) | `~/.claude/skills/<name>/`   | global                         |
 | `CLAUDE.md.template`             | `$VAULT/CLAUDE.md`               | personalized — never upstream  |
 
 ### Path resolution
@@ -94,9 +94,9 @@ Flags: `--dry-run` (show planned changes, no writes).
 2. Baseline = installed tag (stamp), else latest tag.
 3. CRLF-agnostic diff of deployed tooling vs baseline across all four deploy
    locations (vault `.claude/scripts/`, vault `04-templates/`,
-   `~/.claude/commands/`, `~/.claude/skills/autoresearch/`). Build
+   `~/.claude/commands/`, `~/.claude/skills/*/`). Build
    changed/added list.
-4. Scope filter. Include: scripts, templates, commands, autoresearch skill.
+4. Scope filter. Include: scripts, templates, commands, every skill (skills/*/SKILL.md).
    Exclude: `CLAUDE.md`, `categories.json`, `embeddings-cache.json`, `*.bak`,
    vault content dirs (`00-*`..`08-*`), `.kennisbank-version`.
 5. Present the candidate diff; user selects which files to include.
@@ -120,7 +120,8 @@ Flags: `--dry-run` (build branch/diff locally, no push/PR).
 - Repo: `skills/kennisbank-upgrade/SKILL.md`,
   `skills/kennisbank-contribute/SKILL.md`.
 - Installed into `~/.claude/skills/` (globally invocable); `setup.sh` extended
-  to copy them alongside `autoresearch`.
+  to copy all `skills/*/SKILL.md` entries (not just autoresearch) into
+  `~/.claude/skills/<name>/`.
 
 ## Testing
 
