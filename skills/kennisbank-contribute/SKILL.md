@@ -18,11 +18,15 @@ Take local tooling edits in a deployed vault and open an upstream PR.
 | `$VAULT/.claude/scripts/<f>` | `scripts/<f>` |
 | `$VAULT/04-templates/<f>.md` | `templates/<f>.md` |
 | `$HOME/.claude/commands/<f>.md` | `commands/<f>.md` |
-| `$HOME/.claude/skills/autoresearch/SKILL.md` | `skills/autoresearch/SKILL.md` |
+| `$HOME/.claude/skills/<name>/SKILL.md` (each skill) | `skills/<name>/SKILL.md` |
 
 ## Scope filter (NEVER contribute these)
 `CLAUDE.md`, `categories.json`, `embeddings-cache.json`, any `*.bak`, the vault
 content directories `00-*`..`08-*`, and `.kennisbank-version`.
+
+For skills: only skills whose `skills/<name>/SKILL.md` path exists in the BASE
+commit are eligible; locally-installed skills with no upstream repo counterpart
+are excluded regardless of local edits.
 
 ## Procedure
 1. Read `$VAULT/.claude/.kennisbank-version` -> `BASE` (`tag`). If absent, use
@@ -31,10 +35,18 @@ content directories `00-*`..`08-*`, and `.kennisbank-version`.
 3. For each deployed location in the reverse deploy map, CRLF-agnostic diff the
    deployed file against `BASE`'s version of the mapped repo path:
    `diff --strip-trailing-cr <(git -C "$REPO" show "$BASE:<repopath>") "<deployed>"`.
-   A file that is new (no `BASE` version) counts as added. If
-   `git show "$BASE:<repopath>"` exits non-zero (the file does not exist in
-   BASE), treat the file as new/added — record it as added without running
-   diff. Collect the changed and added repo paths, applying the scope filter.
+   For skills, iterate over every installed skill under
+   `$HOME/.claude/skills/*/SKILL.md` and for each resolve its name and check
+   whether the repo counterpart exists at BASE:
+   `git -C "$REPO" ls-tree "$BASE" "skills/<name>/SKILL.md"`.
+   If this exits non-zero (the skill has no counterpart in the repo at BASE),
+   SKIP it silently — it is a locally-installed personal skill with no upstream
+   repo counterpart and is NEVER a contribute candidate. The "missing BASE =
+   added" rule applies only to scripts, templates, and commands — NOT to skills.
+   For skills that do exist in the repo at BASE, diff against
+   `skills/<name>/SKILL.md`; if `git show "$BASE:skills/<name>/SKILL.md"` exits
+   non-zero for any other reason, treat the skill as new/added. Collect the
+   changed and added repo paths, applying the scope filter.
 4. If nothing qualifies, report "no contributable changes" and stop.
 5. Show the user the candidate file list with per-file diffs. Let them choose
    which files to include (default: all).

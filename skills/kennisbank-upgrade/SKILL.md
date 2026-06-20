@@ -18,7 +18,7 @@ Upgrade a deployed vault to the latest **release tag** (never bare main).
 | `scripts/*.py`, `scripts/*.sh` | `$VAULT/.claude/scripts/` |
 | `templates/*.md` | `$VAULT/04-templates/` |
 | `commands/*.md` | `$HOME/.claude/commands/` |
-| `skills/autoresearch/SKILL.md` | `$HOME/.claude/skills/autoresearch/` |
+| `skills/*/SKILL.md` (each skill dir) | `$HOME/.claude/skills/<name>/` |
 
 `CLAUDE.md` is personalized and is NEVER overwritten.
 
@@ -33,30 +33,49 @@ Upgrade a deployed vault to the latest **release tag** (never bare main).
    delta, then, if useful, also show the relevant CHANGELOG.md section at
    `$LATEST` (`git -C "$REPO" show "$LATEST:CHANGELOG.md"`). Keep it concise —
    the commit delta is usually enough.
-6. Drift guard: for every deployed tooling file across ALL FOUR deploy-map
-   categories — scripts (`$VAULT/.claude/scripts/`), templates
-   (`$VAULT/04-templates/`), commands (`$HOME/.claude/commands/`), and the
-   autoresearch skill (`$HOME/.claude/skills/autoresearch/SKILL.md`) — perform
-   a CRLF-agnostic diff against the INSTALLED tag's version. Example for a
-   script file:
+6. Drift guard: iterate over ALL FOUR deploy-map categories — scripts
+   (`$VAULT/.claude/scripts/`), templates (`$VAULT/04-templates/`), commands
+   (`$HOME/.claude/commands/`), and skills. For skills, iterate over BOTH:
+   (a) every installed skill dir under `$HOME/.claude/skills/*/SKILL.md`, AND
+   (b) every skill dir in LATEST that step 9 will write (i.e. every
+   `skills/*/` present in the checked-out LATEST tag).
+   For each skill found in either set, perform a CRLF-agnostic diff of the
+   deployed `~/.claude/skills/<name>/SKILL.md` against the INSTALLED tag's
+   version (`git -C "$REPO" show "$INSTALLED:skills/<name>/SKILL.md"`).
+   If `git show "$INSTALLED:skills/<name>/SKILL.md"` exits non-zero (the skill
+   is absent at INSTALLED — i.e. it is newly added in LATEST) AND a deployed
+   `~/.claude/skills/<name>/SKILL.md` already exists, treat it as drifted/at-
+   risk so it gets backed up before step 9 overwrites it. Example for a script:
    `diff --strip-trailing-cr <(git -C "$REPO" show "$INSTALLED:scripts/<f>") "$VAULT/.claude/scripts/<f>"`.
-   Apply the same pattern for templates, commands, and the autoresearch skill
-   using their respective repo paths from the deploy map. Do not limit the
-   check to scripts only. If any file in any category differs, warn the user
-   that local edits exist, point them to the `kennisbank-contribute` skill, and
-   ask whether to proceed (local edits will survive only in the backup).
-7. On confirmation, back up every deploy-map category that Step 6 found to have
+   Apply the same CRLF-agnostic pattern for templates, commands, and each skill.
+   Do not limit the check to scripts only. If any file in any category differs,
+   warn the user that local edits exist, point them to the `kennisbank-contribute`
+   skill, and ask whether to proceed (local edits will survive only in the backup).
+7. On confirmation, back up every deploy-map category that step 6 found to have
    local drift, using the `.pre-$INSTALLED.bak` naming convention:
    - `$VAULT/.claude/scripts` -> `$VAULT/.claude/scripts.pre-$INSTALLED.bak`
    - `$VAULT/04-templates` -> `$VAULT/04-templates.pre-$INSTALLED.bak`
    - `$HOME/.claude/commands` -> `$HOME/.claude/commands.pre-$INSTALLED.bak`
-   - `$HOME/.claude/skills/autoresearch` -> `$HOME/.claude/skills/autoresearch.pre-$INSTALLED.bak`
-   Only back up a category if it actually has drift; skip clean ones.
+   - For skills: for each skill dir that step 9 will overwrite (every
+     `skills/*/` present in LATEST) where a deployed
+     `~/.claude/skills/<name>/SKILL.md` exists and its content differs from
+     the file step 9 will write, back it up:
+     `$HOME/.claude/skills/<name>` -> `$HOME/.claude/skills/<name>.pre-$INSTALLED.bak`.
+     This explicitly covers skills that are new in LATEST (absent at INSTALLED)
+     but have a pre-existing local file — those are at-risk and must be backed
+     up. Only back up a skill dir if the deployed file differs from what step 9
+     will write; skip identical ones.
+   Only back up a non-skill category if it actually has drift; skip clean ones.
+   The backup set provably covers every skill that step 9 will overwrite — no false safety promise.
 8. `git -C "$REPO" -c advice.detachedHead=false checkout "$LATEST"`.
 9. Copy per the deploy map: `scripts/*.py` and `scripts/*.sh` -> vault scripts;
    `templates/*.md` -> vault templates; `commands/*.md` -> `~/.claude/commands/`;
-   `skills/autoresearch/SKILL.md` -> `~/.claude/skills/autoresearch/`.
+   for each `skills/*/` directory in the checked-out tag, copy its `SKILL.md`
+   to `~/.claude/skills/<name>/SKILL.md` (this refreshes the kennisbank-upgrade
+   and kennisbank-contribute skills themselves).
    `chmod +x` the vault `.py` and `.sh` files. Do not touch `CLAUDE.md`.
+   Note: this step may update the kennisbank-* skills themselves; if their
+   behavior changed, re-invoke the relevant skill to pick up the new version.
 10. Write `$VAULT/.claude/.kennisbank-version`:
     `{"tag":"$LATEST","commit":"<git rev-parse --short $LATEST>","installed_at":"<UTC ISO 8601>"}`.
 11. `git -C "$REPO" checkout -` (return to the previously checked-out branch,
