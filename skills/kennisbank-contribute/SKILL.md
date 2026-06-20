@@ -24,9 +24,11 @@ Take local tooling edits in a deployed vault and open an upstream PR.
 `CLAUDE.md`, `categories.json`, `embeddings-cache.json`, any `*.bak`, the vault
 content directories `00-*`..`08-*`, and `.kennisbank-version`.
 
-For skills: only skills whose `skills/<name>/SKILL.md` path exists in the BASE
-commit are eligible; locally-installed skills with no upstream repo counterpart
-are excluded regardless of local edits.
+For skills: only skills whose `skills/<name>/SKILL.md` path exists in the repo
+at BASE — verified via `git cat-file -e "$BASE:skills/<name>/SKILL.md"` (exits
+0) — are eligible. Locally-installed skills with no upstream repo counterpart
+(probe exits non-zero) are excluded regardless of local edits and must NEVER
+be contributed.
 
 ## Procedure
 1. Read `$VAULT/.claude/.kennisbank-version` -> `BASE` (`tag`). If absent, use
@@ -38,15 +40,15 @@ are excluded regardless of local edits.
    For skills, iterate over every installed skill under
    `$HOME/.claude/skills/*/SKILL.md` and for each resolve its name and check
    whether the repo counterpart exists at BASE:
-   `git -C "$REPO" ls-tree "$BASE" "skills/<name>/SKILL.md"`.
-   If this exits non-zero (the skill has no counterpart in the repo at BASE),
-   SKIP it silently — it is a locally-installed personal skill with no upstream
-   repo counterpart and is NEVER a contribute candidate. The "missing BASE =
-   added" rule applies only to scripts, templates, and commands — NOT to skills.
-   For skills that do exist in the repo at BASE, diff against
-   `skills/<name>/SKILL.md`; if `git show "$BASE:skills/<name>/SKILL.md"` exits
-   non-zero for any other reason, treat the skill as new/added. Collect the
-   changed and added repo paths, applying the scope filter.
+   `git -C "$REPO" cat-file -e "$BASE:skills/<name>/SKILL.md"`.
+   If this exits non-zero (exit 128 when the path is absent), SKIP it silently
+   — it is a locally-installed personal skill with no upstream repo counterpart
+   and is NEVER a contribute candidate. A skill absent at BASE must NEVER be
+   routed to "added"; the "missing BASE = added" rule applies ONLY to scripts,
+   templates, and commands — NOT to skills.
+   For skills confirmed to exist at BASE (probe exits 0), diff against
+   `skills/<name>/SKILL.md` at that ref. Collect changed repo paths, applying
+   the scope filter.
 4. If nothing qualifies, report "no contributable changes" and stop.
 5. Show the user the candidate file list with per-file diffs. Let them choose
    which files to include (default: all).

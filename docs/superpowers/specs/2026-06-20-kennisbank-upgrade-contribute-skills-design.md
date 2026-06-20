@@ -120,7 +120,8 @@ Flags: `--dry-run` (build branch/diff locally, no push/PR).
 - Repo: `skills/kennisbank-upgrade/SKILL.md`,
   `skills/kennisbank-contribute/SKILL.md`.
 - Installed into `~/.claude/skills/` (globally invocable); `setup.sh` extended
-  to copy them alongside `autoresearch`.
+  to copy all `skills/*/SKILL.md` entries (not just autoresearch) into
+  `~/.claude/skills/<name>/`.
 
 ## Testing
 
