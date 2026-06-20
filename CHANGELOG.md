@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-20
+
+Multilingual embedding default, configurable tiling thresholds, a deploy-gap
+fix, and two new lifecycle skills for upgrading a vault and contributing
+improvements upstream.
+
+### Added
+
+- **`kennisbank-upgrade` skill** — upgrades a deployed vault to the latest
+  official release tag: checks the upstream tag, shows the changelog, guards
+  against clobbering local edits, backs up the current deploy, copies the new
+  tooling, stamps `$VAULT/.claude/.kennisbank-version`, and verifies with
+  `doctor.sh`.
+- **`kennisbank-contribute` skill** — isolates local tooling edits in a
+  deployed vault (scripts, templates, commands, skill), filters out personal
+  vault content, and opens an upstream PR.
+- **`qwen3-embedding:8b` as the default embedding model** (multilingual, 119
+  languages) with `nomic-embed-text` as the lighter English-only fallback via
+  `OLLAMA_EMBED_MODEL`.
+- **Configurable tiling thresholds** `TILING_THRESHOLD_ERROR` /
+  `TILING_THRESHOLD_REVIEW`, with robust NL-decimal parsing and a safe fallback
+  instead of a crash on bad input.
+
+### Fixed
+
+- **`setup.sh` now deploys `scripts/*.sh`**, so `doctor.sh` ships with every
+  install instead of relying on a manual copy.
+- **`doctor.sh` respects `OLLAMA_EMBED_MODEL`** and reports the actual default
+  (`qwen3-embedding:8b`) instead of hardcoding `nomic-embed-text`.
+
 ## [0.5.0] - 2026-06-14
 
 Second review round: regression tests + CI, configurable taxonomy, an env var that points every script at the vault, a documentation-drift sweep, and a code-duplication cleanup.
@@ -100,7 +130,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/releases/tag/v0.6.0
 [0.5.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/releases/tag/v0.5.0
 [0.4.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/releases/tag/v0.4.0
 [0.3.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/releases/tag/v0.3.0
