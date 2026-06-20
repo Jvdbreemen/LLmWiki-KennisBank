@@ -1,5 +1,13 @@
 # Kennisbank Upgrade & Contribute Skills Implementation Plan
 
+> **SUPERSEDED IN PART (2026-06-20, v0.6.1):** the skills deploy map was later
+> generalized from `autoresearch`-only to **all `skills/*/`** (so the upgrade
+> refreshes the kennisbank skills themselves and contribute can push any skill).
+> The `skills/autoresearch/SKILL.md`-only deploy-map rows in the task briefs
+> below reflect the original v0.6.0 build and are kept as the historical record.
+> For the current generalized contract see the design spec and the live
+> `skills/kennisbank-upgrade/SKILL.md` / `skills/kennisbank-contribute/SKILL.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add two invocable skills — `kennisbank-upgrade` (pull latest release tag into a vault) and `kennisbank-contribute` (push local vault tooling improvements upstream as a PR) — plus the v0.6.0 release that captures the unreleased fixes.
