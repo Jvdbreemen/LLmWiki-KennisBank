@@ -107,11 +107,11 @@ mkdir -p "$VAULT/graphify-out"
 # Research output dir
 mkdir -p "$RESEARCH"
 
-# Scripts
-for f in scripts/*.py; do
+# Scripts (Python helpers + shell tools like doctor.sh)
+for f in scripts/*.py scripts/*.sh; do
   copy_file "$f" "$VAULT/.claude/scripts/$(basename "$f")"
 done
-chmod +x "$VAULT/.claude/scripts/"*.py
+chmod +x "$VAULT/.claude/scripts/"*.py "$VAULT/.claude/scripts/"*.sh
 
 # Templates
 for f in templates/*.md; do
