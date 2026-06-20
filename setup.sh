@@ -39,7 +39,7 @@ Usage: bash setup.sh [opties]
 Opties:
   -y, --yes          beantwoord alle prompts met ja (niet-interactief)
   --no-commands      sla het kopiëren van commands over
-  --no-skill         sla het kopiëren van de autoresearch skill over
+  --no-skill         sla het kopiëren van de skills (autoresearch, kennisbank-upgrade, kennisbank-contribute) over
   -f, --force        overschrijf bestaande bestanden (scripts, templates, commands, skill, CLAUDE.md)
   -h, --help         toon deze hulp en stop
 
@@ -91,7 +91,7 @@ copy_file() {
   echo "  gekopieerd: $dst"
 }
 
-VAULT="$HOME/KennisBank"
+VAULT="${KENNISBANK_VAULT:-$HOME/KennisBank}"
 RESEARCH="$HOME/Claude/research"
 CLAUDE_COMMANDS="$HOME/.claude/commands"
 CLAUDE_SKILLS="$HOME/.claude/skills"
@@ -107,11 +107,11 @@ mkdir -p "$VAULT/graphify-out"
 # Research output dir
 mkdir -p "$RESEARCH"
 
-# Scripts
-for f in scripts/*.py; do
+# Scripts (Python helpers + shell tools like doctor.sh)
+for f in scripts/*.py scripts/*.sh; do
   copy_file "$f" "$VAULT/.claude/scripts/$(basename "$f")"
 done
-chmod +x "$VAULT/.claude/scripts/"*.py
+chmod +x "$VAULT/.claude/scripts/"*.py "$VAULT/.claude/scripts/"*.sh
 
 # Templates
 for f in templates/*.md; do
@@ -151,16 +151,22 @@ else
 fi
 
 if [ "$NO_SKILL" = "1" ]; then
-  echo "autoresearch skill overgeslagen (--no-skill)."
+  echo "Skills overgeslagen (--no-skill)."
 elif [ "$ASSUME_YES" = "1" ]; then
-  mkdir -p "$CLAUDE_SKILLS/autoresearch"
-  copy_file skills/autoresearch/SKILL.md "$CLAUDE_SKILLS/autoresearch/SKILL.md"
+  for sdir in skills/*/; do
+    sname="$(basename "$sdir")"
+    mkdir -p "$CLAUDE_SKILLS/$sname"
+    copy_file "${sdir}SKILL.md" "$CLAUDE_SKILLS/$sname/SKILL.md"
+  done
 else
-  printf "autoresearch skill kopiëren naar %s/autoresearch/? (y/n) " "$CLAUDE_SKILLS"
+  printf "Skills kopiëren naar %s/? (y/n) " "$CLAUDE_SKILLS"
   read REPLY
   if [ "$REPLY" = "y" ] || [ "$REPLY" = "Y" ]; then
-    mkdir -p "$CLAUDE_SKILLS/autoresearch"
-    copy_file skills/autoresearch/SKILL.md "$CLAUDE_SKILLS/autoresearch/SKILL.md"
+    for sdir in skills/*/; do
+      sname="$(basename "$sdir")"
+      mkdir -p "$CLAUDE_SKILLS/$sname"
+      copy_file "${sdir}SKILL.md" "$CLAUDE_SKILLS/$sname/SKILL.md"
+    done
   fi
 fi
 
