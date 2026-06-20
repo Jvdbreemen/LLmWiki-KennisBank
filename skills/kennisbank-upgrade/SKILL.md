@@ -28,14 +28,23 @@ Upgrade a deployed vault to the latest **release tag** (never bare main).
 3. Read `$VAULT/.claude/.kennisbank-version` -> `INSTALLED` (the `tag` field).
    If the file is absent, treat as unknown/legacy and tell the user.
 4. If `INSTALLED == LATEST`: report "up to date ($LATEST)" and stop.
-5. Show what changed: print the CHANGELOG.md section(s) between INSTALLED and
-   LATEST (`git -C "$REPO" show "$LATEST:CHANGELOG.md"`).
-6. Drift guard: for every deployed tooling file, CRLF-agnostic diff against the
-   INSTALLED tag's version:
+5. Show what is NEW between versions: first run
+   `git -C "$REPO" log --oneline "$INSTALLED..$LATEST"` to display the commit
+   delta, then, if useful, also show the relevant CHANGELOG.md section at
+   `$LATEST` (`git -C "$REPO" show "$LATEST:CHANGELOG.md"`). Keep it concise —
+   the commit delta is usually enough.
+6. Drift guard: for every deployed tooling file across ALL FOUR deploy-map
+   categories — scripts (`$VAULT/.claude/scripts/`), templates
+   (`$VAULT/04-templates/`), commands (`$HOME/.claude/commands/`), and the
+   autoresearch skill (`$HOME/.claude/skills/autoresearch/SKILL.md`) — perform
+   a CRLF-agnostic diff against the INSTALLED tag's version. Example for a
+   script file:
    `diff --strip-trailing-cr <(git -C "$REPO" show "$INSTALLED:scripts/<f>") "$VAULT/.claude/scripts/<f>"`.
-   If any differ, warn the user that local edits exist, point them to the
-   `kennisbank-contribute` skill, and ask whether to proceed (local edits will
-   survive only in the backup).
+   Apply the same pattern for templates, commands, and the autoresearch skill
+   using their respective repo paths from the deploy map. Do not limit the
+   check to scripts only. If any file in any category differs, warn the user
+   that local edits exist, point them to the `kennisbank-contribute` skill, and
+   ask whether to proceed (local edits will survive only in the backup).
 7. On confirmation, back up: copy `$VAULT/.claude/scripts` to
    `$VAULT/.claude/scripts.pre-$INSTALLED.bak` (matching the existing `.bak`
    convention). Back up `$VAULT/04-templates` the same way if templates changed.
@@ -46,7 +55,8 @@ Upgrade a deployed vault to the latest **release tag** (never bare main).
    `chmod +x` the vault `.py` and `.sh` files. Do not touch `CLAUDE.md`.
 10. Write `$VAULT/.claude/.kennisbank-version`:
     `{"tag":"$LATEST","commit":"<git rev-parse --short $LATEST>","installed_at":"<UTC ISO 8601>"}`.
-11. `git -C "$REPO" checkout main` (return to a branch).
+11. `git -C "$REPO" checkout -` (return to the previously checked-out branch,
+    regardless of its name).
 12. Run `bash "$VAULT/.claude/scripts/doctor.sh"` and report the PASS count.
 
 ## Dry-run

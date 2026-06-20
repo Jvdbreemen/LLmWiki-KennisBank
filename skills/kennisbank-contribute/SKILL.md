@@ -31,12 +31,19 @@ content directories `00-*`..`08-*`, and `.kennisbank-version`.
 3. For each deployed location in the reverse deploy map, CRLF-agnostic diff the
    deployed file against `BASE`'s version of the mapped repo path:
    `diff --strip-trailing-cr <(git -C "$REPO" show "$BASE:<repopath>") "<deployed>"`.
-   A file that is new (no `BASE` version) counts as added. Collect the changed
-   and added repo paths, applying the scope filter.
+   A file that is new (no `BASE` version) counts as added. If
+   `git show "$BASE:<repopath>"` exits non-zero (the file does not exist in
+   BASE), treat the file as new/added — record it as added without running
+   diff. Collect the changed and added repo paths, applying the scope filter.
 4. If nothing qualifies, report "no contributable changes" and stop.
 5. Show the user the candidate file list with per-file diffs. Let them choose
    which files to include (default: all).
-6. Create a branch: `git -C "$REPO" checkout -b "contrib/<slug>" main`
+6. Detect the default branch and create a branch off it:
+   ```
+   DEFAULT=$(git -C "$REPO" symbolic-ref --quiet refs/remotes/origin/HEAD | sed 's@^refs/remotes/origin/@@')
+   DEFAULT=${DEFAULT:-main}
+   git -C "$REPO" checkout -b "contrib/<slug>" "$DEFAULT"
+   ```
    (slug from a short user-supplied description).
 7. For each selected file, copy the deployed version into the repo at its mapped
    repo path. `git -C "$REPO" add` those paths.
