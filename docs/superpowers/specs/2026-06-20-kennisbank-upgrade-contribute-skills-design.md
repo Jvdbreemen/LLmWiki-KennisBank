@@ -25,6 +25,10 @@ details. This session surfaced two concrete failure modes the design must fix:
 
 ## Decisions (locked)
 
+- **Cross-platform: every script and test must work on macOS, Linux, and
+  Windows (Git Bash).** Tests pass on all three. Paths handed to a bash
+  subprocess are converted to Git Bash POSIX form (`/c/...`) on Windows.
+  `setup.sh` honors `KENNISBANK_VAULT` like the rest of the script layer.
 - Upgrade source of truth: **latest release tag** (official tags only; main is
   ignored for upgrades).
 - **Cut v0.6.0** so the unreleased qwen3/threshold/doctor fixes (currently past

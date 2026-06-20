@@ -10,8 +10,9 @@
 
 ## Global Constraints
 
+- **Cross-platform: every script and test in this project must work on macOS, Linux, and Windows (Git Bash).** Tests must pass on all three. Never pass a Windows-style path (`C:\...`) to a bash subprocess — convert to Git Bash POSIX form (`/c/...`) first.
 - Upgrade source of truth: latest **release tag** only (`v[0-9]*`), never bare `main`.
-- Vault path resolves via `KENNISBANK_VAULT`, fallback `$HOME/KennisBank`.
+- Vault path resolves via `KENNISBANK_VAULT`, fallback `$HOME/KennisBank`. `setup.sh` honors `KENNISBANK_VAULT` too.
 - Repo clone path resolves via `KENNISBANK_REPO`, else the skill asks the user.
 - All deployed-vs-repo file comparisons are CRLF-agnostic (`diff --strip-trailing-cr`).
 - Version stamp file: `$VAULT/.claude/.kennisbank-version`, JSON keys `tag`, `commit`, `installed_at` (UTC ISO 8601).
@@ -31,11 +32,16 @@
 ### Task 1: Fix setup.sh to deploy shell scripts
 
 **Files:**
-- Modify: `setup.sh:110-114` (the Scripts copy loop)
+- Modify: `setup.sh` — the `VAULT=` line (~94) and the Scripts copy loop (~110-114)
 - Test: `tests/test_setup_deploy.py` (create)
 
 **Interfaces:**
-- Produces: a deployed vault layout where `$VAULT/.claude/scripts/doctor.sh` exists after `bash setup.sh --yes`.
+- Produces: a deployed vault layout where `<vault>/.claude/scripts/doctor.sh` exists after `bash setup.sh --yes`, with `setup.sh` honoring `KENNISBANK_VAULT`.
+
+**Cross-platform note:** the test launches `bash setup.sh` as a subprocess. On
+Windows, Git Bash mangles Windows-style paths (`C:\...`) passed via env, so the
+test MUST convert any path it hands to bash into POSIX form (`/c/...`). The
+`_bash_path` helper below does this; it is identity on macOS/Linux.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -45,6 +51,7 @@ Create `tests/test_setup_deploy.py`:
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -52,34 +59,52 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
+def _bash_path(p: Path) -> str:
+    """Convert a path to a form Git Bash accepts.
+
+    On Windows, C:\\Users\\x -> /c/Users/x (drive letter lowercased, backslashes
+    to forward slashes). On macOS/Linux the path is already POSIX, so identity.
+    """
+    if sys.platform.startswith("win"):
+        s = str(p).replace("\\", "/")
+        if len(s) > 1 and s[1] == ":":
+            s = "/" + s[0].lower() + s[2:]
+        return s
+    return str(p)
+
+
 class SetupDeployTest(unittest.TestCase):
     def run_setup(self):
-        home = tempfile.mkdtemp(prefix="kb-home-")
-        env = dict(os.environ, HOME=home)
-        # Windows-style override so the test is HOME-driven on every platform.
-        env["USERPROFILE"] = home
+        tmp = Path(tempfile.mkdtemp(prefix="kb-home-"))
+        vault = tmp / "KennisBank"
+        env = dict(os.environ)
+        # HOME drives the ~/.claude deploy targets; KENNISBANK_VAULT drives the
+        # vault. Both must be POSIX-form so Git Bash resolves them correctly.
+        env["HOME"] = _bash_path(tmp)
+        env["USERPROFILE"] = _bash_path(tmp)
+        env["KENNISBANK_VAULT"] = _bash_path(vault)
         subprocess.run(
             ["bash", "setup.sh", "--yes"],
             cwd=REPO_ROOT, env=env, check=True,
             capture_output=True, text=True,
         )
-        return Path(home)
+        return tmp, vault
 
     def test_doctor_sh_is_deployed(self):
-        home = self.run_setup()
+        tmp, vault = self.run_setup()
         try:
-            doctor = home / "KennisBank" / ".claude" / "scripts" / "doctor.sh"
+            doctor = vault / ".claude" / "scripts" / "doctor.sh"
             self.assertTrue(doctor.is_file(), f"doctor.sh not deployed at {doctor}")
         finally:
-            shutil.rmtree(home, ignore_errors=True)
+            shutil.rmtree(tmp, ignore_errors=True)
 
     def test_python_scripts_still_deployed(self):
-        home = self.run_setup()
+        tmp, vault = self.run_setup()
         try:
-            common = home / "KennisBank" / ".claude" / "scripts" / "_common.py"
+            common = vault / ".claude" / "scripts" / "_common.py"
             self.assertTrue(common.is_file(), "_common.py regressed out of deploy")
         finally:
-            shutil.rmtree(home, ignore_errors=True)
+            shutil.rmtree(tmp, ignore_errors=True)
 
 
 if __name__ == "__main__":
@@ -89,11 +114,30 @@ if __name__ == "__main__":
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `python3 -m unittest tests.test_setup_deploy -v`
-Expected: `test_doctor_sh_is_deployed` FAILS ("doctor.sh not deployed"); `test_python_scripts_still_deployed` passes.
+Expected: both tests FAIL — `setup.sh` does not yet honor `KENNISBANK_VAULT`
+(so the vault lands at `$HOME/KennisBank`, not the test's vault) and does not
+deploy `doctor.sh`.
 
-- [ ] **Step 3: Implement the fix**
+- [ ] **Step 3: Make setup.sh honor KENNISBANK_VAULT**
 
-In `setup.sh`, replace the Scripts block (currently lines 110-114):
+In `setup.sh`, replace the line (~94):
+
+```bash
+VAULT="$HOME/KennisBank"
+```
+
+with:
+
+```bash
+VAULT="${KENNISBANK_VAULT:-$HOME/KennisBank}"
+```
+
+This matches the rest of the codebase, which already resolves the vault via
+`KENNISBANK_VAULT` (see `scripts/_vaultpath.py`).
+
+- [ ] **Step 4: Make setup.sh deploy shell scripts**
+
+In `setup.sh`, replace the Scripts block (~110-114):
 
 ```bash
 # Scripts
@@ -116,21 +160,21 @@ chmod +x "$VAULT/.claude/scripts/"*.py "$VAULT/.claude/scripts/"*.sh
 (`shopt -s nullglob` is already set at the top of `setup.sh`, so an empty
 `*.sh` glob is safe.)
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 5: Run test to verify it passes**
 
 Run: `python3 -m unittest tests.test_setup_deploy -v`
-Expected: both tests PASS.
+Expected: both tests PASS on this platform.
 
-- [ ] **Step 5: Shell syntax check**
+- [ ] **Step 6: Shell syntax check**
 
 Run: `bash -n setup.sh`
 Expected: no output, exit 0.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add setup.sh tests/test_setup_deploy.py
-git commit -m "fix(setup): deploy scripts/*.sh so doctor.sh ships with installs"
+git commit -m "fix(setup): honor KENNISBANK_VAULT and deploy scripts/*.sh (doctor.sh)"
 ```
 
 ---
@@ -363,14 +407,14 @@ Append to `tests/test_setup_deploy.py` inside `SetupDeployTest`:
 
 ```python
     def test_new_skills_are_installed(self):
-        home = self.run_setup()
+        tmp, vault = self.run_setup()
         try:
-            base = home / ".claude" / "skills"
+            base = tmp / ".claude" / "skills"
             for slug in ("kennisbank-upgrade", "kennisbank-contribute"):
                 skill = base / slug / "SKILL.md"
                 self.assertTrue(skill.is_file(), f"{slug} not installed at {skill}")
         finally:
-            shutil.rmtree(home, ignore_errors=True)
+            shutil.rmtree(tmp, ignore_errors=True)
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
