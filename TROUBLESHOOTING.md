@@ -115,13 +115,13 @@ Or remove the project-level directory if you never intended it.
 
 **Symptom**: `Embedding mislukt via /api/embeddings. Controleer OLLAMA_HOST, ollama serve en OLLAMA_EMBED_MODEL.`
 
-**Cause**: The script calls the Ollama HTTP API at `${OLLAMA_HOST:-http://localhost:11434}/api/embeddings` and requests the model `${OLLAMA_EMBED_MODEL:-nomic-embed-text}`. Either Ollama is not installed, the daemon is not running, `OLLAMA_HOST` points at the wrong server, or the configured model is not pulled. See section 8.
+**Cause**: The script calls the Ollama HTTP API at `${OLLAMA_HOST:-http://localhost:11434}/api/embeddings` and requests the model `${OLLAMA_EMBED_MODEL:-qwen3-embedding:8b}` (the multilingual default; set `OLLAMA_EMBED_MODEL=nomic-embed-text` for the lighter English-only fallback). Either Ollama is not installed, the daemon is not running, `OLLAMA_HOST` points at the wrong server, or the configured model is not pulled. See section 8.
 
 **Fix**:
 ```bash
 ollama serve &
 export OLLAMA_HOST="${OLLAMA_HOST:-http://localhost:11434}"
-export OLLAMA_EMBED_MODEL="${OLLAMA_EMBED_MODEL:-nomic-embed-text}"
+export OLLAMA_EMBED_MODEL="${OLLAMA_EMBED_MODEL:-qwen3-embedding:8b}"
 curl -s "$OLLAMA_HOST/api/tags" >/dev/null && echo "ollama up" || echo "ollama down"
 ollama pull "$OLLAMA_EMBED_MODEL"
 ollama list | grep "$OLLAMA_EMBED_MODEL"
@@ -396,21 +396,22 @@ On macOS, `/Applications/Ollama.app` also launches the daemon.
 
 ### 8.3 Model not pulled
 
-**Symptom**: `Error: model 'nomic-embed-text' not found`.
+**Symptom**: `Error: model 'qwen3-embedding:8b' not found`.
 
 **Cause**: Ollama only loads what you pull.
 
 **Fix**:
 ```bash
-ollama pull nomic-embed-text
-ollama list | grep nomic-embed-text
+ollama pull qwen3-embedding:8b          # multilingual default
+# or, English-only fallback: ollama pull nomic-embed-text
+ollama list | grep -E 'qwen3-embedding|nomic-embed-text'
 ```
 
 ### 8.4 Wrong model name in script
 
 **Symptom**: You set `OLLAMA_EMBED_MODEL` to a different model and `semantic-tiling.py` fails or returns no embedding.
 
-**Cause**: `semantic-tiling.py` reads `OLLAMA_EMBED_MODEL` and defaults to `nomic-embed-text`. The selected model may not be pulled yet, or it may return a different output schema.
+**Cause**: `semantic-tiling.py` reads `OLLAMA_EMBED_MODEL` and defaults to `qwen3-embedding:8b` (with `nomic-embed-text` as the English-only fallback). The selected model may not be pulled yet, or it may return a different output schema.
 
 **Fix**:
 ```bash
