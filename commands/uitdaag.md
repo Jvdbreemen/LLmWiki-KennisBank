@@ -18,6 +18,7 @@ Sparringstool voor journalistiek denken. Geen essay, geen algemene kennis. Allee
 
 3. **Als de lijst leeg is** (geen resultaten boven de drempelwaarde):
    Meld dit direct: "Niets in de vault dat hierop aansluit."
+   > **Let op:** een leeg resultaat kan ook betekenen dat de embed-index nog niet gebouwd is. Herstel met `python3 ~/KennisBank/.claude/scripts/build-embed-index.py` en probeer opnieuw.
    Stop hier. Val niet terug op algemene kennis.
 
 4. **Als er matches zijn:**

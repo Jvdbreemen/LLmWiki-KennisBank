@@ -50,6 +50,7 @@ Patroonherkenning over sessies heen — destilleer herbruikbare kennis als wiki-
    - Noteer het resultaat als **herschreven** (pad + score) voor de rapportage.
 
    **Als `above_threshold` false is (geen match):**
+   > **Let op:** een leeg resultaat kan ook betekenen dat de embed-index nog niet gebouwd is. Herstel met `python3 ~/KennisBank/.claude/scripts/build-embed-index.py` en probeer opnieuw.
    - Val door naar stap 4 (nieuw artikel aanmaken via template).
 
 4. Per wiki-artikel:

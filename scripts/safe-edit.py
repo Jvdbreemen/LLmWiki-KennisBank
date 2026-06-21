@@ -8,9 +8,17 @@ from __future__ import annotations
 
 import difflib
 import json
+import os
 import re
 import sys
 from pathlib import Path
+
+
+def _env_int(name, default):
+    try:
+        return int(os.environ.get(name, str(default)).strip())
+    except (ValueError, AttributeError):
+        return default
 
 
 # ---------------------------------------------------------------------------
@@ -254,15 +262,19 @@ def main(argv=None):
             _emit({"action": "no-op"})
             sys.exit(0)
 
+    # ---- Read env thresholds ----
+    max_lines = _env_int("KB_EDIT_MAX_LINES", 20)
+    max_drop = _env_int("KB_EDIT_MAX_DROP", 3)
+
     # ---- Classify ----
     if not target_exists:
         # New-file case: klein if content fits within max_lines lines.
         new_line_count = len(proposed.splitlines())
-        size = "klein" if new_line_count <= 20 else "groot"
+        size = "klein" if new_line_count <= max_lines else "groot"
         old_text = ""
     else:
         old_text = target.read_text(encoding="utf-8")
-        size = classify(old_text, proposed)
+        size = classify(old_text, proposed, max_lines=max_lines, max_drop=max_drop)
 
     commit_msg = args.message or f"wiki-rewrite: {target.name}"
 

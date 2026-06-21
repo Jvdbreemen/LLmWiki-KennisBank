@@ -208,10 +208,11 @@ The five env vars below control the behavior of the vault-onderhoud scripts
 ### KB_REWRITE_THRESHOLD
 
 - **Default**: `0.62`
-- **Where set**: `scripts/safe-edit.py`.
-- **Effect**: cosine similarity threshold used by `safe-edit.py` to decide whether
-  a proposed rewrite is "close enough" to the existing article to apply
-  automatically. Rewrites with similarity below this are flagged for review.
+- **Where set**: `scripts/find-similar.py`.
+- **Effect**: cosine similarity threshold used by `find-similar.py` to decide
+  whether the best-matching wiki article is close enough to treat as an existing
+  article (rewrite path) rather than a new one. When `above_threshold` is false,
+  `/wiki` falls through to creating a new article instead.
   Tuned for `qwen3-embedding:8b`; recalibrate after a model switch.
 - **To change**: set the environment variable. Same embedding-model caveat as the
   tiling thresholds.
@@ -232,10 +233,10 @@ The five env vars below control the behavior of the vault-onderhoud scripts
 - **Where set**: `scripts/context-budget.py`.
 - **Effect**: selects the progressive context layer loaded at session start
   (via `context-budget.py` and `/sessiestart`).
-  - `0` — L0: bare minimum (vault summary only).
-  - `1` — L1: default (summary + recent wiki changes).
-  - `2` — L2: extended (L1 + cross-project context).
-  - `3` — L3: full (L2 + memory + research files).
+  - `0` — L0: identity only (first ~40 lines of `CLAUDE.md`).
+  - `1` — L1: default (L0 + active state: recent sessions, status counts, open loops).
+  - `2` — L2: extended (L0 + L1 + relevant articles via `kb-search.py`, requires `--query`).
+  - `3` — L3: full (L0 + L1 + L2 + full article bodies for the matched articles).
   Higher levels consume more tokens; use L0 or L1 for long coding sessions, L3
   for deep knowledge-work sessions.
 - **To change**: set the environment variable or pass the level explicitly to

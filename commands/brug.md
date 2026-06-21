@@ -83,6 +83,7 @@ Geef voorkeur aan onverwachte koppelingen. Sla voor de hand liggende overlapping
 
 Als er na stap 3 en stap 4 geen zinvolle brug te vinden is (artikelen bestaan nauwelijks of overlappen niet), zeg dat dan direct:
 "Geen betekenisvolle brug gevonden tussen [A] en [B] op basis van de huidige vault-inhoud."
+> **Let op:** een leeg resultaat kan ook betekenen dat de embed-index nog niet gebouwd is. Herstel met `python3 ~/KennisBank/.claude/scripts/build-embed-index.py` en probeer opnieuw.
 Stop hier. Verzin niets.
 
 ## Regels

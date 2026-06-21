@@ -17,9 +17,10 @@ progressive context budgets.
 
 - **Self-rewriting `/wiki` via `safe-edit.py`** (hybrid-autonomy edit engine). Guards
   every automated wiki rewrite by line-change count (`KB_EDIT_MAX_LINES`, default 20),
-  deletion count (`KB_EDIT_MAX_DROP`, default 3), and rewrite similarity
-  (`KB_REWRITE_THRESHOLD`, default 0.62). Edits that exceed any guard are held back
-  and proposed for human review instead of being applied silently.
+  heading removal, and deletion count (`KB_EDIT_MAX_DROP`, default 3). Edits that
+  exceed any guard are held back and proposed for human review instead of being applied
+  silently. (Similarity-based rewrite matching is handled by `find-similar.py` via
+  `KB_REWRITE_THRESHOLD`, not by `safe-edit.py`.)
 - **`scripts/find-similar.py`** — candidate match finder: returns the most
   semantically similar wiki articles for a query or article, powering `/wiki`'s
   de-duplication awareness.

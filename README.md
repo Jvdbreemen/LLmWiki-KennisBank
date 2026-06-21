@@ -26,7 +26,7 @@ Every Claude session produces a session log. The `/wiki` command compiles logs i
 | `commands/uitdaag.md` | `/uitdaag` command: adversarially challenge a claim or article for weak reasoning |
 | `commands/brug.md` | `/brug` command: find conceptual bridges between two topics or articles |
 | `skills/autoresearch/` | `/autoresearch` skill: iterative multi-round web research |
-| `scripts/safe-edit.py` | Hybrid-autonomy edit engine: guards `/wiki` rewrites by line-change count, deletion count, and rewrite similarity |
+| `scripts/safe-edit.py` | Hybrid-autonomy edit engine: guards `/wiki` rewrites by line-change count, heading removal, and net deletion count |
 | `scripts/find-similar.py` | Candidate match finder: returns the most semantically similar wiki articles for a query or article |
 | `scripts/kb-search.py` | Query retrieval CLI: search the vault by natural-language query and return ranked results |
 | `scripts/conflict-scan.py` | Contradiction detection: compares wiki passage pairs and flags semantically similar but factually diverging claims |

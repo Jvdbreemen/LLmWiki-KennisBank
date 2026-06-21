@@ -5,6 +5,7 @@ Pure-function tests (no git) and CLI integration tests against a temp git repo.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -272,6 +273,43 @@ class TestCLI(unittest.TestCase):
             self.assertEqual(report["action"], "no-op")
             # Commit count must not have changed
             self.assertEqual(self._commit_count(d), before_count)
+        finally:
+            import shutil; shutil.rmtree(str(d), ignore_errors=True)
+
+    # -- KB_EDIT_MAX_LINES env var --
+
+    def test_kb_edit_max_lines_env_lowers_threshold(self):
+        """KB_EDIT_MAX_LINES=1 makes a 'klein' edit (few changed lines) classify as groot -> exit 2."""
+        d, art = self.make_repo()
+        try:
+            original_text = art.read_text(encoding="utf-8")
+            # Two lines added: diff_line_count = 2, which is klein at default (2 <= 20)
+            # but groot at KB_EDIT_MAX_LINES=1 (2 > 1).
+            new_content = "# A\n\nbody line\nextra line A\nextra line B\n"
+            # Sanity: without env override, this is klein -> exit 0
+            result_default = subprocess.run(
+                [sys.executable, str(self.SCRIPT), str(art), "--new", "-"],
+                input=new_content, text=True, capture_output=True,
+            )
+            self.assertEqual(result_default.returncode, 0, result_default.stderr)
+            # Commit happened; reset the file for the next sub-test
+            art.write_text(original_text, encoding="utf-8")
+            subprocess.run(["git", "-C", str(d), "add", str(art)], check=True)
+            subprocess.run(["git", "-C", str(d), "commit", "-qm", "reset"], check=True)
+
+            # With KB_EDIT_MAX_LINES=1 the same edit exceeds the threshold -> exit 2
+            env = {**os.environ, "KB_EDIT_MAX_LINES": "1"}
+            result_strict = subprocess.run(
+                [sys.executable, str(self.SCRIPT), str(art), "--new", "-"],
+                input=new_content, text=True, capture_output=True, env=env,
+            )
+            self.assertEqual(result_strict.returncode, 2, result_strict.stderr)
+            report_line = result_strict.stdout.strip().splitlines()[-1]
+            report = json.loads(report_line)
+            self.assertEqual(report["action"], "needs-confirm")
+            self.assertEqual(report["size"], "groot")
+            # File unchanged
+            self.assertEqual(art.read_text(encoding="utf-8"), original_text)
         finally:
             import shutil; shutil.rmtree(str(d), ignore_errors=True)
 
