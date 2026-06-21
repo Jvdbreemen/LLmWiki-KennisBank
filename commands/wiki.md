@@ -21,20 +21,28 @@ Patroonherkenning over sessies heen — destilleer herbruikbare kennis als wiki-
 3.5. Bestaand artikel herschrijven
    - Voer per kandidaat-onderwerp uit:
      ```
-     python3 ~/KennisBank/.claude/scripts/find-similar.py "<onderwerp-titel>" --threshold 0.75
+     python3 ~/KennisBank/.claude/scripts/find-similar.py "<onderwerp-titel>"
      ```
      (of `scripts/find-similar.py` als je al in de repo-root werkt)
    - Parseer de JSON-uitvoer `{path, score, above_threshold}`.
 
    **Als `above_threshold` true is (match gevonden):**
    - Lees het bestaande artikel op `path`.
-   - Stel de verbeterde volledige artikeltekst op: herschrijf/breid de body en kernpunten uit,
-     maar **behoud het bestaande frontmatter exact** (`created`, `tags`, `status`) en de
-     bestaande backlinks. Pas alleen `updated` aan naar de huidige datum.
-   - Pipe de volledige nieuwe inhoud door `safe-edit.py`:
+   - Stel de verbeterde volledige artikeltekst op: herschrijf/breid de body en kernpunten uit.
+     - **Frontmatter:** kopieer het frontmatter-blok LETTERLIJK (knip-plak, niet overtypen)
+       uit het gelezen bestand. Behoud `type`, `created`, `tags`, `status` ongewijzigd.
+       Wijzig uitsluitend `updated` naar de huidige datum.
+     - **Backlinks** (in de body): behoud alle bestaande backlinks ongewijzigd.
+   - Schrijf de volledige nieuwe inhoud naar een tijdelijk bestand via het file-write tool:
      ```
-     echo "<nieuwe-inhoud>" | python3 ~/KennisBank/.claude/scripts/safe-edit.py <path> --new - --message "wiki-rewrite: <onderwerp>"
+     /tmp/wiki-rewrite-<slug>.md
      ```
+     Gebruik daarna `safe-edit.py` met dat pad als invoer:
+     ```
+     python3 ~/KennisBank/.claude/scripts/safe-edit.py <path> --new /tmp/wiki-rewrite-<slug>.md --message "wiki-rewrite: <onderwerp>"
+     ```
+     > **GEEN `echo "..." | ...` gebruiken.** De body bevat aanhalingstekens, backticks en
+     > `$`/`\` die de shell corrumpeert. Schrijf altijd eerst naar een temp-bestand.
    - Als `safe-edit.py` afsluit met code 2 (action `needs-confirm`, grote wijziging):
      - Toon de afgedrukte diff aan de gebruiker.
      - Vraag expliciete bevestiging voordat je opnieuw uitvoert met `--confirm`.

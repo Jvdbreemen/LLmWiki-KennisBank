@@ -50,13 +50,13 @@ class WikiCommandStructureTest(unittest.TestCase):
     # --- rapport onderscheid ---
 
     def test_report_herschreven(self):
-        self.assertIn("herschreven", self.content)
+        self.assertIn("**herschreven**", self.content)
 
     def test_report_nieuw(self):
-        self.assertIn("nieuw", self.content)
+        self.assertIn("**nieuw**", self.content)
 
     def test_report_overgeslagen(self):
-        self.assertIn("overgeslagen", self.content)
+        self.assertIn("**overgeslagen**", self.content)
 
 
 if __name__ == "__main__":
