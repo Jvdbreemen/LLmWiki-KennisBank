@@ -222,6 +222,34 @@ class TestContradictionSignalMismatchedNumbers(unittest.TestCase):
         self.assertGreaterEqual(sig, 0.0)
         self.assertLessEqual(sig, 1.0)
 
+    def test_single_digit_conflict_higher_than_same(self):
+        """Single-digit number mismatch ("cijfer is 5" vs "6") must outscore identical texts."""
+        cs = _cs()
+        # Differing single-digit number with shared content word "cijfer"
+        sig_diff = cs.contradiction_signal("Het cijfer is 5", "Het cijfer is 6")
+        # Same single-digit number: no exclusive number, so num_score = 0
+        sig_same = cs.contradiction_signal("Het cijfer is 5", "Het cijfer is 5")
+        self.assertGreater(
+            sig_diff,
+            sig_same,
+            f"Expected differing ({sig_diff:.4f}) > same ({sig_same:.4f})",
+        )
+        # Both must be in [0, 1]
+        for score in (sig_diff, sig_same):
+            self.assertGreaterEqual(score, 0.0)
+            self.assertLessEqual(score, 1.0)
+
+    def test_single_digit_version_conflict(self):
+        """Version-number mismatch ("versie 3" vs "versie 4") must outscore matching version."""
+        cs = _cs()
+        sig_diff = cs.contradiction_signal("Gebruik versie 3 van de API", "Gebruik versie 4 van de API")
+        sig_same = cs.contradiction_signal("Gebruik versie 3 van de API", "Gebruik versie 3 van de API")
+        self.assertGreater(
+            sig_diff,
+            sig_same,
+            f"Expected differing ({sig_diff:.4f}) > same ({sig_same:.4f})",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

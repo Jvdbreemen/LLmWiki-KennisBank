@@ -96,15 +96,15 @@ _STOPWORDS = frozenset({
     "de", "het", "een", "en", "in", "van", "op", "te", "aan", "met",
     "voor", "dat", "die", "zijn", "is", "heeft", "hebben", "worden",
     "wordt", "als", "ook", "nog", "maar", "of", "om", "bij", "uit",
-    "over", "naar", "werd", "worden", "zijn", "was", "had", "kan",
-    "kan", "zal", "zou", "mag", "moet", "dan", "er", "al", "er",
-    "the", "a", "an", "and", "or", "in", "of", "to", "is", "it",
+    "over", "naar", "werd", "was", "had", "kan", "zal", "zou",
+    "mag", "moet", "dan", "er", "al",
+    "the", "a", "an", "and", "or", "to", "it",
     "be", "at", "by", "for", "on", "with", "this", "that", "are",
-    "was", "has", "have", "will", "can", "from", "they", "we",
-    "het", "hij", "zij", "ze", "ik", "jij", "je", "wij",
+    "has", "have", "will", "can", "from", "they", "we",
+    "hij", "zij", "ze", "ik", "jij", "je", "wij",
 })
 
-_NUMBER_RE = re.compile(r"\b\d{2,}\b")  # getallen van ≥2 cijfers (jaren, bedragen, enz.)
+_NUMBER_RE = re.compile(r"\b\d+\b")  # alle getallen, incl. éénciijferig (cijfers, versies)
 
 
 def _tokenize(text: str) -> list[str]:
@@ -175,7 +175,7 @@ def contradiction_signal(text_a: str, text_b: str) -> float:
     # 3. Getallenconflict
     nums_a = set(_NUMBER_RE.findall(text_a))
     nums_b = set(_NUMBER_RE.findall(text_b))
-    # Getallen die exclusief in één tekst voorkomen
+    # Getallen die exclusief in één tekst voorkomen (gedeelde getallen tellen niet mee)
     exclusive_nums = nums_a.symmetric_difference(nums_b)
     num_score = 0.5 if exclusive_nums else 0.0
 
@@ -285,8 +285,8 @@ def main() -> None:
         except Exception:
             fm_b = {}
 
-        updated_a = fm_a.get("updated") or fm_a.get("date") or ""
-        updated_b = fm_b.get("updated") or fm_b.get("date") or ""
+        updated_a = fm_a.get("updated") or fm_a.get("date") or ""  # date is fallback voor updated
+        updated_b = fm_b.get("updated") or fm_b.get("date") or ""  # date is fallback voor updated
 
         results.append({
             "path_a": path_a,
