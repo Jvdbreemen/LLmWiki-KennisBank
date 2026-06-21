@@ -79,5 +79,22 @@ class ReconcileCommandStructureTest(unittest.TestCase):
         self.assertIn("reconcile:", self.content)
 
 
+class UitdaagCommandStructureTest(unittest.TestCase):
+    """Controleert dat commands/uitdaag.md alle verwachte elementen bevat."""
+
+    def setUp(self):
+        self.path = COMMANDS_DIR / "uitdaag.md"
+        self.content = self.path.read_text(encoding="utf-8")
+
+    def test_uses_kb_search(self):
+        self.assertIn("kb-search", self.content)
+
+    def test_uses_citation_wikilink(self):
+        self.assertIn("[[", self.content)
+
+    def test_uses_arguments(self):
+        self.assertIn("$ARGUMENTS", self.content)
+
+
 if __name__ == "__main__":
     unittest.main()
