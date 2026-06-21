@@ -12,7 +12,7 @@ Arguments:
     article-or-text   Path to a .md file OR a literal query string.
     --threshold T     Similarity threshold (float). Default: $KB_REWRITE_THRESHOLD
                       or 0.62 if that env var is unset.
-    --json            Always output JSON (default when not a TTY; always if flag set).
+    --json            Accepted for compatibility; output is always JSON.
 
 Output (JSON):
     {"path": <best path or null>, "score": <float>, "above_threshold": <bool>}
@@ -70,7 +70,11 @@ def best_match(target_vec: list, candidates: dict) -> tuple:
 # ---------------------------------------------------------------------------
 
 def _build_candidates(wiki_dir: Path, cache: dict, exclude_path: str | None) -> dict:
-    """Return {str(path): embedding} for all wiki articles except skipped ones."""
+    """Return {str(path): embedding} for all wiki articles except skipped ones.
+
+    Candidates rely on the warmed embedding cache populated by build-embed-index.py.
+    Articles without a cached embedding are skipped to avoid live network calls.
+    """
     candidates = {}
     for md in sorted(wiki_dir.glob("*.md")):
         if md.name in SKIP_NAMES:
@@ -78,15 +82,10 @@ def _build_candidates(wiki_dir: Path, cache: dict, exclude_path: str | None) -> 
         key = str(md)
         if exclude_path and key == exclude_path:
             continue
-        vec = get_cached(md, cache, recompute=True)
+        vec = get_cached(md, cache, recompute=False)
         if vec:
             candidates[key] = vec
     return candidates
-
-
-def _embed_query(text: str):
-    """Embed a raw query string via the configured backend. Returns None on failure."""
-    return embed(text)
 
 
 def main(argv=None):
@@ -107,7 +106,7 @@ def main(argv=None):
         "--json",
         dest="as_json",
         action="store_true",
-        help="Output JSON (default when stdout is not a TTY).",
+        help="Accepted for compatibility; output is always JSON.",
     )
     args = parser.parse_args(argv)
 
@@ -120,6 +119,9 @@ def main(argv=None):
         except ValueError:
             threshold = 0.62
 
+    # Load cache once; candidates and (for .md targets) the target itself read from it.
+    cache = load_cache()
+
     # Determine target path or raw text
     query_arg = args.query
     target_path: str | None = None
@@ -130,12 +132,10 @@ def main(argv=None):
     if p.suffix == ".md" and p.exists():
         target_path = str(p.resolve())
         candidate_exclude = target_path
-        cache = load_cache()
         target_vec = get_cached(p, cache, recompute=True)
     else:
-        # Treat as literal query text
-        cache = load_cache()
-        target_vec = _embed_query(query_arg)
+        # Treat as literal query text — must embed live to get the query vector.
+        target_vec = embed(query_arg)
 
     if target_vec is None:
         result = {"path": None, "score": 0.0, "above_threshold": False}
