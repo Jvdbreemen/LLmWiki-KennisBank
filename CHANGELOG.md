@@ -7,6 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-06-21
+
+Swappable embedding backend and push-based wiki retrieval, plus cost-gated
+graph upkeep and two contribute-skill safeguards.
+
+### Added
+
+- **Swappable embedding provider (`scripts/_embeddings.py`).** Config-driven
+  backend (`ollama` | `openai` | `voyage`) behind a single `embed()` interface,
+  so the embedding model is a one-file choice instead of a code change. Cross-
+  model-safe cache keying via `embed_id()` (provider:model) plus dimension; a
+  model switch invalidates the cache by design. Length-guarded `cosine()`,
+  shared cache. Config via `kennisbank-embed.json` or `KB_EMBED_*` env; API key
+  referenced by env-var NAME only, never stored.
+- **Prompt-time wiki retrieval hook (`scripts/kb-retrieve.py`).** UserPromptSubmit
+  hook embeds the prompt once and injects the top-N matching wiki articles above
+  a threshold as `additionalContext` — push, not pull. Fail-open always: any
+  error, missing backend, empty cache, or trivial prompt yields no output and
+  exit 0. Cheap pre-filter skips short/slash/trivial prompts before the embed.
+  Tuned threshold 0.60 for `qwen3-embedding:8b` (real match 0.73-0.80,
+  noise <= 0.51).
+- **Embedding index builder (`scripts/build-embed-index.py`).** SessionStart
+  hook that warms/refreshes the wiki embedding cache off the per-prompt path.
+  Self-locating, incremental, prunes vanished files.
+- **`kennisbank-embed.example.json`** — sanitized default (ollama/qwen3, empty
+  `api_key_env`), deployed by `setup.sh` (skips if a live config is present
+  unless `--force`).
+
+### Changed
+
+- **`scripts/semantic-tiling.py` refactored onto `_embeddings`** — shares the
+  cache and keeps the same thresholds/behaviour.
+- **`/sessielog` wires incremental `/graphify --update` into Step 2** (before
+  auto-crosslink), so new article nodes exist when crosslinks are added — fixes
+  the stale-graph "geen nodes gevonden in graph.json" miss.
+- **`/sessielog` daily-batch graph gate (cost control).** `--update` runs only
+  on the first session where `graph.json` is >20h old; every session still
+  appends changed paths to `.needs-rebuild` for free. auto-crosslink runs only
+  when `--update` ran. Self-pacing off `graph.json` mtime, no cron.
+- **`CONFIGURATION.md`** section 4 rewritten for the `_embeddings.py` backend
+  (`KB_EMBED_*`), the retrieval hook, and the index builder (`KB_RETRIEVE_*`).
+- **`tests/test_setup_deploy.py`** asserts the new scripts and config deploy.
+
+### Fixed
+
+- **`kennisbank-contribute`: branch-first gotcha.** Documents the failure mode
+  where contribute edits committed to local `$DEFAULT` make a branch-off-DEFAULT
+  PR show no diff and leave `$DEFAULT` ahead of origin with PR-bound commits a
+  stray push would leak — plus the recovery (branch at HEAD, reset `$DEFAULT`
+  to origin) and the rule.
+- **`kennisbank-contribute`: localization auto-skip.** The scan now normalizes
+  deploy-localized path/vault-name rewrites back to portable form and re-diffs;
+  pure-localization files (symmetric `+N -N` diffstat) are skipped, so a
+  contribute run over a long-deployed vault no longer surfaces every path-
+  localized file as a candidate (which "default: all" would ship as a broken,
+  path-leaking PR).
+
 ## [0.6.1] - 2026-06-20
 
 Tooling self-update: the lifecycle skills now manage every skill, not just
