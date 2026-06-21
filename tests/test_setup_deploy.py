@@ -111,6 +111,23 @@ class SetupDeployTest(unittest.TestCase):
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
+    def test_embedding_scripts_deployed(self):
+        tmp, vault = self.run_setup()
+        try:
+            scripts = vault / ".claude" / "scripts"
+            for name in ("_embeddings.py", "kb-retrieve.py", "build-embed-index.py"):
+                self.assertTrue((scripts / name).is_file(), f"{name} not deployed")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_embed_config_is_deployed(self):
+        tmp, vault = self.run_setup()
+        try:
+            cfg = vault / ".claude" / "kennisbank-embed.json"
+            self.assertTrue(cfg.is_file(), f"kennisbank-embed.json not deployed at {cfg}")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
 
 if __name__ == "__main__":
     unittest.main()
