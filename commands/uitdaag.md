@@ -12,6 +12,8 @@ Sparringstool voor journalistiek denken. Geen essay, geen algemene kennis. Allee
    ```
    python3 ~/KennisBank/.claude/scripts/kb-search.py "$ARGUMENTS" --top 5
    ```
+   > Geef de stelling als ÉÉN geciteerd argument en ontsnap interne aanhalingstekens (anders breekt de shell).
+
    Parseer de JSON-uitvoer: een lijst van `{path, score, snippet}`.
 
 3. **Als de lijst leeg is** (geen resultaten boven de drempelwaarde):
