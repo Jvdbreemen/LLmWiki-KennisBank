@@ -49,15 +49,18 @@ Dit voegt de nieuwe sessie toe aan `~/KennisBank/02-wiki/log.md` (het chronologi
    Behandel elk gevonden research-bestand als wiki-kandidaat.
 3. Check bestaande wiki in ~/KennisBank/02-wiki/: update bestaand artikel of schrijf nieuw via template
 4. Per wiki-artikel: YAML frontmatter compleet, backlinks via [[...]], kernpunten met toelichting
-5. Graph incrementeel bijwerken VOOR de crosslinks (anders mist auto-crosslink de zojuist toegevoegde artikelen als nodes): roep de graphify-skill aan in update-modus op de vault, `/graphify ~/KennisBank --update`. Die gebruikt de semantische cache en re-extraheert alleen de gewijzigde bestanden (goedkoop: een paar files, niet de hele vault), herclustert daarna. Overslaan alleen als graphify niet geinstalleerd is (`~/KennisBank/graphify-out/.graphify_python` ontbreekt); schrijf dan de gewijzigde paden naar `~/KennisBank/graphify-out/.needs-rebuild` als fallback voor een latere update en meld dat de graph stale is.
-6. Auto-crosslinks (NA de graph-update in stap 5, zodat de nieuwe nodes bestaan): python3 ~/KennisBank/.claude/scripts/auto-crosslink.py [pad-naar-artikel]
-7. Rapporteer wat nieuw, bijgewerkt of overgeslagen is
+5. Graph bijwerken — DAGELIJKSE BATCH (kostenbesparing: LLM-extractie kost tokens per bestand). ALTIJD eerst: voeg de gewijzigde/nieuwe wiki-paden toe aan `~/KennisBank/graphify-out/.needs-rebuild` (goedkoop, geen LLM). DAN de dag-gate op de mtime van `~/KennisBank/graphify-out/graph.json`:
+   - graph.json OUDER dan ~20 uur (eerste sessie van de dag) EN .needs-rebuild niet leeg: roep `/graphify ~/KennisBank --update` aan. Graphify's manifest batcht ALLE sinds de vorige run gewijzigde bestanden in een keer (cache slaat ongewijzigde over; subagents doen alleen de nieuwe), herclustert, en legt de ECHTE subagent-tokenkost vast in `graphify-out/cost.json` (graphify Step 9 leest `.graphify_run_cost.json`; nooit 0 voor een subagent-run). Leeg daarna `.needs-rebuild` en ga naar item 6.
+   - graph.json JONGER dan ~20u: SLA `--update` deze sessie over en meld "graph ~N bestanden achter (.needs-rebuild), ververst op de eerste sessie na 20u". Zo betaalt alleen de eerste sessie per dag de extractiekost.
+   - graphify niet geinstalleerd (`graphify-out/.graphify_python` ontbreekt): alleen `.needs-rebuild` bijwerken en melden dat de graph stale is.
+6. Auto-crosslinks: ALLEEN als item 5 deze sessie `--update` draaide (anders bestaat de node van het nieuwe artikel nog niet in de graph): python3 ~/KennisBank/.claude/scripts/auto-crosslink.py [pad-naar-artikel]. Werd `--update` overgeslagen, sla crosslinks ook over: het nieuwe artikel krijgt zijn graph-backlinks bij de eerstvolgende dagrun; de handmatige [[...]]-links in het artikel werken intussen.
+7. Rapporteer wat nieuw, bijgewerkt of overgeslagen is (incl. of de graph deze sessie is ververst of pas bij de volgende dagrun, en de tokenkost als `--update` draaide)
 
 ---
 
-## Stap 3: Graphify (afgehandeld in Stap 2)
+## Stap 3: Graphify (afgehandeld in Stap 2, dagelijkse batch)
 
-De graph wordt nu incrementeel bijgewerkt in Stap 2 (item 5: `/graphify ~/KennisBank --update`) VOOR de auto-crosslink, zodat nieuwe artikelen direct als nodes bestaan en gelinkt worden. Dit vervangt de oude losse rebuild-flag die niets consumeerde. `~/KennisBank/graphify-out/.needs-rebuild` is alleen nog een fallback-record: schrijf daar de gewijzigde paden naartoe wanneer graphify niet beschikbaar is, en meld dan dat de graph stale is tot een handmatige `/graphify --update`.
+De graph-update zit in Stap 2 item 5 als DAGELIJKSE BATCH om tokens te sparen: elke sessie schrijft naar `.needs-rebuild` (gratis), maar `/graphify --update` draait alleen op de eerste sessie waarop `graph.json` ouder is dan ~20u. Graphify's eigen manifest bepaalt welke bestanden sinds de vorige run wijzigden en batcht ze in een keer; de cache zorgt dat elk bestand maar een keer wordt geextraheerd. Reden voor dagelijks i.p.v. per-sessie: de LLM-kost is per-bestand-extractie, dus meerdere sessies per dag samenvoegen scheelt de subagent-spawn- en clusteroverhead en her-extractie van bestanden die meerdere keren per dag wijzigen. Wil je de graph tussendoor forceren: draai handmatig `/graphify ~/KennisBank --update`. `.needs-rebuild` is het "er staat werk klaar"-signaal plus fallback wanneer graphify niet beschikbaar is.
 
 ---
 
