@@ -30,6 +30,32 @@ at BASE — verified via `git cat-file -e "$BASE:skills/<name>/SKILL.md"` (exits
 (probe exits non-zero) are excluded regardless of local edits and must NEVER
 be contributed.
 
+### Localization auto-skip (deploy-path / vault-name rewrites)
+
+Deployment rewrites the portable `~/KennisBank` path and the `KennisBank` vault
+name in the upstream files to the LOCAL vault's absolute path and display name
+(e.g. `~/KennisBank/01-raw` -> `D:/Users/Robert/.../Kluis/01-raw`,
+`KennisBank vault` -> `Kluis vault`). A file whose ONLY difference from BASE is
+those rewrites is **deploy-localization, never a contributable edit** — pushing
+it upstream would hard-code one machine's absolute path and vault name and break
+portability for every other user. The tell is a symmetric `+N -N` diffstat (pure
+line replacements, no net add/remove).
+
+Before flagging a file changed in step 3, normalize those rewrites back to the
+portable form and re-diff. If the normalized diff is empty, SKIP the file:
+
+```bash
+VAULT_NAME=$(basename "$VAULT")               # e.g. "Kluis"
+norm() { sed -e "s#${VAULT}#~/KennisBank#g" -e "s#\\b${VAULT_NAME}\\b#KennisBank#g" "$1"; }
+if diff --strip-trailing-cr <(git -C "$REPO" show "$BASE:<repopath>") <(norm "<deployed>") >/dev/null 2>&1; then
+    : # localization-only -> SKIP, not a candidate
+else
+    : # real change remains after normalization -> keep as candidate
+fi
+```
+
+Only the residual, normalization-surviving changes are real candidates.
+
 ## Procedure
 1. Read `$VAULT/.claude/.kennisbank-version` -> `BASE` (`tag`). If absent, use
    `BASE=$(git -C "$REPO" tag --sort=-v:refname | grep '^v[0-9]' | head -1)`.
@@ -37,6 +63,8 @@ be contributed.
 3. For each deployed location in the reverse deploy map, CRLF-agnostic diff the
    deployed file against `BASE`'s version of the mapped repo path:
    `diff --strip-trailing-cr <(git -C "$REPO" show "$BASE:<repopath>") "<deployed>"`.
+   Apply the **Localization auto-skip** above first: if the only difference is the
+   deploy path/vault-name rewrite, the file is NOT a candidate.
    For skills, iterate over every installed skill under
    `$HOME/.claude/skills/*/SKILL.md` and for each resolve its name and check
    whether the repo counterpart exists at BASE:
