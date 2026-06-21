@@ -26,7 +26,9 @@ def classify(
     """Classify a proposed edit as ``"klein"`` (small) or ``"groot"`` (large).
 
     An edit is **klein** when ALL of the following hold:
-    - Net changed lines (added + removed in the unified diff) <= max_lines.
+    - diff_line_count (added + removed lines in the unified diff) <= max_lines.
+      A *modified* line counts twice (once as ``-``, once as ``+``), so the
+      default threshold of 20 is roughly ~10 modified lines.
     - No markdown heading (``^#{1,6} ``) is removed.
     - Net removed non-blank body lines <= max_drop.
     - The target is not being emptied (new is not empty / blank-only).
@@ -55,8 +57,8 @@ def classify(
         elif line.startswith("-"):
             removed += 1
 
-    net_changed = added + removed
-    if net_changed > max_lines:
+    diff_line_count = added + removed
+    if diff_line_count > max_lines:
         return "groot"
 
     # Heading removal: a heading in old absent in new.
@@ -116,9 +118,28 @@ def _short_sha(repo_root: Path) -> str:
     return r.stdout.strip() if r.returncode == 0 else "unknown"
 
 
-def _emit(report: dict, as_json: bool = True):
-    """Print report; always emit as JSON for machine readability."""
+def _emit(report: dict):
+    """Print report as JSON for machine readability. JSON output is always on."""
     print(json.dumps(report, ensure_ascii=False))
+
+
+def _parse_porcelain_path(line: str) -> str:
+    """Extract the (new) file path from a git status --porcelain line.
+
+    Porcelain format: ``XY <path>`` or ``XY "<quoted-path>"``.
+    For renames (``R``): ``XY <old> -> <new>`` — we take the new path.
+    Git quotes paths with special characters in double-quotes; we strip those.
+    """
+    # Strip the 2-char XY status prefix and the separating space.
+    raw = line[3:]
+    # Handle rename: "old -> new" — take the part after " -> ".
+    if " -> " in raw:
+        raw = raw.split(" -> ", 1)[1]
+    # Strip git's quoted-path escaping (paths with special chars are wrapped in "…").
+    raw = raw.strip()
+    if raw.startswith('"') and raw.endswith('"'):
+        raw = raw[1:-1]
+    return raw
 
 
 def main(argv=None):
@@ -154,11 +175,14 @@ def main(argv=None):
         dest="as_json",
         action="store_true",
         default=True,
-        help="Emit machine-readable JSON report (default on).",
+        help="Emit machine-readable JSON report (default on, always active).",
     )
 
     args = parser.parse_args(argv)
 
+    # Both sides are .resolve()d so they are fully canonical; this handles macOS
+    # /tmp -> /private/tmp remapping and is required by Path.is_relative_to
+    # (Python 3.9+).
     target = Path(args.target).resolve()
     target_exists = target.exists()
 
@@ -169,7 +193,7 @@ def main(argv=None):
         proposed = Path(args.new).read_text(encoding="utf-8")
 
     # ---- Git guard ----
-    target_dir = target.parent if target_exists else target.parent
+    target_dir = target.parent
 
     repo_result = _git(
         "-C", str(target_dir), "rev-parse", "--show-toplevel"
@@ -186,21 +210,29 @@ def main(argv=None):
             )
             sys.exit(3)
     else:
-        repo_root = Path(repo_result.stdout.strip())
+        repo_root = Path(repo_result.stdout.strip()).resolve()
 
     if repo_root is not None and not args.force:
         # Check for dirty tree: changes to files OTHER than the target.
+        # Use exact path comparison, not substring match, to avoid false negatives
+        # when a dirty file's path contains the target path as a substring
+        # (e.g. target=02-wiki/a.md, dirty=02-wiki/a.md.bak).
         status_result = _git("-C", str(repo_root), "status", "--porcelain")
         dirty_lines = [
             l for l in status_result.stdout.splitlines()
             if l.strip()
         ]
-        # Filter out lines that are only about the target file itself.
+        # target_rel uses .resolve()d repo_root so is_relative_to works on macOS.
         target_rel = target.relative_to(repo_root) if target.is_relative_to(repo_root) else target
-        non_target_dirty = [
-            l for l in dirty_lines
-            if str(target_rel) not in l and str(target) not in l
-        ]
+        target_rel_str = str(target_rel)
+
+        non_target_dirty = []
+        for l in dirty_lines:
+            parsed_path = _parse_porcelain_path(l)
+            # Exact equality: a.md.bak != a.md even though a.md is a substring.
+            if parsed_path != target_rel_str and parsed_path != str(target):
+                non_target_dirty.append(l)
+
         if non_target_dirty:
             print(
                 json.dumps(
@@ -213,6 +245,14 @@ def main(argv=None):
                 )
             )
             sys.exit(3)
+
+    # ---- No-op detection ----
+    # If proposed content is byte-identical to current file, nothing to do.
+    if target_exists:
+        current_bytes = target.read_bytes()
+        if current_bytes == proposed.encode("utf-8"):
+            _emit({"action": "no-op"})
+            sys.exit(0)
 
     # ---- Classify ----
     if not target_exists:
@@ -242,8 +282,24 @@ def main(argv=None):
     target.write_text(proposed, encoding="utf-8")
 
     if repo_root is not None:
-        _git("-C", str(repo_root), "add", str(target))
-        _git("-C", str(repo_root), "commit", "-m", commit_msg)
+        add_result = _git("-C", str(repo_root), "add", str(target))
+        if add_result.returncode != 0:
+            _emit({
+                "action": "error",
+                "reason": "git-add-failed",
+                "detail": add_result.stderr.strip(),
+            })
+            sys.exit(4)
+
+        commit_result = _git("-C", str(repo_root), "commit", "-m", commit_msg)
+        if commit_result.returncode != 0:
+            _emit({
+                "action": "error",
+                "reason": "git-commit-failed",
+                "detail": commit_result.stderr.strip(),
+            })
+            sys.exit(4)
+
         sha = _short_sha(repo_root)
     else:
         sha = "no-git"
