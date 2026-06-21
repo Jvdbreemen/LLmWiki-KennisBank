@@ -141,6 +141,12 @@ else
   fi
 fi
 
+# 5b. Vault-onderhoud layer scripts (explicit named check).
+ONDERHOUD_SCRIPTS="safe-edit.py find-similar.py kb-search.py conflict-scan.py context-budget.py"
+for s in $ONDERHOUD_SCRIPTS; do
+  check_file "vault-onderhoud script $s" "$SCRIPTS_DIR/$s"
+done
+
 # 6. Research dir.
 if [ -d "$RESEARCH" ]; then
   report_pass "research dir" "$RESEARCH"
@@ -149,7 +155,7 @@ else
 fi
 
 # 7. Slash commands installed.
-COMMAND_FILES="sessielog wiki intake stale sessiestart import"
+COMMAND_FILES="sessielog wiki intake stale sessiestart import reconcile uitdaag brug"
 if [ ! -d "$COMMANDS_DIR" ]; then
   report_warn "commands dir" "$COMMANDS_DIR not found (user may have opted out)"
 else
