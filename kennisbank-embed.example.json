@@ -1,0 +1,16 @@
+{
+  "_comment": "Example embedding-backend config for KennisBank retrieval + semantic tiling. setup.sh copies this to <vault>/.claude/kennisbank-embed.json on install (only if absent; --force overwrites). Read by scripts/_embeddings.py. Env vars override these at runtime (KB_EMBED_PROVIDER, KB_EMBED_MODEL, KB_EMBED_ENDPOINT, KB_EMBED_API_KEY_ENV, KB_RETRIEVE_TOP_N, KB_RETRIEVE_THRESHOLD). Switching model/provider invalidates the embedding cache by design (cross-model vectors are never compared); the next SessionStart rebuilds it. See CONFIGURATION.md section 4.",
+  "provider": "ollama",
+  "model": "qwen3-embedding:8b",
+  "endpoint": "",
+  "api_key_env": "",
+  "retrieve_top_n": 3,
+  "retrieve_threshold": 0.60,
+  "_threshold_note": "Model-specific. Empirical on qwen3-embedding:8b: true match 0.73-0.80, noise <=0.51, irrelevant <=0.35; 0.60 sits in the gap. Re-tune after a model switch.",
+  "_switching": {
+    "_comment": "Set api_key_env to the NAME of the env var holding the key; never put the key itself here. Anthropic/Claude has no native embeddings API; Voyage is their recommended path. OpenRouter embeddings support is thin/unconfirmed, so verify a gateway serves /embeddings before using provider=openai against it.",
+    "openai": {"provider": "openai", "model": "text-embedding-3-small", "endpoint": "https://api.openai.com/v1", "api_key_env": "OPENAI_API_KEY"},
+    "voyage_anthropic_path": {"provider": "voyage", "model": "voyage-3", "endpoint": "https://api.voyageai.com/v1", "api_key_env": "VOYAGE_API_KEY"},
+    "openai_compatible_gateway": {"provider": "openai", "model": "<model>", "endpoint": "https://<gateway>/v1", "api_key_env": "<KEY_ENV_NAME>"}
+  }
+}

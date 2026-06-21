@@ -98,15 +98,40 @@ The four root paths are declared at the top of `setup.sh`. Scripts and commands 
 
 ---
 
-## 4. Semantic tiling (`scripts/semantic-tiling.py`)
+## 4. Embedding backend, semantic tiling, and retrieval (`scripts/_embeddings.py`)
 
-### OLLAMA_MODEL / OLLAMA_EMBED_MODEL
+The embedding backend is a config-driven, swappable provider shared by
+`semantic-tiling.py`, the retrieval hook (`kb-retrieve.py`), and the index builder
+(`build-embed-index.py`). The model can be a local Ollama model (default) or an
+API provider, selected in `.claude/kennisbank-embed.json` (deployed by `setup.sh`
+from `kennisbank-embed.example.json`) or via `KB_EMBED_*` env vars. Env vars
+override the config file; both override the built-in defaults.
 
-- **Default**: `qwen3-embedding:8b` (multilingual, 119 languages)
-- **Where set**: `scripts/semantic-tiling.py` (`OLLAMA_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "qwen3-embedding:8b")`).
-- **Read by**: `scripts/semantic-tiling.py` only.
-- **Effect**: the Ollama model used to compute embeddings via the HTTP API (`POST /api/embeddings`). Ollama has no `ollama embed` CLI subcommand, so embeddings go through the HTTP API.
-- **To change**: set the `OLLAMA_EMBED_MODEL` environment variable (or edit the default). Any model that returns an `embedding` (or `embeddings[0]`) JSON field works. Run `ollama pull <model>` first. The default is multilingual and works for non-English vaults out of the box (`ollama pull qwen3-embedding:8b`, ~4.7 GB). For an English-only vault you can switch to the lighter `nomic-embed-text` (~274 MB) — then also set the thresholds to `0.90` / `0.80` (see below), since `nomic` spreads higher.
+### Provider / model / endpoint / API key (`KB_EMBED_*`)
+
+- **Provider** (`KB_EMBED_PROVIDER`, default `ollama`): `ollama` (local HTTP API,
+  `POST /api/embeddings`), `openai` (any OpenAI-compatible `/embeddings`
+  endpoint), or `voyage` (Voyage AI). Anthropic/Claude has no native embeddings
+  API; Voyage is their recommended path. OpenRouter's embeddings support is
+  thin/unconfirmed, so verify a gateway serves `/embeddings` before pointing
+  `provider=openai` at it.
+- **Model** (`KB_EMBED_MODEL`, default per provider; ollama → `qwen3-embedding:8b`,
+  multilingual, 119 languages). For `ollama` the legacy `OLLAMA_EMBED_MODEL` var is
+  still honored when `KB_EMBED_MODEL` is unset.
+- **Endpoint** (`KB_EMBED_ENDPOINT`): base-URL override (default per provider).
+- **API key** (`KB_EMBED_API_KEY_ENV`): the NAME of the env var holding the key;
+  the key itself is never stored in the config or the repo.
+- **Where set**: `scripts/_embeddings.py` (`_resolve()` / `embed()`).
+- **Read by**: `scripts/_embeddings.py`, used by `semantic-tiling.py`,
+  `kb-retrieve.py`, and `build-embed-index.py`.
+- **To change**: edit `.claude/kennisbank-embed.json` (see its `_switching`
+  examples) or set the `KB_EMBED_*` env vars. Run `ollama pull <model>` first for
+  local models. For an English-only vault the lighter `nomic-embed-text` works
+  (then also set the tiling thresholds to `0.90` / `0.80`, since `nomic` spreads
+  higher).
+- **Note**: switching model/provider invalidates the embedding cache by design
+  (cross-model cosine is silently wrong: different dimensions and vector spaces).
+  Cache entries are keyed on `embed_id()` (`provider:model`) plus dimension.
 
 ### TILING_THRESHOLD_ERROR (duplicate threshold)
 
@@ -131,14 +156,25 @@ The four root paths are declared at the top of `setup.sh`. Scripts and commands 
 ### CACHE_FILE
 
 - **Default**: `$HOME/KennisBank/.claude/embeddings-cache.json`
-- **Where set**: `scripts/semantic-tiling.py` line 24.
-- **Effect**: stores embeddings keyed by file path, content hash, and embedding model. Changing `OLLAMA_EMBED_MODEL` transparently invalidates cached vectors (no manual wipe), since entries from a different model no longer match. Stale entries (files no longer in `02-wiki/`) are pruned on every run.
+- **Where set**: `scripts/_embeddings.py` (`CACHE_FILE`), shared by tiling, retrieval, and the index builder.
+- **Effect**: stores embeddings keyed by file path, content hash, `embed_id()` (provider:model), and vector dimension. Switching model/provider transparently invalidates cached vectors (no manual wipe), since entries with a different `embed_id` no longer match. Stale entries (files no longer in `02-wiki/`) are pruned on every run.
 
 ### WIKI_DIR
 
 - **Default**: `$HOME/KennisBank/02-wiki`
 - **Where set**: `scripts/semantic-tiling.py` line 20.
 - **Effect**: the directory scanned recursively (`**/*.md`) for comparison candidates. `index.md` is excluded.
+
+### Retrieval hook (`scripts/kb-retrieve.py`, UserPromptSubmit)
+
+- **Effect**: embeds the user's prompt and injects the top matching wiki articles (above a threshold) as `additionalContext`. Registered as a global `UserPromptSubmit` hook so the wiki is consulted in every session, in any project. Fail-open: any error, or a trivial/short/slash-command prompt, injects nothing.
+- **`KB_RETRIEVE_TOP_N`** (config `retrieve_top_n`, default `3`): max articles injected.
+- **`KB_RETRIEVE_THRESHOLD`** (config `retrieve_threshold`, default `0.60`): minimum cosine to inject. Model-specific; empirical on `qwen3-embedding:8b`: true match 0.73-0.80, noise <= 0.51. Re-tune after a model switch.
+- **`KB_RETRIEVE_TIMEOUT`** (default `20`s): embed-call timeout.
+
+### Index builder (`scripts/build-embed-index.py`, SessionStart)
+
+- **Effect**: warms/refreshes the wiki embedding cache once per session, off the per-prompt path, and warms the local model. Incremental (only changed files or a model switch trigger real embed calls); prunes vanished files; clears the graphify `.needs-rebuild` flag. Registered as a global `SessionStart` hook.
 
 ---
 
