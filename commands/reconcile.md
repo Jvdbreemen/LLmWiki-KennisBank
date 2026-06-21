@@ -50,8 +50,9 @@ Detecteer semantisch overlappende artikelen die elkaars claims tegenspreken, laa
 
 4. Voeg een auditlog-regel toe aan `~/KennisBank/02-wiki/reconciliation-log.md` (maak het bestand aan als het niet bestaat):
    ```
-   - YYYY-MM-DD [[winnaar-artikel]] over [[verliezer-artikel]] — reden: <korte motivatie>
+   - YYYY-MM-DD [[winnaar-stem]] over [[verliezer-stem]] — reden: <korte motivatie>
    ```
+   Gebruik als wikilink-doel de **bestandsstam** (filename zonder extensie en zonder mappad) van het winnaar- resp. verliezer-pad. Het verliezer-pad komt rechtstreeks uit de JSON-velden `path_a` of `path_b` van conflict-scan; reconstrueer het niet zelf.
    Gebruik de datum van vandaag. De motivatie is een zin die de gebruiker formuleerde of die je uit de beslissing afleidt.
 
 5. Rapporteer na alle paren:

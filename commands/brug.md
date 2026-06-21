@@ -23,6 +23,8 @@ python3 ~/KennisBank/.claude/scripts/kb-search.py "<onderwerp A>" --top 5
 python3 ~/KennisBank/.claude/scripts/kb-search.py "<onderwerp B>" --top 5
 ```
 
+> Geef elk onderwerp als ÉÉN geciteerd argument en ontsnap interne aanhalingstekens (anders breekt de shell).
+
 Parseer de JSON-uitvoer: elke query geeft een lijst van `{path, score, snippet}`.
 Bewaar de resultatensets als **cluster A** en **cluster B**.
 
@@ -33,13 +35,17 @@ Controleer of `graphify-out/graph.json` bestaat in de vault (standaard `~/Kennis
 **Als graph.json aanwezig is:**
 
 Lees de graaf. Structuur:
-- `nodes`: een lijst van artikelen/entiteiten, elk met een `id` (bestandsstam) en eventueel `label`, `tags`, `file`.
-- `edges`: een lijst van relaties in de vorm `{source, target, relation}` of `{from, to, label}`.
+- `nodes`: een lijst van entiteiten, elk met een `id` (entiteitslug, bijv. `wiki_sd_kaart_malware_scan_protocol_protocol`) en een `source_file` (het artikelpad, bijv. `02-wiki/wiki-sd-kaart-malware-scan-protocol.md`). Meerdere nodes kunnen naar hetzelfde artikel verwijzen.
+- `links`: een lijst van relaties in de vorm `{source, target, relation}` waarbij `source` en `target` entiteitslugs zijn (de `id`-waarden van nodes).
+- `hyperedges` (indien aanwezig): groepen co-voorkomende entiteiten in de vorm `{id, label, nodes:[...], relation}`.
+
+Koppel een cluster-artikel (een pad uit kb-search) aan graph-nodes door het pad te vergelijken met het `source_file`-veld van elke node. Beschouw **alle** nodes waarvan `source_file` overeenkomt met dat artikel als behorend tot het cluster.
 
 Traverseer de graaf om **brugpaden** te vinden:
-- Zoek de nodes die overeenkomen met de gevonden artikelen in cluster A en cluster B.
-- Zoek tussenliggende nodes (afstand 1-2 stappen) die zowel verbonden zijn met een node uit cluster A als een node uit cluster B.
-- Noteer elk brugnodepad: `A-artikel -> tussenknoop -> B-artikel`, inclusief de relatie-labels op de edges.
+- Zoek de nodes die overeenkomen met de gevonden artikelen in cluster A en cluster B (via `source_file`-match).
+- Zoek tussenliggende nodes (afstand 1-2 stappen via `links`) die zowel verbonden zijn met een node uit cluster A als een node uit cluster B.
+- Noteer elk brugnodepad: `A-artikel -> tussenknoop -> B-artikel`, inclusief de `relation`-waarden op de links. Los intermediate node-ids op naar hun `source_file` voor de `[[wikilink]]`.
+- Als `hyperedges` aanwezig zijn: behandel elke hyperedge waarvan `nodes` zowel een cluster-A- als een cluster-B-entiteit raakt als een sterk brugssignaal.
 
 Gebruik deze graaf-bruggen als primaire bron voor de verbindingen in stap 5.
 
