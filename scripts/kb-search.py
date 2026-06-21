@@ -32,6 +32,12 @@ import re
 import sys
 from pathlib import Path
 
+# Allow direct execution and import via _loader alike.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from _embeddings import cosine, doc_text, embed, embed_id, load_cache  # noqa: E402
+from _vaultpath import vault_root  # noqa: E402
+
 
 # ---------------------------------------------------------------------------
 # Pure core — no I/O, injected vectors, fully testable without Ollama
@@ -55,42 +61,13 @@ def rank(
         List of (path, score) tuples, sorted by score descending,
         filtered to score >= threshold, capped at top_n.
     """
-    # Import cosine from _embeddings. sys.path is set in __main__ for the CLI;
-    # for pure unit-test calls the import happens at module load time below, but
-    # only if _embeddings is importable. We use a local import so the pure-core
-    # function still works when _embeddings is available on sys.path.
-    _cosine = _get_cosine()
     scored = []
     for path, vec in candidates.items():
-        s = _cosine(query_vec, vec)
+        s = cosine(query_vec, vec)
         if s >= threshold:
             scored.append((path, s))
     scored.sort(key=lambda x: x[1], reverse=True)
     return scored[:top_n]
-
-
-def _get_cosine():
-    """Return the cosine function, importing from _embeddings when available."""
-    try:
-        import _embeddings as emb  # noqa: PLC0415
-        return emb.cosine
-    except ImportError:
-        pass
-    # Fallback: compute inline (keeps the pure core importable even when
-    # sys.path has not been extended to include scripts/).
-    import math
-
-    def _cosine_fallback(a, b) -> float:
-        if not a or not b or len(a) != len(b):
-            return 0.0
-        dot = sum(x * y for x, y in zip(a, b))
-        na = math.sqrt(sum(x * x for x in a))
-        nb = math.sqrt(sum(y * y for y in b))
-        if na == 0 or nb == 0:
-            return 0.0
-        return float(dot / (na * nb))
-
-    return _cosine_fallback
 
 
 # ---------------------------------------------------------------------------
@@ -140,21 +117,9 @@ def main() -> None:
         print("[]")
         return
 
-    # Locate scripts dir and extend path so _embeddings/_vaultpath are importable.
-    scripts_dir = os.path.dirname(os.path.abspath(__file__))
-    if scripts_dir not in sys.path:
-        sys.path.insert(0, scripts_dir)
-
-    try:
-        import _embeddings as emb
-        from _vaultpath import vault_root
-    except Exception:
-        print("[]")
-        return
-
     # Load cache (warmed by SessionStart hook build-embed-index.py).
     try:
-        cache = emb.load_cache()
+        cache = load_cache()
     except Exception:
         cache = {}
 
@@ -162,7 +127,7 @@ def main() -> None:
         print("[]")
         return
 
-    eid = emb.embed_id()
+    eid = embed_id()
     wiki_prefix = str(vault_root() / "02-wiki")
 
     # Build candidates from cached wiki entries only (recompute=False, skip uncached).
@@ -187,7 +152,7 @@ def main() -> None:
 
     # Embed the query live (one-off is fine here).
     try:
-        qvec = emb.embed(query)
+        qvec = embed(query)
     except Exception:
         qvec = None
 
@@ -203,7 +168,7 @@ def main() -> None:
     output = []
     for path, score in ranked:
         try:
-            raw_text = emb.doc_text(Path(path), cap=4000)
+            raw_text = doc_text(Path(path), cap=4000)
             snippet = _collapse(raw_text, cap=200)
         except Exception:
             snippet = ""
