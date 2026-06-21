@@ -22,7 +22,15 @@ Every Claude session produces a session log. The `/wiki` command compiles logs i
 | `commands/intake.md` | `/intake` command: process files dropped in `00-inbox/` |
 | `commands/stale.md` | `/stale` command: detect and update stale wiki articles |
 | `commands/import.md` | `/import` command: orchestrates the three importers |
+| `commands/reconcile.md` | `/reconcile` command: surface and resolve contradictions across wiki articles |
+| `commands/uitdaag.md` | `/uitdaag` command: adversarially challenge a claim or article for weak reasoning |
+| `commands/brug.md` | `/brug` command: find conceptual bridges between two topics or articles |
 | `skills/autoresearch/` | `/autoresearch` skill: iterative multi-round web research |
+| `scripts/safe-edit.py` | Hybrid-autonomy edit engine: guards `/wiki` rewrites by line-change count, deletion count, and rewrite similarity |
+| `scripts/find-similar.py` | Candidate match finder: returns the most semantically similar wiki articles for a query or article |
+| `scripts/kb-search.py` | Query retrieval CLI: search the vault by natural-language query and return ranked results |
+| `scripts/conflict-scan.py` | Contradiction detection: compares wiki passage pairs and flags semantically similar but factually diverging claims |
+| `scripts/context-budget.py` | Progressive L0-L3 context layers: selects how much vault context to load at session start |
 | `scripts/auto-crosslink.py` | Add backlinks based on knowledge graph (graphify integration) |
 | `scripts/stale-check.py` | Detect wiki articles older than threshold with newer session logs |
 | `scripts/intake-scan.py` | Scan inbox and classify files by type |
@@ -114,6 +122,9 @@ cp skills/autoresearch/SKILL.md ~/.claude/skills/autoresearch/
 | `/stale` | none | Detects articles older than 60 days with newer session data |
 | `/import` | `cc` \| `claudeai <path>` \| `folder <path>` \| `cowork` | Bulk-import old sessions: `cc` (Claude Code history), `claudeai <path>` (claude.ai export bundle), `folder <path>` (any markdown/text folder, recursive), `cowork` (auto-detected Mac desktop Claude data) |
 | `/autoresearch` | topic | Multi-round web research, saves to `~/Claude/research/` |
+| `/reconcile` | none | Surface contradictions across wiki articles and produce a reconciliation log |
+| `/uitdaag` | claim or article | Adversarially challenge a claim for weak reasoning, missing evidence, or overgeneralization |
+| `/brug` | two topics | Find conceptual bridges and shared principles between two topics or articles |
 
 ## Vault structure
 
