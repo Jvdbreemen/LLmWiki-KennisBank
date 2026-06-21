@@ -1,10 +1,15 @@
 """Tests for the KENNISBANK_VAULT env-var resolver in scripts/_vaultpath.py.
 
-The four non-importer scripts (stale-check, semantic-tiling, auto-crosslink,
-intake-scan) used to hardcode `Path.home() / "KennisBank"`. They now resolve the
-vault via the shared helper vault_root(), which honors $KENNISBANK_VAULT and
-defaults to ~/KennisBank. _vaultpath.py has no hyphen so it imports directly
-once scripts/ is on sys.path.
+Every script (the non-importers stale-check, semantic-tiling, auto-crosslink,
+intake-scan AND the importers build-karpathy-index, import-cc-history,
+import-claudeai-export, import-folder) used to hardcode
+`Path.home() / "KennisBank"`. They now resolve the vault via the shared helper
+vault_root(), which honors $KENNISBANK_VAULT and defaults to ~/KennisBank.
+_vaultpath.py has no hyphen so it imports directly once scripts/ is on sys.path.
+
+`test_no_script_hardcodes_the_vault` is the regression guard: it scans every
+scripts/*.py and fails if any reintroduces the literal hardcode. This is the
+test that would have caught the importer scripts shipping to the wrong vault.
 """
 from __future__ import annotations
 
@@ -69,6 +74,41 @@ class TestVaultRootResolver(unittest.TestCase):
 
         tiling = load_script("semantic-tiling.py")
         self.assertEqual(tiling.WIKI_DIR, Path("/tmp/kb-resolver-test") / "02-wiki")
+
+    def test_importer_scripts_use_the_resolver(self):
+        # The importer scripts expose VAULT_DEFAULT as the argparse default;
+        # it must resolve via the env var, not a Path.home() hardcode.
+        os.environ[_vaultpath.ENV_VAR] = "/tmp/kb-importer-test"
+        from _loader import load_script
+
+        for name in (
+            "build-karpathy-index.py",
+            "import-cc-history.py",
+            "import-claudeai-export.py",
+            "import-folder.py",
+        ):
+            mod = load_script(name)
+            self.assertEqual(
+                mod.VAULT_DEFAULT,
+                Path("/tmp/kb-importer-test"),
+                f"{name} ignores $KENNISBANK_VAULT",
+            )
+
+    def test_no_script_hardcodes_the_vault(self):
+        # Regression guard: no script may reintroduce the literal hardcode.
+        # _vaultpath.py is the single allowed place (it IS the fallback).
+        import re
+
+        pattern = re.compile(r"""home\(\)\s*/\s*['"]KennisBank['"]""")
+        offenders = []
+        for script in SCRIPTS_DIR.glob("*.py"):
+            if script.name == "_vaultpath.py":
+                continue
+            if pattern.search(script.read_text(encoding="utf-8")):
+                offenders.append(script.name)
+        self.assertEqual(
+            offenders, [], f"hardcoded vault default in: {offenders}; use vault_root()"
+        )
 
 
 if __name__ == "__main__":

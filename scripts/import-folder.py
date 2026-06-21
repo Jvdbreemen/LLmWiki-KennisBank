@@ -45,10 +45,11 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _vaultpath import vault_root  # noqa: E402
 from _frontmatter import parse_frontmatter  # noqa: E402
 from _common import _today_iso, _utcnow_iso, print_summary, slugify  # noqa: E402
 
-VAULT_DEFAULT = Path.home() / "KennisBank"
+VAULT_DEFAULT = vault_root()
 
 ALLOWED_EXTS = {".md", ".markdown", ".txt"}
 
