@@ -222,6 +222,59 @@ class TestCLI(unittest.TestCase):
         finally:
             import shutil; shutil.rmtree(str(d), ignore_errors=True)
 
+    # -- Critical 1: dirty-tree substring-match bug --
+
+    def test_dirty_tree_superstring_path_exits_3(self):
+        """A dirty file whose path is a superstring of the target path must trigger exit 3.
+
+        Target: 02-wiki/a.md  Dirty: 02-wiki/a.md.bak
+        The old substring check wrongly treated a.md.bak as "the target itself"
+        because str(target_rel) is contained in the dirty line string.
+        Correct behaviour: a.md.bak != a.md -> dirty-tree guard fires -> exit 3.
+        """
+        d, art = self.make_repo()
+        try:
+            bak = d / "02-wiki" / "a.md.bak"
+            bak.write_text("backup\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(d), "add", str(bak)], check=True)
+            # staged but not committed -> dirty; no --force
+            new_content = "# A\n\nbody line fixed\n"
+            result = self._run(d, art, new_content)
+            self.assertEqual(result.returncode, 3, result.stderr)
+        finally:
+            import shutil; shutil.rmtree(str(d), ignore_errors=True)
+
+    def test_dirty_tree_superstring_path_with_force_succeeds(self):
+        """--force must skip the dirty-tree guard even with the superstring path."""
+        d, art = self.make_repo()
+        try:
+            bak = d / "02-wiki" / "a.md.bak"
+            bak.write_text("backup\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(d), "add", str(bak)], check=True)
+            new_content = "# A\n\nbody line fixed\n"
+            result = self._run(d, art, new_content, extra_args=["--force"])
+            self.assertEqual(result.returncode, 0, result.stderr)
+        finally:
+            import shutil; shutil.rmtree(str(d), ignore_errors=True)
+
+    # -- Critical 2: no-op detection --
+
+    def test_noop_edit_does_not_commit(self):
+        """If proposed content is identical to current content, report no-op and don't commit."""
+        d, art = self.make_repo()
+        try:
+            before_count = self._commit_count(d)
+            original_text = art.read_text(encoding="utf-8")
+            # Feed back the exact same content -> no-op
+            result = self._run(d, art, original_text)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout.strip().splitlines()[-1])
+            self.assertEqual(report["action"], "no-op")
+            # Commit count must not have changed
+            self.assertEqual(self._commit_count(d), before_count)
+        finally:
+            import shutil; shutil.rmtree(str(d), ignore_errors=True)
+
     # -- new-file case --
 
     def test_new_file_small_is_applied(self):
