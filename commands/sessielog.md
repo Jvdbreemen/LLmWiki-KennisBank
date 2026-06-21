@@ -49,14 +49,15 @@ Dit voegt de nieuwe sessie toe aan `~/KennisBank/02-wiki/log.md` (het chronologi
    Behandel elk gevonden research-bestand als wiki-kandidaat.
 3. Check bestaande wiki in ~/KennisBank/02-wiki/: update bestaand artikel of schrijf nieuw via template
 4. Per wiki-artikel: YAML frontmatter compleet, backlinks via [[...]], kernpunten met toelichting
-5. Auto-crosslinks: python3 ~/KennisBank/.claude/scripts/auto-crosslink.py [pad-naar-artikel]
-6. Rapporteer wat nieuw, bijgewerkt of overgeslagen is
+5. Graph incrementeel bijwerken VOOR de crosslinks (anders mist auto-crosslink de zojuist toegevoegde artikelen als nodes): roep de graphify-skill aan in update-modus op de vault, `/graphify ~/KennisBank --update`. Die gebruikt de semantische cache en re-extraheert alleen de gewijzigde bestanden (goedkoop: een paar files, niet de hele vault), herclustert daarna. Overslaan alleen als graphify niet geinstalleerd is (`~/KennisBank/graphify-out/.graphify_python` ontbreekt); schrijf dan de gewijzigde paden naar `~/KennisBank/graphify-out/.needs-rebuild` als fallback voor een latere update en meld dat de graph stale is.
+6. Auto-crosslinks (NA de graph-update in stap 5, zodat de nieuwe nodes bestaan): python3 ~/KennisBank/.claude/scripts/auto-crosslink.py [pad-naar-artikel]
+7. Rapporteer wat nieuw, bijgewerkt of overgeslagen is
 
 ---
 
-## Stap 3: Graphify rebuild-flag
+## Stap 3: Graphify (afgehandeld in Stap 2)
 
-Als er wiki-wijzigingen zijn, schrijf gewijzigde bestanden naar ~/KennisBank/graphify-out/.needs-rebuild
+De graph wordt nu incrementeel bijgewerkt in Stap 2 (item 5: `/graphify ~/KennisBank --update`) VOOR de auto-crosslink, zodat nieuwe artikelen direct als nodes bestaan en gelinkt worden. Dit vervangt de oude losse rebuild-flag die niets consumeerde. `~/KennisBank/graphify-out/.needs-rebuild` is alleen nog een fallback-record: schrijf daar de gewijzigde paden naartoe wanneer graphify niet beschikbaar is, en meld dan dat de graph stale is tot een handmatige `/graphify --update`.
 
 ---
 
