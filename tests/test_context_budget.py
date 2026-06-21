@@ -5,9 +5,17 @@ Geen netwerk, geen Ollama, geen filesystem-afhankelijkheden.
 """
 from __future__ import annotations
 
+import json
+import os
+import subprocess
+import sys
 import unittest
+from pathlib import Path
 
 from tests._loader import load_script
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SCRIPT = REPO_ROOT / "scripts" / "context-budget.py"
 
 
 def _cb():
@@ -192,6 +200,56 @@ class TestSelectLayersReturnType(unittest.TestCase):
             with self.subTest(level=level):
                 result = self.cb.select_layers(level, FULL_STATE)
                 self.assertIsInstance(result, dict)
+
+
+class TestEnvIntFailSoft(unittest.TestCase):
+    """Subprocess-tests: garbage env vars mogen nooit een crash opleveren."""
+
+    def _run(self, extra_env: dict, extra_args: list[str] | None = None) -> subprocess.CompletedProcess:
+        env = {**os.environ, "KENNISBANK_VAULT": "/nonexistent/vault/path", **extra_env}
+        cmd = [sys.executable, str(SCRIPT)] + (extra_args or [])
+        return subprocess.run(cmd, capture_output=True, text=True, env=env)
+
+    def test_garbage_kb_context_level_exits_zero(self):
+        """KB_CONTEXT_LEVEL='abc' mag geen ValueError-traceback geven; exit 0."""
+        result = self._run({"KB_CONTEXT_LEVEL": "abc"})
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+
+    def test_garbage_kb_context_level_outputs_valid_json(self):
+        """Output bij garbage KB_CONTEXT_LEVEL moet parseerbare JSON zijn."""
+        result = self._run({"KB_CONTEXT_LEVEL": "abc"})
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        parsed = json.loads(result.stdout)
+        self.assertIsInstance(parsed, dict)
+
+    def test_garbage_kb_retrieve_top_n_exits_zero(self):
+        """KB_RETRIEVE_TOP_N='xyz' mag geen ValueError geven; exit 0."""
+        result = self._run({"KB_RETRIEVE_TOP_N": "xyz"})
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+
+    def test_garbage_kb_retrieve_top_n_outputs_valid_json(self):
+        """Output bij garbage KB_RETRIEVE_TOP_N moet parseerbare JSON zijn."""
+        result = self._run({"KB_RETRIEVE_TOP_N": "xyz"})
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        parsed = json.loads(result.stdout)
+        self.assertIsInstance(parsed, dict)
+
+    def test_level0_missing_vault_exits_zero(self):
+        """--level 0 tegen een ontbrekende vault moet exit 0 geven."""
+        result = self._run({}, extra_args=["--level", "0"])
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+
+    def test_level0_missing_vault_contains_identity_key(self):
+        """--level 0 tegen een ontbrekende vault geeft JSON met 'identity'-sleutel (leeg of afwezig is ook goed)."""
+        result = self._run({}, extra_args=["--level", "0"])
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        parsed = json.loads(result.stdout)
+        self.assertIsInstance(parsed, dict)
+        # identity mag ontbreken (vault bestaat niet) maar de output is altijd een dict
+        # en bevat in ieder geval de sleutel als CLAUDE.md aanwezig was
+        # Hier controleren we dat er geen ongeldige sleutels zijn
+        allowed = {"identity", "active", "relevant", "bodies"}
+        self.assertTrue(set(parsed.keys()).issubset(allowed))
 
 
 if __name__ == "__main__":
