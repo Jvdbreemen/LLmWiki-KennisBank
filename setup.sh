@@ -113,6 +113,10 @@ for f in scripts/*.py scripts/*.sh; do
 done
 chmod +x "$VAULT/.claude/scripts/"*.py "$VAULT/.claude/scripts/"*.sh
 
+# Embedding backend config (example -> live). copy_file skips if it already
+# exists (unless --force), so a user's edited backend config is never clobbered.
+copy_file kennisbank-embed.example.json "$VAULT/.claude/kennisbank-embed.json"
+
 # Templates
 for f in templates/*.md; do
   copy_file "$f" "$VAULT/04-templates/$(basename "$f")"
