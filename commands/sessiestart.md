@@ -3,6 +3,20 @@ Voer een sessie-check uit en geef een compact overzicht om de sessie mee te star
 ## Doel
 Tegenhanger van `/sessielog`. Lees vault-context, memory, wiki-status en recente activiteit voordat je begint met werken. Read-only, snel, geen mutaties.
 
+## Context-lagen (L0-L3)
+
+Laad vault-context progressief op basis van wat de sessie nodig heeft. Standaard L1 (identity + actieve status):
+
+```bash
+python3 ~/KennisBank/.claude/scripts/context-budget.py --level 1
+```
+
+Diepere niveaus op verzoek:
+- `--level 2 --query "<onderwerp>"` voegt relevante wiki-artikelen toe (L2).
+- `--level 3 --query "<onderwerp>"` voegt ook de volledige artikelteksten toe (L3).
+
+Dit vult de cozempic-context-hygiëne aan, het vervangt die niet.
+
 ## Stap 1: Lees vault-context
 ```bash
 cat ~/KennisBank/CLAUDE.md

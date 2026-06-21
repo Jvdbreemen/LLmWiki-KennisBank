@@ -117,5 +117,16 @@ class BrugCommandStructureTest(unittest.TestCase):
         self.assertTrue(has_fallback, "brug.md moet 'fallback' of 'terugval' bevatten")
 
 
+class SessiestartCommandStructureTest(unittest.TestCase):
+    """Controleert dat commands/sessiestart.md de context-budget integratie bevat."""
+
+    def setUp(self):
+        self.path = COMMANDS_DIR / "sessiestart.md"
+        self.content = self.path.read_text(encoding="utf-8")
+
+    def test_contains_context_budget(self):
+        self.assertIn("context-budget", self.content)
+
+
 if __name__ == "__main__":
     unittest.main()
