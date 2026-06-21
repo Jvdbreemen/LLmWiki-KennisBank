@@ -50,7 +50,26 @@ Dit voegt de nieuwe sessie toe aan `~/KennisBank/02-wiki/log.md` (het chronologi
 3. Check bestaande wiki in ~/KennisBank/02-wiki/: update bestaand artikel of schrijf nieuw via template
 4. Per wiki-artikel: YAML frontmatter compleet, backlinks via [[...]], kernpunten met toelichting
 5. Graph bijwerken — DAGELIJKSE BATCH (kostenbesparing: LLM-extractie kost tokens per bestand). ALTIJD eerst: voeg de gewijzigde/nieuwe wiki-paden toe aan `~/KennisBank/graphify-out/.needs-rebuild` (goedkoop, geen LLM). DAN de dag-gate op de mtime van `~/KennisBank/graphify-out/graph.json`:
-   - graph.json OUDER dan ~20 uur (eerste sessie van de dag) EN .needs-rebuild niet leeg: roep `/graphify ~/KennisBank --update` aan. Graphify's manifest batcht ALLE sinds de vorige run gewijzigde bestanden in een keer (cache slaat ongewijzigde over; subagents doen alleen de nieuwe), herclustert, en legt de ECHTE subagent-tokenkost vast in `graphify-out/cost.json` (graphify Step 9 leest `.graphify_run_cost.json`; nooit 0 voor een subagent-run). Leeg daarna `.needs-rebuild` en ga naar item 6.
+   - graph.json OUDER dan ~20 uur (eerste sessie van de dag) EN .needs-rebuild niet leeg: roep `/graphify ~/KennisBank --update` aan. Graphify's manifest batcht ALLE sinds de vorige run gewijzigde bestanden in een keer (cache slaat ongewijzigde over; subagents doen alleen de nieuwe), herclustert. Leeg daarna `.needs-rebuild`. PATCH DAN de tokenkost in cost.json (graphify logt een subagent-extractie op 0; graphify blijft ongemodificeerd, we corrigeren het hier in sessielog): tel de `usage.subagent_tokens` op van ALLE extractie-subagents die je tijdens deze `--update` dispatchte (de Agent-API geeft een gecombineerd getal, geen in/out-splitsing) en schrijf dat naar de laatste run. Vervang `<SUBAGENT_TOKENS>` door die som:
+     ```bash
+     python3 - "<SUBAGENT_TOKENS>" <<'PY'
+     import json, os, sys
+     from pathlib import Path
+     sub = int(sys.argv[1])
+     vault = os.environ.get('KENNISBANK_VAULT') or str(Path.home() / 'KennisBank')
+     p = Path(vault) / 'graphify-out' / 'cost.json'
+     c = json.loads(p.read_text(encoding='utf-8'))
+     r = c['runs'][-1]                              # de zojuist door graphify toegevoegde run
+     r['backend'] = 'claude-subagent'
+     r['subagent_tokens'] = sub
+     r['total_tokens'] = r.get('input_tokens', 0) + r.get('output_tokens', 0) + sub
+     c['total_subagent_tokens'] = sum(x.get('subagent_tokens', 0) for x in c['runs'])
+     c['total_tokens'] = sum(x.get('input_tokens', 0) + x.get('output_tokens', 0) + x.get('subagent_tokens', 0) for x in c['runs'])
+     p.write_text(json.dumps(c, indent=2, ensure_ascii=False), encoding='utf-8')
+     print(f'cost.json gepatcht: {sub} subagent-tokens; totaal {c["total_tokens"]}')
+     PY
+     ```
+     Nooit een subagent-run op 0 laten staan. Ga dan naar item 6.
    - graph.json JONGER dan ~20u: SLA `--update` deze sessie over en meld "graph ~N bestanden achter (.needs-rebuild), ververst op de eerste sessie na 20u". Zo betaalt alleen de eerste sessie per dag de extractiekost.
    - graphify niet geinstalleerd (`graphify-out/.graphify_python` ontbreekt): alleen `.needs-rebuild` bijwerken en melden dat de graph stale is.
 6. Auto-crosslinks: ALLEEN als item 5 deze sessie `--update` draaide (anders bestaat de node van het nieuwe artikel nog niet in de graph): python3 ~/KennisBank/.claude/scripts/auto-crosslink.py [pad-naar-artikel]. Werd `--update` overgeslagen, sla crosslinks ook over: het nieuwe artikel krijgt zijn graph-backlinks bij de eerstvolgende dagrun; de handmatige [[...]]-links in het artikel werken intussen.
