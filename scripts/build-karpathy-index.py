@@ -41,10 +41,11 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _vaultpath import vault_root  # noqa: E402
 from _frontmatter import parse_frontmatter  # noqa: E402
 
 
-VAULT_DEFAULT = Path.home() / "KennisBank"
+VAULT_DEFAULT = vault_root()
 WIKI_SUBDIR_DEFAULT = "02-wiki"
 SESSIES_SUBDIR_DEFAULT = "01-raw/sessies"
 

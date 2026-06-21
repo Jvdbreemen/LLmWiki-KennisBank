@@ -32,9 +32,10 @@ import zipfile
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _vaultpath import vault_root  # noqa: E402
 from _common import _today_iso, _utcnow_iso, print_summary, slugify  # noqa: E402
 
-VAULT_DEFAULT = Path.home() / "KennisBank"
+VAULT_DEFAULT = vault_root()
 
 
 def extract_message_text(msg: dict) -> str:
