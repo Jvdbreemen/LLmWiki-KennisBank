@@ -59,5 +59,25 @@ class WikiCommandStructureTest(unittest.TestCase):
         self.assertIn("**overgeslagen**", self.content)
 
 
+class ReconcileCommandStructureTest(unittest.TestCase):
+    """Controleert dat commands/reconcile.md alle verwachte secties bevat."""
+
+    def setUp(self):
+        self.path = COMMANDS_DIR / "reconcile.md"
+        self.content = self.path.read_text(encoding="utf-8")
+
+    def test_uses_conflict_scan(self):
+        self.assertIn("conflict-scan", self.content)
+
+    def test_uses_safe_edit(self):
+        self.assertIn("safe-edit", self.content)
+
+    def test_writes_reconciliation_log(self):
+        self.assertIn("reconciliation-log.md", self.content)
+
+    def test_commit_prefix(self):
+        self.assertIn("reconcile:", self.content)
+
+
 if __name__ == "__main__":
     unittest.main()
