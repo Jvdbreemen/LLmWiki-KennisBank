@@ -96,5 +96,26 @@ class UitdaagCommandStructureTest(unittest.TestCase):
         self.assertIn("$ARGUMENTS", self.content)
 
 
+class BrugCommandStructureTest(unittest.TestCase):
+    """Controleert dat commands/brug.md alle verwachte elementen bevat."""
+
+    def setUp(self):
+        self.path = COMMANDS_DIR / "brug.md"
+        self.content = self.path.read_text(encoding="utf-8")
+
+    def test_uses_kb_search(self):
+        self.assertIn("kb-search", self.content)
+
+    def test_uses_graph_json(self):
+        self.assertIn("graph.json", self.content)
+
+    def test_uses_arguments(self):
+        self.assertIn("$ARGUMENTS", self.content)
+
+    def test_has_fallback(self):
+        has_fallback = "fallback" in self.content or "terugval" in self.content
+        self.assertTrue(has_fallback, "brug.md moet 'fallback' of 'terugval' bevatten")
+
+
 if __name__ == "__main__":
     unittest.main()
