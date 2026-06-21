@@ -66,6 +66,25 @@ be contributed.
 10. `gh pr create --repo <upstream> --base "$DEFAULT" --head "contrib/<slug>"` with a
     title and body describing the improvement. Report the PR URL.
 
+## Gotcha: contribute work goes on a branch, never the default branch first
+
+This skill assumes the tooling edits live ONLY in the deployed files (step 7 copies
+the deployed version into the repo). If you (or a prior session) already committed
+them to local `$DEFAULT` (e.g. straight to `main`), step 6's `checkout -b contrib/<slug>
+$DEFAULT` branches off a tip that ALREADY contains them, so a same-tip PR has no diff
+to show, and local `$DEFAULT` is left ahead of origin with PR-bound commits that a
+stray `git push` would land on the default branch, bypassing review.
+
+If you find commits already on local `$DEFAULT` that belong in the PR: move them to the
+branch and reset the default branch back to origin before pushing:
+```
+git -C "$REPO" branch "contrib/<slug>"                 # branch keeps the commits at HEAD
+git -C "$REPO" checkout "$DEFAULT" && git -C "$REPO" reset --hard "origin/$DEFAULT"
+git -C "$REPO" checkout "contrib/<slug>"               # PR-bound work now lives only here
+```
+`gh pr create --base "$DEFAULT"` compares against origin/$DEFAULT, so the PR then shows
+exactly your changes. Rule: never commit contribute work to the default branch.
+
 ## Dry-run
 If invoked with `--dry-run`, perform steps 1-5 and print the branch name and the
 files that would be committed, but do not create the branch, commit, push, or PR.
