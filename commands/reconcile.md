@@ -1,4 +1,11 @@
-Los tegenstrijdigheden op tussen wiki-artikelen in ~/KennisBank/ en leg de beslissingen vast in een auditlog. Optioneel onderwerp: $ARGUMENTS
+Los tegenstrijdigheden op tussen wiki-artikelen in $VAULT/ en leg de beslissingen vast in een auditlog. Optioneel onderwerp: $ARGUMENTS
+
+## Vault-root bepalen (VERPLICHT — lees dit eerst)
+
+Bepaal de vault-root ÉÉN keer aan het begin van dit command en gebruik die overal:
+`VAULT="${KENNISBANK_VAULT:-$HOME/KennisBank}"`
+
+Gebruik `$VAULT` voor ELK pad hieronder. Gebruik NOOIT een letterlijk `~/KennisBank`- of `C:\...\KennisBank`-pad: dat negeert de `KENNISBANK_VAULT`-env-var en schrijft naar de verkeerde vault.
 
 ## Doel
 Detecteer semantisch overlappende artikelen die elkaars claims tegenspreken, laat de gebruiker besluiten welke claim survives, pas het verliezende artikel aan en log elke beslissing.
@@ -7,7 +14,7 @@ Detecteer semantisch overlappende artikelen die elkaars claims tegenspreken, laa
 
 1. Scan de wiki op kandidaat-tegenstrijdige paren:
    ```
-   python3 ~/KennisBank/.claude/scripts/conflict-scan.py --json
+   python3 $VAULT/.claude/scripts/conflict-scan.py --json
    ```
    - De uitvoer is een JSON-array van objecten met: `path_a`, `path_b`, `updated_a`, `updated_b`, `cosine`, `signal`, `excerpt_a`, `excerpt_b`.
    - Als $ARGUMENTS is opgegeven: filter paren waarvan minstens één pad of excerpt het opgegeven onderwerp bevat.
@@ -40,7 +47,7 @@ Detecteer semantisch overlappende artikelen die elkaars claims tegenspreken, laa
 
    d. Pas de wijziging toe:
       ```
-      python3 ~/KennisBank/.claude/scripts/safe-edit.py <verliezer-pad> --new /tmp/reconcile-<slug>.md --message "reconcile: <onderwerp>"
+      python3 $VAULT/.claude/scripts/safe-edit.py <verliezer-pad> --new /tmp/reconcile-<slug>.md --message "reconcile: <onderwerp>"
       ```
       - Als `safe-edit.py` afsluit met exitcode 2 (action `needs-confirm`, grote wijziging):
         - Toon de afgedrukte diff aan de gebruiker.
@@ -48,7 +55,7 @@ Detecteer semantisch overlappende artikelen die elkaars claims tegenspreken, laa
         - Overschrijf **nooit** stil met `--force`.
       - Verwijder **nooit** automatisch een artikel.
 
-4. Voeg een auditlog-regel toe aan `~/KennisBank/02-wiki/reconciliation-log.md` (maak het bestand aan als het niet bestaat):
+4. Voeg een auditlog-regel toe aan `$VAULT/02-wiki/reconciliation-log.md` (maak het bestand aan als het niet bestaat):
    ```
    - YYYY-MM-DD [[winnaar-stem]] over [[verliezer-stem]] — reden: <korte motivatie>
    ```
