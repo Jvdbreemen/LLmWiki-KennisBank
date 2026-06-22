@@ -1,7 +1,15 @@
 Importeer oude sessies (Claude Code, claude.ai, of generieke map) naar de KennisBank vault. Argumenten: $ARGUMENTS
 
+## Vault-root bepalen (VERPLICHT — lees dit eerst)
+
+Bepaal de vault-root ÉÉN keer aan het begin van dit command en gebruik die overal:
+`VAULT="${KENNISBANK_VAULT:-$HOME/KennisBank}"`
+
+Gebruik `$VAULT` voor ELK pad hieronder. Gebruik NOOIT een letterlijk `~/KennisBank`- of `C:\...\KennisBank`-pad: dat negeert de `KENNISBANK_VAULT`-env-var en schrijft naar de verkeerde vault (de oorzaak van een eerdere skeleton-misser).
+
+
 ## Doel
-Backfill van bestaande Claude-historie in `~/KennisBank/01-raw/sessies/` zodat `/wiki` er kennis uit kan compileren. Drie importers, één commando.
+Backfill van bestaande Claude-historie in `$VAULT/01-raw/sessies/` zodat `/wiki` er kennis uit kan compileren. Drie importers, één commando.
 
 ## Argumenten parsen
 
@@ -20,10 +28,10 @@ Als `$ARGUMENTS` niet matcht met bovenstaande: toon de lijst en vraag opnieuw.
 - Nooit `--force` zonder expliciete bevestiging van de gebruiker
 - Imports zijn idempotent: bestaande raw-sessie-bestanden worden overgeslagen tenzij `--force` gezet is
 - Bij errors in de JSON-output: lijst de error-bestanden in het rapport, abort niet
-- Tel het aantal bestanden in `~/KennisBank/01-raw/sessies/` voor en na, zodat het verschil terug te rapporteren is
+- Tel het aantal bestanden in `$VAULT/01-raw/sessies/` voor en na, zodat het verschil terug te rapporteren is
 
 ```bash
-ls -1 ~/KennisBank/01-raw/sessies/ 2>/dev/null | wc -l
+ls -1 $VAULT/01-raw/sessies/ 2>/dev/null | wc -l
 ```
 
 ## Stappen per source
@@ -32,13 +40,13 @@ ls -1 ~/KennisBank/01-raw/sessies/ 2>/dev/null | wc -l
 
 1. Dry-run met verbose:
    ```bash
-   python3 ~/KennisBank/.claude/scripts/import-cc-history.py --dry-run --verbose | head -50
+   python3 $VAULT/.claude/scripts/import-cc-history.py --dry-run --verbose | head -50
    ```
 2. Toon hoeveel sessies gevonden zijn en hoeveel nieuw zouden worden geschreven.
 3. Vraag bevestiging: "Doorgaan met import?"
 4. Bij ja: draai zonder `--dry-run`, met `--json`:
    ```bash
-   python3 ~/KennisBank/.claude/scripts/import-cc-history.py --json
+   python3 $VAULT/.claude/scripts/import-cc-history.py --json
    ```
 5. Vat de JSON-output samen in het rapport (imported, skipped, errors).
 
@@ -52,7 +60,7 @@ ls -1 ~/KennisBank/01-raw/sessies/ 2>/dev/null | wc -l
    Als MISSING: stop, rapporteer terug en vraag een correct pad.
 3. Dry-run:
    ```bash
-   python3 ~/KennisBank/.claude/scripts/import-claudeai-export.py "<pad>" --dry-run --verbose | head -50
+   python3 $VAULT/.claude/scripts/import-claudeai-export.py "<pad>" --dry-run --verbose | head -50
    ```
 4. Bevestig en draai zonder `--dry-run`, met `--json`. Vat de output samen.
 
@@ -60,13 +68,13 @@ ls -1 ~/KennisBank/01-raw/sessies/ 2>/dev/null | wc -l
 
 1. Als pad ontbreekt: vraag de gebruiker om een absoluut pad. Suggereer dat de auto-detect van Mac desktop Claude data via:
    ```bash
-   python3 ~/KennisBank/.claude/scripts/import-folder.py --list-cowork-candidates
+   python3 $VAULT/.claude/scripts/import-folder.py --list-cowork-candidates
    ```
    gevonden kan worden.
 2. Optioneel tweede argument: prefix voor de gegenereerde slugs (bijv. `cowork`, `notes`).
 3. Dry-run:
    ```bash
-   python3 ~/KennisBank/.claude/scripts/import-folder.py "<pad>" [--prefix <prefix>] --dry-run --verbose | head -50
+   python3 $VAULT/.claude/scripts/import-folder.py "<pad>" [--prefix <prefix>] --dry-run --verbose | head -50
    ```
 4. Bevestig en draai zonder `--dry-run`, met `--json`. Vat de output samen.
 
@@ -74,12 +82,12 @@ ls -1 ~/KennisBank/01-raw/sessies/ 2>/dev/null | wc -l
 
 1. Toon de gevonden kandidaten:
    ```bash
-   python3 ~/KennisBank/.claude/scripts/import-folder.py --list-cowork-candidates
+   python3 $VAULT/.claude/scripts/import-folder.py --list-cowork-candidates
    ```
 2. Laat de gebruiker een pad kiezen uit de lijst. Als er maar één kandidaat is: stel die voor en bevestig.
 3. Dry-run met dat pad en `--prefix cowork`:
    ```bash
-   python3 ~/KennisBank/.claude/scripts/import-folder.py "<gekozen-pad>" --prefix cowork --dry-run --verbose | head -50
+   python3 $VAULT/.claude/scripts/import-folder.py "<gekozen-pad>" --prefix cowork --dry-run --verbose | head -50
    ```
 4. Bevestig en draai zonder `--dry-run`, met `--json`. Vat de output samen.
 
@@ -92,9 +100,9 @@ ls -1 ~/KennisBank/01-raw/sessies/ 2>/dev/null | wc -l
 
 ## Post-import
 
-- Toon het aantal bestanden in `~/KennisBank/01-raw/sessies/` voor en na, plus het verschil.
+- Toon het aantal bestanden in `$VAULT/01-raw/sessies/` voor en na, plus het verschil.
 - Suggereer als afsluiting:
-  - "Run `/wiki` om kennis uit deze imports te compileren naar `~/KennisBank/02-wiki/`."
+  - "Run `/wiki` om kennis uit deze imports te compileren naar `$VAULT/02-wiki/`."
   - Alleen als er duplicaten of overlap te verwachten zijn: "Een latere `/sessielog`-run overschrijft het bestaande log voor die operation."
 
 ## Bevestiging
@@ -103,6 +111,6 @@ Per source rapporteren:
 - Aantal imported
 - Aantal skipped (al aanwezig)
 - Aantal errors, met bestandsnamen
-- Pad naar `~/KennisBank/01-raw/sessies/`
+- Pad naar `$VAULT/01-raw/sessies/`
 
 Bij `all`: bovenstaand per source plus een totaal eronder.
