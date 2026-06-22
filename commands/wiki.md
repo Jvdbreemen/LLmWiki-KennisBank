@@ -29,7 +29,7 @@ Patroonherkenning over sessies heen — destilleer herbruikbare kennis als wiki-
 3.5. Bestaand artikel herschrijven
    - Voer per kandidaat-onderwerp uit:
      ```
-     python3 ~/KennisBank/.claude/scripts/find-similar.py "<onderwerp-titel>"
+     python3 $VAULT/.claude/scripts/find-similar.py "<onderwerp-titel>"
      ```
      (of `scripts/find-similar.py` als je al in de repo-root werkt)
    - Parseer de JSON-uitvoer `{path, score, above_threshold}`.
@@ -47,7 +47,7 @@ Patroonherkenning over sessies heen — destilleer herbruikbare kennis als wiki-
      ```
      Gebruik daarna `safe-edit.py` met dat pad als invoer:
      ```
-     python3 ~/KennisBank/.claude/scripts/safe-edit.py <path> --new /tmp/wiki-rewrite-<slug>.md --message "wiki-rewrite: <onderwerp>"
+     python3 $VAULT/.claude/scripts/safe-edit.py <path> --new /tmp/wiki-rewrite-<slug>.md --message "wiki-rewrite: <onderwerp>"
      ```
      > **GEEN `echo "..." | ...` gebruiken.** De body bevat aanhalingstekens, backticks en
      > `$`/`\` die de shell corrumpeert. Schrijf altijd eerst naar een temp-bestand.
@@ -58,7 +58,7 @@ Patroonherkenning over sessies heen — destilleer herbruikbare kennis als wiki-
    - Noteer het resultaat als **herschreven** (pad + score) voor de rapportage.
 
    **Als `above_threshold` false is (geen match):**
-   > **Let op:** een leeg resultaat kan ook betekenen dat de embed-index nog niet gebouwd is. Herstel met `python3 ~/KennisBank/.claude/scripts/build-embed-index.py` en probeer opnieuw.
+   > **Let op:** een leeg resultaat kan ook betekenen dat de embed-index nog niet gebouwd is. Herstel met `python3 $VAULT/.claude/scripts/build-embed-index.py` en probeer opnieuw.
    - Val door naar stap 4 (nieuw artikel aanmaken via template).
 
 4. Per wiki-artikel:

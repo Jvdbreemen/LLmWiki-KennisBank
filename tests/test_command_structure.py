@@ -128,5 +128,56 @@ class SessiestartCommandStructureTest(unittest.TestCase):
         self.assertIn("context-budget", self.content)
 
 
+
+class KennisbankUpgradeCommandStructureTest(unittest.TestCase):
+    """Controleert dat commands/kennisbank-upgrade.md de skill aanstuurt."""
+
+    def setUp(self):
+        self.path = COMMANDS_DIR / "kennisbank-upgrade.md"
+        self.content = self.path.read_text(encoding="utf-8")
+
+    def test_invokes_skill(self):
+        self.assertIn("kennisbank-upgrade", self.content)
+        self.assertIn("skill", self.content)
+
+    def test_passes_arguments(self):
+        self.assertIn("$ARGUMENTS", self.content)
+
+    def test_mentions_doctor_verification(self):
+        self.assertIn("doctor.sh", self.content)
+
+
+class KennisbankContributeCommandStructureTest(unittest.TestCase):
+    """Controleert dat commands/kennisbank-contribute.md de skill aanstuurt."""
+
+    def setUp(self):
+        self.path = COMMANDS_DIR / "kennisbank-contribute.md"
+        self.content = self.path.read_text(encoding="utf-8")
+
+    def test_invokes_skill(self):
+        self.assertIn("kennisbank-contribute", self.content)
+        self.assertIn("skill", self.content)
+
+    def test_passes_arguments(self):
+        self.assertIn("$ARGUMENTS", self.content)
+
+    def test_mentions_pull_request(self):
+        self.assertIn("pull request", self.content)
+
+
+class NoHardcodedVaultInCommandsTest(unittest.TestCase):
+    """Regressie-guard: geen command-bestand mag scripts via een hardcoded
+    ~/KennisBank-pad aanroepen; gebruik de $VAULT-resolutie."""
+
+    def test_no_hardcoded_script_path(self):
+        for md in sorted(COMMANDS_DIR.glob("*.md")):
+            content = md.read_text(encoding="utf-8")
+            self.assertNotIn(
+                "~/KennisBank/.claude/scripts",
+                content,
+                f"{md.name} roept een script aan via een hardcoded ~/KennisBank-pad; gebruik de $VAULT-resolutie",
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

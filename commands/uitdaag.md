@@ -1,5 +1,12 @@
 Daag een stelling of beslissing uit met wat de vault al weet. Stelling/beslissing: $ARGUMENTS
 
+## Vault-root bepalen (VERPLICHT — lees dit eerst)
+
+Bepaal de vault-root ÉÉN keer aan het begin van dit command en gebruik die overal:
+`VAULT="${KENNISBANK_VAULT:-$HOME/KennisBank}"`
+
+Gebruik `$VAULT` voor ELK pad hieronder. Gebruik NOOIT een letterlijk `~/KennisBank`- of `C:\...\KennisBank`-pad: dat negeert de `KENNISBANK_VAULT`-env-var en schrijft naar de verkeerde vault.
+
 ## Doel
 
 Sparringstool voor journalistiek denken. Geen essay, geen algemene kennis. Alleen wat er al in de vault staat.
@@ -10,7 +17,7 @@ Sparringstool voor journalistiek denken. Geen essay, geen algemene kennis. Allee
 
 2. Zoek de meest relevante vault-artikelen:
    ```
-   python3 ~/KennisBank/.claude/scripts/kb-search.py "$ARGUMENTS" --top 5
+   python3 $VAULT/.claude/scripts/kb-search.py "$ARGUMENTS" --top 5
    ```
    > Geef de stelling als ÉÉN geciteerd argument en ontsnap interne aanhalingstekens (anders breekt de shell).
 
@@ -18,7 +25,7 @@ Sparringstool voor journalistiek denken. Geen essay, geen algemene kennis. Allee
 
 3. **Als de lijst leeg is** (geen resultaten boven de drempelwaarde):
    Meld dit direct: "Niets in de vault dat hierop aansluit."
-   > **Let op:** een leeg resultaat kan ook betekenen dat de embed-index nog niet gebouwd is. Herstel met `python3 ~/KennisBank/.claude/scripts/build-embed-index.py` en probeer opnieuw.
+   > **Let op:** een leeg resultaat kan ook betekenen dat de embed-index nog niet gebouwd is. Herstel met `python3 $VAULT/.claude/scripts/build-embed-index.py` en probeer opnieuw.
    Stop hier. Val niet terug op algemene kennis.
 
 4. **Als er matches zijn:**

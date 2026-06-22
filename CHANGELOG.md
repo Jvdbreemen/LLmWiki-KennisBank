@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-06-22
+
+Slash-command launchers voor de lifecycle-skills en vault-pad-consistentie voor de
+v0.8.0-commands.
+
+### Added
+
+- **`/kennisbank-upgrade`** en **`/kennisbank-contribute`** — slash-command launchers
+  voor de gelijknamige lifecycle-skills, zodat upgrade en contribute direct als
+  commando aanroepbaar zijn (de skills bleven anders alleen model-getriggerd).
+
+### Changed
+
+- **Vault-pad-resolutie in de v0.8.0-commands.** `wiki.md`, `reconcile.md`,
+  `uitdaag.md`, `brug.md` en `sessiestart.md` roepen scripts nu aan via
+  `VAULT="${KENNISBANK_VAULT:-$HOME/KennisBank}"` in plaats van een hardcoded
+  `~/KennisBank`-pad, in lijn met de repo-brede env-var-fix (PR #11) die deze
+  nieuwere commands nog niet dekte. Een regressie-guard
+  (`NoHardcodedVaultInCommandsTest`) bewaakt dit voortaan.
+
 ## [0.8.0] - 2026-06-21
 
 Vault-onderhoud en denkgereedschap layer: self-rewriting `/wiki` with hybrid-autonomy
@@ -246,7 +266,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/releases/tag/v0.6.1
