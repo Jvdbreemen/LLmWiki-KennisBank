@@ -1,5 +1,12 @@
 Zoek niet-voor-de-hand-liggende verbindingen tussen twee onderwerpen in de vault. Onderwerpen: $ARGUMENTS
 
+## Vault-root bepalen (VERPLICHT — lees dit eerst)
+
+Bepaal de vault-root ÉÉN keer aan het begin van dit command en gebruik die overal:
+`VAULT="${KENNISBANK_VAULT:-$HOME/KennisBank}"`
+
+Gebruik `$VAULT` voor ELK pad hieronder. Gebruik NOOIT een letterlijk `~/KennisBank`- of `C:\...\KennisBank`-pad: dat negeert de `KENNISBANK_VAULT`-env-var en schrijft naar de verkeerde vault.
+
 Verwacht formaat: `/brug onderwerp A & onderwerp B`
 Gebruik `&`, `vs`, `en` of een komma als scheidingsteken tussen de twee onderwerpen.
 
@@ -19,8 +26,8 @@ Als er geen of maar één onderwerp in $ARGUMENTS staat, stop dan en vraag: "Gee
 Voer voor elk onderwerp de zoekopdracht uit:
 
 ```
-python3 ~/KennisBank/.claude/scripts/kb-search.py "<onderwerp A>" --top 5
-python3 ~/KennisBank/.claude/scripts/kb-search.py "<onderwerp B>" --top 5
+python3 $VAULT/.claude/scripts/kb-search.py "<onderwerp A>" --top 5
+python3 $VAULT/.claude/scripts/kb-search.py "<onderwerp B>" --top 5
 ```
 
 > Geef elk onderwerp als ÉÉN geciteerd argument en ontsnap interne aanhalingstekens (anders breekt de shell).
@@ -30,7 +37,7 @@ Bewaar de resultatensets als **cluster A** en **cluster B**.
 
 ### 3. Graph-first: zoek brugpaden via de kennisgraaf
 
-Controleer of `graphify-out/graph.json` bestaat in de vault (standaard `~/KennisBank/graphify-out/graph.json`).
+Controleer of `graphify-out/graph.json` bestaat in de vault (standaard `$VAULT/graphify-out/graph.json`).
 
 **Als graph.json aanwezig is:**
 
@@ -60,7 +67,7 @@ Ga verder naar de terugval (stap 4).
 Zoek artikelen die matig scoren op BEIDE onderwerpen tegelijk — dat zijn potentiële brugartikelen die in beide domeinen voorkomen:
 
 ```
-python3 ~/KennisBank/.claude/scripts/kb-search.py "<onderwerp A> <onderwerp B>" --top 10
+python3 $VAULT/.claude/scripts/kb-search.py "<onderwerp A> <onderwerp B>" --top 10
 ```
 
 Vergelijk de uitvoer met cluster A en cluster B:
@@ -83,7 +90,7 @@ Geef voorkeur aan onverwachte koppelingen. Sla voor de hand liggende overlapping
 
 Als er na stap 3 en stap 4 geen zinvolle brug te vinden is (artikelen bestaan nauwelijks of overlappen niet), zeg dat dan direct:
 "Geen betekenisvolle brug gevonden tussen [A] en [B] op basis van de huidige vault-inhoud."
-> **Let op:** een leeg resultaat kan ook betekenen dat de embed-index nog niet gebouwd is. Herstel met `python3 ~/KennisBank/.claude/scripts/build-embed-index.py` en probeer opnieuw.
+> **Let op:** een leeg resultaat kan ook betekenen dat de embed-index nog niet gebouwd is. Herstel met `python3 $VAULT/.claude/scripts/build-embed-index.py` en probeer opnieuw.
 Stop hier. Verzin niets.
 
 ## Regels
