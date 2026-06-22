@@ -89,6 +89,8 @@ The setup script will:
 
 After install, run `bash scripts/doctor.sh` to verify, then read [POST-INSTALL.md](POST-INSTALL.md) for the first-session walkthrough.
 
+`setup.sh` also registers two retrieval hooks in `~/.claude/settings.json` (SessionStart -> `build-embed-index.py` warms the embed cache, UserPromptSubmit -> `kb-retrieve.py` injects matching wiki snippets). Skip with `--no-hooks`; verify with `doctor.sh`.
+
 ### Manual installation
 
 ```bash

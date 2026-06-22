@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-06-22
+
+Retrieval hooks are now registered automatically, closing the cold-cache footgun
+where `/uitdaag`, `/brug`, and `/wiki` self-rewrite silently found nothing on a
+fresh install.
+
+### Added
+
+- **`scripts/register-hooks.py`** -- an idempotent, non-destructive merger that
+  registers KennisBank hooks in `~/.claude/settings.json`. Existing hooks,
+  permissions, env, and other settings are preserved; re-running is a no-op; a
+  stale script path self-heals; an unparseable settings file is refused rather
+  than clobbered.
+- **`setup.sh` registers the retrieval hooks**: `SessionStart` -> `build-embed-index.py`
+  (warms the wiki embed cache) and `UserPromptSubmit` -> `kb-retrieve.py` (injects
+  matching wiki snippets). Skip with `--no-hooks`.
+- **`doctor.sh` check #13** verifies both hooks are registered, warning (never
+  failing) when they are missing or the settings file is absent/unparseable.
+
 ## [0.8.1] - 2026-06-22
 
 Slash-command launchers voor de lifecycle-skills en vault-pad-consistentie voor de
@@ -266,7 +285,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.8.2...HEAD
+[0.8.2]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.6.1...v0.7.0
