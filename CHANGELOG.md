@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-06-21
+
+Vault-onderhoud en denkgereedschap layer: self-rewriting `/wiki` with hybrid-autonomy
+guards, contradiction detection and reconciliation, adversarial thinking tools, and
+progressive context budgets.
+
+### Added
+
+- **Self-rewriting `/wiki` via `safe-edit.py`** (hybrid-autonomy edit engine). Guards
+  every automated wiki rewrite by line-change count (`KB_EDIT_MAX_LINES`, default 20),
+  heading removal, and deletion count (`KB_EDIT_MAX_DROP`, default 3). Edits that
+  exceed any guard are held back and proposed for human review instead of being applied
+  silently. (Similarity-based rewrite matching is handled by `find-similar.py` via
+  `KB_REWRITE_THRESHOLD`, not by `safe-edit.py`.)
+- **`scripts/find-similar.py`** — candidate match finder: returns the most
+  semantically similar wiki articles for a query or article, powering `/wiki`'s
+  de-duplication awareness.
+- **`scripts/kb-search.py`** — query retrieval CLI: search the vault by
+  natural-language query and return ranked results, usable standalone or wired into
+  commands.
+- **`scripts/conflict-scan.py`** — contradiction detection: compares wiki passage
+  pairs and flags semantically similar but factually diverging claims. Threshold
+  `KB_CONFLICT_SIM` (default 0.62).
+- **`scripts/context-budget.py`** — progressive L0-L3 context layers: selects how
+  much vault context to load at session start based on `KB_CONTEXT_LEVEL` (default
+  1 = L1). L0 = bare minimum, L1 = default, L2 = extended, L3 = full.
+- **`commands/reconcile.md`** (`/reconcile`) — surfaces contradictions detected by
+  `conflict-scan.py` and produces a reconciliation audit trail.
+- **`commands/uitdaag.md`** (`/uitdaag`) — adversarial thinking tool: challenges a
+  claim or article for weak reasoning, missing evidence, or overgeneralization.
+- **`commands/brug.md`** (`/brug`) — thinking tool: finds conceptual bridges and
+  shared principles between two topics or articles.
+
+### New env vars
+
+| Variable | Default | Controls |
+|----------|---------|---------|
+| `KB_EDIT_MAX_LINES` | `20` | Max lines changed per automated `/wiki` edit pass |
+| `KB_EDIT_MAX_DROP` | `3` | Max non-blank lines deleted per automated edit pass |
+| `KB_REWRITE_THRESHOLD` | `0.62` | Min cosine similarity for auto-apply of a rewrite |
+| `KB_CONFLICT_SIM` | `0.62` | Min cosine to classify passage pair as potential contradiction |
+| `KB_CONTEXT_LEVEL` | `1` | Progressive context layer loaded at session start (0-3) |
+
 ## [0.7.0] - 2026-06-21
 
 Swappable embedding backend and push-based wiki retrieval, plus cost-gated
@@ -203,7 +246,9 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/releases/tag/v0.6.1
 [0.6.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/releases/tag/v0.6.0
 [0.5.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/releases/tag/v0.5.0

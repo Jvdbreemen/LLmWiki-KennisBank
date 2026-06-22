@@ -128,6 +128,38 @@ class SetupDeployTest(unittest.TestCase):
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
+    def test_vault_onderhoud_scripts_deployed(self):
+        """safe-edit.py, find-similar.py, kb-search.py, conflict-scan.py, context-budget.py."""
+        tmp, vault = self.run_setup()
+        try:
+            scripts = vault / ".claude" / "scripts"
+            for name in (
+                "safe-edit.py",
+                "find-similar.py",
+                "kb-search.py",
+                "conflict-scan.py",
+                "context-budget.py",
+            ):
+                self.assertTrue(
+                    (scripts / name).is_file(),
+                    f"{name} not deployed at {scripts / name}",
+                )
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_vault_onderhoud_commands_deployed(self):
+        """reconcile.md, uitdaag.md, brug.md must be installed as slash commands."""
+        tmp, vault = self.run_setup()
+        try:
+            commands = tmp / ".claude" / "commands"
+            for name in ("reconcile.md", "uitdaag.md", "brug.md"):
+                self.assertTrue(
+                    (commands / name).is_file(),
+                    f"{name} not installed at {commands / name}",
+                )
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
 
 if __name__ == "__main__":
     unittest.main()

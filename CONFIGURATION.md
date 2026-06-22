@@ -178,6 +178,72 @@ override the config file; both override the built-in defaults.
 
 ---
 
+## 4b. Vault-onderhoud layer env vars
+
+The five env vars below control the behavior of the vault-onderhoud scripts
+(`safe-edit.py`, `find-similar.py`, `kb-search.py`, `conflict-scan.py`,
+`context-budget.py`) and the `/wiki` command's hybrid-autonomy edit guard.
+
+### KB_EDIT_MAX_LINES
+
+- **Default**: `20`
+- **Where set**: `scripts/safe-edit.py`.
+- **Effect**: maximum number of lines that `safe-edit.py` may change in a single
+  `/wiki` edit pass. Edits that would touch more lines than this are held back and
+  proposed to the user for review instead of being applied automatically. Raise for
+  larger automated rewrites; lower for stricter human-in-the-loop control.
+- **To change**: set the environment variable before running a session, or patch
+  the default in `safe-edit.py`.
+
+### KB_EDIT_MAX_DROP
+
+- **Default**: `3`
+- **Where set**: `scripts/safe-edit.py`.
+- **Effect**: maximum number of non-blank lines that `safe-edit.py` may delete in
+  one pass. Deletions beyond this count trigger the same review-hold as
+  `KB_EDIT_MAX_LINES`. Protects against silent content loss when `/wiki` rewrites
+  an article.
+- **To change**: set the environment variable or patch the default in `safe-edit.py`.
+
+### KB_REWRITE_THRESHOLD
+
+- **Default**: `0.62`
+- **Where set**: `scripts/find-similar.py`.
+- **Effect**: cosine similarity threshold used by `find-similar.py` to decide
+  whether the best-matching wiki article is close enough to treat as an existing
+  article (rewrite path) rather than a new one. When `above_threshold` is false,
+  `/wiki` falls through to creating a new article instead.
+  Tuned for `qwen3-embedding:8b`; recalibrate after a model switch.
+- **To change**: set the environment variable. Same embedding-model caveat as the
+  tiling thresholds.
+
+### KB_CONFLICT_SIM
+
+- **Default**: `0.62`
+- **Where set**: `scripts/conflict-scan.py`.
+- **Effect**: cosine similarity threshold for `conflict-scan.py` (and by extension
+  the `/reconcile` command) to classify two wiki passage pairs as potentially
+  contradictory. Pairs above this threshold and with diverging factual claims are
+  surfaced; pairs below are skipped. Tuned for `qwen3-embedding:8b`.
+- **To change**: set the environment variable. Recalibrate per embedding model.
+
+### KB_CONTEXT_LEVEL
+
+- **Default**: `1`
+- **Where set**: `scripts/context-budget.py`.
+- **Effect**: selects the progressive context layer loaded at session start
+  (via `context-budget.py` and `/sessiestart`).
+  - `0` — L0: identity only (first ~40 lines of `CLAUDE.md`).
+  - `1` — L1: default (L0 + active state: recent sessions, status counts, open loops).
+  - `2` — L2: extended (L0 + L1 + relevant articles via `kb-search.py`, requires `--query`).
+  - `3` — L3: full (L0 + L1 + L2 + full article bodies for the matched articles).
+  Higher levels consume more tokens; use L0 or L1 for long coding sessions, L3
+  for deep knowledge-work sessions.
+- **To change**: set the environment variable or pass the level explicitly to
+  `context-budget.py`.
+
+---
+
 ## 5. autoresearch skill
 
 ### Output path
