@@ -25,6 +25,8 @@ Every Claude session produces a session log. The `/wiki` command compiles logs i
 | `commands/reconcile.md` | `/reconcile` command: surface and resolve contradictions across wiki articles |
 | `commands/uitdaag.md` | `/uitdaag` command: adversarially challenge a claim or article for weak reasoning |
 | `commands/brug.md` | `/brug` command: find conceptual bridges between two topics or articles |
+| `commands/kennisbank-upgrade.md` | `/kennisbank-upgrade` command: launcher for the kennisbank-upgrade skill |
+| `commands/kennisbank-contribute.md` | `/kennisbank-contribute` command: launcher for the kennisbank-contribute skill |
 | `skills/autoresearch/` | `/autoresearch` skill: iterative multi-round web research |
 | `scripts/safe-edit.py` | Hybrid-autonomy edit engine: guards `/wiki` rewrites by line-change count, heading removal, and net deletion count |
 | `scripts/find-similar.py` | Candidate match finder: returns the most semantically similar wiki articles for a query or article |
@@ -125,6 +127,8 @@ cp skills/autoresearch/SKILL.md ~/.claude/skills/autoresearch/
 | `/reconcile` | none | Surface contradictions across wiki articles and produce a reconciliation log |
 | `/uitdaag` | claim or article | Adversarially challenge a claim for weak reasoning, missing evidence, or overgeneralization |
 | `/brug` | two topics | Find conceptual bridges and shared principles between two topics or articles |
+| `/kennisbank-upgrade` | optional `--dry-run` | Launcher for the kennisbank-upgrade skill: upgrade the deployed vault to the latest release tag |
+| `/kennisbank-contribute` | optional `--dry-run` | Launcher for the kennisbank-contribute skill: PR local tooling edits upstream |
 
 ## Vault structure
 

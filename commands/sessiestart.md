@@ -16,7 +16,7 @@ Tegenhanger van `/sessielog`. Lees vault-context, memory, wiki-status en recente
 Laad vault-context progressief op basis van wat de sessie nodig heeft. Standaard L1 (identity + actieve status):
 
 ```bash
-python3 ~/KennisBank/.claude/scripts/context-budget.py --level 1
+python3 $VAULT/.claude/scripts/context-budget.py --level 1
 ```
 
 Diepere niveaus op verzoek:
