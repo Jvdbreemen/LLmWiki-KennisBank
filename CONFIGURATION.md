@@ -178,6 +178,26 @@ override the config file; both override the built-in defaults.
 
 ---
 
+### Hook registration (`scripts/register-hooks.py`)
+
+`setup.sh` registers two retrieval hooks into `~/.claude/settings.json`:
+
+- **SessionStart** runs `build-embed-index.py` to warm the wiki embed cache.
+- **UserPromptSubmit** runs `kb-retrieve.py` to inject matching wiki snippets.
+
+Registration is idempotent and non-destructive: existing hooks, permissions, and
+env are preserved, re-running is a no-op, and a stale script path self-heals. An
+unparseable `settings.json` is left untouched (registration refuses rather than
+clobbers). Skip with `setup.sh --no-hooks`. To register manually later:
+
+```
+python3 ~/KennisBank/.claude/scripts/register-hooks.py ~/.claude/settings.json \
+  SessionStart ~/KennisBank/.claude/scripts/build-embed-index.py \
+  UserPromptSubmit ~/KennisBank/.claude/scripts/kb-retrieve.py
+```
+
+`doctor.sh` (check #13) reports whether both hooks are registered.
+
 ## 4b. Vault-onderhoud layer env vars
 
 The five env vars below control the behavior of the vault-onderhoud scripts
