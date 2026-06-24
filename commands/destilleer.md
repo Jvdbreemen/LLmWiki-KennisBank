@@ -1,6 +1,6 @@
 Destilleer gearchiveerde Claude Code-transcripts uit de vault tot wiki-kennis.
 
-## Vault-root bepalen (VERPLICHT — lees dit eerst)
+## Vault-root bepalen (VERPLICHT: lees dit eerst)
 
 Bepaal de vault-root EEN keer en gebruik die overal:
 `VAULT="${KENNISBANK_VAULT:-$HOME/KennisBank}"`
