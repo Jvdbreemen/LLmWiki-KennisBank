@@ -7,6 +7,7 @@ This documents the directory layout of `~/KennisBank/` after running `setup.sh`.
   00-inbox/
   01-raw/
     sessies/
+    transcripts/
   02-wiki/
   03-projecten/
   04-templates/
@@ -41,7 +42,10 @@ Raw, unprocessed notes and session logs. No editing for quality; just capture.
 #### `01-raw/sessies/`
 Session logs written by `/sessielog`. Naming convention: `raw-sessie-YYYY-MM-DD-topic.md`.
 
-These are the source material for wiki compilation. Do not delete them — stale-check.py cross-references session dates against wiki article update dates.
+These are the source material for wiki compilation. Do not delete them -- stale-check.py cross-references session dates against wiki article update dates.
+
+#### `01-raw/transcripts/`
+Archived CC transcripts (`.jsonl`) written by the `SessionEnd` hook (`archive-transcript.py`). Naming convention: `YYYY-MM-DD-<project>-<sid8>.jsonl`. Created by `setup.sh`.
 
 ### `02-wiki/`
 Compiled wiki articles. Each article covers one concept, tool, method, or pattern.

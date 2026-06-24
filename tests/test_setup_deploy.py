@@ -128,6 +128,17 @@ class SetupDeployTest(unittest.TestCase):
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
+    def test_archive_and_distill_scripts_deployed(self):
+        tmp, vault = self.run_setup()
+        try:
+            scripts = vault / ".claude" / "scripts"
+            for name in ("archive-transcript.py", "distill-notify.py"):
+                self.assertTrue((scripts / name).is_file(), f"{name} not deployed")
+            self.assertTrue((vault / "01-raw" / "transcripts").is_dir(),
+                            "transcripts dir not created")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
 
 if __name__ == "__main__":
     unittest.main()
