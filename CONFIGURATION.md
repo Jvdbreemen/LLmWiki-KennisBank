@@ -176,6 +176,49 @@ override the config file; both override the built-in defaults.
 
 - **Effect**: warms/refreshes the wiki embedding cache once per session, off the per-prompt path, and warms the local model. Incremental (only changed files or a model switch trigger real embed calls); prunes vanished files; clears the graphify `.needs-rebuild` flag. Registered as a global `SessionStart` hook.
 
+### Transcript-archief (`scripts/archive-transcript.py`, SessionEnd)
+
+- **Effect:** kopieert het transcript van elke beeindigde sessie naar
+  `$VAULT/01-raw/transcripts/<datum>-<project>-<sid8>.jsonl`. Deterministisch,
+  fail-open, idempotent. Overleeft `cleanupPeriodDays` omdat de vault een
+  backup-locatie is. Lege/`-p`-transcripts (< 200 bytes) worden overgeslagen.
+
+### Destillatie-melding (`scripts/distill-notify.py`, SessionStart)
+
+- **Effect:** telt transcripts in `01-raw/transcripts/` die niet in de
+  `.distilled`-watermark staan en injecteert een melding "N wachten op
+  destillatie". Geen LLM. Met `--mark <stem...>` (door `/destilleer`) worden
+  exact de verwerkte stems aan de watermark toegevoegd.
+
+### Hookregistratie (`~/.claude/settings.json`)
+
+De scripts worden door `setup.sh` naar `$VAULT/.claude/scripts/` gedeployed. Voeg
+daarna onderstaande entries TOE aan de bestaande `hooks`-arrays in je
+`~/.claude/settings.json` (Windows `py -3`-launcher; pas `<VAULT>` aan).
+
+> LET OP: dit is GEEN volledige settings.json. Plak het niet als geheel; dat
+> wist je bestaande hooks, env (incl. `KENNISBANK_VAULT`) en permissions. Voeg
+> alleen deze twee entries toe aan de respectieve arrays. De `SessionStart`-array
+> bevat al `build-embed-index.py` (en evt. caveman) -- zet `distill-notify.py`
+> erNAAST, niet eroverheen.
+
+```jsonc
+// toe te voegen ENTRIES (geen complete settings.json):
+"SessionEnd": [
+  { "matcher": "", "hooks": [
+    { "type": "command", "command": "py -3 \"<VAULT>/.claude/scripts/archive-transcript.py\"" }
+  ]}
+],
+// onder de BESTAANDE SessionStart-array een extra hook-blok:
+"SessionStart": [
+  { "matcher": "", "hooks": [
+    { "type": "command", "command": "py -3 \"<VAULT>/.claude/scripts/distill-notify.py\"" }
+  ]}
+]
+```
+
+Op macOS/Linux: vervang `py -3` door `python3`.
+
 ---
 
 ## 5. autoresearch skill
