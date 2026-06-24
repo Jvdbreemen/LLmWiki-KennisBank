@@ -54,8 +54,11 @@ Dit APPENDt de verwerkte stems aan `$VAULT/01-raw/transcripts/.distilled`.
 
 ## Regels
 - Idempotent: opnieuw draaien verwerkt alleen niet-gewatermerkte transcripts.
-- Crasht stap 3 halverwege: laat de watermark ONGEMOEID (sla stap 4 over), zodat de
-  rest bij de volgende run alsnog wordt opgepakt.
+- Crasht stap 3 halverwege: laat de watermark ONGEMOEID (sla stap 4 over). De
+  al-geimporteerde raw-sessielogs blijven staan; stap 2 re-import is dan een no-op
+  (de importer slaat bestaande targets over), dus het herstel leunt op het
+  7-daagse raw-log-venster van `/wiki`: draai `/destilleer` of `/wiki` binnen 7
+  dagen zodat die logs alsnog gecompileerd worden.
 - Een transcript dat TIJDENS de run binnenkomt zit niet in `$BATCH` en blijft dus
   pending: het wordt bij de volgende `/destilleer` aangeboden. Geen stil verlies.
 - Taal: volgt de prompt. Geen em dashes.
