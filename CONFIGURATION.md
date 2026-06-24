@@ -178,7 +178,7 @@ override the config file; both override the built-in defaults.
 
 ### Transcript-archief (`scripts/archive-transcript.py`, SessionEnd)
 
-- **Effect:** kopieert het transcript van elke beeindigde sessie naar
+- **Effect:** kopieert het transcript van elke beëindigde sessie naar
   `$VAULT/01-raw/transcripts/<datum>-<project>-<sid8>.jsonl`. Deterministisch,
   fail-open, idempotent. Overleeft `cleanupPeriodDays` omdat de vault een
   backup-locatie is. Lege/`-p`-transcripts (< 200 bytes) worden overgeslagen.
