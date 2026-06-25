@@ -101,6 +101,15 @@ def main() -> int:
             hook = {}
     except (json.JSONDecodeError, OSError, ValueError):
         hook = {}
+    # Toggle-gate: archiveer alleen als auto_archive aanstaat. Fail-open: kan de
+    # toggle niet gelezen worden, val terug op de default (False = uit).
+    try:
+        import _settings
+        enabled = _settings.get("auto_archive", False)
+    except Exception:
+        enabled = False
+    if not enabled:
+        return 0
     try:
         result = archive(hook, vault_root())
     except Exception as e:  # fail-open
