@@ -139,6 +139,29 @@ class SetupDeployTest(unittest.TestCase):
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
+    def test_settings_command_deploys_to_subdir(self):
+        tmp, vault = self.run_setup()
+        try:
+            cmd = tmp / ".claude" / "commands" / "kennisbank" / "settings.md"
+            self.assertTrue(cmd.is_file(),
+                            f"/kennisbank:settings niet gedeployed op {cmd}")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_settings_file_bootstrapped_with_defaults(self):
+        import json
+        tmp, vault = self.run_setup()  # run_setup gebruikt --yes (niet-interactief)
+        try:
+            sf = vault / "kennisbank-settings.json"
+            self.assertTrue(sf.is_file(), "settings-bestand niet aangemaakt door setup")
+            data = json.loads(sf.read_text(encoding="utf-8"))
+            self.assertEqual(data["auto_archive"], False)
+            self.assertEqual(data["distill_notify"], True)
+            self.assertEqual(data["embed_index"], True)
+            self.assertEqual(data["daily_graphify"], True)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
 
 if __name__ == "__main__":
     unittest.main()
