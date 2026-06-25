@@ -181,6 +181,13 @@ Your memory files live under `~/.claude/projects/`. The path segment is a slug o
    When the user types `/autoresearch`, invoke the Skill tool with `skill: "autoresearch"` before doing anything else.
    ```
 
+### Achtergrond-automatiek aan/uit
+
+Vier achtergrond-taken (transcript-archief, destillatie-melding, embed-index,
+dagelijkse graph-update) zijn toggles in `kennisbank-settings.json`. Beheer ze
+met `/kennisbank:settings`. `auto_archive` staat default uit; de rest aan. Zie
+CONFIGURATION.md voor de tabel.
+
 ## Optional: graphify integration
 
 The `auto-crosslink.py` script reads from `~/KennisBank/graphify-out/graph.json`. This is produced by the graphify skill when run on the vault. Without it, the crosslink step is silently skipped.

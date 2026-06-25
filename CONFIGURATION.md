@@ -411,6 +411,26 @@ model, not by Python; they still contain literal `~/KennisBank/...` and
 
 ---
 
+## 11. Achtergrond-automatiek (settings-toggles)
+
+Vier achtergrond-automatieken zijn individueel aan/uit te zetten via
+`$VAULT/kennisbank-settings.json` (bron van waarheid, gelezen door
+`scripts/_settings.py`).
+
+| toggle | default | effect aan | effect uit |
+|--------|---------|-----------|-----------|
+| `auto_archive` | uit | SessionEnd archiveert het transcript naar `01-raw/transcripts/` | geen archief; gebruik `/sessielog` handmatig |
+| `distill_notify` | aan | SessionStart meldt openstaande transcripts | geen melding; `/destilleer` blijft handmatig werken |
+| `embed_index` | aan | SessionStart ververst de wiki-embeddingcache | retrieval draait op de bestaande (oudere) cache |
+| `daily_graphify` | aan | 1x/dag automatisch `/graphify --update` (kost-gated op 20u) | alleen `.needs-rebuild` bijhouden; graph handmatig |
+
+- **Wijzigen**: draai `/kennisbank:settings` (toont een tabel en zet toggles aan/uit), of bewerk het JSON-bestand (waarden zijn JSON-booleans).
+- **Self-gating**: de hooks blijven statisch geregistreerd in `~/.claude/settings.json`; elk hookscript leest zijn toggle en eindigt fail-open (`exit 0`) als hij uit staat. Een toggle-wijziging werkt vanaf de volgende sessie.
+- **Defaults bij ontbreken**: ontbreekt het bestand of een key, dan geldt de default-kolom hierboven. `setup` en `upgrade` schrijven expliciete waarden.
+- **Interactie**: met `embed_index` uit wordt `graphify-out/.needs-rebuild` niet bij SessionStart geleegd; dat is benign, de flag wordt door de graphify-rebuild zelf geleegd.
+
+---
+
 ## Discrepancies found
 
 1. **`THRESHOLD_DAYS` constant does not exist.** `README.md` (line 126) and the original task description reference editing `THRESHOLD_DAYS` in `stale-check.py`. The actual code uses `argparse` with `default=60`. The `--days N` CLI flag is correct.
