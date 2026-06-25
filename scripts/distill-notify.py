@@ -101,7 +101,17 @@ def main() -> int:
             for s in pending(vault):
                 print(s)
             return 0
-        _emit_notify(len(pending(vault)))
+        # Alleen het SessionStart-meldpad gate-t op distill_notify. De
+        # --mark/--list-pending subcommando's hierboven draaien altijd, zodat
+        # /destilleer blijft werken als de melding uit staat. Fail-open: kan de
+        # toggle niet gelezen worden, val terug op de default (True = aan).
+        try:
+            import _settings
+            notify = _settings.get("distill_notify", True)
+        except Exception:
+            notify = True
+        if notify:
+            _emit_notify(len(pending(vault)))
     except Exception as e:  # fail-open
         print(f"[distill-notify] unexpected: {e}", file=sys.stderr)
         return 0

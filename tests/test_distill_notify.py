@@ -100,6 +100,24 @@ class DistillNotifyTest(unittest.TestCase):
         self._run_main(["distill-notify.py", "--mark", "2026-06-24-a-aaaa1111"])
         self.assertEqual(mod.pending(self.vault), [])
 
+    def _write_settings(self, text):
+        self.vault.mkdir(parents=True, exist_ok=True)
+        (self.vault / "kennisbank-settings.json").write_text(text, encoding="utf-8")
+
+    def test_notify_silent_when_toggle_off(self):
+        self._add("2026-06-24-a-aaaa1111.jsonl")
+        self._write_settings('{"distill_notify": false}')
+        rc, out = self._run_main(["distill-notify.py"])
+        self.assertEqual(rc, 0)
+        self.assertEqual(out.strip(), "")
+
+    def test_list_pending_works_even_when_toggle_off(self):
+        # De handmatige /destilleer-paden mogen NIET gate-en op de melding.
+        self._add("2026-06-24-a-aaaa1111.jsonl")
+        self._write_settings('{"distill_notify": false}')
+        rc, out = self._run_main(["distill-notify.py", "--list-pending"])
+        self.assertEqual(out.strip(), "2026-06-24-a-aaaa1111")
+
 
 if __name__ == "__main__":
     unittest.main()
