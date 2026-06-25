@@ -36,6 +36,9 @@ in `$VAULT/02-wiki/` bij, en draai de dagelijkse graphify-batch en semantische
 tiling zoals `/wiki` voorschrijft. Verwerk alleen de raw-logs van vandaag of de
 nieuw geimporteerde set; her-compileer geen oude artikelen.
 
+De dagelijkse graphify-batch respecteert de `daily_graphify`-toggle: staat die
+uit (`python3 -c "import sys; sys.path.insert(0,'$VAULT/.claude/scripts'); import _settings; print(_settings.get('daily_graphify', True))"` geeft `False`), werk dan alleen `.needs-rebuild` bij en sla de automatische `/graphify --update` over.
+
 ## Stap 4: Markeer exact de snapshot als gedestilleerd
 Alleen als stap 2 en 3 zonder fout zijn afgerond. Markeer ALLEEN de stems uit
 `$BATCH` (stap 1), zodat een transcript dat tijdens stap 2-3 binnenkwam pending
