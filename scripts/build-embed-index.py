@@ -30,6 +30,16 @@ SKIP = {"index.md", "log.md"}
 
 
 def main() -> None:
+    # Toggle-gate: ververs de embed-index alleen als embed_index aanstaat.
+    # Fail-open: kan de toggle niet gelezen worden, val terug op de default
+    # (True = aan). De gate zit vóór de .needs-rebuild-clear en elke embed-call.
+    try:
+        import _settings
+        if not _settings.get("embed_index", True):
+            print("embed-index: uitgeschakeld via settings (embed_index=false)")
+            return
+    except Exception:
+        pass
     if not WIKI.exists():
         print("embed-index: geen 02-wiki/, overgeslagen")
         return
