@@ -1,0 +1,297 @@
+---
+title: KennisBank als agent-geheugen + leesbare kennisbank
+date: 2026-06-26
+status: design
+author: Robert van den Breemen (+ Claude)
+---
+
+# KennisBank als agent-geheugen + leesbare kennisbank
+
+## Doel
+
+KennisBank tegelijk maken tot:
+1. **Lange-termijn agent-geheugen** — agents (Claude Code, lokale MCP-clients) vinden
+   eerder, vergelijkbaar werk snel terug: lessons learned, oude bugs, gerelateerde
+   projecten — automatisch gepusht in de context binnen een fractie van een seconde.
+2. **Mens-leesbare kennisbank** — Robert vindt zijn kennis zinvol en leesbaar terug
+   (Obsidian-markdown), en kan een memory daarna als artikel nalezen.
+
+"Best of both worlds": ruw, snel agent-geheugen **én** gecureerde, leesbare wiki —
+zonder dat het een doorzoekbare-maar-onleesbare DB-soep wordt.
+
+## Niet-onderhandelbare randvoorwaarden
+
+Afgeleid uit het ontwerp-interview (angst-ranking van de gebruiker):
+
+1. **Geen foute/stale recall** (#1 angst) — onbeoordeelde of achterhaalde memory mag
+   nóóit als geldige context bovenkomen.
+2. **Geen ruis** (#2) — kwaliteitspoort zodat relevante kennis niet verdrinkt.
+3. **Geen bloat / dubbelen** (#3) — geen speld-in-hooiberg.
+4. **Lokaal, altijd** (#4, hard) — niets mag zonder expliciete toestemming naar de cloud.
+   SQLite-file lokaal, Ollama lokaal (GPU), MCP via stdio/localhost. Geen netwerk-bind.
+5. **Leesbaar** (#5) — markdown blijft de leesbare laag.
+6. **DB altijd herbouwbaar** (#6) — de index is een wegwerp-cache, herbouwbaar uit files.
+7. **Geen handwerk** — alles wat handmatige discipline vereist gebeurt in de praktijk niet;
+   kwaliteit moet autonoom/geautomatiseerd geborgd worden.
+8. **Performance: vooraf betalen, snel ophalen** — zware verwerking off de hot path;
+   recall is een index-lookup, geen corpus-scan.
+
+## Kernprincipe
+
+```
+markdown-files = BRON VAN WAARHEID   (Git, Obsidian, mens-leesbaar)
+        │  build-index (afgeleid, incrementeel, herbouwbaar)
+        ▼
+   kb-index.db = WEGWERP-ZOEKINDEX   (rm + rebuild = altijd terug uit files)
+```
+
+De DB wordt nooit autoritatief. `rm kb-index.db && kb-index --rebuild` reconstrueert
+'m volledig uit de markdown. Dekt randvoorwaarde #4 (lokaal, één file) en #6 (herbouwbaar).
+
+## Architectuur — twee lagen, één waarheid
+
+```
+                  ┌─────────────────────────────────────────┐
+   agents ──push──┤  RECALL (kb-retrieve hook + lokale MCP)  │
+   (CC, Cursor)   │  zoekt: wiki eerst, dan memory(current)  │
+                  └──────────────┬──────────────────────────┘
+                                 │ hybride query (<1s)
+        ┌────────────────────────┴───────────────────────┐
+        ▼                                                  ▼
+  02-wiki/ (gecureerd)                            09-memory/ (ruw)
+  mens-leesbare artikelen                         atomair → maand-merge
+        ▲                                          status: unverified|current|...
+        └──────────── /wiki promoot ◄──────────────────────┘
+
+  files = waarheid  ──build-index──►  kb-index.db (sqlite-vec vec0 + FTS5)
+```
+
+Twee lagen, één vault, één afgeleide index:
+
+- **`02-wiki/`** — bestaande gecureerde wiki. Ongewijzigd in rol.
+- **`09-memory/`** — nieuwe ruwe agent-geheugenlaag (volgende vrije vault-nummer;
+  `05-` is al `05-bronnen/`).
+- **`kb-index.db`** — nieuwe afgeleide SQLite-index over beide lagen.
+
+## Componenten
+
+Elk component heeft één doel, een gedefinieerde interface, en is los testbaar.
+
+### 1. Memory-formaat (`09-memory/`)
+
+Hybride: **atomair capture → maand-merge**.
+
+- Capture = één `.md` per memory: `09-memory/YYYY-MM-DD-<slug>.md`.
+- Memory ouder dan 30 dagen én niet gepromoot → gemergd naar maand-archief
+  `09-memory/archive/YYYY-MM.md` (houdt file-count in toom, Obsidian browsebaar).
+
+Frontmatter (truth-maintenance, randvoorwaarde #1):
+
+```yaml
+---
+title: "<korte titel>"
+type: memory
+status: unverified        # unverified | current | superseded | retracted | expired
+evidence_basis: cc-sessie # getypt | cc-sessie | audio | import | autoresearch | agent
+source_session: <id/pad>  # herkomst voor provenance
+created: 2026-06-26
+updated: 2026-06-26
+expires: 2026-12-26        # optioneel; inline-judge/sweep schat vluchtigheid
+superseded_by: [[...]]     # gezet bij supersession
+tags: [...]
+---
+```
+
+### 2. Capture-writer + inline-judge (lib + skill-integratie)
+
+Door agents/skills gebruikte schrijf-functie. **Optie C (quarantaine) + inline
+onafhankelijke verificatie** — zodat de agent *door de dag heen* leert, niet pas na een
+dagelijkse pass.
+
+Twee taken bewust gesplitst:
+- **(a) per-memory kwaliteitspoort** = lokaal besluit → gebeurt **direct bij capture**.
+- **(b) cross-memory onderhoud** = vereist globale blik → event-driven sweep (component 7).
+
+Capture-flow:
+
+```
+agent ──► capture-writer
+   ├─ capture-tijd dedup: embed + cosine tegen bestaande memories;
+   │     similarity > 0.92 → géén nieuwe file, bestaande krijgt updated-stamp
+   │     (hergebruikt semantic-tiling.py). Bestrijdt bloat (#3) aan de bron.
+   └─ INLINE-JUDGE (onafhankelijke, goedkope pass — NIET de producerende agent):
+         oordeelt ruis / zekerheid, ingesteld om af te keuren bij twijfel.
+            hoge zekerheid + geen ruis → status: current   → meteen recallbaar
+            twijfel                    → status: unverified → quarantaine-vangnet
+```
+
+Kritische eis: de inline-judge is **onafhankelijk** van de schrijvende agent (aparte
+prompt/sub-agent, expliciete "probeer dit af te keuren"-instelling). Anders is het
+zelf-keuren — slager keurt eigen vlees, en randvoorwaarde #1 valt om.
+
+- `unverified` blijft **uitgesloten van recall** → geen recall-venster voor ongevette
+  memory; het vangnet onder een falende/twijfelende inline-judge.
+- `current` is direct recallbaar → instant leren voor het zekere werk.
+- Restrisico (inline-judge vergist zich, ruis wordt `current`) wordt ondervangen door de
+  tweede verdedigingslinie: de event-driven sweep hercontroleert `current` memories
+  (component 7).
+- Capture draait einde-sessie / off hot path → de extra judge-call kost geen recall-latency.
+
+### 3. kb-index builder (uitbreiding van `build-embed-index.py`)
+
+- Incrementeel: alleen gewijzigde files re-embedden (mtime/contenthash — bestaand gedrag).
+- Schrijft naar `kb-index.db`:
+  - **sqlite-vec `vec0`** virtuele tabel voor vectoren (brute-force KNN; gepinde versie).
+  - **FTS5** tabel voor keyword (zit in Python-stdlib `sqlite3`; rotsvast).
+- Indexeert `02-wiki/` (alle) + `09-memory/` met `status: current` (NIET unverified).
+- Embeddings: `qwen3-embedding:8b` via Ollama op GPU.
+- `--rebuild` flag: drop + herbouw volledig uit files.
+
+### 4. kb-recall (query-lib)
+
+Hybride query, gebruikt door zowel de hook als de MCP-server:
+
+- Embed query 1× (Ollama GPU, tientallen ms).
+- Vector-KNN (sqlite-vec) **+** keyword (FTS5), gefuseerd.
+- **Wiki eerst**, dan memory; `created` (recency) als tiebreaker.
+- Filtert `status != current` weg (geen unverified/superseded/retracted/expired in recall).
+- Output linkt naar bron-`.md` (zodat de mens het als artikel naleest).
+
+### 5. kb-retrieve hook (uitbreiding bestaand)
+
+- Bestaande UserPromptSubmit-hook, nu over de gecombineerde `kb-index.db`.
+- Push top-matches (wiki + memory-current) in context. **Fail-open, altijd** —
+  nooit de prompt vertragen of blokkeren (bestaand contract).
+
+### 6. kb MCP-server (nieuw)
+
+- Lokale **stdio**-MCP-server; exposeert `kb-recall` (read) aan lokale MCP-clients
+  (Cursor, LM Studio, Claude Desktop).
+- Geen netwerk-bind; cloud-web-AI's bewust uitgesloten (#4).
+- Write-via-MCP: zelfde capture-writer (quarantaine, `unverified`).
+
+### 7. memory-sweep (event-driven cross-memory onderhoud — taak (b))
+
+De *globale* tegenhanger van de inline-judge. Doet wat één capture niet kan zien.
+**Event-driven, niet rigide 1×/dag:** draait op SessionStart (hook bestaat al) of elke
+N captures — dus vaker dan dagelijks, maar alleen als er werk is. Off hot path.
+
+```
+op SessionStart / elke N captures, idle:
+   ├─ resterende unverified (door inline-judge geparkeerd) → herbeoordeel:
+   │     goed? → current   ruis? → retracted   dubbel? → merge, retracted
+   ├─ cross-memory (globale blik):
+   │     vluchtig?                       → expires zetten
+   │     spreekt huidige current tegen?  → superseded + superseded_by-link
+   │     clusterbaar?                    → markeer als promotie-kandidaat voor /wiki
+   ├─ TWEEDE VERDEDIGINGSLINIE: hercontroleer recent door inline-judge gepromote
+   │     current memories → alsnog retracted/superseded indien fout doorgelaten
+   └─ rapport: "12 nieuw, 8 current, 3 retracted, 1 superseded, 0 fouten"
+```
+
+- Statuswijzigingen zijn **niet-destructief**: files blijven, alleen status flipt
+  (reversibel, in Git-historie). Respecteert controle (#5).
+- **Geen autonome hard-delete.** Verwijderen blijft mens-actie.
+- Sluit aan op bestaande daily-graphify-gate (zelfde idle-trigger-infra).
+
+### 8. /wiki promotie (uitbreiding bestaand)
+
+- `/wiki` cluster gerelateerde `current` memories → één gecureerd wiki-artikel.
+- Gepromote memories verlaten de hot recall (declutter, #3).
+
+### 9. /stale uitbreiding
+
+- Surfacet `expired` + oude transient memories als mens-leesbaar overzicht (optioneel —
+  de sweep doet het zware werk; `/stale` is de menselijke inspectie-view).
+
+### 10. Health & zichtbaarheid (kritiek voor optie C)
+
+Optie C leunt op de sweep als vangnet; zijn falen moet **luid** zijn, anders verschuift
+"inbox-rot" naar "quarantaine-rot":
+
+- **`doctor.sh` no-cloud-check:** assert dat geen component een externe host aanroept.
+- **`doctor.sh` quarantaine-rot-check:** waarschuw bij N memories `unverified` > 48u
+  (de sweep ruimt niet op / draait niet).
+- **Sessiestart-waarschuwing:** toon sweep-gezondheid + achterstand bij sessiestart.
+
+## Data flow
+
+```
+Capture:  agent ──► capture-writer ──(dedup>0.92?)──► inline-judge (onafhankelijk)
+                                                          │
+                                       hoge zekerheid ────┤──► 09-memory/<slug>.md [current]
+                                       twijfel ───────────┘──► 09-memory/<slug>.md [unverified]
+                                                              │
+Index:    write/idle ──► kb-index builder ──(status=current only)──► kb-index.db
+                                                              │
+Sweep:    SessionStart / elke N ──► memory-sweep ──► status-flips + hercontrole + rapport
+                                                              │
+Recall:   prompt ──► kb-retrieve hook / MCP ──► kb-recall ──► kb-index.db
+                                                  (wiki eerst, current only, <1s)
+                                                              │
+Promote:  /wiki ──► current memories ──► 02-wiki/<artikel>.md
+```
+
+## Performance-ontwerp
+
+Principe: **betaal vooraf, retrieval snel.**
+
+| Fase            | Wanneer            | Kost                                            |
+|-----------------|--------------------|-------------------------------------------------|
+| Embed + index   | write-time / idle, incrementeel | off hot path                       |
+| Inline-judge    | bij capture, off hot path | extra LLM-call einde-sessie               |
+| Memory-sweep    | SessionStart / elke N, idle | off hot path                          |
+| **Recall**      | hot path           | index-lookup + 1× query-embed (Ollama GPU, ~tientallen ms) |
+
+- Recall raakt nooit het corpus: sqlite-vec `vec0` brute-force KNN over enkele duizenden
+  vectoren = sub-milliseconde. ANN-index (IVF/DiskANN) pas bij > 100k memories.
+- Bottleneck = query-embedding. `qwen3-embedding:8b` op GPU → tientallen ms.
+  Query- en index-model moeten identiek zijn (geldige cosine).
+- Min-impact: index = één SQLite-file (`mmap`, geen proces); hook fail-open; sweep idle.
+
+## sqlite-vec — risico & mitigatie
+
+Status (juni 2026): `v0.1.10-alpha.4`, pre-v1.0, Mozilla-backed, actief. Stabiele
+non-prerelease tags bestaan (`v0.1.9`). Risico = breaking changes in SQL-API/storage-format.
+
+Mitigatie:
+- **Versie pinnen** op een stabiele tag.
+- **Brute-force `vec0`** gebruiken (stabiel), experimentele IVF/DiskANN mijden tot v1.
+- Index is **afgeleid + herbouwbaar** → storage-break kost een rebuild, geen dataverlies.
+  Het engste alpha-risico raakt deze use-case niet.
+
+## Error handling
+
+- **Recall (hook):** fail-open. Elke fout/lege cache/cold index → geen output, exit 0.
+- **Index-builder:** corrupte/missende `kb-index.db` → `--rebuild` uit files.
+- **Sweep-faal:** zichtbaar bij sessiestart + `doctor.sh`; door inline-judge geparkeerde
+  memories blijven `unverified` (veilig: niet recallbaar) tot volgende succesvolle sweep.
+- **Inline-judge-faal:** capture valt terug op `unverified` (fail-safe: bij twijfel of
+  fout nooit direct `current`).
+- **Model-mismatch:** cache-entries met afwijkend embed-model/dimensie worden genegeerd
+  (bestaand cross-model-veiligheidsgedrag van kb-retrieve).
+
+## Testing
+
+- Unit: capture-writer (dedup-drempel, frontmatter), kb-recall (wiki-eerst, status-filter,
+  recency-tiebreak), index-builder (incrementeel + rebuild-idempotentie).
+- Integratie: capture(twijfel) → recall ziet `unverified` niet; inline-judge(hoge zekerheid)
+  → recall ziet `current` meteen; sweep hercontroleert `current` → kan alsnog retracten.
+- Onafhankelijkheid inline-judge: judge keurt producent-ruis af (geen zelf-keuren).
+- Eigenschap: `rebuild` uit files reproduceert dezelfde index (herbouwbaarheid #6).
+- No-cloud: test/doctor assert geen externe host-calls (#4).
+
+## YAGNI — bewust NIET
+
+- ❌ DB als bron-van-waarheid (breekt herbouw + leesbaarheid).
+- ❌ `confidence`-gegokte cijfers (schijnprecisie).
+- ❌ cloud-web-AI-toegang (leak-risico #4).
+- ❌ access-keys / multi-tenant filtering (single-user, nul waarde).
+- ❌ inbox-omweg voor twijfel-captures (vervangen door inline-judge + quarantaine + sweep).
+- ❌ rigide 1×/dag janitor (vervangen door inline-judge bij capture + event-driven sweep).
+- ❌ autonome hard-delete (alleen reversibele status-flips).
+
+## Open punten
+
+Geen. Alle ontwerpkeuzes zijn in het interview vastgelegd. Implementatie-volgorde
+(fasering) wordt in het implementatie-plan (writing-plans) uitgewerkt.
