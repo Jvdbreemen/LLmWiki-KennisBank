@@ -163,5 +163,11 @@ class SetupDeployTest(unittest.TestCase):
             shutil.rmtree(tmp, ignore_errors=True)
 
 
+    def test_setup_creates_09_memory_dir(self):
+        text = (Path(__file__).resolve().parent.parent / "setup.sh").read_text(encoding="utf-8")
+        self.assertIn("09-memory", text)
+        self.assertIn("09-memory/archive", text)
+
+
 if __name__ == "__main__":
     unittest.main()

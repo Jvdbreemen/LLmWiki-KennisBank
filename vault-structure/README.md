@@ -15,6 +15,8 @@ This documents the directory layout of `~/KennisBank/` after running `setup.sh`.
   06-claude/
   07-media/
   08-archive/
+  09-memory/
+    archive/
   .claude/
     scripts/
   graphify-out/
@@ -77,6 +79,13 @@ Descriptions and metadata for media files. Images themselves are not stored here
 
 ### `08-archive/`
 Articles removed from active wiki. Kept for historical reference.
+
+### `09-memory/`
+Ruwe agent-geheugenlaag. Atomaire memories (`YYYY-MM-DD-slug.md`) met
+truth-maintenance-frontmatter (`status`, `evidence_basis`, `superseded_by`).
+Gevuld door het geheugen-subsysteem (toggle `memory_capture`); niet handmatig
+gecureerd. Maand-archief van oude, niet-gepromote memories in `09-memory/archive/`.
+Gepromote kennis verhuist via `/wiki` naar `02-wiki/`.
 
 ### `.claude/scripts/`
 Python utility scripts. Installed by `setup.sh`. Do not move; commands reference these paths directly.

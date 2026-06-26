@@ -100,7 +100,7 @@ echo "LLmWiki-KennisBank setup"
 echo "========================"
 
 # Vault directories
-mkdir -p "$VAULT"/{00-inbox,01-raw/sessies,01-raw/transcripts,02-wiki,03-projecten,04-templates,05-bronnen,06-claude,07-media,08-archive}
+mkdir -p "$VAULT"/{00-inbox,01-raw/sessies,01-raw/transcripts,02-wiki,03-projecten,04-templates,05-bronnen,06-claude,07-media,08-archive,09-memory,09-memory/archive}
 mkdir -p "$VAULT/.claude/scripts"
 mkdir -p "$VAULT/graphify-out"
 
