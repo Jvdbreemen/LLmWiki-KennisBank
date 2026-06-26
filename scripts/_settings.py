@@ -38,6 +38,10 @@ DEFAULTS = {
     "distill_notify": True,
     "embed_index": True,
     "daily_graphify": True,
+    # Geheugen-subsysteem (spec fase 1). Kern-functionaliteit → default aan,
+    # bewust afwijkend van de opt-in-conventie van auto_archive.
+    "memory_capture": True,
+    "memory_recall": True,
 }
 
 _TRUTHY = ("1", "true", "yes", "y", "on")
