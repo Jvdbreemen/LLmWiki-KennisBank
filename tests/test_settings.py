@@ -124,6 +124,21 @@ class SettingsTest(unittest.TestCase):
         self.assertEqual(set(data.keys()), set(_settings.DEFAULTS.keys()))
         self.assertEqual(data, _settings.DEFAULTS)
 
+    def test_memory_toggles_default_true(self):
+        # Geen settings-bestand → defaults. Geheugen is kern-functionaliteit: default aan.
+        self.assertTrue(_settings.get("memory_capture", _settings.DEFAULTS["memory_capture"]))
+        self.assertTrue(_settings.get("memory_recall", _settings.DEFAULTS["memory_recall"]))
+
+    def test_memory_toggles_in_defaults(self):
+        self.assertIs(_settings.DEFAULTS.get("memory_capture"), True)
+        self.assertIs(_settings.DEFAULTS.get("memory_recall"), True)
+
+    def test_memory_toggle_independently_settable(self):
+        # recall uit, capture aan: onafhankelijk schakelbaar.
+        _settings.set("memory_recall", False)
+        self.assertFalse(_settings.get("memory_recall", True))
+        self.assertTrue(_settings.get("memory_capture", True))
+
 
 if __name__ == "__main__":
     unittest.main()
