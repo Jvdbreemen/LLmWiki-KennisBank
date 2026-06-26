@@ -39,7 +39,10 @@ class MemoryFormatTest(unittest.TestCase):
             _memory.STATUSES,
             ("unverified", "current", "superseded", "retracted", "expired"),
         )
-        self.assertIn("cc-sessie", _memory.EVIDENCE_BASES)
+        self.assertEqual(
+            _memory.EVIDENCE_BASES,
+            ("getypt", "cc-sessie", "audio", "import", "autoresearch", "agent"),
+        )
 
     def test_memory_path_layout(self):
         p = _memory.memory_path("Hook-gedreven retrieval", created="2026-06-27")
@@ -57,6 +60,10 @@ class MemoryFormatTest(unittest.TestCase):
     def test_render_rejects_bad_status(self):
         with self.assertRaises(ValueError):
             _memory.render("T", "b", status="bogus")
+
+    def test_render_rejects_bad_evidence_basis(self):
+        with self.assertRaises(ValueError):
+            _memory.render("T", "b", evidence_basis="hallucination")
 
     def test_write_creates_file_and_dir(self):
         p = _memory.write("Een les", "Wat ik leerde.", created="2026-06-27")
