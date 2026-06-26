@@ -55,10 +55,59 @@ def ensure_schema(conn: sqlite3.Connection, dim: int, embed_id: str) -> None:
     conn.commit()
 
 
-def meta_get(conn: sqlite3.Connection, key: str):
+def meta_get(conn: sqlite3.Connection, key: str) -> "str | None":
     row = conn.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
     return row[0] if row else None
 
 
 def is_valid_for(conn: sqlite3.Connection, embed_id: str) -> bool:
     return meta_get(conn, "embed_id") == embed_id
+
+
+def _serialize(vector):
+    from sqlite_vec import serialize_float32
+    return serialize_float32(list(vector))
+
+
+def indexed_hash(conn: sqlite3.Connection, path: str):
+    row = conn.execute("SELECT hash FROM docs WHERE path=?", (path,)).fetchone()
+    return row[0] if row else None
+
+
+def count(conn: sqlite3.Connection) -> int:
+    return conn.execute("SELECT count(*) FROM docs").fetchone()[0]
+
+
+def upsert(conn: sqlite3.Connection, *, path: str, layer: str, status: str,
+           body: str, vector, file_hash: str, title: str = "",
+           created: str = "") -> int:
+    """Insert/replace een doc over docs+fts_docs+vec_docs onder één doc_id."""
+    row = conn.execute("SELECT doc_id FROM docs WHERE path=?", (path,)).fetchone()
+    if row:
+        doc_id = row[0]
+        conn.execute(
+            "UPDATE docs SET layer=?, status=?, hash=?, title=?, created=? WHERE doc_id=?",
+            (layer, status, file_hash, title, created, doc_id))
+        conn.execute("DELETE FROM fts_docs WHERE rowid=?", (doc_id,))
+        conn.execute("DELETE FROM vec_docs WHERE doc_id=?", (doc_id,))
+    else:
+        cur = conn.execute(
+            "INSERT INTO docs(path, layer, status, hash, title, created) "
+            "VALUES (?,?,?,?,?,?)", (path, layer, status, file_hash, title, created))
+        doc_id = cur.lastrowid
+    conn.execute("INSERT INTO fts_docs(rowid, body) VALUES (?, ?)", (doc_id, body))
+    conn.execute("INSERT INTO vec_docs(doc_id, embedding) VALUES (?, ?)",
+                 (doc_id, _serialize(vector)))
+    conn.commit()
+    return doc_id
+
+
+def prune(conn: sqlite3.Connection, keep_paths: set) -> int:
+    rows = conn.execute("SELECT doc_id, path FROM docs").fetchall()
+    gone = [(d, p) for (d, p) in rows if p not in keep_paths]
+    for doc_id, _ in gone:
+        conn.execute("DELETE FROM docs WHERE doc_id=?", (doc_id,))
+        conn.execute("DELETE FROM fts_docs WHERE rowid=?", (doc_id,))
+        conn.execute("DELETE FROM vec_docs WHERE doc_id=?", (doc_id,))
+    conn.commit()
+    return len(gone)

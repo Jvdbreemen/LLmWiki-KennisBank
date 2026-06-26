@@ -53,6 +53,8 @@ class KbIndexSchemaTest(unittest.TestCase):
             "select name from sqlite_master where type in ('table','view')")}
         self.assertIn("docs", tables)
         self.assertIn("meta", tables)
+        self.assertIn("vec_docs", tables)
+        self.assertIn("fts_docs", tables)
         conn.close()
 
     def test_is_valid_for(self):
