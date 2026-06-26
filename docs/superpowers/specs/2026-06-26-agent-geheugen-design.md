@@ -35,6 +35,11 @@ Afgeleid uit het ontwerp-interview (angst-ranking van de gebruiker):
    kwaliteit moet autonoom/geautomatiseerd geborgd worden.
 8. **Performance: vooraf betalen, snel ophalen** — zware verwerking off de hot path;
    recall is een index-lookup, geen corpus-scan.
+9. **Onafhankelijk ontkoppeld** (hard) — het geheugen-subsysteem is volledig losgekoppeld
+   van het bestaande werk (`auto_archive`, `distill_notify`, `embed_index`,
+   `daily_graphify`). Eigen toggles, default uit. Geheugen uit = die features draaien
+   exact als voorheen, nul impact. Geheugen behandelt `auto_archive`/`daily_graphify` als
+   *optionele input*, nooit als afhankelijkheid.
 
 ## Kernprincipe
 
@@ -72,6 +77,35 @@ Twee lagen, één vault, één afgeleide index:
 - **`09-memory/`** — nieuwe ruwe agent-geheugenlaag (volgende vrije vault-nummer;
   `05-` is al `05-bronnen/`).
 - **`kb-index.db`** — nieuwe afgeleide SQLite-index over beide lagen.
+
+## Toggles & ontkoppeling
+
+Het geheugen-subsysteem is volledig losgekoppeld van het bestaande werk. Twee **nieuwe**
+toggles in `$VAULT/kennisbank-settings.json` (via bestaande `_settings.py get/set`),
+**beide default `false`** (opt-in, zoals `auto_archive`):
+
+| Toggle | Gate-t | Onafhankelijk van |
+|---|---|---|
+| `memory_capture` | extractie + judge → `09-memory/`, sweep-onderhoud, index van memory | werkt mét `auto_archive` (auto) óf zonder (alleen via `/sessielog`) |
+| `memory_recall`  | hook + MCP injecteren memory(current) in context | `memory_capture` — recall-only of capture-only kan |
+
+Bestaande toggles blijven ongemoeid: `auto_archive`, `distill_notify`, `embed_index`,
+`daily_graphify`.
+
+Gedrag per combinatie:
+
+- **beide uit (default):** archive/distill/graphify/embed draaien exact als voorheen.
+  Geheugen bestaat niet; nul impact (randvoorwaarde #9).
+- **`memory_capture` aan, `auto_archive` uit:** geheugen vult alleen als jij `/sessielog`
+  draait. Geen stille afhankelijkheid van auto-archive.
+- **`memory_capture` aan, `auto_archive` aan:** transcripts worden automatisch tot memory
+  verwerkt — als gevolg van *twee aparte schakelaars*, niet één versmolten feature.
+- **`memory_recall` los van `memory_capture`:** lezen-zonder-autonoom-schrijven of
+  omgekeerd is mogelijk.
+
+Ontkoppel-invariant: gedeelde idle-trigger-*infra* met graphify mag nooit één gedeelde
+gate worden. Gedeelde *timing*, gescheiden *aan/uit*. Een test borgt dat met geheugen uit
+geen enkel geheugen-pad (capture/sweep/recall/index-van-memory) draait.
 
 ## Componenten
 
@@ -130,12 +164,19 @@ SessionStart-sweep (volgende sessie, verse context = vanzelf onafhankelijk):
          twijfel                    → 09-memory/<slug>.md  status: unverified
 ```
 
-**Triggers (trigger-agnostisch pad).** Dezelfde extractie+judge-pijplijn vuurt op meerdere
-momenten — capture hangt nooit aan één enkel moment:
-- **SessionStart-sweep** — autonome baseline (verwerkt nieuwe transcripts).
-- **SessionEnd-hook** — autonoom archiveren van het transcript.
-- **`/sessielog`-skill** — on-demand: archiveert + verwerkt het transcript meteen, geeft
-  een within-session capture-pad wanneer jij dat wilt.
+**Triggers (trigger-agnostisch pad).** Gegate op `memory_capture` (eigen toggle). De
+extractie+judge-pijplijn vuurt op meerdere momenten — capture hangt nooit aan één moment
+en nooit aan een andere toggle:
+- **SessionStart-sweep** — autonome baseline; verwerkt aanwezige transcripts in
+  `01-raw/transcripts/`. Dat die map gevuld wordt door `auto_archive` is *optionele input*,
+  geen vereiste: ontbreekt auto-archive, dan is er simpelweg minder te verwerken.
+- **`/sessielog`-skill** — on-demand: archiveert + verwerkt het transcript meteen
+  (eigen, ingebouwde archiveerstap — werkt óók als `auto_archive` uit staat). Geeft een
+  within-session capture-pad wanneer jij dat wilt.
+
+Ontkoppeling: capture leest `01-raw/transcripts/` als *bron indien aanwezig*, maar bezit
+z'n eigen trigger (`/sessielog`) en eigen gate (`memory_capture`). `auto_archive` aan/uit
+verandert niets aan óf geheugen werkt — alleen hoeveel transcripts automatisch klaarstaan.
 
 Onafhankelijkheid — **invariant, ongeacht de trigger:** de judge draait altijd in een
 **verse-context sub-agent**, los van de sessie die de kennis produceerde → geen
@@ -155,7 +196,9 @@ afkeur-bij-twijfel.
 - Schrijft naar `kb-index.db`:
   - **sqlite-vec `vec0`** virtuele tabel voor vectoren (brute-force KNN; gepinde versie).
   - **FTS5** tabel voor keyword (zit in Python-stdlib `sqlite3`; rotsvast).
-- Indexeert `02-wiki/` (alle) + `09-memory/` met `status: current` (NIET unverified).
+- Indexeert `02-wiki/` (gegate op bestaande `embed_index`, ongewijzigd) + `09-memory/`
+  met `status: current` (gegate op `memory_capture`; NIET unverified). Memory uit → alleen
+  wiki geïndexeerd, exact als nu.
 - Embeddings: `qwen3-embedding:8b` via Ollama op GPU.
 - `--rebuild` flag: drop + herbouw volledig uit files.
 
@@ -174,13 +217,15 @@ Hybride query, gebruikt door zowel de hook als de MCP-server:
 ### 5. kb-retrieve hook (uitbreiding bestaand)
 
 - Bestaande UserPromptSubmit-hook, nu over de gecombineerde `kb-index.db`.
-- Push top-matches (wiki + memory-current) in context. **Fail-open, altijd** —
-  nooit de prompt vertragen of blokkeren (bestaand contract).
+- Push top-matches in context. **Memory-laag gegate op `memory_recall`:** uit → de hook
+  injecteert alleen wiki, exact als nu; aan → ook memory(current). Wiki-recall blijft
+  onveranderd.
+- **Fail-open, altijd** — nooit de prompt vertragen of blokkeren (bestaand contract).
 
 ### 6. kb MCP-server (nieuw)
 
 - Lokale **stdio**-MCP-server; exposeert `kb-recall` (read) aan lokale MCP-clients
-  (Cursor, LM Studio, Claude Desktop).
+  (Cursor, LM Studio, Claude Desktop). Gegate op `memory_recall`.
 - Geen netwerk-bind; cloud-web-AI's bewust uitgesloten (#4).
 - Write-via-MCP: externe lokale client schrijft direct een memory → landt als
   `unverified`, wordt door de eerstvolgende sweep gejudged (zelfde quarantaine-poort).
@@ -209,7 +254,9 @@ op SessionStart, verse context, idle:
 - Statuswijzigingen zijn **niet-destructief**: files blijven, alleen status flipt
   (reversibel, in Git-historie). Respecteert controle (#5).
 - **Geen autonome hard-delete.** Verwijderen blijft mens-actie.
-- Sluit aan op bestaande daily-graphify-gate (zelfde idle-trigger-infra).
+- **Eigen gate `memory_capture`** — *niet* de `daily_graphify`-toggle. De sweep deelt
+  hooguit de idle-trigger-*infra* (wanneer draait achtergrondwerk) met graphify, maar is
+  een **aparte aan/uit-beslissing**. Gedeelde timing, gescheiden gates.
 
 ### 8. /wiki promotie (uitbreiding bestaand)
 
@@ -259,10 +306,14 @@ volgorde, idempotent:
 
 ```
 SessionStart (of /sessielog):
-   1. memory-sweep   (extractie+judge nieuwe transcripts; status-flips; supersede; expire)
-   2. kb-index build (incrementeel; indexeert nu de vers-gepromote current)
-   3. recall actief  (hook + MCP zien de nieuwe current)
+   0. gate-check     (memory_capture? memory_recall? — alles hieronder is gegate)
+   1. memory-sweep   (alleen als memory_capture: extractie+judge; status-flips; supersede)
+   2. kb-index build (memory(current) alleen als memory_capture; wiki onder embed_index)
+   3. recall actief  (memory in context alleen als memory_recall)
 ```
+
+Met beide toggles uit draait stap 1–3 voor geheugen niet; wiki-index/recall blijven
+ongemoeid onder hun eigen bestaande toggles.
 
 Een memory uit sessie A is dus recallbaar vanaf sessie B (of meteen als jij `/sessielog`
 draait — dat vuurt dezelfde sweep+index in deze sessie). Binnen-sessie automatisch (zonder
@@ -325,6 +376,9 @@ Mitigatie:
   keurt producent-ruis af (geen zelf-keuren).
 - Eigenschap: `rebuild` uit files reproduceert dezelfde index (herbouwbaarheid #6).
 - No-cloud: test/doctor assert geen externe host-calls (#4).
+- **Ontkoppeling (#9):** met `memory_capture`+`memory_recall` uit draait geen enkel
+  geheugen-pad (capture/sweep/recall/memory-index); archive/distill/graphify/embed gedragen
+  zich byte-identiek aan vóór het geheugen-subsysteem. Toggles onafhankelijk schakelbaar.
 
 ## UX & output-principe (zie `CLAUDE.md`)
 
