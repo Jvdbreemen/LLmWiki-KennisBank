@@ -1,4 +1,4 @@
----
+<!-- D:\Users\Robert\Documents\GitHub\RvdB\LLmWiki-KennisBank\docs\superpowers\specs\2026-06-26-agent-geheugen-design.md--- -->
 title: KennisBank als agent-geheugen + leesbare kennisbank
 date: 2026-06-26
 status: design
@@ -283,6 +283,28 @@ Optie C leunt op de sweep als vangnet; zijn falen moet **luid** zijn, anders ver
   (de sweep ruimt niet op / draait niet).
 - **Sessiestart-waarschuwing:** toon sweep-gezondheid + achterstand bij sessiestart.
 
+### 11. `/kennisbank:rebuild-index` (snel, cache-herbouw)
+
+- Drop `kb-index.db` en her-embed alle bron-files (`02-wiki/` onder `embed_index`,
+  `09-memory/` status=current onder `memory_capture`).
+- **Deterministisch** — zelfde files → zelfde index (randvoorwaarde #6). Goedkoop, seconden.
+- Verandert **geen** markdown; raakt alleen de wegwerp-index. Altijd veilig te draaien.
+- Wrapt de `--rebuild` flag van de index-builder (component 3).
+
+### 12. `/kennisbank:rebuild-memory` (zwaar, her-extractie) + upgrade-backfill
+
+- Her-extraheert memories uit **bron-transcripts** (`01-raw/transcripts/`): extractie →
+  dedup → judge → `09-memory/`, dan `rebuild-index`.
+- **Niet-deterministisch** (LLM-oordeel), vele agent-calls, bestand-wijzigend → **vraagt
+  expliciete bevestiging** vóór het draait. Niet verwarren met rebuild-index.
+- **Upgrade-backfill:** de `kennisbank-upgrade`-skill draait bij upgrade naar deze versie
+  `rebuild-memory` één keer over de bestaande transcript-backlog → bootstrapt `09-memory/`
+  uit wat er al gearchiveerd staat. Idempotent: dedup voorkomt dubbele memories bij
+  herhaald draaien.
+- **Geen wiki→memory seeding (keuze C).** Wiki blijft puur promotie-*doel* (memory→wiki),
+  nooit bron voor memory. Recall dekt de wiki-laag toch al via de index; wiki naar memory
+  kopiëren zou enkel dup/bloat (#3) opleveren.
+
 ## Data flow
 
 ```
@@ -384,6 +406,9 @@ Mitigatie:
 - **Ontkoppeling (#9):** met `memory_capture`+`memory_recall` uit draait geen enkel
   geheugen-pad (capture/sweep/recall/memory-index); archive/distill/graphify/embed gedragen
   zich byte-identiek aan vóór het geheugen-subsysteem. Toggles onafhankelijk schakelbaar.
+- **Rebuild-index determinisme:** zelfde files → identieke index; raakt geen markdown.
+- **Backfill-idempotentie:** `rebuild-memory` twee keer over dezelfde transcript-backlog
+  levert geen dubbele memories (dedup-poort).
 
 ## UX & output-principe (zie `CLAUDE.md`)
 
@@ -419,6 +444,9 @@ voorrang die memory uit de top verdringt.
 - ❌ rigide 1×/dag janitor (vervangen door SessionStart/`/sessielog`-getriggerde sweep).
 - ❌ inline-judge mid-sessie (vervangen door verse-context judge in de sweep — autonoom
   + onafhankelijk; trilemma-besluit A).
+- ❌ wiki→memory seeding (keuze C): wiki is promotie-doel, geen memory-bron; recall dekt
+  wiki al via de index, seeding = dup/bloat.
+- ❌ rebuild-index en rebuild-memory onder één knop (zware her-extractie nooit per ongeluk).
 - ❌ autonome hard-delete (alleen reversibele status-flips).
 
 ## Open punten
