@@ -53,7 +53,7 @@ De DB wordt nooit autoritatief. `rm kb-index.db && kb-index --rebuild` reconstru
 ```
                   ┌─────────────────────────────────────────┐
    agents ──push──┤  RECALL (kb-retrieve hook + lokale MCP)  │
-   (CC, Cursor)   │  zoekt: wiki eerst, dan memory(current)  │
+   (CC, Cursor)   │  zoekt: wiki + memory(current), beide  │
                   └──────────────┬──────────────────────────┘
                                  │ hybride query (<1s)
         ┌────────────────────────┴───────────────────────┐
@@ -96,56 +96,58 @@ evidence_basis: cc-sessie # getypt | cc-sessie | audio | import | autoresearch |
 source_session: <id/pad>  # herkomst voor provenance
 created: 2026-06-26
 updated: 2026-06-26
-expires: 2026-12-26        # optioneel; inline-judge/sweep schat vluchtigheid
+expires: 2026-12-26        # optioneel; judge/sweep schat vluchtigheid
 superseded_by: [[...]]     # gezet bij supersession
 tags: [...]
 ---
 ```
 
-### 2. Capture-writer + inline-judge (lib + skill-integratie)
+### 2. Capture + onafhankelijke judge (via bestaande transcript-pijplijn)
 
-Door agents/skills gebruikte schrijf-functie. **Optie C (quarantaine) + inline
-onafhankelijke verificatie** — zodat de agent *door de dag heen* leert, niet pas na een
-dagelijkse pass.
+**Ontwerpkeuze A (goedgekeurd):** capture is volledig autonoom en hangt aan de
+*bestaande* transcript-pijplijn, niet aan een skill die iemand moet onthouden. De
+onafhankelijke judge draait in de SessionStart-sweep met *verse context* — niet inline
+mid-sessie. Dit beslecht de trilemma: autonoom (#7) + onafhankelijk (#1) tegelijk.
 
 Twee taken bewust gesplitst:
-- **(a) per-memory kwaliteitspoort** = lokaal besluit → gebeurt **direct bij capture**.
-- **(b) cross-memory onderhoud** = vereist globale blik → event-driven sweep (component 7).
+- **(a) per-memory kwaliteitspoort** = ruis/zekerheid-oordeel → in de sweep, verse context.
+- **(b) cross-memory onderhoud** = globale blik → zelfde sweep (component 7).
 
 Capture-flow:
 
 ```
-agent ──► capture-writer
+SessionEnd-hook (autonoom, bestaat al):   transcript → 01-raw/transcripts/ archief
+        │
+SessionStart-sweep (volgende sessie, verse context = vanzelf onafhankelijk):
+   ├─ lees nieuwe transcripts sinds vorige sweep
+   ├─ extraheer kandidaat-memories (lessons learned, bugs, besluiten)
    ├─ capture-tijd dedup: embed + cosine tegen bestaande memories;
-   │     similarity > DEDUP_THRESHOLD → géén nieuwe file, bestaande krijgt updated-stamp
-   │     (hergebruikt semantic-tiling.py). Bestrijdt bloat (#3) aan de bron.
+   │     similarity > DEDUP_THRESHOLD → merge in bestaande (updated-stamp), geen nieuwe file
    │     DEDUP_THRESHOLD (~0.92) is model-specifiek; empirisch tunen op qwen3-embedding,
    │     niet als constante hardcoden.
-   └─ INLINE-JUDGE (onafhankelijke, goedkope pass — NIET de producerende agent):
-         oordeelt ruis / zekerheid, ingesteld om af te keuren bij twijfel.
-            hoge zekerheid + geen ruis → status: current   → meteen recallbaar
-            twijfel                    → status: unverified → quarantaine-vangnet
+   └─ JUDGE per kandidaat (verse context, "probeer af te keuren; bij twijfel afkeuren"):
+         hoge zekerheid + geen ruis → 09-memory/<slug>.md  status: current
+         twijfel                    → 09-memory/<slug>.md  status: unverified
 ```
 
-Kritische eis: de inline-judge is **onafhankelijk** van de schrijvende agent. Te pinnen
-in het plan:
-- **Waar aangeroepen?** Capture is einde-sessie. Een Stop-hook (script) kan niet triviaal
-  een agent spawnen; een in-sessie skill wel. Dit bepaalt of een echte aparte sub-agent
-  haalbaar is op het capture-punt. Voorkeur: in-sessie skill die een **verse-context
-  sub-agent** als judge aanroept.
-- **Echt onafhankelijk?** Zelfde model + zelfde sessie-context is géén onafhankelijkheid,
-  ook al verschilt de prompt. Minimum: schone context + expliciete "probeer dit af te
-  keuren; bij twijfel afkeuren"-instelling. Anders is het zelf-keuren — slager keurt eigen
-  vlees, en randvoorwaarde #1 valt om.
-- **Fail-safe:** judge faalt/twijfelt → `unverified` (nooit direct `current`).
+**Triggers (trigger-agnostisch pad).** Dezelfde extractie+judge-pijplijn vuurt op meerdere
+momenten — capture hangt nooit aan één enkel moment:
+- **SessionStart-sweep** — autonome baseline (verwerkt nieuwe transcripts).
+- **SessionEnd-hook** — autonoom archiveren van het transcript.
+- **`/sessielog`-skill** — on-demand: archiveert + verwerkt het transcript meteen, geeft
+  een within-session capture-pad wanneer jij dat wilt.
 
-- `unverified` blijft **uitgesloten van recall** → geen recall-venster voor ongevette
-  memory; het vangnet onder een falende/twijfelende inline-judge.
-- `current` is direct recallbaar → instant leren voor het zekere werk.
-- Restrisico (inline-judge vergist zich, ruis wordt `current`) wordt ondervangen door de
-  tweede verdedigingslinie: de event-driven sweep hercontroleert `current` memories
-  (component 7).
-- Capture draait einde-sessie / off hot path → de extra judge-call kost geen recall-latency.
+Onafhankelijkheid — **invariant, ongeacht de trigger:** de judge draait altijd in een
+**verse-context sub-agent**, los van de sessie die de kennis produceerde → geen
+zelf-keuren (#1 geborgd), óók wanneer `/sessielog` mid-sessie triggert. Expliciete
+afkeur-bij-twijfel.
+
+- `unverified` blijft **uitgesloten van recall** → vangnet onder een twijfelende judge.
+- `current` wordt recallbaar zodra de sweep-stap de index bijwerkt (zelfde SessionStart,
+  vaste volgorde sweep→index→recall).
+- **Geen handwerk:** alles hangt aan SessionEnd/SessionStart-hooks die al draaien.
+- Bewuste prijs: een memory uit sessie A is recallbaar vanaf sessie B, niet binnen A.
+  Aanvaard — de kern-use-case (eerder werk) is weken oud; within-session is geen vereiste.
 
 ### 3. kb-index builder (uitbreiding van `build-embed-index.py`)
 
@@ -180,24 +182,27 @@ Hybride query, gebruikt door zowel de hook als de MCP-server:
 - Lokale **stdio**-MCP-server; exposeert `kb-recall` (read) aan lokale MCP-clients
   (Cursor, LM Studio, Claude Desktop).
 - Geen netwerk-bind; cloud-web-AI's bewust uitgesloten (#4).
-- Write-via-MCP: zelfde capture-writer (quarantaine, `unverified`).
+- Write-via-MCP: externe lokale client schrijft direct een memory → landt als
+  `unverified`, wordt door de eerstvolgende sweep gejudged (zelfde quarantaine-poort).
 
-### 7. memory-sweep (event-driven cross-memory onderhoud — taak (b))
+### 7. memory-sweep (extractie + judge + cross-memory onderhoud)
 
-De *globale* tegenhanger van de inline-judge. Doet wat één capture niet kan zien.
-**Event-driven, niet rigide 1×/dag:** draait op SessionStart (hook bestaat al) of elke
-N captures — dus vaker dan dagelijks, maar alleen als er werk is. Off hot path.
+De autonome motor. Draait op **SessionStart** (hook bestaat al; verse context). Doet
+zowel de capture-judge (taak a, component 2) als het globale onderhoud (taak b) dat één
+capture niet kan zien. Off hot path.
 
 ```
-op SessionStart / elke N captures, idle:
-   ├─ resterende unverified (door inline-judge geparkeerd) → herbeoordeel:
+op SessionStart, verse context, idle:
+   ├─ EXTRACTIE + JUDGE (taak a): nieuwe transcripts → kandidaat-memories →
+   │     dedup → judge → current / unverified   (zie component 2)
+   ├─ resterende unverified van eerdere sweeps → herbeoordeel:
    │     goed? → current   ruis? → retracted   dubbel? → merge, retracted
-   ├─ cross-memory (globale blik):
+   ├─ cross-memory (globale blik, taak b):
    │     vluchtig?                       → expires zetten
    │     spreekt huidige current tegen?  → superseded + superseded_by-link
    │     clusterbaar?                    → markeer als promotie-kandidaat voor /wiki
-   ├─ TWEEDE VERDEDIGINGSLINIE: hercontroleer recent door inline-judge gepromote
-   │     current memories → alsnog retracted/superseded indien fout doorgelaten
+   ├─ TWEEDE VERDEDIGINGSLINIE: hercontroleer recent gepromote current memories
+   │     → alsnog retracted/superseded indien fout doorgelaten
    └─ rapport: "12 nieuw, 8 current, 3 retracted, 1 superseded, 0 fouten"
 ```
 
@@ -229,17 +234,18 @@ Optie C leunt op de sweep als vangnet; zijn falen moet **luid** zijn, anders ver
 ## Data flow
 
 ```
-Capture:  agent ──► capture-writer ──(dedup>0.92?)──► inline-judge (onafhankelijk)
-                                                          │
-                                       hoge zekerheid ────┤──► 09-memory/<slug>.md [current]
-                                       twijfel ───────────┘──► 09-memory/<slug>.md [unverified]
+Archief:  SessionEnd-hook / /sessielog ──► transcript → 01-raw/transcripts/
                                                               │
-Index:    write/idle ──► kb-index builder ──(status=current only)──► kb-index.db
+Sweep:    SessionStart / /sessielog ──► memory-sweep:
+            extractie → dedup → JUDGE (verse-context sub-agent)
+                                       hoge zekerheid ──► 09-memory/<slug>.md [current]
+                                       twijfel ─────────► 09-memory/<slug>.md [unverified]
+            + cross-memory onderhoud (supersede/expire/cluster) + rapport
                                                               │
-Sweep:    SessionStart / elke N ──► memory-sweep ──► status-flips + hercontrole + rapport
+Index:    sweep-stap / idle ──► kb-index builder ──(status=current only)──► kb-index.db
                                                               │
 Recall:   prompt ──► kb-retrieve hook / MCP ──► kb-recall ──► kb-index.db
-                                                  (wiki eerst, current only, <1s)
+                                                  (beide lagen, current only, <1s)
                                                               │
 Promote:  /wiki ──► current memories ──► 02-wiki/<artikel>.md
 ```
@@ -252,15 +258,15 @@ index-build. Verkeerde volgorde = net-gepromote memory mist deze sessie. Daarom 
 volgorde, idempotent:
 
 ```
-SessionStart:  1. memory-sweep   (status-flips: unverified→current, supersede, expire)
-               2. kb-index build (incrementeel; indexeert nu de vers-gepromote current)
-               3. recall actief  (hook + MCP zien de nieuwe current)
+SessionStart (of /sessielog):
+   1. memory-sweep   (extractie+judge nieuwe transcripts; status-flips; supersede; expire)
+   2. kb-index build (incrementeel; indexeert nu de vers-gepromote current)
+   3. recall actief  (hook + MCP zien de nieuwe current)
 ```
 
-Memories die binnen-sessie als `current` worden geschreven (inline-judge, hoge zekerheid)
-zijn gegarandeerd recallbaar vanaf de eerstvolgende SessionStart-index-build. Binnen
-dezelfde sessie direct recallbaar maken is een optionele optimalisatie (incrementele
-index-append bij capture), niet vereist voor de kern-use-case (recall van eerder werk).
+Een memory uit sessie A is dus recallbaar vanaf sessie B (of meteen als jij `/sessielog`
+draait — dat vuurt dezelfde sweep+index in deze sessie). Binnen-sessie automatisch (zonder
+`/sessielog`) is bewust geen vereiste — de kern-use-case is recall van eerder werk.
 
 ## Performance-ontwerp
 
@@ -268,9 +274,8 @@ Principe: **betaal vooraf, retrieval snel.**
 
 | Fase            | Wanneer            | Kost                                            |
 |-----------------|--------------------|-------------------------------------------------|
-| Embed + index   | write-time / idle, incrementeel | off hot path                       |
-| Inline-judge    | bij capture, off hot path | extra LLM-call einde-sessie               |
-| Memory-sweep    | SessionStart / elke N, idle | off hot path                          |
+| Embed + index   | sweep-stap / idle, incrementeel | off hot path                       |
+| Memory-sweep    | SessionStart / /sessielog, idle | extractie + judge (verse-context sub-agent) + onderhoud, off hot path |
 | **Recall**      | hot path           | index-lookup + 1× query-embed (Ollama GPU, ~tientallen ms) |
 
 - Recall raakt nooit het corpus: sqlite-vec `vec0` brute-force KNN over enkele duizenden
@@ -301,20 +306,23 @@ Mitigatie:
 
 - **Recall (hook):** fail-open. Elke fout/lege cache/cold index → geen output, exit 0.
 - **Index-builder:** corrupte/missende `kb-index.db` → `--rebuild` uit files.
-- **Sweep-faal:** zichtbaar bij sessiestart + `doctor.sh`; door inline-judge geparkeerde
-  memories blijven `unverified` (veilig: niet recallbaar) tot volgende succesvolle sweep.
-- **Inline-judge-faal:** capture valt terug op `unverified` (fail-safe: bij twijfel of
-  fout nooit direct `current`).
+- **Sweep-faal:** zichtbaar bij sessiestart + `doctor.sh`; geparkeerde memories blijven
+  `unverified` (veilig: niet recallbaar) tot volgende succesvolle sweep. Niet-geëxtraheerde
+  transcripts blijven in `01-raw/transcripts/` staan → volgende sweep pakt ze op.
+- **Judge-faal:** kandidaat valt terug op `unverified` (fail-safe: bij twijfel of fout
+  nooit direct `current`).
 - **Model-mismatch:** cache-entries met afwijkend embed-model/dimensie worden genegeerd
   (bestaand cross-model-veiligheidsgedrag van kb-retrieve).
 
 ## Testing
 
-- Unit: capture-writer (dedup-drempel, frontmatter), kb-recall (wiki-eerst, status-filter,
-  recency-tiebreak), index-builder (incrementeel + rebuild-idempotentie).
-- Integratie: capture(twijfel) → recall ziet `unverified` niet; inline-judge(hoge zekerheid)
-  → recall ziet `current` meteen; sweep hercontroleert `current` → kan alsnog retracten.
-- Onafhankelijkheid inline-judge: judge keurt producent-ruis af (geen zelf-keuren).
+- Unit: extractie+dedup+frontmatter, judge (afkeur-bij-twijfel), kb-recall (beide-lagen,
+  status-filter, recency-tiebreak), index-builder (incrementeel + rebuild-idempotentie).
+- Integratie: transcript → sweep extraheert+judget; twijfel → recall ziet `unverified`
+  niet; hoge zekerheid → na index-build recallbaar; sweep hercontroleert `current` → kan
+  alsnog retracten.
+- Onafhankelijkheid judge: draait in verse-context sub-agent (ook bij `/sessielog`-trigger),
+  keurt producent-ruis af (geen zelf-keuren).
 - Eigenschap: `rebuild` uit files reproduceert dezelfde index (herbouwbaarheid #6).
 - No-cloud: test/doctor assert geen externe host-calls (#4).
 
@@ -325,7 +333,7 @@ alle componenten:
 
 - **Onzichtbaar tenzij waardevol.** De recall-hook injecteert stil; sweep/index draaien
   idle. Geen ceremonie, geen log-ruis richting de gebruiker.
-- **Feitelijke output, samengevat.** Sweep/janitor/index rapporteren in één heldere regel
+- **Feitelijke output, samengevat.** Sweep/index rapporteren in één heldere regel
   ("12 nieuw, 8 current, 3 retracted, 0 fouten"), niet met log-dumps. Onderdruk ruis,
   behoud status-besef.
 - **Proactief surfacen, hoog-precies.** "Hé, hier liep je twee maanden geleden ook
@@ -348,8 +356,10 @@ voorrang die memory uit de top verdringt.
 - ❌ `confidence`-gegokte cijfers (schijnprecisie).
 - ❌ cloud-web-AI-toegang (leak-risico #4).
 - ❌ access-keys / multi-tenant filtering (single-user, nul waarde).
-- ❌ inbox-omweg voor twijfel-captures (vervangen door inline-judge + quarantaine + sweep).
-- ❌ rigide 1×/dag janitor (vervangen door inline-judge bij capture + event-driven sweep).
+- ❌ inbox-omweg voor twijfel-captures (vervangen door sweep-judge + quarantaine).
+- ❌ rigide 1×/dag janitor (vervangen door SessionStart/`/sessielog`-getriggerde sweep).
+- ❌ inline-judge mid-sessie (vervangen door verse-context judge in de sweep — autonoom
+  + onafhankelijk; trilemma-besluit A).
 - ❌ autonome hard-delete (alleen reversibele status-flips).
 
 ## Open punten
