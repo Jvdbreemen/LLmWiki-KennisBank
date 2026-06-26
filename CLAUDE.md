@@ -31,6 +31,19 @@ Bij elke keuze: simpel en uitlegbaar boven slim en opaak. Weeg opties kritisch, 
 helderste aanpak, en houd performance + retrieval leidend. Liever één begrijpelijk
 mechanisme dan drie clevere.
 
+## Backlog.md — altijd taken vastleggen
+
+Dit repo gebruikt Backlog.md (`backlog/`) als bron van waarheid voor werk. Regel:
+
+- **Na elk plan, vóór uitvoer:** maak een Backlog-taak aan (titel, beschrijving,
+  acceptatiecriteria, milestone, dependencies). Geen uitvoer zonder taak.
+- **Bij starten:** zet de taak op `In Progress`.
+- **Na afronden:** zet de taak door naar de volgende status en rond af (`Done`)
+  zodra het werk gereviewd en groen is.
+
+Gebruik de `mcp__backlog__*`-tools (of de `backlog` CLI). Houd taken klein genoeg
+om los af te ronden.
+
 ## Lokaal, altijd
 
 Niets gaat zonder expliciete toestemming naar de cloud. Lokale opslag (SQLite, markdown),
