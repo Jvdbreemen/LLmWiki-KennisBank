@@ -117,17 +117,27 @@ Capture-flow:
 ```
 agent ──► capture-writer
    ├─ capture-tijd dedup: embed + cosine tegen bestaande memories;
-   │     similarity > 0.92 → géén nieuwe file, bestaande krijgt updated-stamp
+   │     similarity > DEDUP_THRESHOLD → géén nieuwe file, bestaande krijgt updated-stamp
    │     (hergebruikt semantic-tiling.py). Bestrijdt bloat (#3) aan de bron.
+   │     DEDUP_THRESHOLD (~0.92) is model-specifiek; empirisch tunen op qwen3-embedding,
+   │     niet als constante hardcoden.
    └─ INLINE-JUDGE (onafhankelijke, goedkope pass — NIET de producerende agent):
          oordeelt ruis / zekerheid, ingesteld om af te keuren bij twijfel.
             hoge zekerheid + geen ruis → status: current   → meteen recallbaar
             twijfel                    → status: unverified → quarantaine-vangnet
 ```
 
-Kritische eis: de inline-judge is **onafhankelijk** van de schrijvende agent (aparte
-prompt/sub-agent, expliciete "probeer dit af te keuren"-instelling). Anders is het
-zelf-keuren — slager keurt eigen vlees, en randvoorwaarde #1 valt om.
+Kritische eis: de inline-judge is **onafhankelijk** van de schrijvende agent. Te pinnen
+in het plan:
+- **Waar aangeroepen?** Capture is einde-sessie. Een Stop-hook (script) kan niet triviaal
+  een agent spawnen; een in-sessie skill wel. Dit bepaalt of een echte aparte sub-agent
+  haalbaar is op het capture-punt. Voorkeur: in-sessie skill die een **verse-context
+  sub-agent** als judge aanroept.
+- **Echt onafhankelijk?** Zelfde model + zelfde sessie-context is géén onafhankelijkheid,
+  ook al verschilt de prompt. Minimum: schone context + expliciete "probeer dit af te
+  keuren; bij twijfel afkeuren"-instelling. Anders is het zelf-keuren — slager keurt eigen
+  vlees, en randvoorwaarde #1 valt om.
+- **Fail-safe:** judge faalt/twijfelt → `unverified` (nooit direct `current`).
 
 - `unverified` blijft **uitgesloten van recall** → geen recall-venster voor ongevette
   memory; het vangnet onder een falende/twijfelende inline-judge.
@@ -153,7 +163,9 @@ Hybride query, gebruikt door zowel de hook als de MCP-server:
 
 - Embed query 1× (Ollama GPU, tientallen ms).
 - Vector-KNN (sqlite-vec) **+** keyword (FTS5), gefuseerd.
-- **Wiki eerst**, dan memory; `created` (recency) als tiebreaker.
+- Resultaten uit **beide** lagen (top-k wiki + top-k memory); wiki + `created` (recency)
+  als tiebreaker bij gelijke relevantie — geen harde voorrang die memory begraaft
+  (zie "Recall-balans").
 - Filtert `status != current` weg (geen unverified/superseded/retracted/expired in recall).
 - Output linkt naar bron-`.md` (zodat de mens het als artikel naleest).
 
@@ -232,6 +244,24 @@ Recall:   prompt ──► kb-retrieve hook / MCP ──► kb-recall ──► 
 Promote:  /wiki ──► current memories ──► 02-wiki/<artikel>.md
 ```
 
+### SessionStart-volgorde (kritisch voor "leert door de dag")
+
+Een memory is pas recallbaar als hij (a) `status: current` heeft én (b) in `kb-index.db`
+staat. Bij SessionStart draaien zowel de sweep (flipt `unverified`→`current`) als de
+index-build. Verkeerde volgorde = net-gepromote memory mist deze sessie. Daarom vaste
+volgorde, idempotent:
+
+```
+SessionStart:  1. memory-sweep   (status-flips: unverified→current, supersede, expire)
+               2. kb-index build (incrementeel; indexeert nu de vers-gepromote current)
+               3. recall actief  (hook + MCP zien de nieuwe current)
+```
+
+Memories die binnen-sessie als `current` worden geschreven (inline-judge, hoge zekerheid)
+zijn gegarandeerd recallbaar vanaf de eerstvolgende SessionStart-index-build. Binnen
+dezelfde sessie direct recallbaar maken is een optionele optimalisatie (incrementele
+index-append bij capture), niet vereist voor de kern-use-case (recall van eerder werk).
+
 ## Performance-ontwerp
 
 Principe: **betaal vooraf, retrieval snel.**
@@ -249,16 +279,23 @@ Principe: **betaal vooraf, retrieval snel.**
   Query- en index-model moeten identiek zijn (geldige cosine).
 - Min-impact: index = één SQLite-file (`mmap`, geen proces); hook fail-open; sweep idle.
 
-## sqlite-vec — risico & mitigatie
+## sqlite-vec — risico, verificatie & mitigatie
 
-Status (juni 2026): `v0.1.10-alpha.4`, pre-v1.0, Mozilla-backed, actief. Stabiele
-non-prerelease tags bestaan (`v0.1.9`). Risico = breaking changes in SQL-API/storage-format.
+Status (juni 2026): `v0.1.10-alpha.4` is de laatste alpha; `v0.1.9` is een stabiele
+non-prerelease tag, Mozilla-backed, actief. Risico = breaking changes in SQL-API/storage-format.
+
+**Geverifieerd op doelmachine (2026-06-26):** sqlite-vec laadt op Windows / Python 3.14.2.
+De stdlib `sqlite3` ondersteunt `enable_load_extension(True)`, `pip install sqlite-vec`
+levert `vec_version() = v0.1.9` (de stabiele tag). De backbone-aanname is dus empirisch
+bevestigd; `vec0` is de vector-backend, geen fallback nodig.
 
 Mitigatie:
-- **Versie pinnen** op een stabiele tag.
+- **Versie pinnen** op `v0.1.9` (de geverifieerde stabiele tag).
 - **Brute-force `vec0`** gebruiken (stabiel), experimentele IVF/DiskANN mijden tot v1.
 - Index is **afgeleid + herbouwbaar** → storage-break kost een rebuild, geen dataverlies.
   Het engste alpha-risico raakt deze use-case niet.
+- Fallback-ontwerp (FTS5 + vectoren-als-blob + numpy-cosine, geen extensie nodig) blijft
+  achter de hand mocht een toekomstige upgrade `vec0` breken — zelfde `kb-index.db`.
 
 ## Error handling
 
@@ -280,6 +317,30 @@ Mitigatie:
 - Onafhankelijkheid inline-judge: judge keurt producent-ruis af (geen zelf-keuren).
 - Eigenschap: `rebuild` uit files reproduceert dezelfde index (herbouwbaarheid #6).
 - No-cloud: test/doctor assert geen externe host-calls (#4).
+
+## UX & output-principe (zie `CLAUDE.md`)
+
+KennisBank moet voelen alsof het er niet is — snel, automatisch, uit de weg. Dit stuurt
+alle componenten:
+
+- **Onzichtbaar tenzij waardevol.** De recall-hook injecteert stil; sweep/index draaien
+  idle. Geen ceremonie, geen log-ruis richting de gebruiker.
+- **Feitelijke output, samengevat.** Sweep/janitor/index rapporteren in één heldere regel
+  ("12 nieuw, 8 current, 3 retracted, 0 fouten"), niet met log-dumps. Onderdruk ruis,
+  behoud status-besef.
+- **Proactief surfacen, hoog-precies.** "Hé, hier liep je twee maanden geleden ook
+  tegenaan." Dit rijdt op dezelfde relevantie-score als recall, maar spreekt alleen
+  ongevraagd boven een **hogere** drempel dan de stille injectie. Onterechte
+  onderbrekingen zijn precies de cruft die we vermijden — liever stil dan vals-positief.
+- **Performance + retrieval leidend** bij elke afweging; KISS bij elke keuze.
+
+## Recall-balans (wiki eerst, memory niet begraven)
+
+"Wiki eerst" mag de kern-use-case (recall van rúwe sessie-lessons/bugs in `09-memory`)
+niet verdringen. Een generiek wiki-artikel mag de specifieke ruwe memory die het antwoord
+ís niet wegdrukken. Daarom: recall garandeert resultaten uit **beide** lagen (bv. top-k
+wiki + top-k memory), met wiki als tiebreaker bij gelijke relevantie — niet als harde
+voorrang die memory uit de top verdringt.
 
 ## YAGNI — bewust NIET
 
