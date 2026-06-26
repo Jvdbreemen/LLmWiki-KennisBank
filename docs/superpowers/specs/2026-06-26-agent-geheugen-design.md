@@ -37,9 +37,11 @@ Afgeleid uit het ontwerp-interview (angst-ranking van de gebruiker):
    recall is een index-lookup, geen corpus-scan.
 9. **Onafhankelijk ontkoppeld** (hard) — het geheugen-subsysteem is volledig losgekoppeld
    van het bestaande werk (`auto_archive`, `distill_notify`, `embed_index`,
-   `daily_graphify`). Eigen toggles, default uit. Geheugen uit = die features draaien
-   exact als voorheen, nul impact. Geheugen behandelt `auto_archive`/`daily_graphify` als
-   *optionele input*, nooit als afhankelijkheid.
+   `daily_graphify`). Eigen toggles, **default aan** (uitzetbaar). Geheugen uit = die
+   features draaien exact als voorheen, nul impact. Geheugen behandelt
+   `auto_archive`/`daily_graphify` als *optionele input*, nooit als afhankelijkheid.
+   (Bewuste afwijking van de bestaande opt-in-conventie voor achtergrond-automatiek:
+   geheugen is kern-functionaliteit, dus default aan.)
 
 ## Kernprincipe
 
@@ -82,7 +84,9 @@ Twee lagen, één vault, één afgeleide index:
 
 Het geheugen-subsysteem is volledig losgekoppeld van het bestaande werk. Twee **nieuwe**
 toggles in `$VAULT/kennisbank-settings.json` (via bestaande `_settings.py get/set`),
-**beide default `false`** (opt-in, zoals `auto_archive`):
+**beide default `true`** (aan; uitzetbaar). Setup/upgrade schrijft ze als afwezig op `true`
+(`_settings.py init`/`DEFAULTS`). Afwijking van de opt-in-conventie van `auto_archive`:
+geheugen is kern-functionaliteit.
 
 | Toggle | Gate-t | Onafhankelijk van |
 |---|---|---|
@@ -94,8 +98,9 @@ Bestaande toggles blijven ongemoeid: `auto_archive`, `distill_notify`, `embed_in
 
 Gedrag per combinatie:
 
-- **beide uit (default):** archive/distill/graphify/embed draaien exact als voorheen.
-  Geheugen bestaat niet; nul impact (randvoorwaarde #9).
+- **beide aan (default):** geheugen capture + recall actief out-of-the-box.
+- **beide uit (handmatig):** archive/distill/graphify/embed draaien exact als voorheen.
+  Geheugen bestaat niet; nul impact (randvoorwaarde #9 — uitzetbaarheid blijft gegarandeerd).
 - **`memory_capture` aan, `auto_archive` uit:** geheugen vult alleen als jij `/sessielog`
   draait. Geen stille afhankelijkheid van auto-archive.
 - **`memory_capture` aan, `auto_archive` aan:** transcripts worden automatisch tot memory
