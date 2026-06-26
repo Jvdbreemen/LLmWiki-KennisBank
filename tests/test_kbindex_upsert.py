@@ -58,6 +58,7 @@ class KbIndexUpsertTest(unittest.TestCase):
         self.assertEqual(removed, 1)
         self.assertEqual(_kbindex.count(self.conn), 1)
         self.assertEqual(self.conn.execute("SELECT count(*) FROM vec_docs").fetchone()[0], 1)
+        self.assertEqual(self.conn.execute("SELECT count(*) FROM fts_docs").fetchone()[0], 1)
 
 
 if __name__ == "__main__":

@@ -69,7 +69,7 @@ def _serialize(vector):
     return serialize_float32(list(vector))
 
 
-def indexed_hash(conn: sqlite3.Connection, path: str):
+def indexed_hash(conn: sqlite3.Connection, path: str) -> "str | None":
     row = conn.execute("SELECT hash FROM docs WHERE path=?", (path,)).fetchone()
     return row[0] if row else None
 
@@ -111,3 +111,50 @@ def prune(conn: sqlite3.Connection, keep_paths: set) -> int:
         conn.execute("DELETE FROM vec_docs WHERE doc_id=?", (doc_id,))
     conn.commit()
     return len(gone)
+
+
+def _rrf(rank_lists, k_const: int = 60) -> dict:
+    """Reciprocal Rank Fusion: doc_id -> gefuseerde score (hoger = beter)."""
+    scores: dict = {}
+    for ranking in rank_lists:
+        for rank, doc_id in enumerate(ranking):
+            scores[doc_id] = scores.get(doc_id, 0.0) + 1.0 / (k_const + rank)
+    return scores
+
+
+def search(conn: sqlite3.Connection, *, query_vector, query_text: str = "",
+           k: int = 8, layers=None, statuses=("current",)) -> list:
+    pool = max(k * 4, 20)
+    vec_ranking = [r[0] for r in conn.execute(
+        "SELECT doc_id FROM vec_docs WHERE embedding MATCH ? ORDER BY distance LIMIT ?",
+        (_serialize(query_vector), pool)).fetchall()]
+    rankings = [vec_ranking]
+    if query_text.strip():
+        try:
+            fts_ranking = [r[0] for r in conn.execute(
+                "SELECT rowid FROM fts_docs WHERE fts_docs MATCH ? ORDER BY rank LIMIT ?",
+                (query_text, pool)).fetchall()]
+            rankings.append(fts_ranking)
+        except sqlite3.OperationalError:
+            pass  # FTS-syntaxfout (rare query) -> alleen vector
+    fused = _rrf(rankings)
+    if not fused:
+        return []
+    placeholders = ",".join("?" for _ in fused)
+    meta = {r[0]: r for r in conn.execute(
+        f"SELECT doc_id, path, layer, status, title, created FROM docs "
+        f"WHERE doc_id IN ({placeholders})", tuple(fused)).fetchall()}
+    out = []
+    for doc_id, score in fused.items():
+        row = meta.get(doc_id)
+        if not row:
+            continue
+        _, path, layer, status, title, created = row
+        if layers is not None and layer not in layers:
+            continue
+        if statuses is not None and status not in statuses:
+            continue
+        out.append({"path": path, "layer": layer, "status": status,
+                    "title": title, "created": created, "score": score})
+    out.sort(key=lambda d: d["score"], reverse=True)
+    return out[:k]
