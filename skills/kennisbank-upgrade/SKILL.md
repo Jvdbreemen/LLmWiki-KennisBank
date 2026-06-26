@@ -90,7 +90,7 @@ Existing installs may not have a `kennisbank-settings.json` yet. Read each
 canonical toggle's current value:
 
 ```bash
-for key in auto_archive distill_notify embed_index daily_graphify; do
+for key in auto_archive distill_notify embed_index daily_graphify memory_capture memory_recall; do
   echo "$key=$(python3 "$VAULT/.claude/scripts/_settings.py" get "$key")"
 done
 ```
@@ -103,6 +103,8 @@ enable it, suggesting the default:
 - distill_notify (default ON) - notify at start that transcripts are pending
 - embed_index (default ON) - refresh the wiki embedding cache at start
 - daily_graphify (default ON) - update the graph automatically once a day
+- memory_capture (default ON) - extract and judge memories into 09-memory/ with maintenance
+- memory_recall (default ON) - inject memories into context via hook and local MCP
 
 Write each choice with `python3 "$VAULT/.claude/scripts/_settings.py" set <key> <true|false>`.
 Do NOT re-ask keys that are already set. Mention afterwards that the user can
