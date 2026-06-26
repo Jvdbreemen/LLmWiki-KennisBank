@@ -6,6 +6,7 @@ en bouwt paden. Geen netwerk, geen embeddings, geen side-effects bij import.
 Underscore-naam zodat scripts het importeren na sys.path.insert (idem _settings).
 
 Frontmatter-contract (spec fase 1):
+    title: vrije tekst (verplicht)
     type: memory
     status: unverified | current | superseded | retracted | expired
     evidence_basis: getypt | cc-sessie | audio | import | autoresearch | agent
