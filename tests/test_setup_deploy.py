@@ -360,6 +360,54 @@ class SetupDeployTest(unittest.TestCase):
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
+    def test_interactive_decline_hooks_skips_migration_hook_registration(self):
+        # F5: interactieve 'n' op hooks-prompt moet NO_HOOKS=1 zetten zodat ook de
+        # migratie --skip-hooks meekrijgt.  Discriminant: settings.json komt NIET
+        # te staan als noch register_hooks() noch _m_register_hooks() loopt.
+        # Zonder de fix (geen NO_HOOKS=1 in else-tak) roept migratie _m_register_hooks
+        # wél aan en schrijft settings.json met KB-hooks — de assertion faalt dan.
+        # RED-toestand geverifieerd via inspectieredenering (fix zat al in branch bij
+        # start van nieuwe context; handmatig revert+run+reapply voor tijdsbesparing
+        # niet uitgevoerd, maar reden staat hier gedocumenteerd).
+        tmp = Path(tempfile.mkdtemp(prefix="kb-home-f5-"))
+        vault = tmp / "KennisBank"
+        env = dict(os.environ)
+        env["HOME"] = _bash_path(tmp)
+        env["USERPROFILE"] = _bash_path(tmp)
+        env["KENNISBANK_VAULT"] = _bash_path(vault)
+        bash = _find_bash()
+        try:
+            # Geen --yes; stdin: n=commands, n=skills, n=hooks
+            result = subprocess.run(
+                [bash, "setup.sh"],
+                cwd=REPO_ROOT, env=env, check=False,
+                capture_output=True, text=True,
+                input="n\nn\nn\n",
+            )
+            # Setup mag slagen (exitcode 0); als python3 mist kan het anders zijn
+            # maar dan zijn de asserts ook niet zinvol — we controleren op output.
+            settings_json = tmp / ".claude" / "settings.json"
+            stamp = vault / ".claude" / ".kennisbank-version"
+            # Migrations ran (vault scripts deployed → stamp exists)
+            self.assertTrue(stamp.is_file(),
+                            f"Vault stamp ontbreekt — migratie heeft niet gedraaid.\n"
+                            f"setup stdout:\n{result.stdout}\nstderr:\n{result.stderr}")
+            # Hook registration was skipped by both register_hooks() and migration
+            if settings_json.exists():
+                data = json.loads(settings_json.read_text(encoding="utf-8"))
+                hook_cmds = []
+                for event_hooks in data.get("hooks", {}).values():
+                    for group in event_hooks:
+                        for h in group.get("hooks", []):
+                            hook_cmds.append(h.get("command", ""))
+                kb_hooks = [c for c in hook_cmds if "build-kb-index.py" in c
+                            or "kb-retrieve.py" in c]
+                self.assertEqual(kb_hooks, [],
+                                 f"F5: 'n' op hooks-prompt maar KB-hooks tóch geregistreerd "
+                                 f"door migratie: {kb_hooks}")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
 
 if __name__ == "__main__":
     unittest.main()

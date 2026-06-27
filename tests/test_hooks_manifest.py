@@ -36,6 +36,26 @@ class HooksManifestTest(unittest.TestCase):
         self.m.hooks().append(("X", "y.py", None))
         self.assertNotIn(("X", "y.py", None), self.m.hooks())
 
+    def test_archive_transcript_is_session_end(self):
+        # M3: event veld controleren — archive-transcript.py moet SessionEnd zijn.
+        for event, script, _m in self.m.hooks():
+            if script == "archive-transcript.py":
+                self.assertEqual(event, "SessionEnd",
+                                 "archive-transcript.py moet op SessionEnd staan")
+                break
+        else:
+            self.fail("archive-transcript.py niet in manifest")
+
+    def test_kb_retrieve_is_user_prompt_submit(self):
+        # M3: event veld controleren — kb-retrieve.py moet UserPromptSubmit zijn.
+        for event, script, _m in self.m.hooks():
+            if script == "kb-retrieve.py":
+                self.assertEqual(event, "UserPromptSubmit",
+                                 "kb-retrieve.py moet op UserPromptSubmit staan")
+                break
+        else:
+            self.fail("kb-retrieve.py niet in manifest")
+
 
 if __name__ == "__main__":
     unittest.main()

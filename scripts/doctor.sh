@@ -297,7 +297,7 @@ fi
 
 # 13c. Vault-versie-stamp.
 if command -v python3 >/dev/null 2>&1; then
-  KB_VER="$(python3 "$SCRIPTS_DIR/_migrations.py" version "$VAULT" 2>/dev/null)"
+  KB_VER="$(python3 "$SCRIPTS_DIR/_migrations.py" version "$VAULT" 2>/dev/null | tr -d '\r')"
   report_info "kennisbank-versie" "${KB_VER:-onbekend}"
 fi
 

@@ -60,7 +60,15 @@ def _m_register_hooks(vault_root, ctx):
         return
     rh = _load_sibling("register_hooks", "register-hooks.py")
     settings_path = ctx["settings_path"]
-    settings = rh.load_settings(settings_path)
+    # F4: een corrupte globale settings.json blokkeert de rest van de migratie NIET.
+    # Corrupt = afzonderlijk probleem; dirs + toggles + stamp gaan gewoon door.
+    # doctor.sh zal daarna waarschuwen over ontbrekende hooks.
+    try:
+        settings = rh.load_settings(settings_path)
+    except ValueError as e:
+        print(f"  waarschuwing: {e}; hook-registratie overgeslagen (doctor.sh meldt dit later).",
+              file=sys.stderr)
+        return
     if rh.register_manifest(settings, str(vault_root)):
         rh.save_settings(settings_path, settings)
 
@@ -87,13 +95,17 @@ def pending(vault_root):
 
 def run(vault_root, settings_path, skip_hooks=False):
     """Pas pending migraties toe en stempel VERSION. Een falende migratie
-    propageert vóór de stamp zodat een re-run hervat. Return de namen."""
+    propageert vóór de stamp zodat een re-run hervat. Return de namen.
+
+    F6: write_stamp alleen als VERSION nieuwer is dan de huidige stamp —
+    nooit downgraden (bv. een oudere setup.sh op een nieuwer gestempelde vault)."""
     ctx = {"settings_path": settings_path, "skip_hooks": skip_hooks}
     applied = []
     for version, name, fn in pending(vault_root):
         fn(vault_root, ctx)
         applied.append(name)
-    write_stamp(vault_root, VERSION)
+    if _vtuple(VERSION) > _vtuple(read_stamp(vault_root)):
+        write_stamp(vault_root, VERSION)
     return applied
 
 

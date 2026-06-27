@@ -107,11 +107,26 @@ def init() -> bool:
 def migrate() -> bool:
     """Voeg ontbrekende DEFAULTS-keys toe aan een bestaand settings-bestand zonder
     bestaande waarden te wijzigen. Bestaat het bestand niet, val terug op init().
-    Return True als er iets geschreven is. Idempotent."""
+    Return True als er iets geschreven is. Idempotent.
+
+    Corrupt bestand (niet-leeg, ongeldige JSON): weiger stil (return False, schrijf niets).
+    Zelfde principe als register-hooks: corrupt → weiger, niet overschrijven."""
     p = settings_path()
     if not p.exists():
         return init()
-    data = _load()
+    raw = p.read_text(encoding="utf-8")
+    if raw.strip():
+        try:
+            data = json.loads(raw)
+        except (ValueError, json.JSONDecodeError):
+            import sys as _sys
+            print(f"_settings: {p} is geen geldige JSON; migrate() weigert te overschrijven.",
+                  file=_sys.stderr)
+            return False
+        if not isinstance(data, dict):
+            data = {}
+    else:
+        data = {}
     missing = {k: v for k, v in DEFAULTS.items() if k not in data}
     if not missing:
         return False

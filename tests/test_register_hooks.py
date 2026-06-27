@@ -73,6 +73,34 @@ class RegisterHooksTest(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertEqual(self.settings.read_text(encoding="utf-8"), "{not json")
 
+    def test_selfheal_adds_missing_matcher_to_existing_matcherless_group(self):
+        # F2: bestaande PreToolUse-entry ZONDER matcher -> re-run met matcher= moet
+        # de matcher toevoegen (anders blijft kb-presearch op elk tool-call vuren).
+        s = {"hooks": {"PreToolUse": [
+            {"hooks": [{"type": "command",
+                        "command": 'py -3 "/oud/.claude/scripts/kb-presearch.py"'}]}
+        ]}}
+        changed = self.m.ensure_hook(
+            s, "PreToolUse", "/oud/.claude/scripts/kb-presearch.py",
+            matcher="WebSearch|WebFetch",
+        )
+        # pad is niet veranderd maar matcher is toegevoegd -> changed=True
+        self.assertTrue(changed, "ensure_hook must return True when matcher is added")
+        group = s["hooks"]["PreToolUse"][0]
+        self.assertEqual(group.get("matcher"), "WebSearch|WebFetch",
+                         "ensure_hook must add the missing matcher to the existing group")
+
+    def test_selfheal_preserves_python3_interpreter(self):
+        # F8: bestaande hook met python3 en STALE pad -> pad ververst, prefix blijft python3
+        s = {"hooks": {"SessionStart": [
+            {"hooks": [{"type": "command",
+                        "command": 'python3 "/oud/.claude/scripts/kb-retrieve.py"'}]}]}}
+        changed = self.m.ensure_hook(s, "SessionStart", "/nieuw/.claude/scripts/kb-retrieve.py")
+        self.assertTrue(changed)
+        cmd = s["hooks"]["SessionStart"][0]["hooks"][0]["command"]
+        self.assertEqual(cmd, 'python3 "/nieuw/.claude/scripts/kb-retrieve.py"',
+                         "python3 prefix must be preserved on self-heal, path must be updated")
+
 
 if __name__ == "__main__":
     unittest.main()

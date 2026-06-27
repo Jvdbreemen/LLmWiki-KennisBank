@@ -104,12 +104,18 @@ def ensure_hook(settings: dict, event: str, script_path: str, matcher=None) -> b
                 continue
             existing = h.get("command")
             if isinstance(existing, str) and basename in existing:
+                # Self-heal: update path (preserve interpreter prefix) AND matcher.
+                # Safe because each KennisBank hook lives in its own group (one hook per group).
+                changed = False
                 prefix = _existing_prefix(existing)
                 desired = f'{prefix}"{script_path}"' if prefix else build_command(script_path)
-                if desired == existing:
-                    return False
-                h["command"] = desired  # self-heal pad, behoud interpreter
-                return True
+                if desired != existing:
+                    h["command"] = desired  # self-heal pad, behoud interpreter
+                    changed = True
+                if matcher and group.get("matcher") != matcher:
+                    group["matcher"] = matcher  # self-heal ontbrekende/stale matcher
+                    changed = True
+                return changed
 
     group: dict
     if matcher:

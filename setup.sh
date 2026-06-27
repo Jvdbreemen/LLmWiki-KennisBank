@@ -132,8 +132,14 @@ chmod +x "$VAULT/.claude/scripts/"*.py "$VAULT/.claude/scripts/"*.sh
 copy_file kennisbank-embed.example.json "$VAULT/.claude/kennisbank-embed.json"
 
 # Python-afhankelijkheden (sqlite-vec voor kb-index)
-python3 -m pip install --quiet "sqlite-vec==0.1.9" 2>/dev/null \
-  || echo "  (let op: 'pip install sqlite-vec==0.1.9' handmatig nodig voor kb-index)"
+# F3: op Windows draait py -3 (de hooks-interpreter); gebruik diezelfde interpreter
+# voor pip zodat sqlite-vec in dezelfde omgeving terechtkomt.
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) PIP_PYTHON="py -3" ;;
+  *) PIP_PYTHON="python3" ;;
+esac
+$PIP_PYTHON -m pip install --quiet "sqlite-vec==0.1.9" 2>/dev/null \
+  || echo "  (let op: '$PIP_PYTHON -m pip install sqlite-vec==0.1.9' handmatig nodig voor kb-index)"
 
 # Settings-bootstrap: zorg dat kennisbank-settings.json bestaat. De toggles
 # bepalen welke achtergrond-automatiek draait (auto-archive, distill-notify,
@@ -258,6 +264,9 @@ else
   read REPLY
   if [ "$REPLY" = "y" ] || [ "$REPLY" = "Y" ]; then
     register_hooks
+  else
+    # F5: interactieve 'n' stelt NO_HOOKS=1 zodat ook de migratie --skip-hooks krijgt.
+    NO_HOOKS=1
   fi
 fi
 
