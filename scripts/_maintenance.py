@@ -85,3 +85,45 @@ def neighbor_counts(items: list, threshold: float) -> dict:
                 counts[items[i]["path"]] += 1
                 counts[items[j]["path"]] += 1
     return counts
+
+
+import json as _json
+
+SUPERSEDE_SYSTEM = (
+    "Je beoordeelt of een NIEUWERE memory een OUDERE TEGENSPREEKT of vervangt "
+    "(bv. 'Jim zoekt baan' -> 'Jim heeft baan'). Antwoord UITSLUITEND met JSON: "
+    "{\"supersede\": true|false, \"reason\": \"<kort>\"}. Bij twijfel: false."
+)
+
+
+def judge_supersede(new_text: str, old_text: str) -> bool:
+    import _llm
+    raw = _llm.generate(f"NIEUWER:\n{new_text}\n\nOUDER:\n{old_text}\n\nOordeel (JSON):",
+                        system=SUPERSEDE_SYSTEM)
+    if not raw:
+        return False
+    try:
+        s, e = raw.find("{"), raw.rfind("}")
+        obj = _json.loads(raw[s:e + 1]) if s >= 0 and e > s else {}
+    except Exception:
+        return False
+    return obj.get("supersede") is True
+
+
+def supersede_pass(threshold: float = 0.85, judge_fn=None, get_cached_fn=None) -> int:
+    import _memory
+    judge_fn = judge_fn or judge_supersede
+    items = current_items(get_cached_fn=get_cached_fn)
+    done = 0
+    superseded_paths = set()
+    for a, b, _sim in similar_pairs(items, threshold):
+        # bepaal nieuwer/ouder op created (string ISO sorteert correct)
+        newer, older = (a, b) if (a["created"] >= b["created"]) else (b, a)
+        if older["path"] in superseded_paths or newer["path"] in superseded_paths:
+            continue
+        if judge_fn(newer["body"], older["body"]):
+            if _memory.set_status(older["path"], "superseded",
+                                  superseded_by=[Path(newer["path"]).stem]):
+                superseded_paths.add(older["path"])
+                done += 1
+    return done
