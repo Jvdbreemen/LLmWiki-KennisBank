@@ -71,7 +71,12 @@ class LlmRouterTest(unittest.TestCase):
     def test_all_fail_returns_none(self):
         self._cfg({"providers": ["ollama", "openrouter"]})
         _llm._call = lambda *a, **k: None
-        self.assertIsNone(_llm.generate("hi"))
+        buf = io.StringIO()
+        with redirect_stderr(buf):
+            self.assertIsNone(_llm.generate("hi"))
+        # de cloud-waarschuwing moet OOK in het all-fail-pad vuren (privacy #4)
+        self.assertIn("openrouter", buf.getvalue())
+        self.assertIn("cloud", buf.getvalue().lower())
 
     def test_is_local_false_when_cloud_first(self):
         self._cfg({"providers": ["openrouter", "ollama"]})

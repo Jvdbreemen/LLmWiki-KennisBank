@@ -132,6 +132,7 @@ def generate(prompt: str, system: str = "", timeout: float = 120.0):
         if prov in CLOUD_PROVIDERS:
             sys.stderr.write(
                 f"⚠ LLM-router: provider '{prov}' is CLOUD — content verlaat je machine.\n")
+            sys.stderr.flush()  # nooit gebufferd achter de _call-output (privacy #4)
         out = _call(prov, model_for(prov), _endpoint(prov), api_key_env,
                     prompt, system, timeout)
         if out:
