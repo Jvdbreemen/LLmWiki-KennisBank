@@ -178,6 +178,29 @@ class SettingsMigrateTest(unittest.TestCase):
         self.assertTrue(self.s.migrate())
         self.assertTrue((self.vault / "kennisbank-settings.json").exists())
 
+    def test_migrate_refuses_corrupt_file_and_leaves_bytes_unchanged(self):
+        # F1: corrupt (non-empty) settings.json -> migrate() must return False and NOT
+        # overwrite the file. Bytes must be identical after the call.
+        p = self.vault / "kennisbank-settings.json"
+        corrupt = b"{ this is not json"
+        p.write_bytes(corrupt)
+        result = self.s.migrate()
+        self.assertFalse(result, "migrate() should return False on a corrupt file")
+        self.assertEqual(p.read_bytes(), corrupt,
+                         "migrate() must leave a corrupt file completely untouched")
+
+    def test_migrate_preserves_non_default_values_end_to_end(self):
+        # F7: existing user with non-default toggle -> migrate() must preserve value
+        p = self.vault / "kennisbank-settings.json"
+        p.write_text(json.dumps({"auto_archive": True}), encoding="utf-8")
+        self.s.migrate()
+        data = json.loads(p.read_text(encoding="utf-8"))
+        self.assertTrue(data["auto_archive"], "non-default auto_archive must survive migrate()")
+        self.assertIn("memory_capture", data, "memory_capture must be added by migrate()")
+        self.assertIn("memory_recall", data, "memory_recall must be added by migrate()")
+        self.assertEqual(data["memory_capture"], True,
+                         "memory_capture default (True) must be added correctly")
+
 
 if __name__ == "__main__":
     unittest.main()
