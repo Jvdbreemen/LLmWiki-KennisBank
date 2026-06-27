@@ -335,6 +335,18 @@ class SetupDeployTest(unittest.TestCase):
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
+    def test_doctor_reports_memory_hooks_and_version(self):
+        tmp, vault = self.run_setup()
+        try:
+            result = self.run_doctor_in(tmp, vault)
+            out = result.stdout
+            self.assertRegex(out, r"\[PASS\].*build-kb-index\.py.*registered")
+            self.assertRegex(out, r"\[PASS\].*kb-presearch\.py.*registered")
+            self.assertRegex(out, r"kennisbank-versie.*0\.9\.0")
+            self.assertEqual(result.returncode, 0, f"doctor exited {result.returncode}:\n{out}")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
     def test_rerun_preserves_user_data_and_refreshes_tooling(self):
         tmp, vault = self.run_setup()
         try:
