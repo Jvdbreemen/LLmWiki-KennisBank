@@ -131,6 +131,9 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = 6,
         "errors": 0,
         "embed_failed": 0,
         "model_unreachable": False,
+        "superseded": 0,
+        "rechecked_retracted": 0,
+        "promote_marked": 0,
     }
 
     # Gate: als memory_capture uit staat, vroeg terugkeren (maar heartbeat wel schrijven).
@@ -201,6 +204,27 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = 6,
             s["errors"] += 1
 
     s["expired"] = _expire_pass()
+
+    # Cross-memory onderhoud (v2): supersede, 2e-lijn-hercontrole, cluster-promotie.
+    try:
+        import _maintenance as _mnt
+        try:
+            s["superseded"] = _mnt.supersede_pass()
+        except Exception:
+            s["superseded"] = 0
+        try:
+            s["rechecked_retracted"] = _mnt.recheck_pass()
+        except Exception:
+            s["rechecked_retracted"] = 0
+        try:
+            s["promote_marked"] = _mnt.cluster_promote_pass()
+        except Exception:
+            s["promote_marked"] = 0
+    except Exception:
+        s["superseded"] = s.get("superseded", 0)
+        s["rechecked_retracted"] = s.get("rechecked_retracted", 0)
+        s["promote_marked"] = s.get("promote_marked", 0)
+
     _write_heartbeat(s)
     return s
 

@@ -215,6 +215,12 @@ class MemorySweepTest(unittest.TestCase):
         self.assertEqual(s_all["processed"], 12,
                          f"ignore_watermark=True moet alle 12 verwerken, got {s_all['processed']}")
 
+    def test_sweep_runs_maintenance(self):
+        # na een normale sweep moet de summary de onderhouds-tellers bevatten
+        s = self.m.run_sweep()
+        for key in ("superseded", "rechecked_retracted", "promote_marked"):
+            self.assertIn(key, s)
+
     def test_embed_down_marks_nothing(self):
         """Embed-follow-up: embed-backend down (chat up) → transcript NIET gemarkeerd.
 
