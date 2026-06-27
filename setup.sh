@@ -97,6 +97,13 @@ copy_file() {
   echo "  gekopieerd: $dst"
 }
 
+# copy_force SRC DST -- altijd (over)kopieren. Voor TOOLING (scripts/commands/
+# skills): geen user-data, dus altijd de repo-versie. User-data blijft copy_file.
+copy_force() {
+  cp "$1" "$2"
+  echo "  ververst: $2"
+}
+
 VAULT="${KENNISBANK_VAULT:-$HOME/KennisBank}"
 RESEARCH="$HOME/Claude/research"
 CLAUDE_COMMANDS="$HOME/.claude/commands"
@@ -116,7 +123,7 @@ mkdir -p "$RESEARCH"
 
 # Scripts (Python helpers + shell tools like doctor.sh)
 for f in scripts/*.py scripts/*.sh; do
-  copy_file "$f" "$VAULT/.claude/scripts/$(basename "$f")"
+  copy_force "$f" "$VAULT/.claude/scripts/$(basename "$f")"
 done
 chmod +x "$VAULT/.claude/scripts/"*.py "$VAULT/.claude/scripts/"*.sh
 
@@ -182,13 +189,13 @@ if [ "$NO_COMMANDS" = "1" ]; then
 elif [ "$ASSUME_YES" = "1" ]; then
   mkdir -p "$CLAUDE_COMMANDS"
   for f in commands/*.md; do
-    copy_file "$f" "$CLAUDE_COMMANDS/$(basename "$f")"
+    copy_force "$f" "$CLAUDE_COMMANDS/$(basename "$f")"
   done
   # Genamespacede commands (bv. commands/kennisbank/settings.md -> /kennisbank:settings)
   for f in commands/*/*.md; do
     rel="${f#commands/}"
     mkdir -p "$CLAUDE_COMMANDS/$(dirname "$rel")"
-    copy_file "$f" "$CLAUDE_COMMANDS/$rel"
+    copy_force "$f" "$CLAUDE_COMMANDS/$rel"
   done
 else
   printf "Commands kopiëren naar %s/? (y/n) " "$CLAUDE_COMMANDS"
@@ -196,12 +203,12 @@ else
   if [ "$REPLY" = "y" ] || [ "$REPLY" = "Y" ]; then
     mkdir -p "$CLAUDE_COMMANDS"
     for f in commands/*.md; do
-      copy_file "$f" "$CLAUDE_COMMANDS/$(basename "$f")"
+      copy_force "$f" "$CLAUDE_COMMANDS/$(basename "$f")"
     done
     for f in commands/*/*.md; do
       rel="${f#commands/}"
       mkdir -p "$CLAUDE_COMMANDS/$(dirname "$rel")"
-      copy_file "$f" "$CLAUDE_COMMANDS/$rel"
+      copy_force "$f" "$CLAUDE_COMMANDS/$rel"
     done
   fi
 fi
@@ -212,7 +219,7 @@ elif [ "$ASSUME_YES" = "1" ]; then
   for sdir in skills/*/; do
     sname="$(basename "$sdir")"
     mkdir -p "$CLAUDE_SKILLS/$sname"
-    copy_file "${sdir}SKILL.md" "$CLAUDE_SKILLS/$sname/SKILL.md"
+    copy_force "${sdir}SKILL.md" "$CLAUDE_SKILLS/$sname/SKILL.md"
   done
 else
   printf "Skills kopiëren naar %s/? (y/n) " "$CLAUDE_SKILLS"
@@ -221,7 +228,7 @@ else
     for sdir in skills/*/; do
       sname="$(basename "$sdir")"
       mkdir -p "$CLAUDE_SKILLS/$sname"
-      copy_file "${sdir}SKILL.md" "$CLAUDE_SKILLS/$sname/SKILL.md"
+      copy_force "${sdir}SKILL.md" "$CLAUDE_SKILLS/$sname/SKILL.md"
     done
   fi
 fi
@@ -233,14 +240,12 @@ fi
 # a cold cache and /uitdaag, /brug and /wiki self-rewrite silently find nothing.
 register_hooks() {
   if ! command -v python3 >/dev/null 2>&1; then
-    echo "  WAARSCHUWING: python3 niet gevonden; hooks niet geregistreerd."
+    echo "  WAARSCHUWING: python3 niet gevonden; hooks/migraties niet uitgevoerd."
     echo "  Registreer later handmatig (zie CONFIGURATION.md, sectie 4)."
     return 0
   fi
   mkdir -p "$HOME/.claude"
-  python3 "$VAULT/.claude/scripts/register-hooks.py" "$CLAUDE_SETTINGS" \
-    SessionStart "$VAULT/.claude/scripts/build-embed-index.py" \
-    UserPromptSubmit "$VAULT/.claude/scripts/kb-retrieve.py" \
+  python3 "$VAULT/.claude/scripts/register-hooks.py" "$CLAUDE_SETTINGS" --manifest "$VAULT" \
     || echo "  hooks niet geregistreerd (zie melding hierboven); registreer handmatig (CONFIGURATION.md)." >&2
 }
 
@@ -254,6 +259,15 @@ else
   if [ "$REPLY" = "y" ] || [ "$REPLY" = "Y" ]; then
     register_hooks
   fi
+fi
+
+# Migraties: breng de vault version-gated naar de huidige staat (dirs, hooks,
+# toggles) en stempel de versie. Idempotent; fail-soft (breekt setup niet).
+if command -v python3 >/dev/null 2>&1; then
+  SKIP_HOOKS_ARG=""
+  [ "$NO_HOOKS" = "1" ] && SKIP_HOOKS_ARG="--skip-hooks"
+  python3 "$VAULT/.claude/scripts/_migrations.py" run "$VAULT" "$CLAUDE_SETTINGS" $SKIP_HOOKS_ARG \
+    || echo "  migraties niet (volledig) uitgevoerd; her-run 'bash setup.sh'." >&2
 fi
 
 echo ""

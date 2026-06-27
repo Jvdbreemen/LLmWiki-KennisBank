@@ -311,6 +311,43 @@ class SetupDeployTest(unittest.TestCase):
         self.assertIn("09-memory", text)
         self.assertIn("09-memory/archive", text)
 
+    def test_full_memory_hookset_registered(self):
+        tmp, vault = self.run_setup()
+        try:
+            settings = json.loads((tmp / ".claude" / "settings.json").read_text(encoding="utf-8"))
+            session = " ".join(_hook_commands(settings, "SessionStart"))
+            for need in ("build-embed-index.py", "build-kb-index.py", "sweep-launch.py",
+                         "memory-notify.py"):
+                self.assertIn(need, session, f"{need} niet op SessionStart")
+            pre = settings.get("hooks", {}).get("PreToolUse", [])
+            self.assertTrue(pre, "geen PreToolUse-hook")
+            self.assertEqual(pre[0].get("matcher"), "WebSearch|WebFetch")
+            self.assertIn("kb-presearch.py", _hook_commands(settings, "PreToolUse")[0])
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_version_stamp_written(self):
+        tmp, vault = self.run_setup()
+        try:
+            stamp = vault / ".claude" / ".kennisbank-version"
+            self.assertTrue(stamp.is_file())
+            self.assertEqual(stamp.read_text(encoding="utf-8").strip(), "0.9.0")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_rerun_preserves_user_data_and_refreshes_tooling(self):
+        tmp, vault = self.run_setup()
+        try:
+            # user-data wijzigen + een tooling-script bewust 'verouderen'
+            (vault / "CLAUDE.md").write_text("MIJN EIGEN CLAUDE\n", encoding="utf-8")
+            stale = vault / ".claude" / "scripts" / "kb-recall.py"
+            stale.write_text("# STALE\n", encoding="utf-8")
+            self.run_setup_in(tmp)  # tweede run tegen dezelfde HOME
+            self.assertEqual((vault / "CLAUDE.md").read_text(encoding="utf-8"), "MIJN EIGEN CLAUDE\n")
+            self.assertNotEqual(stale.read_text(encoding="utf-8"), "# STALE\n")  # ververst
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
 
 if __name__ == "__main__":
     unittest.main()
