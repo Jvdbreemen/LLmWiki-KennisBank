@@ -29,26 +29,43 @@ def _lock_path() -> Path:
 
 
 def is_stale(lock: Path) -> bool:
+    """True als de lock ouder is dan STALE_SEC of een toekomstige mtime heeft (clock skew)."""
     try:
-        return (time.time() - lock.stat().st_mtime) > STALE_SEC
+        age = time.time() - lock.stat().st_mtime
+        return age > STALE_SEC or age < 0
     except OSError:
         return True
 
 
 def acquire_lock() -> bool:
+    """Probeer de lock atomair te verkrijgen (O_EXCL-first).
+
+    1. Probeer O_CREAT|O_EXCL direct — slaagt als de lock nog niet bestaat.
+    2. Bij FileExistsError: controleer of de lock stale is.
+       - Niet stale → een actieve sweep draait; return False.
+       - Stale → unlink + één retry van de O_EXCL-create (reclaim).
+    Concurrent sweeps zijn onschadelijk: de watermark (nu outage-veilig) +
+    dedup voorkomen dubbele writes.
+    """
     lock = _lock_path()
     lock.parent.mkdir(parents=True, exist_ok=True)
-    if lock.exists() and not is_stale(lock):
-        return False
     try:
-        if lock.exists():
-            lock.unlink()  # verweesde lock opruimen
         fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         os.write(fd, str(os.getpid()).encode())
         os.close(fd)
         return True
     except FileExistsError:
-        return False
+        if not is_stale(lock):
+            return False
+        # Stale lock: opruimen en één keer opnieuw proberen.
+        try:
+            lock.unlink()
+            fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.write(fd, str(os.getpid()).encode())
+            os.close(fd)
+            return True
+        except (FileExistsError, OSError):
+            return False
     except OSError:
         return False
 

@@ -31,6 +31,26 @@ class SweepUtilTest(unittest.TestCase):
     def test_is_duplicate_empty_existing(self):
         self.assertFalse(su.is_duplicate([1.0, 0.0], [], threshold=0.9))
 
+    def test_is_duplicate_default_threshold_above(self):
+        """COVERAGE: paar net boven de productie-standaard 0.92 → duplicate."""
+        import math
+        # cos([1,0], [cos(θ), sin(θ)]) = cos(θ). Kies θ = arccos(0.93) → sim=0.93 > 0.92.
+        theta = math.acos(0.93)
+        v = [1.0, 0.0]
+        w = [math.cos(theta), math.sin(theta)]
+        self.assertTrue(su.is_duplicate(v, [w]),
+                        "cosine 0.93 should be a duplicate at default threshold 0.92")
+
+    def test_is_duplicate_default_threshold_below(self):
+        """COVERAGE: paar net onder de productie-standaard 0.92 → geen duplicate."""
+        import math
+        # cos([1,0], [cos(θ), sin(θ)]) = cos(θ). Kies θ = arccos(0.91) → sim=0.91 < 0.92.
+        theta = math.acos(0.91)
+        v = [1.0, 0.0]
+        w = [math.cos(theta), math.sin(theta)]
+        self.assertFalse(su.is_duplicate(v, [w]),
+                         "cosine 0.91 should NOT be a duplicate at default threshold 0.92")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -59,6 +59,30 @@ class SweepLaunchTest(unittest.TestCase):
         self.assertIn("build-kb-index.py", spawned)
         self.assertLess(spawned.index("memory-sweep.py"), spawned.index("build-kb-index.py"))
 
+    def test_stale_lock_is_reclaimed(self):
+        """IMPORTANT 2: een stale lock (backdated mtime) moet door acquire_lock worden hergebruikt."""
+        import time
+        # Verwerf de lock normaal
+        self.assertTrue(self.m.acquire_lock())
+        lock_path = self.m._lock_path()
+        self.assertTrue(lock_path.exists())
+        # Zet de mtime terug in het verleden, voorbij STALE_SEC
+        old = time.time() - self.m.STALE_SEC - 10
+        os.utime(str(lock_path), (old, old))
+        # Tweede acquire moet slagen (stale reclaim)
+        self.assertTrue(self.m.acquire_lock(), "stale lock should be reclaimed")
+
+    def test_future_mtime_treated_as_stale(self):
+        """BUG 5a: een lock met toekomstige mtime (clock skew) moet als stale worden gezien."""
+        import time
+        lock_path = self.m._lock_path()
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path.write_text("pid", encoding="utf-8")
+        # Zet de mtime in de toekomst (clock skew simulatie)
+        future = time.time() + 7200
+        os.utime(str(lock_path), (future, future))
+        self.assertTrue(self.m.is_stale(lock_path), "future mtime should be treated as stale")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -65,6 +65,25 @@ class SweepStateTest(unittest.TestCase):
         bad.write_text("{ kapot json", encoding="utf-8")
         self.assertEqual(ss.transcript_text(bad), "")
 
+    def test_block_text_none_content(self):
+        """COVERAGE: _block_text(None) → lege string."""
+        self.assertEqual(ss._block_text(None), "")
+
+    def test_block_text_mixed_list_only_text_extracted(self):
+        """COVERAGE: gemengde content-lijst → alleen text-blokken worden geëxtraheerd."""
+        content = [
+            {"type": "tool_use", "id": "some-tool-id"},
+            {"type": "text", "text": "hello"},
+            {"type": "image", "source": {"type": "base64", "data": "..."}},
+            {"type": "text", "text": "world"},
+        ]
+        result = ss._block_text(content)
+        self.assertIn("hello", result)
+        self.assertIn("world", result)
+        # Niet-tekst-blokken mogen NIET in de output belanden
+        self.assertNotIn("tool_use", result)
+        self.assertNotIn("base64", result)
+
 
 if __name__ == "__main__":
     unittest.main()
