@@ -138,6 +138,21 @@ class KbRecallTest(unittest.TestCase):
         hits = self.kb.memory_hits([0.1, 0.2, 0.3, 0.4], query_text="bug", k=5)
         self.assertTrue(all(Path(h["path"]).name == "m1.md" for h in hits))
 
+    def test_has_fts_match_finds_keyword(self):
+        # 'artikel' staat in de wiki-body -> FTS-match in de wiki-laag
+        self.assertTrue(self.kb.has_fts_match("artikel", layer="wiki"))
+
+    def test_has_fts_match_no_keyword(self):
+        self.assertFalse(self.kb.has_fts_match("zwaluwparadox", layer="wiki"))
+
+    def test_has_fts_match_failsoft_bad_query(self):
+        # FTS5-syntax-tekens mogen niet crashen -> False
+        self.assertFalse(self.kb.has_fts_match('"("', layer="wiki"))
+
+    def test_wiki_hits_only_wiki(self):
+        hits = self.kb.wiki_hits([0.9, 0.8, 0.7, 0.6], query_text="wiki", k=5)
+        self.assertTrue(all(h["layer"] == "wiki" for h in hits))
+
 
 if __name__ == "__main__":
     unittest.main()
