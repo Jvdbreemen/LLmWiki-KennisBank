@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Idempotent-veilige setup/upgrade (`setup.sh`, `scripts/_migrations.py`).** `setup.sh` is nu veilig om opnieuw uit te voeren voor zowel nieuwe als bestaande vaults: het ververst de tooling (scripts, templates, commands) zonder user-data te overschrijven of aanpassingen te verliezen. Idempotent via version-stamp `<vault>/.claude/.kennisbank-version` (v0.9.0).
+- **Volledige hookset-registratie via `register-hooks.py --manifest` (`scripts/register-hooks.py`).** Registreert niet langer slechts twee retrieval-hooks, maar de volledige set: SessionStart (build-embed-index, distill-notify, build-kb-index, sweep-launch), SessionEnd (archive-transcript), UserPromptSubmit (kb-retrieve), en PreToolUse matcher WebSearch|WebFetch (kb-presearch). Alle hooks samen in één atomaire operatie.
+- **Interpreter-aware hook-registratie (`scripts/register-hooks.py`).** Detecteert het platform en gebruikt `py -3` op Windows, `python3` elders; een self-heal op stale paden behoudt de originele interpreter zodat opnieuw registreren het platform niet verwisselt.
+- **`scripts/_migrations.py` version-stamp + runner.** Beheert `<vault>/.claude/.kennisbank-version`, voert datgene migrations uit (momenteel: toggle-defaults + old-version cleanup), en houdt de vault actueel over releases. Fail-soft per migratie; alles draait bij setup en upgrade.
+- **Settings-migrate (`scripts/_settings.py.migrate()`).** Aanvullende helper voor het stellen van ontbrekende toggle-defaults in `kennisbank-settings.json`, inclusief backward-compatibility voor oude installs.
 - **Hybrid wiki-recall in UserPromptSubmit-hook (`scripts/kb-recall.py`, `scripts/kb-retrieve.py`).** Dual-gate cosine|FTS5 + cosine-fallback — exacte termen vinden nu ook wiki-artikelen. Eval-helper `scripts/eval-wiki-recall.py` demonstreert before/after via `has_fts_match` + `wiki_hits`.
 - **Cross-memory onderhoud v2 (`scripts/memory-sweep.py` + `scripts/_maintenance.py`).** De sweep draait na elke capture-loop drie onderhoudspassen: supersede (nieuwer spreekt ouder tegen → status superseded + link), 2e-lijn-hercontrole (her-judge current → retract bij non-current), en cluster-promotie (markeer `promote_candidate: true` voor /wiki bij ≥2 verwante buren). Gegate op `memory_capture`, fail-soft per pass; samenvatting in de heartbeat (`superseded`, `rechecked_retracted`, `promote_marked`).
 - **Presearch hook (`scripts/kb-presearch.py`, PreToolUse).** Injecteert geheugen+wiki voor WebSearch/WebFetch vóór externe zoekactie (matcher `WebSearch|WebFetch`), niet-blokkerend, gegate op `memory_recall`.
@@ -26,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Hooks gaten zichzelf op hun toggle.** `archive-transcript.py` (auto_archive), `distill-notify.py`-meldpad (distill_notify) en `build-embed-index.py` (embed_index) eindigen fail-open als hun toggle uit staat. De daily-graphify-batch in `sessielog`/`wiki`/`destilleer` respecteert `daily_graphify`.
 - **`setup.sh` deployt nu ook genamespacede commands** (`commands/*/*.md`) met behoud van de subdir-structuur.
+- **`setup.sh` en `register-hooks.py` volledig geïntegreerd voor idempotent upgraden.** Setup.sh voert `_migrations.py` uit na registratie van hooks, dus existing installs krijgen toggle-defaults en version-stamp in één stap. Oude upgrades hoeven alleen `bash setup.sh` opnieuw te draaien.
 
 ### Behaviour change
 - **`auto_archive` is default UIT.** Bestaande installaties stoppen na deze update met automatisch archiveren tot `auto_archive` expliciet aan wordt gezet. De `kennisbank-upgrade`-skill vraagt dit actief uit. Reden: opt-in, conform de wens "kan inschakelen".
