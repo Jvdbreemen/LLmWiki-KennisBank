@@ -32,6 +32,8 @@ class KbPresearchTest(unittest.TestCase):
         os.environ["KENNISBANK_VAULT"] = str(self.vault)
         sys.path.insert(0, str(SCRIPTS_DIR))
         self.m = _load()
+        if getattr(self.m, "kb_recall", None) is None:
+            self.skipTest("kb_recall niet beschikbaar (sqlite_vec ontbreekt?)")
         import _embeddings as emb
         self._orig_embed = emb.embed
         emb.embed = lambda text, timeout=30.0: [0.1, 0.2, 0.3]
@@ -84,6 +86,19 @@ class KbPresearchTest(unittest.TestCase):
 
     def test_garbage_input_failopen(self):
         self.assertEqual(self._run({}).strip(), "")  # geen tool_name -> stil
+
+    def test_bad_json_failopen(self):
+        import io
+        from contextlib import redirect_stdout
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            self.m.main(stdin_text="not-json{{")
+        self.assertEqual(buf.getvalue().strip(), "")
+
+    def test_embed_exception_failopen(self):
+        self.emb.embed = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("ollama down"))
+        out = self._run({"tool_name": "WebSearch", "tool_input": {"query": "iets relevants"}})
+        self.assertEqual(out.strip(), "")
 
 
 if __name__ == "__main__":

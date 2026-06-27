@@ -22,6 +22,8 @@ import os
 import sys
 from pathlib import Path
 
+os.environ.setdefault("KENNISBANK_VAULT", str(Path(__file__).resolve().parents[2]))
+
 _SEARCH_TOOLS = {"WebSearch", "WebFetch"}
 
 # ---------------------------------------------------------------------------
