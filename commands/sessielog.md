@@ -45,6 +45,14 @@ python3 $VAULT/.claude/scripts/build-karpathy-index.py
 ```
 Dit voegt de nieuwe sessie toe aan `$VAULT/02-wiki/log.md` (het chronologische index-bestand in `## [YYYY-MM-DD] OPERATION | Title` formaat).
 
+### Memory-sweep (optioneel, on-demand)
+
+De autonome capture-sweep (`sweep-launch.py`) draait normaal automatisch bij SessionStart. Wil je de sweep op-demand draaien (bijvoorbeeld na een lange sessie met veel nieuwe transcripts), dan kan dat direct:
+```bash
+python3 "$VAULT/.claude/scripts/memory-sweep.py"
+```
+Dit verwerkt pending transcripts naar `09-memory/` (extract -> dedup -> judge -> schrijf). Gegate op `memory_capture`; exit 0 fail-open.
+
 ---
 
 ## Stap 2: Wiki-kandidaten verwerken

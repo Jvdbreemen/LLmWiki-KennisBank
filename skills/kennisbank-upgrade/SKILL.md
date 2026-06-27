@@ -90,7 +90,7 @@ Existing installs may not have a `kennisbank-settings.json` yet. Read each
 canonical toggle's current value:
 
 ```bash
-for key in auto_archive distill_notify embed_index daily_graphify; do
+for key in auto_archive distill_notify embed_index daily_graphify memory_capture memory_recall; do
   echo "$key=$(python3 "$VAULT/.claude/scripts/_settings.py" get "$key")"
 done
 ```
@@ -103,6 +103,8 @@ enable it, suggesting the default:
 - distill_notify (default ON) - notify at start that transcripts are pending
 - embed_index (default ON) - refresh the wiki embedding cache at start
 - daily_graphify (default ON) - update the graph automatically once a day
+- memory_capture (default ON) - extract and judge memories into 09-memory/ with maintenance
+- memory_recall (default ON) - inject memories into context via hook and local MCP
 
 Write each choice with `python3 "$VAULT/.claude/scripts/_settings.py" set <key> <true|false>`.
 Do NOT re-ask keys that are already set. Mention afterwards that the user can
@@ -110,6 +112,23 @@ change this later with `/kennisbank:settings`.
 
 BEHAVIOUR CHANGE: after this upgrade the hook only archives when `auto_archive`
 is ON. Ask for it explicitly, otherwise the transcript archive stops silently.
+
+## Geheugen-backfill (eenmalig, bij upgrade naar de geheugen-versie)
+
+Als `memory_capture` aan staat en er al transcripts in `01-raw/transcripts/`
+staan, bied aan de bestaande backlog te her-extraheren tot geheugen:
+
+> "Er staan N gearchiveerde transcripts. Wil je die nu eenmalig tot geheugen
+> verwerken (`/kennisbank:rebuild-memory`)? Dit is zwaar LLM-werk maar idempotent."
+
+Pas na bevestiging:
+
+```bash
+python3 "$VAULT/.claude/scripts/memory-sweep.py" --all
+```
+
+Idempotent via dedup; herhaald draaien maakt geen dubbele memories. Sla over als
+de gebruiker nee zegt of als Ollama/het LLM niet draait.
 
 ## Dry-run
 If invoked with `--dry-run`, perform steps 1-6 and print the planned copies and

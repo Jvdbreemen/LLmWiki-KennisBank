@@ -107,7 +107,7 @@ echo "LLmWiki-KennisBank setup"
 echo "========================"
 
 # Vault directories
-mkdir -p "$VAULT"/{00-inbox,01-raw/sessies,01-raw/transcripts,02-wiki,03-projecten,04-templates,05-bronnen,06-claude,07-media,08-archive}
+mkdir -p "$VAULT"/{00-inbox,01-raw/sessies,01-raw/transcripts,02-wiki,03-projecten,04-templates,05-bronnen,06-claude,07-media,08-archive,09-memory,09-memory/archive}
 mkdir -p "$VAULT/.claude/scripts"
 mkdir -p "$VAULT/graphify-out"
 
@@ -123,6 +123,10 @@ chmod +x "$VAULT/.claude/scripts/"*.py "$VAULT/.claude/scripts/"*.sh
 # Embedding backend config (example -> live). copy_file skips if it already
 # exists (unless --force), so a user's edited backend config is never clobbered.
 copy_file kennisbank-embed.example.json "$VAULT/.claude/kennisbank-embed.json"
+
+# Python-afhankelijkheden (sqlite-vec voor kb-index)
+python3 -m pip install --quiet "sqlite-vec==0.1.9" 2>/dev/null \
+  || echo "  (let op: 'pip install sqlite-vec==0.1.9' handmatig nodig voor kb-index)"
 
 # Settings-bootstrap: zorg dat kennisbank-settings.json bestaat. De toggles
 # bepalen welke achtergrond-automatiek draait (auto-archive, distill-notify,

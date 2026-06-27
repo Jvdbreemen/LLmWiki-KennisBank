@@ -2,5 +2,7 @@
   "auto_archive": false,
   "distill_notify": true,
   "embed_index": true,
-  "daily_graphify": true
+  "daily_graphify": true,
+  "memory_capture": true,
+  "memory_recall": true
 }

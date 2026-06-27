@@ -15,6 +15,8 @@ This documents the directory layout of `~/KennisBank/` after running `setup.sh`.
   06-claude/
   07-media/
   08-archive/
+  09-memory/
+    archive/
   .claude/
     scripts/
   graphify-out/
@@ -78,8 +80,20 @@ Descriptions and metadata for media files. Images themselves are not stored here
 ### `08-archive/`
 Articles removed from active wiki. Kept for historical reference.
 
+### `09-memory/`
+Ruwe agent-geheugenlaag. Atomaire memories (`YYYY-MM-DD-slug.md`) met
+truth-maintenance-frontmatter (`status`, `evidence_basis`, `superseded_by`).
+Gevuld door het geheugen-subsysteem (toggle `memory_capture`); niet handmatig
+gecureerd. Maand-archief van oude, niet-gepromote memories in `09-memory/archive/`.
+Gepromote kennis verhuist via `/wiki` naar `02-wiki/`.
+
 ### `.claude/scripts/`
 Python utility scripts. Installed by `setup.sh`. Do not move; commands reference these paths directly.
+
+#### Derived files in `.claude/`:
+- `kb-index.db` — SQLite index of extracted memories, built by `build-kb-index.py` (SessionStart).
+- `memory-sweep-status.json` — Heartbeat file written by `memory-sweep.py` after each run, tracks pending/errors/model-reachability.
+- `.sweep.lock` — Single-flight lockfile used by `sweep-launch.py` to prevent concurrent sweep runs.
 
 ### `graphify-out/`
 Output directory for the graphify skill. `graph.json` is written here when graphify runs over the vault. `auto-crosslink.py` reads it.
