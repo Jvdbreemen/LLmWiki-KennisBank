@@ -4,6 +4,7 @@ title: Agent-geheugen — Wiki-recall migreren naar hybride kb-index (eval-gated
 status: To Do
 assignee: []
 created_date: '2026-06-27 12:39'
+updated_date: '2026-06-27 13:19'
 labels:
   - agent-geheugen
 milestone: Agent-geheugen
