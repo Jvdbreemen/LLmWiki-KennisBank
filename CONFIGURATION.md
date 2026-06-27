@@ -176,6 +176,10 @@ override the config file; both override the built-in defaults.
 
 - **Effect**: warms/refreshes the wiki embedding cache once per session, off the per-prompt path, and warms the local model. Incremental (only changed files or a model switch trigger real embed calls); prunes vanished files; clears the graphify `.needs-rebuild` flag. Registered as a global `SessionStart` hook.
 
+### Geheugen-index (`scripts/build-kb-index.py`, SessionStart)
+
+- **Effect**: bouwt/verfrist `kb-index.db` (de hybride sqlite-vec + FTS5 zoekindex over wiki + memory) eenmaal per sessie, buiten het per-prompt-pad. Incrementeel: alleen gewijzigde bestanden of een model-switch triggert echte embed-aanroepen; verwijderde bestanden worden gepruned. Hergebruikt de JSON embed-cache (`emb.get_cached`) zodat vectoren niet opnieuw berekend worden. Registered as a global `SessionStart` hook naast `build-embed-index.py`. Gegate op `embed_index` (wiki-laag) en `memory_capture` (memory-laag).
+
 ### Transcript-archief (`scripts/archive-transcript.py`, SessionEnd)
 
 - **Effect:** kopieert het transcript van elke beëindigde sessie naar
@@ -198,9 +202,9 @@ daarna onderstaande entries TOE aan de bestaande `hooks`-arrays in je
 
 > LET OP: dit is GEEN volledige settings.json. Plak het niet als geheel; dat
 > wist je bestaande hooks, env (incl. `KENNISBANK_VAULT`) en permissions. Voeg
-> alleen deze twee entries toe aan de respectieve arrays. De `SessionStart`-array
+> alleen deze entries toe aan de respectieve arrays. De `SessionStart`-array
 > bevat al `build-embed-index.py` (en evt. caveman) -- zet `distill-notify.py`
-> erNAAST, niet eroverheen.
+> en `build-kb-index.py` erNAAST, niet eroverheen.
 
 ```jsonc
 // toe te voegen ENTRIES (geen complete settings.json):
@@ -209,10 +213,13 @@ daarna onderstaande entries TOE aan de bestaande `hooks`-arrays in je
     { "type": "command", "command": "py -3 \"<VAULT>/.claude/scripts/archive-transcript.py\"" }
   ]}
 ],
-// onder de BESTAANDE SessionStart-array een extra hook-blok:
+// onder de BESTAANDE SessionStart-array twee extra hook-blokken:
 "SessionStart": [
   { "matcher": "", "hooks": [
     { "type": "command", "command": "py -3 \"<VAULT>/.claude/scripts/distill-notify.py\"" }
+  ]},
+  { "matcher": "", "hooks": [
+    { "type": "command", "command": "py -3 \"<VAULT>/.claude/scripts/build-kb-index.py\"" }
   ]}
 ]
 ```
