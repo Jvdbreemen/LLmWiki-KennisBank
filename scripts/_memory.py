@@ -39,8 +39,19 @@ def memory_path(title: str, created: str | None = None) -> Path:
     return memory_dir() / f"{date}-{slugify(title)}.md"
 
 
+def _yaml_scalar(s) -> str:
+    """Veilige double-quoted scalar voor de minimale frontmatter-parser.
+    Sanitize i.p.v. escape (de parser kent geen escapes): embedded quotes ->
+    enkele quote, newlines -> spatie."""
+    s = str(s).replace('"', "'").replace("\n", " ").replace("\r", " ").strip()
+    return f'"{s}"'
+
+
 def _yaml_list(items) -> str:
-    return "[" + ", ".join(items) + "]"
+    if isinstance(items, str):
+        items = [items]
+    safe = [str(i).replace("\n", " ").strip() for i in (items or [])]
+    return "[" + ", ".join(safe) + "]"
 
 
 def render(title: str, body: str, *, status: str = DEFAULT_STATUS,
@@ -54,11 +65,11 @@ def render(title: str, body: str, *, status: str = DEFAULT_STATUS,
     created = created or _today_iso()
     updated = updated or created
     lines = ["---",
-             f'title: "{title}"',
+             f"title: {_yaml_scalar(title)}",
              "type: memory",
              f"status: {status}",
              f"evidence_basis: {evidence_basis}",
-             f'source_session: "{source_session}"',
+             f"source_session: {_yaml_scalar(source_session)}",
              f"created: {created}",
              f"updated: {updated}"]
     if expires:
