@@ -36,10 +36,17 @@ class MemorySweepTest(unittest.TestCase):
             json.dumps({"type": "user", "message": {"role": "user", "content": "Bug X opgelost"}}),
             encoding="utf-8")
         self.m = _load()
-        import _extract, _judge
+        import _extract, _judge, _llm
         import _embeddings as emb
-        # Save originals (4: extract, judge, embed, get_cached)
+        import _sweepstate as _ss
+        # Save originals (4: extract, judge, embed, get_cached + llm.generate + transcript_text)
         self._orig = (_extract.extract_candidates, _judge.judge, emb.embed, emb.get_cached)
+        self._orig_generate = _llm.generate
+        self._orig_transcript_text = _ss.transcript_text
+        self._llm = _llm
+        self._ss = _ss
+        # Mock _llm.generate so the model-probe in run_sweep succeeds without Ollama.
+        _llm.generate = lambda *a, **k: "ok"
         _extract.extract_candidates = lambda text, max_n=8: [{"title": "Bug X", "body": "opgelost via Y"}]
         _judge.judge = lambda cand, context="": {"verdict": "current", "reason": "duidelijk"}
         emb.embed = lambda text, timeout=30.0: [0.1, 0.2, 0.3]
@@ -54,6 +61,8 @@ class MemorySweepTest(unittest.TestCase):
          self._judge.judge,
          self.emb.embed,
          self.emb.get_cached) = self._orig
+        self._llm.generate = self._orig_generate
+        self._ss.transcript_text = self._orig_transcript_text
         if self._saved is None:
             os.environ.pop("KENNISBANK_VAULT", None)
         else:
@@ -105,6 +114,72 @@ class MemorySweepTest(unittest.TestCase):
                             expires="2000-01-01", created="2026-06-27")
         self.m.run_sweep()
         self.assertIn("status: expired", old.read_text(encoding="utf-8"))
+
+
+    def test_per_transcript_error_increments_errors(self):
+        """COVERAGE: per-transcript exception → errors telt mee, transcript blijft pending."""
+        import _sweepstate as _ss
+
+        def _raise(_p):
+            raise RuntimeError("forced transcript error")
+
+        _ss.transcript_text = _raise
+        try:
+            summary = self.m.run_sweep()
+            self.assertGreaterEqual(summary.get("errors", 0), 1,
+                                    "errors should be at least 1")
+            # Transcript is NOT marked (exception prevented ss.mark)
+            self.assertGreater(len(_ss.pending()), 0,
+                               "transcript should still be pending after error")
+        finally:
+            _ss.transcript_text = self._orig_transcript_text
+
+    def test_source_session_in_memory_frontmatter(self):
+        """COVERAGE: source_session in frontmatter komt overeen met de transcriptnaam."""
+        self.m.run_sweep()
+        mems = list((self.vault / "09-memory").glob("*.md"))
+        self.assertEqual(len(mems), 1)
+        txt = mems[0].read_text(encoding="utf-8")
+        self.assertIn("s1.jsonl", txt, "source_session must reference the transcript filename")
+
+    def test_expire_quoted_status_flips_correctly(self):
+        """BUG 3: status: \"current\" (quoted in file) moet naar expired flippen."""
+        import _memory
+        old_path = _memory.write("Vluchtig", "iets", status="current",
+                                 expires="2000-01-01", created="2026-06-27")
+        # Overschrijf status-regel met quoted variant (de bug-trigger)
+        content = old_path.read_text(encoding="utf-8")
+        quoted = content.replace("status: current", 'status: "current"', 1)
+        old_path.write_text(quoted, encoding="utf-8")
+        self.assertIn('status: "current"', old_path.read_text(encoding="utf-8"))
+        self.m.run_sweep()
+        result = old_path.read_text(encoding="utf-8")
+        self.assertIn("status: expired", result,
+                      "quoted status: current should be flipped to expired")
+        self.assertNotIn("status: current", result)
+
+    def test_model_down_marks_nothing(self):
+        """IMPORTANT 1 RED: model onbereikbaar → transcript mag NIET gemarkeerd worden."""
+        import _llm
+        import _sweepstate as _ss
+        _llm.generate = lambda *a, **k: None  # model down
+        try:
+            summary = self.m.run_sweep()
+            # (a) transcript still pending
+            self.assertGreater(len(_ss.pending()), 0,
+                               "transcript should still be pending when model is down")
+            # (b) no memory written
+            mems = list((self.vault / "09-memory").glob("*.md"))
+            self.assertEqual(len(mems), 0,
+                             "no memory may be written when model is down")
+            # (c) heartbeat has model_unreachable truthy
+            hb = self.vault / ".claude" / "memory-sweep-status.json"
+            self.assertTrue(hb.exists(), "heartbeat should be written")
+            data = json.loads(hb.read_text(encoding="utf-8"))
+            self.assertTrue(data.get("model_unreachable"),
+                            "heartbeat must flag model_unreachable")
+        finally:
+            _llm.generate = self._orig_generate
 
 
 if __name__ == "__main__":

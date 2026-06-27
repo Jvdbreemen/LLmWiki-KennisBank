@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -36,6 +37,11 @@ from _vaultpath import vault_root  # noqa: E402
 HEARTBEAT = "memory-sweep-status.json"
 
 
+def _model_reachable() -> bool:
+    """Probe het LLM: True als de keten een niet-lege string teruggeeft."""
+    return bool(_llm.generate("ping"))
+
+
 def _existing_memory_vectors() -> list:
     """Bouw de dedup-pool: embed alle bestaande 09-memory-files (via cache)."""
     vecs, cache = [], emb.load_cache()
@@ -50,7 +56,13 @@ def _existing_memory_vectors() -> list:
 
 
 def _expire_pass() -> int:
-    """Deterministisch: current memory met expires < vandaag -> expired."""
+    """Deterministisch: current memory met expires < vandaag -> expired.
+
+    Muteert ALLEEN de status-regel binnen het frontmatter-blok (tussen de eerste
+    twee --- fences) met een regex-replace, zodat quoted status-waarden én
+    een eventueel zelfde patroon in de body niet mis-vervangen worden.
+    Telt alleen mee als de inhoud daadwerkelijk veranderd is.
+    """
     today = date.today().isoformat()
     n = 0
     mdir = vault_root() / "09-memory"
@@ -58,13 +70,23 @@ def _expire_pass() -> int:
         return 0
     for f in mdir.glob("**/*.md"):
         try:
-            fm, _ = parse_frontmatter(f.read_text(encoding="utf-8"))
+            txt = f.read_text(encoding="utf-8")
+            fm, _ = parse_frontmatter(txt)
         except Exception:
             continue
         if fm.get("status") == "current" and fm.get("expires") and fm["expires"] < today:
-            txt = f.read_text(encoding="utf-8").replace("status: current", "status: expired", 1)
-            f.write_text(txt, encoding="utf-8")
-            n += 1
+            # Split op de eerste twee --- fences om frontmatter te isoleren.
+            parts = txt.split("---", 2)
+            if len(parts) < 3:
+                continue
+            pre, fm_block, rest = parts
+            new_fm_block = re.sub(
+                r"^status:.*$", "status: expired", fm_block, count=1, flags=re.MULTILINE
+            )
+            new_txt = "---".join([pre, new_fm_block, rest])
+            if new_txt != txt:
+                f.write_text(new_txt, encoding="utf-8")
+                n += 1
     return n
 
 
@@ -97,6 +119,8 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = 6) -> dict:
         "duplicates": 0,
         "expired": 0,
         "errors": 0,
+        "embed_failed": 0,
+        "model_unreachable": False,
     }
 
     # Gate: als memory_capture uit staat, vroeg terugkeren (maar heartbeat wel schrijven).
@@ -105,10 +129,19 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = 6) -> dict:
         _write_heartbeat(s)
         return s
 
+    # IMPORTANT 1: upfront model-bereikbaarheidsprobe — alleen als er pending werk is.
+    # Een sweep tijdens een model-outage mag NOOIT transcripts als 'swept' markeren;
+    # anders zijn ze permanent verloren (de .swept-watermark is append-only).
+    pending_list = ss.pending()[:max_transcripts]
+    if pending_list and not _model_reachable():
+        s["model_unreachable"] = True
+        _write_heartbeat(s)
+        return s
+
     existing = _existing_memory_vectors()
     today = date.today().isoformat()
 
-    for tp in ss.pending()[:max_transcripts]:
+    for tp in pending_list:
         try:
             transcript = ss.transcript_text(tp)
             for ch in su.chunk(transcript)[:max_chunks]:
@@ -116,7 +149,12 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = 6) -> dict:
                     title = cand.get("title", "memory")
                     body = cand.get("body", "")
                     vec = emb.embed(body)
-                    if vec and su.is_duplicate(vec, existing):
+                    # BUG 4: als embed None teruggeeft (backend down), sla kandidaat over;
+                    # een geheugenbestand zonder vector is niet te dedupliceren.
+                    if vec is None:
+                        s["embed_failed"] += 1
+                        continue
+                    if su.is_duplicate(vec, existing):
                         s["duplicates"] += 1
                         continue
                     verdict = _judge.judge(body)
@@ -133,8 +171,7 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = 6) -> dict:
                     )
                     path.parent.mkdir(parents=True, exist_ok=True)
                     path.write_text(rendered, encoding="utf-8")
-                    if vec:
-                        existing.append(vec)
+                    existing.append(vec)
                     s["written"] += 1
                     s[status] += 1
             ss.mark([tp.stem])
