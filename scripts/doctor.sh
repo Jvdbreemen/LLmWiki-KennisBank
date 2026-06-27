@@ -141,6 +141,12 @@ else
   fi
 fi
 
+# 5b. Vault-onderhoud layer scripts (explicit named check).
+ONDERHOUD_SCRIPTS="safe-edit.py find-similar.py kb-search.py conflict-scan.py context-budget.py"
+for s in $ONDERHOUD_SCRIPTS; do
+  check_file "vault-onderhoud script $s" "$SCRIPTS_DIR/$s"
+done
+
 # 6. Research dir.
 if [ -d "$RESEARCH" ]; then
   report_pass "research dir" "$RESEARCH"
@@ -149,7 +155,7 @@ else
 fi
 
 # 7. Slash commands installed.
-COMMAND_FILES="sessielog wiki intake stale sessiestart import"
+COMMAND_FILES="sessielog wiki intake stale sessiestart import reconcile uitdaag brug"
 if [ ! -d "$COMMANDS_DIR" ]; then
   report_warn "commands dir" "$COMMANDS_DIR not found (user may have opted out)"
 else
@@ -235,6 +241,65 @@ EOF2
     report_warn "geheugen quarantaine" "$rot unverified memories ouder dan 48u (sweep/judge hangt?)"
   else
     report_pass "geheugen quarantaine" "geen rot"
+  fi
+fi
+
+# 13b. Retrieval hooks registered in settings.json.
+# setup.sh wires two hooks into ~/.claude/settings.json so the wiki embed cache
+# warms on SessionStart (build-embed-index.py) and matching snippets are injected
+# on UserPromptSubmit (kb-retrieve.py). If a user ran `setup.sh --no-hooks`, declined
+# the prompt, or python3 was absent at setup time, they are missing and retrieval
+# (/uitdaag, /brug, /wiki self-rewrite) silently finds nothing. Warn, never fail.
+SETTINGS="$CLAUDE_DIR/settings.json"
+HOOK_HINT="re-run 'bash setup.sh' or register manually (CONFIGURATION.md, 'Hook registration'): python3 $SCRIPTS_DIR/register-hooks.py $SETTINGS SessionStart $SCRIPTS_DIR/build-embed-index.py UserPromptSubmit $SCRIPTS_DIR/kb-retrieve.py"
+if ! command -v python3 >/dev/null 2>&1; then
+  report_warn "retrieval hooks" "cannot read $SETTINGS without python3; $HOOK_HINT"
+else
+  HOOK_STATUS="$(python3 -c '
+import json, sys
+from pathlib import Path
+p = Path(sys.argv[1])
+if not p.exists():
+    print("NOFILE"); raise SystemExit
+try:
+    text = p.read_text(encoding="utf-8")
+    data = json.loads(text) if text.strip() else {}
+except (ValueError, OSError):
+    print("BADJSON"); raise SystemExit
+if not isinstance(data, dict):
+    print("BADJSON"); raise SystemExit
+hooks = data.get("hooks", {})
+hooks = hooks if isinstance(hooks, dict) else {}
+def present(event, needle):
+    for group in (hooks.get(event) or []):
+        if not isinstance(group, dict):
+            continue
+        for h in (group.get("hooks") or []):
+            if isinstance(h, dict) and needle in (h.get("command") or ""):
+                return True
+    return False
+print("OK %d %d" % (present("SessionStart", "build-embed-index.py"),
+                    present("UserPromptSubmit", "kb-retrieve.py")))
+' "$SETTINGS" 2>/dev/null)"
+  if [ "$HOOK_STATUS" = "NOFILE" ]; then
+    report_warn "retrieval hooks" "no $SETTINGS yet, so neither hook is registered; $HOOK_HINT"
+  elif [ "$HOOK_STATUS" = "BADJSON" ]; then
+    report_warn "retrieval hooks" "$SETTINGS is not valid JSON; cannot verify hooks. $HOOK_HINT"
+  elif [ -z "$HOOK_STATUS" ]; then
+    report_warn "retrieval hooks" "could not read $SETTINGS (python3 error); $HOOK_HINT"
+  else
+    HOOK_SESSION="$(printf '%s' "$HOOK_STATUS" | cut -d' ' -f2)"
+    HOOK_PROMPT="$(printf '%s' "$HOOK_STATUS" | cut -d' ' -f3)"
+    if [ "$HOOK_SESSION" = "1" ]; then
+      report_pass "hook SessionStart build-embed-index.py" "registered in $SETTINGS"
+    else
+      report_warn "hook SessionStart build-embed-index.py" "not registered; embed cache stays cold. $HOOK_HINT"
+    fi
+    if [ "$HOOK_PROMPT" = "1" ]; then
+      report_pass "hook UserPromptSubmit kb-retrieve.py" "registered in $SETTINGS"
+    else
+      report_warn "hook UserPromptSubmit kb-retrieve.py" "not registered; retrieval injects nothing. $HOOK_HINT"
+    fi
   fi
 fi
 
