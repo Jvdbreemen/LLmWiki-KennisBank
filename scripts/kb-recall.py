@@ -15,6 +15,7 @@ Stdlib + sqlite-vec. Hyphen in de naam: importeer via importlib of draai als CLI
 from __future__ import annotations
 
 import os
+import re as _re
 import sqlite3
 import sys
 from pathlib import Path
@@ -82,3 +83,35 @@ def recall_hits(query_vector, query_text: str = "", k: int = 3,
 def memory_hits(query_vector, query_text: str = "", k: int = 3) -> list:
     """Dunne wrapper: alleen de memory-laag (backward-compat)."""
     return recall_hits(query_vector, query_text=query_text, k=k, layers=("memory",))
+
+
+def has_fts_match(query_text: str, layer: str = "wiki") -> bool:
+    """True als een FTS5-keyword-match bestaat in de gegeven laag. Fail-soft.
+
+    Tokeniseert op woorden >= 4 tekens (ge-OR'd) zodat stopwoorden en losse
+    leestekens geen vals signaal of FTS5-syntaxfout geven."""
+    tokens = [t for t in _re.findall(r"[\w]{4,}", (query_text or "").lower())]
+    if not tokens:
+        return False
+    match_expr = " OR ".join(tokens)
+    conn = _open_ro(_kbindex.index_path())
+    if conn is None:
+        return False
+    try:
+        row = conn.execute(
+            "SELECT 1 FROM fts_docs JOIN docs ON docs.doc_id = fts_docs.rowid "
+            "WHERE fts_docs MATCH ? AND docs.layer = ? LIMIT 1",
+            (match_expr, layer)).fetchone()
+        return row is not None
+    except Exception:
+        return False
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def wiki_hits(query_vector, query_text: str = "", k: int = 3) -> list:
+    """Dunne wrapper: alleen de wiki-laag (hybride)."""
+    return recall_hits(query_vector, query_text=query_text, k=k, layers=("wiki",))
