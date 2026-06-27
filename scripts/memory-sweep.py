@@ -205,6 +205,15 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = 6,
 
     s["expired"] = _expire_pass()
 
+    # De onderhoudspas gebruikt het LLM; draai 'm NOOIT als het model onbereikbaar
+    # is. Onvoorwaardelijke check (de capture-probe is gegate op 'todo' en vuurt niet
+    # als er geen pending transcripts zijn) -> anders zinloze LLM-calls op een dode
+    # judge. De judge-seams zijn al fail-safe-to-keep, dit is defense-in-depth.
+    if not _model_reachable():
+        s["model_unreachable"] = True
+        _write_heartbeat(s)
+        return s
+
     # Cross-memory onderhoud (v2): supersede, 2e-lijn-hercontrole, cluster-promotie.
     try:
         import _maintenance as _mnt

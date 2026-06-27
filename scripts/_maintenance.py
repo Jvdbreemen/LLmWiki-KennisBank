@@ -10,6 +10,7 @@ Stdlib + _embeddings.
 """
 from __future__ import annotations
 
+import json as _json
 import os
 import sys
 from pathlib import Path
@@ -87,8 +88,6 @@ def neighbor_counts(items: list, threshold: float) -> dict:
     return counts
 
 
-import json as _json
-
 SUPERSEDE_SYSTEM = (
     "Je beoordeelt of een NIEUWERE memory een OUDERE TEGENSPREEKT of vervangt "
     "(bv. 'Jim zoekt baan' -> 'Jim heeft baan'). Antwoord UITSLUITEND met JSON: "
@@ -108,6 +107,32 @@ def judge_supersede(new_text: str, old_text: str) -> bool:
     except Exception:
         return False
     return obj.get("supersede") is True
+
+
+RECHECK_SYSTEM = (
+    "Je beoordeelt of een memory DUIDELIJK RUIS, onjuist of waardeloos is en ingetrokken moet worden. "
+    "Antwoord UITSLUITEND met JSON: {\"retract\": true|false, \"reason\": \"<kort>\"}. "
+    "Bij twijfel: false. Retract ALLEEN als het aantoonbaar slecht is."
+)
+
+
+def judge_recheck(text: str) -> bool:
+    """Vraag het LLM of deze memory duidelijk ruis/onjuist is en ingetrokken moet worden.
+
+    FAIL-SAFE-TO-KEEP: None / parse-fout / ontbrekende sleutel / {"retract": false}
+    → False (KEEP). Retract ALLEEN bij expliciete {"retract": true}.
+    Spiegelt de shape van judge_supersede.
+    """
+    import _llm
+    raw = _llm.generate(f"Geheugen:\n{text}\n\nOordeel (JSON):", system=RECHECK_SYSTEM)
+    if not raw:
+        return False
+    try:
+        s, e = raw.find("{"), raw.rfind("}")
+        obj = _json.loads(raw[s:e + 1]) if s >= 0 and e > s else {}
+    except Exception:
+        return False
+    return obj.get("retract") is True
 
 
 def supersede_pass(threshold: float = 0.85, judge_fn=None, get_cached_fn=None) -> int:
@@ -130,14 +155,18 @@ def supersede_pass(threshold: float = 0.85, judge_fn=None, get_cached_fn=None) -
 
 
 def recheck_pass(judge_fn=None, limit: int = 20) -> int:
-    import _judge
+    """Hercontrole van current memories: retract ALLEEN bij expliciete ruis-signaal.
+
+    judge_fn(text: str) -> bool: True = retract, False = keep.
+    FAIL-SAFE: standaard judge_recheck retourneert False bij twijfel/model-down.
+    Nooit wrongly retracten op een dode judge.
+    """
     import _memory
-    judge_fn = judge_fn or _judge.judge
+    judge_fn = judge_fn or judge_recheck
     items = current_items()
     done = 0
     for it in items[:limit]:
-        verdict = judge_fn(it["body"])
-        if verdict.get("verdict") != "current":
+        if judge_fn(it["body"]):
             if _memory.set_status(it["path"], "retracted"):
                 done += 1
     return done

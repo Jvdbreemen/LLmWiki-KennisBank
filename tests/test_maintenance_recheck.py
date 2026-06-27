@@ -34,16 +34,29 @@ class RecheckTest(unittest.TestCase):
             os.environ["KENNISBANK_VAULT"] = self._saved
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def test_recheck_retracts_non_current(self):
-        _judge.judge = lambda cand, context="": {"verdict": "unverified", "reason": "ruis"}
-        n = mnt.recheck_pass()
+    def test_recheck_retracts_on_explicit_noise(self):
+        # judge_recheck-seam geeft True = expliciet ruis -> retract
+        n = mnt.recheck_pass(judge_fn=lambda text: True)
         self.assertEqual(n, 1)
         self.assertEqual(_memory.read_status(self.m), "retracted")
 
-    def test_recheck_keeps_current(self):
-        _judge.judge = lambda cand, context="": {"verdict": "current", "reason": "ok"}
-        self.assertEqual(mnt.recheck_pass(), 0)
+    def test_recheck_keeps_when_judge_false(self):
+        # False = keep (fail-safe-to-keep) -> geen retract
+        self.assertEqual(mnt.recheck_pass(judge_fn=lambda text: False), 0)
         self.assertEqual(_memory.read_status(self.m), "current")
+
+    def test_recheck_keeps_on_model_down(self):
+        """REGRESSION: model down → judge_recheck returns False → geen retract (de bug)."""
+        import _llm
+        orig_generate = _llm.generate
+        try:
+            _llm.generate = lambda *a, **k: None
+            n = mnt.recheck_pass()
+            self.assertEqual(n, 0, "model-down mag GEEN memories retracten")
+            self.assertEqual(_memory.read_status(self.m), "current",
+                             "memory moet current blijven als model onbereikbaar is")
+        finally:
+            _llm.generate = orig_generate
 
     def test_cluster_marks_neighbors(self):
         _memory.write("A", "onderwerp x een", status="current", created="2026-06-01")
