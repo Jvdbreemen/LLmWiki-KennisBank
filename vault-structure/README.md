@@ -90,6 +90,11 @@ Gepromote kennis verhuist via `/wiki` naar `02-wiki/`.
 ### `.claude/scripts/`
 Python utility scripts. Installed by `setup.sh`. Do not move; commands reference these paths directly.
 
+#### Derived files in `.claude/`:
+- `kb-index.db` — SQLite index of extracted memories, built by `build-kb-index.py` (SessionStart).
+- `memory-sweep-status.json` — Heartbeat file written by `memory-sweep.py` after each run, tracks pending/errors/model-reachability.
+- `.sweep.lock` — Single-flight lockfile used by `sweep-launch.py` to prevent concurrent sweep runs.
+
 ### `graphify-out/`
 Output directory for the graphify skill. `graph.json` is written here when graphify runs over the vault. `auto-crosslink.py` reads it.
 

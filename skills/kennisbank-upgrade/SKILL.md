@@ -113,6 +113,23 @@ change this later with `/kennisbank:settings`.
 BEHAVIOUR CHANGE: after this upgrade the hook only archives when `auto_archive`
 is ON. Ask for it explicitly, otherwise the transcript archive stops silently.
 
+## Geheugen-backfill (eenmalig, bij upgrade naar de geheugen-versie)
+
+Als `memory_capture` aan staat en er al transcripts in `01-raw/transcripts/`
+staan, bied aan de bestaande backlog te her-extraheren tot geheugen:
+
+> "Er staan N gearchiveerde transcripts. Wil je die nu eenmalig tot geheugen
+> verwerken (`/kennisbank:rebuild-memory`)? Dit is zwaar LLM-werk maar idempotent."
+
+Pas na bevestiging:
+
+```bash
+python3 "$VAULT/.claude/scripts/memory-sweep.py" --all
+```
+
+Idempotent via dedup; herhaald draaien maakt geen dubbele memories. Sla over als
+de gebruiker nee zegt of als Ollama/het LLM niet draait.
+
 ## Dry-run
 If invoked with `--dry-run`, perform steps 1-6 and print the planned copies and
 backups, but make no writes (no backup, no copy, no stamp, no checkout side
