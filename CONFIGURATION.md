@@ -180,6 +180,10 @@ override the config file; both override the built-in defaults.
 
 - **Effect**: bouwt/verfrist `kb-index.db` (de hybride sqlite-vec + FTS5 zoekindex over wiki + memory) eenmaal per sessie, buiten het per-prompt-pad. Incrementeel: alleen gewijzigde bestanden of een model-switch triggert echte embed-aanroepen; verwijderde bestanden worden gepruned. Hergebruikt de JSON embed-cache (`emb.get_cached`) zodat vectoren niet opnieuw berekend worden. Registered as a global `SessionStart` hook naast `build-embed-index.py`. Gegate op `embed_index` (wiki-laag) en `memory_capture` (memory-laag).
 
+### Autonome capture-sweep (`scripts/sweep-launch.py`, SessionStart)
+
+- **Effect**: dun launcher voor de autonome memory-sweep; gegate op `memory_capture`. Neemt een single-flight lockfile (`<vault>/.claude/.sweep.lock`, PID + mtime, stale-reclaim na 1u) zodat nooit twee sweeps gelijktijdig draaien. Spawnt `memory-sweep.py` DETACHED (niet-blokkerend: Windows DETACHED_PROCESS|CREATE_NO_WINDOW, POSIX start_new_session) en daarna `build-kb-index.py` (sweep-voor-index-ordening zodat verse memories meteen in de index landen). Eindigt met exit 0 fail-open. De zware LLM-sweep draait los van SessionStart en houdt de sessiestart onzichtbaar/snel. Draait naast de directe `build-kb-index.py`-hook (die de wiki-laag via `embed_index` bedient onafhankelijk van `memory_capture`; de dubbele run is benign want incrementeel en idempotent).
+
 ### Transcript-archief (`scripts/archive-transcript.py`, SessionEnd)
 
 - **Effect:** kopieert het transcript van elke beëindigde sessie naar
@@ -213,13 +217,16 @@ daarna onderstaande entries TOE aan de bestaande `hooks`-arrays in je
     { "type": "command", "command": "py -3 \"<VAULT>/.claude/scripts/archive-transcript.py\"" }
   ]}
 ],
-// onder de BESTAANDE SessionStart-array twee extra hook-blokken:
+// onder de BESTAANDE SessionStart-array drie extra hook-blokken:
 "SessionStart": [
   { "matcher": "", "hooks": [
     { "type": "command", "command": "py -3 \"<VAULT>/.claude/scripts/distill-notify.py\"" }
   ]},
   { "matcher": "", "hooks": [
     { "type": "command", "command": "py -3 \"<VAULT>/.claude/scripts/build-kb-index.py\"" }
+  ]},
+  { "matcher": "", "hooks": [
+    { "type": "command", "command": "py -3 \"<VAULT>/.claude/scripts/sweep-launch.py\"" }
   ]}
 ]
 ```

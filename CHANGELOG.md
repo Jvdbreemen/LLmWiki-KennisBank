@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Settings-bootstrap in `setup.sh` en de `kennisbank-upgrade`-skill.** Verse setup schrijft defaults (of vraagt interactief); upgrade vraagt ontbrekende toggles uit.
 - **Memory-toggles (`memory_capture`, `memory_recall`, default aan) + `09-memory/`-fundament.** Twee nieuwe opt-in-knopen voor automatische memory-extractie en -injectie; `_memory.py`, frontmatter-contract en settings-defaults zijn aanwezig.
 - **Geheugen-recall (`scripts/kb-recall.py`, `scripts/kb-retrieve.py`-hook, SessionStart-indexbouw).** `kb-recall.py` injecteert additief memory-fragmenten (`09-memory/`) in de retrieval-hook; gegate op `memory_recall`. `build-kb-index.py` draait als extra SessionStart-hook naast `build-embed-index.py` om `kb-index.db` vers te houden.
+- **Autonome capture-sweep + detached launcher (`scripts/memory-sweep.py` + `scripts/sweep-launch.py`, SessionStart).** `memory-sweep.py` orchestreert de extract -> dedup -> judge -> schrijf pipeline over pending transcripts. `sweep-launch.py` spawnt de sweep DETACHED (niet-blokkerend) met een single-flight lockfile, gevolgd door `build-kb-index.py` (sweep-voor-index-ordening); gegate op `memory_capture`; exit 0 fail-open.
 
 ### Changed
 - **Hooks gaten zichzelf op hun toggle.** `archive-transcript.py` (auto_archive), `distill-notify.py`-meldpad (distill_notify) en `build-embed-index.py` (embed_index) eindigen fail-open als hun toggle uit staat. De daily-graphify-batch in `sessielog`/`wiki`/`destilleer` respecteert `daily_graphify`.
