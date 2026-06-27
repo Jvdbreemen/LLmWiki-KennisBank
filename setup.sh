@@ -14,6 +14,7 @@
 #   -y, --yes          beantwoord alle prompts met ja
 #   --no-commands      sla het kopiëren van commands over (heeft voorrang op --yes)
 #   --no-skill         sla het kopiëren van de autoresearch skill over (heeft voorrang op --yes)
+#   --no-hooks         sla het registreren van de retrieval-hooks over (heeft voorrang op --yes)
 #   -f, --force        overschrijf bestaande bestanden
 #   -h, --help         toon usage en stop
 
@@ -30,6 +31,7 @@ shopt -s nullglob
 ASSUME_YES=0
 NO_COMMANDS=0
 NO_SKILL=0
+NO_HOOKS=0
 FORCE=0
 
 usage() {
@@ -40,6 +42,7 @@ Opties:
   -y, --yes          beantwoord alle prompts met ja (niet-interactief)
   --no-commands      sla het kopiëren van commands over
   --no-skill         sla het kopiëren van de skills (autoresearch, kennisbank-upgrade, kennisbank-contribute) over
+  --no-hooks         sla het registreren van de retrieval-hooks in ~/.claude/settings.json over
   -f, --force        overschrijf bestaande bestanden (scripts, templates, commands, skill, CLAUDE.md)
   -h, --help         toon deze hulp en stop
 
@@ -61,6 +64,9 @@ while [ $# -gt 0 ]; do
       ;;
     --no-skill)
       NO_SKILL=1
+      ;;
+    --no-hooks)
+      NO_HOOKS=1
       ;;
     -f|--force)
       FORCE=1
@@ -95,6 +101,7 @@ VAULT="${KENNISBANK_VAULT:-$HOME/KennisBank}"
 RESEARCH="$HOME/Claude/research"
 CLAUDE_COMMANDS="$HOME/.claude/commands"
 CLAUDE_SKILLS="$HOME/.claude/skills"
+CLAUDE_SETTINGS="$HOME/.claude/settings.json"
 
 echo "LLmWiki-KennisBank setup"
 echo "========================"
@@ -219,9 +226,40 @@ else
   fi
 fi
 
+# Retrieval hooks: SessionStart warms the wiki embed cache (build-embed-index.py),
+# UserPromptSubmit injects matching wiki snippets (kb-retrieve.py). Registered into
+# ~/.claude/settings.json by register-hooks.py: idempotent and non-destructive
+# (existing hooks/permissions/env are preserved). Without these a fresh install has
+# a cold cache and /uitdaag, /brug and /wiki self-rewrite silently find nothing.
+register_hooks() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "  WAARSCHUWING: python3 niet gevonden; hooks niet geregistreerd."
+    echo "  Registreer later handmatig (zie CONFIGURATION.md, sectie 4)."
+    return 0
+  fi
+  mkdir -p "$HOME/.claude"
+  python3 "$VAULT/.claude/scripts/register-hooks.py" "$CLAUDE_SETTINGS" \
+    SessionStart "$VAULT/.claude/scripts/build-embed-index.py" \
+    UserPromptSubmit "$VAULT/.claude/scripts/kb-retrieve.py" \
+    || echo "  hooks niet geregistreerd (zie melding hierboven); registreer handmatig (CONFIGURATION.md)." >&2
+}
+
+if [ "$NO_HOOKS" = "1" ]; then
+  echo "Hooks overgeslagen (--no-hooks)."
+elif [ "$ASSUME_YES" = "1" ]; then
+  register_hooks
+else
+  printf "Retrieval-hooks registreren in %s? (y/n) " "$CLAUDE_SETTINGS"
+  read REPLY
+  if [ "$REPLY" = "y" ] || [ "$REPLY" = "Y" ]; then
+    register_hooks
+  fi
+fi
+
 echo ""
 echo "Klaar. Volgende stappen:"
 echo "0. Verifieer de installatie: bash scripts/doctor.sh"
 echo "1. Bewerk ~/KennisBank/CLAUDE.md  -  vul je naam en projecten in"
 echo "2. Voeg /autoresearch toe aan je globale ~/.claude/CLAUDE.md (zie README.md)"
 echo "3. Optioneel: ollama pull qwen3-embedding:8b (meertalig, voor semantic tiling; Engels-only? ollama pull nomic-embed-text)"
+echo "4. De retrieval-hooks zijn geregistreerd in ~/.claude/settings.json; ze warmen de embed-cache bij elke nieuwe sessie. Sla over met --no-hooks."

@@ -29,6 +29,87 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Behaviour change
 - **`auto_archive` is default UIT.** Bestaande installaties stoppen na deze update met automatisch archiveren tot `auto_archive` expliciet aan wordt gezet. De `kennisbank-upgrade`-skill vraagt dit actief uit. Reden: opt-in, conform de wens "kan inschakelen".
+## [0.8.2] - 2026-06-22
+
+Retrieval hooks are now registered automatically, closing the cold-cache footgun
+where `/uitdaag`, `/brug`, and `/wiki` self-rewrite silently found nothing on a
+fresh install.
+
+### Added
+
+- **`scripts/register-hooks.py`** -- an idempotent, non-destructive merger that
+  registers KennisBank hooks in `~/.claude/settings.json`. Existing hooks,
+  permissions, env, and other settings are preserved; re-running is a no-op; a
+  stale script path self-heals; an unparseable settings file is refused rather
+  than clobbered.
+- **`setup.sh` registers the retrieval hooks**: `SessionStart` -> `build-embed-index.py`
+  (warms the wiki embed cache) and `UserPromptSubmit` -> `kb-retrieve.py` (injects
+  matching wiki snippets). Skip with `--no-hooks`.
+- **`doctor.sh` check #13** verifies both hooks are registered, warning (never
+  failing) when they are missing or the settings file is absent/unparseable.
+
+## [0.8.1] - 2026-06-22
+
+Slash-command launchers voor de lifecycle-skills en vault-pad-consistentie voor de
+v0.8.0-commands.
+
+### Added
+
+- **`/kennisbank-upgrade`** en **`/kennisbank-contribute`** — slash-command launchers
+  voor de gelijknamige lifecycle-skills, zodat upgrade en contribute direct als
+  commando aanroepbaar zijn (de skills bleven anders alleen model-getriggerd).
+
+### Changed
+
+- **Vault-pad-resolutie in de v0.8.0-commands.** `wiki.md`, `reconcile.md`,
+  `uitdaag.md`, `brug.md` en `sessiestart.md` roepen scripts nu aan via
+  `VAULT="${KENNISBANK_VAULT:-$HOME/KennisBank}"` in plaats van een hardcoded
+  `~/KennisBank`-pad, in lijn met de repo-brede env-var-fix (PR #11) die deze
+  nieuwere commands nog niet dekte. Een regressie-guard
+  (`NoHardcodedVaultInCommandsTest`) bewaakt dit voortaan.
+
+## [0.8.0] - 2026-06-21
+
+Vault-onderhoud en denkgereedschap layer: self-rewriting `/wiki` with hybrid-autonomy
+guards, contradiction detection and reconciliation, adversarial thinking tools, and
+progressive context budgets.
+
+### Added
+
+- **Self-rewriting `/wiki` via `safe-edit.py`** (hybrid-autonomy edit engine). Guards
+  every automated wiki rewrite by line-change count (`KB_EDIT_MAX_LINES`, default 20),
+  heading removal, and deletion count (`KB_EDIT_MAX_DROP`, default 3). Edits that
+  exceed any guard are held back and proposed for human review instead of being applied
+  silently. (Similarity-based rewrite matching is handled by `find-similar.py` via
+  `KB_REWRITE_THRESHOLD`, not by `safe-edit.py`.)
+- **`scripts/find-similar.py`** — candidate match finder: returns the most
+  semantically similar wiki articles for a query or article, powering `/wiki`'s
+  de-duplication awareness.
+- **`scripts/kb-search.py`** — query retrieval CLI: search the vault by
+  natural-language query and return ranked results, usable standalone or wired into
+  commands.
+- **`scripts/conflict-scan.py`** — contradiction detection: compares wiki passage
+  pairs and flags semantically similar but factually diverging claims. Threshold
+  `KB_CONFLICT_SIM` (default 0.62).
+- **`scripts/context-budget.py`** — progressive L0-L3 context layers: selects how
+  much vault context to load at session start based on `KB_CONTEXT_LEVEL` (default
+  1 = L1). L0 = bare minimum, L1 = default, L2 = extended, L3 = full.
+- **`commands/reconcile.md`** (`/reconcile`) — surfaces contradictions detected by
+  `conflict-scan.py` and produces a reconciliation audit trail.
+- **`commands/uitdaag.md`** (`/uitdaag`) — adversarial thinking tool: challenges a
+  claim or article for weak reasoning, missing evidence, or overgeneralization.
+- **`commands/brug.md`** (`/brug`) — thinking tool: finds conceptual bridges and
+  shared principles between two topics or articles.
+
+### New env vars
+
+| Variable | Default | Controls |
+|----------|---------|---------|
+| `KB_EDIT_MAX_LINES` | `20` | Max lines changed per automated `/wiki` edit pass |
+| `KB_EDIT_MAX_DROP` | `3` | Max non-blank lines deleted per automated edit pass |
+| `KB_REWRITE_THRESHOLD` | `0.62` | Min cosine similarity for auto-apply of a rewrite |
+| `KB_CONFLICT_SIM` | `0.62` | Min cosine to classify passage pair as potential contradiction |
+| `KB_CONTEXT_LEVEL` | `1` | Progressive context layer loaded at session start (0-3) |
 
 ## [0.7.0] - 2026-06-21
 
@@ -226,7 +307,11 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.8.2...HEAD
+[0.8.2]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.8.1...v0.8.2
+[0.8.1]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.8.0...v0.8.1
+[0.8.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/releases/tag/v0.6.1
 [0.6.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/releases/tag/v0.6.0
 [0.5.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/releases/tag/v0.5.0
