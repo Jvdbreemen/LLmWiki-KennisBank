@@ -30,6 +30,12 @@ class SkillFrontmatterTest(unittest.TestCase):
             self.assertEqual(fm.get("name"), slug, f"{path} name mismatch")
             self.assertTrue(fm.get("description"), f"{path} empty description")
 
+    def test_upgrade_skill_mentions_memory_backfill(self):
+        text = (Path(__file__).resolve().parent.parent /
+                "skills" / "kennisbank-upgrade" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("rebuild-memory", text)
+        self.assertIn("backfill", text.lower())
+
 
 if __name__ == "__main__":
     unittest.main()

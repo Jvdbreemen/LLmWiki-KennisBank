@@ -77,3 +77,7 @@ Patroonherkenning over sessies heen — destilleer herbruikbare kennis als wiki-
 - Bij twijfel: status: concept
 - Taal: volgt de bron
 - Dagelijkse graphify-batch respecteert de `daily_graphify`-toggle in `kennisbank-settings.json`: staat die uit, werk alleen `$VAULT/graphify-out/.needs-rebuild` bij en draai geen automatische `/graphify --update`. Lezen: `python3 -c "import sys; sys.path.insert(0,'$VAULT/.claude/scripts'); import _settings; print(_settings.get('daily_graphify', True))"`.
+
+## Bronnen: `promote_candidate`-memories
+
+De autonome capture-sweep (`memory-sweep.py`) markeert memories in `09-memory/` met `promote_candidate: true` als ze deel uitmaken van een cluster van minstens twee verwante current-memories (cosine > 0.80). Deze memories zijn bij compilatie van wiki-artikelen bij uitstek bruikbare bronnen: ze vertegenwoordigen onderwerpen die in meerdere sessies terugkomen. Geef ze voorrang als er keuze is tussen vergelijkbare bronnen.

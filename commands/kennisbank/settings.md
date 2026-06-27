@@ -17,7 +17,7 @@ dagelijkse graphify-gate).
 Lees per toggle de waarde via de helper. Gebruik de canonieke keys en hun default:
 
 ```bash
-for key in auto_archive distill_notify embed_index daily_graphify; do
+for key in auto_archive distill_notify embed_index daily_graphify memory_capture memory_recall; do
   val=$(python3 "$VAULT/.claude/scripts/_settings.py" get "$key")
   echo "$key=$val"
 done
@@ -34,6 +34,8 @@ doet:
 - **distill_notify** - meld bij sessiestart hoeveel transcripts op `/destilleer` wachten.
 - **embed_index** - ververs de wiki-embeddingcache bij sessiestart (voor prompt-time retrieval). Uit = retrieval draait op een oudere cache.
 - **daily_graphify** - draai 1x/dag automatisch `/graphify --update` (kost-gated op 20u). Uit = alleen `.needs-rebuild` bijhouden; draai de graph handmatig.
+- **memory_capture** - extractie+judge van memories naar `09-memory/` + onderhoud. Uit = geen memory-opslag.
+- **memory_recall** - injecteer memories in de context via hook + lokale MCP. Uit = geen memory-retrieval bij sessiestart.
 
 Vraag de gebruiker via `AskUserQuestion` (multiSelect) welke toggles AAN moeten
 staan. Vink vooraf exact de toggles aan die nu `1` zijn (uit stap 1), zodat de
@@ -48,6 +50,8 @@ python3 "$VAULT/.claude/scripts/_settings.py" set auto_archive   <true|false>
 python3 "$VAULT/.claude/scripts/_settings.py" set distill_notify <true|false>
 python3 "$VAULT/.claude/scripts/_settings.py" set embed_index    <true|false>
 python3 "$VAULT/.claude/scripts/_settings.py" set daily_graphify <true|false>
+python3 "$VAULT/.claude/scripts/_settings.py" set memory_capture  <true|false>
+python3 "$VAULT/.claude/scripts/_settings.py" set memory_recall   <true|false>
 ```
 
 ## Bevestiging

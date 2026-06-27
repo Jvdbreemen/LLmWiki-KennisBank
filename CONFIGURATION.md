@@ -176,6 +176,14 @@ override the config file; both override the built-in defaults.
 
 - **Effect**: warms/refreshes the wiki embedding cache once per session, off the per-prompt path, and warms the local model. Incremental (only changed files or a model switch trigger real embed calls); prunes vanished files; clears the graphify `.needs-rebuild` flag. Registered as a global `SessionStart` hook.
 
+### Geheugen-index (`scripts/build-kb-index.py`, SessionStart)
+
+- **Effect**: bouwt/verfrist `kb-index.db` (de hybride sqlite-vec + FTS5 zoekindex over wiki + memory) eenmaal per sessie, buiten het per-prompt-pad. Incrementeel: alleen gewijzigde bestanden of een model-switch triggert echte embed-aanroepen; verwijderde bestanden worden gepruned. Hergebruikt de JSON embed-cache (`emb.get_cached`) zodat vectoren niet opnieuw berekend worden. Registered as a global `SessionStart` hook naast `build-embed-index.py`. Gegate op `embed_index` (wiki-laag) en `memory_capture` (memory-laag).
+
+### Autonome capture-sweep (`scripts/sweep-launch.py`, SessionStart)
+
+- **Effect**: dun launcher voor de autonome memory-sweep; gegate op `memory_capture`. Neemt een single-flight lockfile (`<vault>/.claude/.sweep.lock`, PID + mtime, stale-reclaim na 1u) zodat nooit twee sweeps gelijktijdig draaien. Spawnt `memory-sweep.py` DETACHED (niet-blokkerend: Windows DETACHED_PROCESS|CREATE_NO_WINDOW, POSIX start_new_session) en daarna `build-kb-index.py` (sweep-voor-index-ordening zodat verse memories meteen in de index landen). Eindigt met exit 0 fail-open. De zware LLM-sweep draait los van SessionStart en houdt de sessiestart onzichtbaar/snel. Draait naast de directe `build-kb-index.py`-hook (die de wiki-laag via `embed_index` bedient onafhankelijk van `memory_capture`; de dubbele run is benign want incrementeel en idempotent).
+
 ### Transcript-archief (`scripts/archive-transcript.py`, SessionEnd)
 
 - **Effect:** kopieert het transcript van elke beëindigde sessie naar
@@ -190,6 +198,21 @@ override the config file; both override the built-in defaults.
   destillatie". Geen LLM. Met `--mark <stem...>` (door `/destilleer`) worden
   exact de verwerkte stems aan de watermark toegevoegd.
 
+### Geheugen-gezondheid-melding (`scripts/memory-notify.py`, SessionStart)
+
+- **Effect:** leest de sweep-heartbeat (`<vault>/.claude/memory-sweep-status.json`)
+  en telt unverified memories ouder dan 48u via `memory-doctor.py`. Meldt ALLEEN
+  als er iets te rapporteren is: model onbereikbaar, sweep-fouten, of ouderdom.
+  Niets mis → geen output (stil). Fail-open.
+
+### Presearch hook (`scripts/kb-presearch.py`, PreToolUse)
+
+- **Effect:** voordat elke `WebSearch` of `WebFetch` wordt uitgevoerd, injecteert
+  `kb-presearch.py` relevante geheugen- en wiki-fragmenten (`additionalContext`)
+  zodat de agent eerst zijn lokale KennisBank raadpleegt vóór externe zoeking.
+  Niet-blokkerend (permissionDecision defer); fail-open op elke fout. Gegate op
+  `memory_recall`.
+
 ### Hookregistratie (`~/.claude/settings.json`)
 
 De scripts worden door `setup.sh` naar `$VAULT/.claude/scripts/` gedeployed. Voeg
@@ -198,9 +221,9 @@ daarna onderstaande entries TOE aan de bestaande `hooks`-arrays in je
 
 > LET OP: dit is GEEN volledige settings.json. Plak het niet als geheel; dat
 > wist je bestaande hooks, env (incl. `KENNISBANK_VAULT`) en permissions. Voeg
-> alleen deze twee entries toe aan de respectieve arrays. De `SessionStart`-array
+> alleen deze entries toe aan de respectieve arrays. De `SessionStart`-array
 > bevat al `build-embed-index.py` (en evt. caveman) -- zet `distill-notify.py`
-> erNAAST, niet eroverheen.
+> en `build-kb-index.py` erNAAST, niet eroverheen.
 
 ```jsonc
 // toe te voegen ENTRIES (geen complete settings.json):
@@ -209,10 +232,25 @@ daarna onderstaande entries TOE aan de bestaande `hooks`-arrays in je
     { "type": "command", "command": "py -3 \"<VAULT>/.claude/scripts/archive-transcript.py\"" }
   ]}
 ],
-// onder de BESTAANDE SessionStart-array een extra hook-blok:
+// onder de BESTAANDE SessionStart-array vier extra hook-blokken:
 "SessionStart": [
   { "matcher": "", "hooks": [
     { "type": "command", "command": "py -3 \"<VAULT>/.claude/scripts/distill-notify.py\"" }
+  ]},
+  { "matcher": "", "hooks": [
+    { "type": "command", "command": "py -3 \"<VAULT>/.claude/scripts/memory-notify.py\"" }
+  ]},
+  { "matcher": "", "hooks": [
+    { "type": "command", "command": "py -3 \"<VAULT>/.claude/scripts/build-kb-index.py\"" }
+  ]},
+  { "matcher": "", "hooks": [
+    { "type": "command", "command": "py -3 \"<VAULT>/.claude/scripts/sweep-launch.py\"" }
+  ]}
+],
+// PreToolUse presearch-hook (geheugen+wiki vóór WebSearch/WebFetch):
+"PreToolUse": [
+  { "matcher": "WebSearch|WebFetch", "hooks": [
+    { "type": "command", "command": "py -3 \"<VAULT>/.claude/scripts/kb-presearch.py\"" }
   ]}
 ]
 ```
@@ -509,11 +547,30 @@ Vier achtergrond-automatieken zijn individueel aan/uit te zetten via
 | `distill_notify` | aan | SessionStart meldt openstaande transcripts | geen melding; `/destilleer` blijft handmatig werken |
 | `embed_index` | aan | SessionStart ververst de wiki-embeddingcache | retrieval draait op de bestaande (oudere) cache |
 | `daily_graphify` | aan | 1x/dag automatisch `/graphify --update` (kost-gated op 20u) | alleen `.needs-rebuild` bijhouden; graph handmatig |
+| `memory_capture` | aan | extractie + judge van memories naar `09-memory/` + onderhoud | geen automatische memory-extractie; `/wiki` blijft werken |
+| `memory_recall` | aan | injecteer relevante memories in de context via hook + lokale MCP | geen memory-injectie; context bevat alleen wiki-retrieval |
 
 - **Wijzigen**: draai `/kennisbank:settings` (toont een tabel en zet toggles aan/uit), of bewerk het JSON-bestand (waarden zijn JSON-booleans).
 - **Self-gating**: de hooks blijven statisch geregistreerd in `~/.claude/settings.json`; elk hookscript leest zijn toggle en eindigt fail-open (`exit 0`) als hij uit staat. Een toggle-wijziging werkt vanaf de volgende sessie.
 - **Defaults bij ontbreken**: ontbreekt het bestand of een key, dan geldt de default-kolom hierboven. `setup` en `upgrade` schrijven expliciete waarden.
 - **Interactie**: met `embed_index` uit wordt `graphify-out/.needs-rebuild` niet bij SessionStart geleegd; dat is benign, de flag wordt door de graphify-rebuild zelf geleegd.
+
+---
+
+## 12. Lokale MCP-server (kb-mcp.py, optioneel)
+
+`kb-mcp.py` exposeert je KennisBank (geheugen + wiki) als `recall`-tool aan lokale
+MCP-clients (Cursor, LM Studio, Claude Desktop) via **stdio** — lokaal, geen netwerk.
+Vereist eenmalig `pip install mcp`. Registreer bij je MCP-client met commando:
+
+```
+python3 "$HOME/KennisBank/.claude/scripts/kb-mcp.py"
+```
+
+(Windows: `py -3 "%USERPROFILE%/KennisBank/.claude/scripts/kb-mcp.py"`.)
+De server opent `kb-index.db` read-only; embedt query's lokaal via Ollama. Zonder
+het `mcp`-pakket meldt het script netjes dat de dep ontbreekt — de rest van
+KennisBank (hook-recall, sweep) werkt onafhankelijk door.
 
 ---
 

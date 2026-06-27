@@ -226,7 +226,25 @@ else
   fi
 fi
 
-# 13. Retrieval hooks registered in settings.json.
+# 13. Memory subsystem checks (fase 5).
+if [ -f "$SCRIPTS_DIR/memory-doctor.py" ]; then
+  nocloud_out="$(python3 "$SCRIPTS_DIR/memory-doctor.py" nocloud 2>/dev/null)"
+  if [ -n "$nocloud_out" ]; then
+    while IFS= read -r line; do report_warn "geheugen no-cloud" "$line"; done <<EOF2
+$nocloud_out
+EOF2
+  else
+    report_pass "geheugen no-cloud" "LLM-keten lokaal"
+  fi
+  rot="$(python3 "$SCRIPTS_DIR/memory-doctor.py" rot 2>/dev/null)"
+  if [ "${rot:-0}" -gt 0 ] 2>/dev/null; then
+    report_warn "geheugen quarantaine" "$rot unverified memories ouder dan 48u (sweep/judge hangt?)"
+  else
+    report_pass "geheugen quarantaine" "geen rot"
+  fi
+fi
+
+# 13b. Retrieval hooks registered in settings.json.
 # setup.sh wires two hooks into ~/.claude/settings.json so the wiki embed cache
 # warms on SessionStart (build-embed-index.py) and matching snippets are injected
 # on UserPromptSubmit (kb-retrieve.py). If a user ran `setup.sh --no-hooks`, declined

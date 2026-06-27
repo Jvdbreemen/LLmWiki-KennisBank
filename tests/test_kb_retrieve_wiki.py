@@ -1,0 +1,93 @@
+"""Tests voor de hybride wiki-injectie in kb-retrieve._wiki_block. Geen model:
+we injecteren qvec/cosine/hits via monkeypatch op de helpers."""
+from __future__ import annotations
+
+import importlib.util
+import os
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
+
+
+def _load_hook():
+    spec = importlib.util.spec_from_file_location("kb_retrieve", str(SCRIPTS_DIR / "kb-retrieve.py"))
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+class WikiBlockTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="kb-wiki-"))
+        self.vault = self.tmp / "vault"
+        (self.vault / "02-wiki").mkdir(parents=True)
+        (self.vault / ".claude").mkdir(parents=True)
+        self._saved = os.environ.get("KENNISBANK_VAULT")
+        os.environ["KENNISBANK_VAULT"] = str(self.vault)
+        sys.path.insert(0, str(SCRIPTS_DIR))
+        self.m = _load_hook()
+        import _embeddings as emb
+        from _vaultpath import vault_root
+        self.emb, self.vault_root = emb, vault_root
+        # fake emb: één wiki-kandidaat in de cache, embed geeft qvec
+        self._orig = (emb.load_cache, emb.embed, emb.cosine, emb.doc_text, emb.embed_id)
+        wpath = str(self.vault / "02-wiki" / "art.md")
+        emb.embed_id = lambda: "ollama:test"
+        emb.load_cache = lambda: {wpath: {"id": "ollama:test", "embedding": [0.1, 0.2], "dim": 2}}
+        emb.embed = lambda text, timeout=20.0: [0.1, 0.2]
+        emb.doc_text = lambda p, cap=280: "wiki body"
+
+    def tearDown(self):
+        import shutil
+        (self.emb.load_cache, self.emb.embed, self.emb.cosine,
+         self.emb.doc_text, self.emb.embed_id) = self._orig
+        if self._saved is None:
+            os.environ.pop("KENNISBANK_VAULT", None)
+        else:
+            os.environ["KENNISBANK_VAULT"] = self._saved
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _cfg(self):
+        return {}
+
+    def test_cosine_relevant_injects_hybrid(self):
+        self.emb.cosine = lambda a, b: 0.9  # boven drempel -> gate slaagt
+        self.m.kb_recall.wiki_hits = lambda qv, query_text="", k=3: [
+            {"path": "/v/02-wiki/art.md", "layer": "wiki", "title": "Art",
+             "created": "2026-06-01", "score": 0.5, "snippet": "hybride treffer"}]
+        text, qvec = self.m._wiki_block("een relevante vraag over het artikel",
+                                        self.emb, self.vault_root, self._cfg())
+        self.assertIn("hybride treffer", text)
+        self.assertIsNotNone(qvec)
+
+    def test_fts_only_triggers_when_cosine_low(self):
+        self.emb.cosine = lambda a, b: 0.1  # onder drempel -> alleen FTS kan triggeren
+        self.m.kb_recall.has_fts_match = lambda q, layer="wiki": True
+        self.m.kb_recall.wiki_hits = lambda qv, query_text="", k=3: [
+            {"path": "/v/02-wiki/art.md", "layer": "wiki", "title": "Art",
+             "created": "2026-06-01", "score": 0.5, "snippet": "exacte-term-treffer"}]
+        text, _ = self.m._wiki_block("FunctieNaamXYZ aanroep",
+                                     self.emb, self.vault_root, self._cfg())
+        self.assertIn("exacte-term-treffer", text)
+
+    def test_irrelevant_no_injection(self):
+        self.emb.cosine = lambda a, b: 0.1
+        self.m.kb_recall.has_fts_match = lambda q, layer="wiki": False
+        text, _ = self.m._wiki_block("totaal iets anders zonder match",
+                                     self.emb, self.vault_root, self._cfg())
+        self.assertEqual(text, "")
+
+    def test_fallback_to_cosine_when_hybrid_empty(self):
+        self.emb.cosine = lambda a, b: 0.9  # gate slaagt
+        self.m.kb_recall.wiki_hits = lambda qv, query_text="", k=3: []  # index leeg
+        text, _ = self.m._wiki_block("relevante vraag over het artikel",
+                                     self.emb, self.vault_root, self._cfg())
+        # fallback naar cosine-cache-selectie: het wiki-artikel staat er
+        self.assertIn("[[art]]", text)
+
+
+if __name__ == "__main__":
+    unittest.main()
