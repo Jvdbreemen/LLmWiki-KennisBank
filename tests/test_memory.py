@@ -97,6 +97,12 @@ class MemoryFormatTest(unittest.TestCase):
         self.assertIn("[[ander]]", md)
         self.assertNotIn("[[a]], [[n]]", md)  # niet per-char gesplitst
 
+    def test_unique_memory_path_avoids_collision(self):
+        p1 = _memory.write("Zelfde titel", "een", created="2026-06-27")
+        p2 = _memory.unique_memory_path("Zelfde titel", created="2026-06-27")
+        self.assertNotEqual(p1, p2)
+        self.assertTrue(p2.name.endswith("-2.md"))
+
 
 if __name__ == "__main__":
     unittest.main()

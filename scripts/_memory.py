@@ -39,6 +39,20 @@ def memory_path(title: str, created: str | None = None) -> Path:
     return memory_dir() / f"{date}-{slugify(title)}.md"
 
 
+def unique_memory_path(title: str, created: str | None = None) -> Path:
+    """memory_path met collision-guard: voegt -2,-3,.. toe tot het pad vrij is."""
+    base = memory_path(title, created)
+    if not base.exists():
+        return base
+    stem, suffix, parent = base.stem, base.suffix, base.parent
+    n = 2
+    while True:
+        cand = parent / f"{stem}-{n}{suffix}"
+        if not cand.exists():
+            return cand
+        n += 1
+
+
 def _yaml_scalar(s) -> str:
     """Veilige double-quoted scalar voor de minimale frontmatter-parser.
     Sanitize i.p.v. escape (de parser kent geen escapes): embedded quotes ->
