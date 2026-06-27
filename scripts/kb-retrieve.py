@@ -95,16 +95,24 @@ def _wiki_block(prompt, emb, vault_root, cfg):
     return "\n".join(lines), qvec
 
 
-def _memory_block(qvec, prompt, cfg):
-    """Additief memory-blok via kb-recall. Leeg bij geen hits / fail-soft."""
+def _memory_block(qvec, prompt, cfg, hits_fn=None):
+    """Additief memory-blok via kb-recall. Leeg bij geen hits / fail-soft.
+
+    hits_fn: optionele injectable callable met dezelfde signatuur als
+    kb_recall.memory_hits (qvec, query_text, k) -> list. Standaard wordt
+    kb-recall.py via importlib geladen (gedrag ongewijzigd). Testbaar zonder
+    Ollama door hits_fn=<stub> mee te geven (MINOR 2).
+    """
     try:
-        import importlib.util
-        spec = importlib.util.spec_from_file_location(
-            "kb_recall", os.path.join(os.path.dirname(os.path.abspath(__file__)), "kb-recall.py"))
-        kb = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(kb)
+        if hits_fn is None:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location(
+                "kb_recall", os.path.join(os.path.dirname(os.path.abspath(__file__)), "kb-recall.py"))
+            kb = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(kb)
+            hits_fn = kb.memory_hits
         top_n = _num("KB_RECALL_TOP_N", cfg, "memory_top_n", 3)
-        hits = kb.memory_hits(qvec, query_text=prompt, k=int(top_n))
+        hits = hits_fn(qvec, query_text=prompt, k=int(top_n))
     except Exception:
         return ""
     if not hits:

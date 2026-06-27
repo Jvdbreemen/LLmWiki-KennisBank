@@ -20,6 +20,15 @@ import _kbindex  # noqa: E402
 
 DIM = 4
 
+# Vaste body-tekst voor de live m1.md (gebruikt in snippet-assertie)
+_M1_BODY = "hook gedreven retrieval bug"
+_M1_MD = (
+    '---\ntitle: "M1"\ntype: memory\nstatus: current\n'
+    'evidence_basis: cc-sessie\nsource_session: ""\n'
+    "created: 2026-06-01\nupdated: 2026-06-01\ntags: []\n---\n\n"
+    + _M1_BODY + "\n"
+)
+
 
 def _load_kb_recall():
     spec = importlib.util.spec_from_file_location("kb_recall", str(SCRIPTS_DIR / "kb-recall.py"))
@@ -39,12 +48,17 @@ class KbRecallTest(unittest.TestCase):
         conn = _kbindex.connect()  # schrijft naar <vault>/.claude/kb-index.db
         _kbindex.ensure_schema(conn, dim=DIM, embed_id="ollama:test")
         _kbindex.upsert(conn, path=str(self.vault / "09-memory" / "m1.md"),
-                        layer="memory", status="current", body="hook gedreven retrieval bug",
+                        layer="memory", status="current", body=_M1_BODY,
                         vector=[0.1, 0.2, 0.3, 0.4], file_hash="h1", title="M1", created="2026-06-01")
         _kbindex.upsert(conn, path=str(self.vault / "02-wiki" / "w1.md"),
                         layer="wiki", status="current", body="wiki artikel",
                         vector=[0.9, 0.8, 0.7, 0.6], file_hash="h2", title="W1", created="2026-06-02")
         conn.close()
+        # schrijf ook het live bestand zodat read_status de echte status kan lezen
+        # (MINOR 4: live bestand met echte body voor snippet-assertie)
+        mem_dir = self.vault / "09-memory"
+        mem_dir.mkdir(parents=True, exist_ok=True)
+        (mem_dir / "m1.md").write_text(_M1_MD, encoding="utf-8")
         self.kb = _load_kb_recall()
         # forceer actieve embed_id zodat happy-path niet mismatcht
         import _embeddings as emb
@@ -67,6 +81,8 @@ class KbRecallTest(unittest.TestCase):
         self.assertTrue(all(Path(h["path"]).name == "m1.md" for h in hits))
         self.assertIn("snippet", hits[0])
         self.assertIn("title", hits[0])
+        # MINOR 4: snippet bevat echte body-tekst uit het live bestand
+        self.assertIn(_M1_BODY, hits[0]["snippet"])
 
     def test_embed_id_mismatch_returns_empty(self):
         # actieve embed_id != index embed_id -> geen resultaten
@@ -81,6 +97,27 @@ class KbRecallTest(unittest.TestCase):
     def test_missing_index_returns_empty(self):
         (self.vault / ".claude" / "kb-index.db").unlink()
         self.assertEqual(self.kb.memory_hits([0.1, 0.2, 0.3, 0.4], k=5), [])
+
+    def test_stale_index_retracted_not_recalled(self):
+        """Regressietest IMPORTANT 1: stale index dient geen ingetrokken geheugen op.
+
+        Index zegt status=current (verouderd); live bestand zegt status=retracted.
+        memory_hits moet het resultaat weggooien na live-validatie.
+        RED vóór de fix in kb-recall.py, GREEN daarna.
+        """
+        retracted_md = (
+            '---\ntitle: "M1"\ntype: memory\nstatus: retracted\n'
+            'evidence_basis: cc-sessie\nsource_session: ""\n'
+            "created: 2026-06-01\nupdated: 2026-06-01\ntags: []\n---\n\n"
+            "Dit geheugen is ingetrokken.\n"
+        )
+        (self.vault / "09-memory" / "m1.md").write_text(retracted_md, encoding="utf-8")
+        hits = self.kb.memory_hits([0.1, 0.2, 0.3, 0.4], query_text="bug", k=5)
+        hit_paths = [h["path"] for h in hits]
+        self.assertNotIn(
+            str(self.vault / "09-memory" / "m1.md"), hit_paths,
+            "retracted memory werd teruggegeven via stale index (IMPORTANT 1 regressie)",
+        )
 
 
 if __name__ == "__main__":

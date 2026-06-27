@@ -23,11 +23,13 @@ os.environ.setdefault("KENNISBANK_VAULT", str(Path(__file__).resolve().parents[2
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _embeddings as emb  # noqa: E402
 import _kbindex  # noqa: E402
+import _memory as _mem  # noqa: E402  # live-status hervalidatie (IMPORTANT 1)
 
 
 def _open_ro(db_path: Path):
     if not db_path.exists():
         return None
+    conn = None
     try:
         import sqlite_vec
         uri = f"file:{db_path.as_posix()}?mode=ro"
@@ -37,6 +39,8 @@ def _open_ro(db_path: Path):
         conn.enable_load_extension(False)
         return conn
     except Exception:
+        if conn is not None:
+            conn.close()
         return None
 
 
@@ -54,6 +58,11 @@ def memory_hits(query_vector, query_text: str = "", k: int = 3) -> list:
                                k=k, layers=("memory",), statuses=("current",))
         out = []
         for r in rows:
+            # Defense-in-depth: hervalideer de live-status van het bestand.
+            # Een stale index (build overgeslagen) kan een ingetrokken/vervangen
+            # geheugen nog als 'current' serveren. Gooi die treffers weg.
+            if _mem.read_status(Path(r["path"])) != "current":
+                continue
             snippet = emb.doc_text(Path(r["path"]), cap=280).replace("\n", " ").strip()
             out.append({"path": r["path"], "title": r.get("title", ""),
                         "created": r.get("created", ""), "score": r.get("score", 0.0),
