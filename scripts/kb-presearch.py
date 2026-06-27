@@ -65,8 +65,9 @@ def build_context(hits: list) -> str:
     lines = ["Je eigen KennisBank bevat hier mogelijk al kennis over (check dit eerst):"]
     for h in hits:
         tag = "geheugen" if h.get("layer") == "memory" else "wiki"
-        title = h.get("title", "") or Path(h.get("path", "")).stem
-        lines.append(f"- [{tag}] {title} ({h.get('score', 0.0):.2f}): {h.get('snippet', '')}")
+        stem = Path(h.get("path", "")).stem
+        title = h.get("title", "") or stem
+        lines.append(f"- [{tag}] [[{stem}|{title}]] ({h.get('score', 0.0):.2f}): {h.get('snippet', '')}")
     return "\n".join(lines)
 
 
