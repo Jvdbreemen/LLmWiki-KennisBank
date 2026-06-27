@@ -57,7 +57,16 @@ Dit voegt de nieuwe sessie toe aan `$VAULT/02-wiki/log.md` (het chronologische i
    Behandel elk gevonden research-bestand als wiki-kandidaat.
 3. Check bestaande wiki in $VAULT/02-wiki/: update bestaand artikel of schrijf nieuw via template
 4. Per wiki-artikel: YAML frontmatter compleet, backlinks via [[...]], kernpunten met toelichting
-5. Graph bijwerken — DAGELIJKSE BATCH (kostenbesparing: LLM-extractie kost tokens per bestand). ALTIJD eerst: voeg de gewijzigde/nieuwe wiki-paden toe aan `$VAULT/graphify-out/.needs-rebuild` (goedkoop, geen LLM). DAN de dag-gate op de mtime van `$VAULT/graphify-out/graph.json`:
+5. Graph bijwerken — DAGELIJKSE BATCH (kostenbesparing: LLM-extractie kost tokens per bestand). ALTIJD eerst: voeg de gewijzigde/nieuwe wiki-paden toe aan `$VAULT/graphify-out/.needs-rebuild` (goedkoop, geen LLM).
+
+   Lees daarna de `daily_graphify`-toggle:
+   ```bash
+   DG=$(python3 -c "import sys; sys.path.insert(0,'$VAULT/.claude/scripts'); import _settings; print('1' if _settings.get('daily_graphify', True) else '0')")
+   ```
+   - `daily_graphify` UIT (`DG=0`): sla de automatische `--update` deze sessie over. `.needs-rebuild` is al bijgewerkt (gratis). Meld "auto-graph uit via settings; draai handmatig `/graphify $VAULT --update`". Sla ook item 6 (auto-crosslinks) over en ga naar item 7.
+   - `daily_graphify` AAN (`DG=1`): volg de bestaande dag-gate hieronder.
+
+   DAN de dag-gate op de mtime van `$VAULT/graphify-out/graph.json`:
    - graph.json OUDER dan ~20 uur (eerste sessie van de dag) EN .needs-rebuild niet leeg: roep `/graphify $VAULT --update` aan. Graphify's manifest batcht ALLE sinds de vorige run gewijzigde bestanden in een keer (cache slaat ongewijzigde over; subagents doen alleen de nieuwe), herclustert. Leeg daarna `.needs-rebuild`. PATCH DAN de tokenkost in cost.json (graphify logt een subagent-extractie op 0; graphify blijft ongemodificeerd, we corrigeren het hier in sessielog): tel de `usage.subagent_tokens` op van ALLE extractie-subagents die je tijdens deze `--update` dispatchte (de Agent-API geeft een gecombineerd getal, geen in/out-splitsing) en schrijf dat naar de laatste run. Vervang `<SUBAGENT_TOKENS>` door die som:
      ```bash
      python3 - "<SUBAGENT_TOKENS>" <<'PY'

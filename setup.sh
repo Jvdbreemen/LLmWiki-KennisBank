@@ -107,7 +107,7 @@ echo "LLmWiki-KennisBank setup"
 echo "========================"
 
 # Vault directories
-mkdir -p "$VAULT"/{00-inbox,01-raw/sessies,02-wiki,03-projecten,04-templates,05-bronnen,06-claude,07-media,08-archive}
+mkdir -p "$VAULT"/{00-inbox,01-raw/sessies,01-raw/transcripts,02-wiki,03-projecten,04-templates,05-bronnen,06-claude,07-media,08-archive}
 mkdir -p "$VAULT/.claude/scripts"
 mkdir -p "$VAULT/graphify-out"
 
@@ -123,6 +123,36 @@ chmod +x "$VAULT/.claude/scripts/"*.py "$VAULT/.claude/scripts/"*.sh
 # Embedding backend config (example -> live). copy_file skips if it already
 # exists (unless --force), so a user's edited backend config is never clobbered.
 copy_file kennisbank-embed.example.json "$VAULT/.claude/kennisbank-embed.json"
+
+# Settings-bootstrap: zorg dat kennisbank-settings.json bestaat. De toggles
+# bepalen welke achtergrond-automatiek draait (auto-archive, distill-notify,
+# embed-index, daily-graphify). Interactief vragen we per toggle; niet-
+# interactief (--yes of geen TTY) schrijven we de defaults.
+SETTINGS_FILE="$VAULT/kennisbank-settings.json"
+if [ -f "$SETTINGS_FILE" ]; then
+  echo "  behouden: $SETTINGS_FILE (bestaat al)"
+elif [ "$ASSUME_YES" = "1" ] || [ ! -t 0 ]; then
+  python3 "$VAULT/.claude/scripts/_settings.py" init >/dev/null \
+    && echo "  settings: defaults geschreven naar $SETTINGS_FILE (draai /kennisbank:settings om aan te passen)"
+else
+  echo "Achtergrond-automatiek instellen (Enter = default):"
+  # auto_archive default uit, de rest aan. read met default-hint.
+  ask_toggle() {
+    local key="$1" prompt="$2" def="$3" reply
+    printf "  %s [%s] (y/n) " "$prompt" "$([ "$def" = "1" ] && echo "Y/n" || echo "y/N")"
+    read reply
+    if [ -z "$reply" ]; then reply="$def"; fi
+    case "$reply" in
+      y|Y|1) python3 "$VAULT/.claude/scripts/_settings.py" set "$key" true >/dev/null ;;
+      *)     python3 "$VAULT/.claude/scripts/_settings.py" set "$key" false >/dev/null ;;
+    esac
+  }
+  ask_toggle auto_archive   "transcripts archiveren bij sessie-einde (auto_archive)" 0
+  ask_toggle distill_notify "melden bij start dat transcripts wachten (distill_notify)" 1
+  ask_toggle embed_index    "wiki-embeddings verversen bij start (embed_index)" 1
+  ask_toggle daily_graphify "1x/dag graph automatisch bijwerken (daily_graphify)" 1
+  echo "  settings: keuze opgeslagen in $SETTINGS_FILE"
+fi
 
 # Templates
 for f in templates/*.md; do
@@ -150,6 +180,12 @@ elif [ "$ASSUME_YES" = "1" ]; then
   for f in commands/*.md; do
     copy_file "$f" "$CLAUDE_COMMANDS/$(basename "$f")"
   done
+  # Genamespacede commands (bv. commands/kennisbank/settings.md -> /kennisbank:settings)
+  for f in commands/*/*.md; do
+    rel="${f#commands/}"
+    mkdir -p "$CLAUDE_COMMANDS/$(dirname "$rel")"
+    copy_file "$f" "$CLAUDE_COMMANDS/$rel"
+  done
 else
   printf "Commands kopiëren naar %s/? (y/n) " "$CLAUDE_COMMANDS"
   read REPLY
@@ -157,6 +193,11 @@ else
     mkdir -p "$CLAUDE_COMMANDS"
     for f in commands/*.md; do
       copy_file "$f" "$CLAUDE_COMMANDS/$(basename "$f")"
+    done
+    for f in commands/*/*.md; do
+      rel="${f#commands/}"
+      mkdir -p "$CLAUDE_COMMANDS/$(dirname "$rel")"
+      copy_file "$f" "$CLAUDE_COMMANDS/$rel"
     done
   fi
 fi

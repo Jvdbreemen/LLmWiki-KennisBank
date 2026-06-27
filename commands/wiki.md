@@ -76,3 +76,4 @@ Patroonherkenning over sessies heen — destilleer herbruikbare kennis als wiki-
 - Compilatie, niet kopieer-en-plak
 - Bij twijfel: status: concept
 - Taal: volgt de bron
+- Dagelijkse graphify-batch respecteert de `daily_graphify`-toggle in `kennisbank-settings.json`: staat die uit, werk alleen `$VAULT/graphify-out/.needs-rebuild` bij en draai geen automatische `/graphify --update`. Lezen: `python3 -c "import sys; sys.path.insert(0,'$VAULT/.claude/scripts'); import _settings; print(_settings.get('daily_graphify', True))"`.

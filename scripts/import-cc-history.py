@@ -247,6 +247,20 @@ def target_path(out_dir: Path, meta: dict) -> Path:
     return out_dir / f"raw-sessie-{meta['date']}-{slug}-{suffix}.md"
 
 
+def collect_jsonl(root: Path, flat: bool) -> list[Path]:
+    """Verzamel jsonl-bestanden. flat=True: platte archiefmap (*.jsonl);
+    flat=False: CC projects-layout (*/*.jsonl).
+
+    NB: onder flat=True (een --source archiefmap) is jsonl_path.parent.name
+    'transcripts' voor elke sessie, dus parse_session's project_slug wordt
+    generiek 'transcripts'. Onschadelijk: render_body gebruikt cwd_display (de
+    echte cwd uit het record) en target_path keyt op first_user_text+date+
+    session_id. project_slug is alleen een fallback die voor gearchiveerde
+    transcripts (die altijd een cwd-veld hebben) nooit wordt geraakt."""
+    pattern = "*.jsonl" if flat else "*/*.jsonl"
+    return sorted(root.glob(pattern))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Importeer Claude Code sessie-history naar 01-raw/sessies/."
@@ -255,6 +269,9 @@ def main() -> int:
                         help=f"Vault root (default: {VAULT_DEFAULT})")
     parser.add_argument("--projects-dir", type=Path, default=CC_PROJECTS_DIR_DEFAULT,
                         help=f"CC projects directory (default: {CC_PROJECTS_DIR_DEFAULT})")
+    parser.add_argument("--source", type=Path, default=None,
+                        help="Platte map met gearchiveerde *.jsonl-transcripts "
+                             "(bv. $VAULT/01-raw/transcripts). Overschrijft --projects-dir.")
     parser.add_argument("--dry-run", action="store_true",
                         help="Toon wat geschreven zou worden, schrijf niets.")
     parser.add_argument("--verbose", action="store_true")
@@ -266,17 +283,22 @@ def main() -> int:
                         help="Beperk aantal te verwerken jsonl-bestanden (0 = alle).")
     args = parser.parse_args()
 
-    projects_dir: Path = args.projects_dir
+    if args.source is not None:
+        src_root: Path = args.source
+        flat = True
+    else:
+        src_root = args.projects_dir
+        flat = False
     out_dir: Path = args.vault / "01-raw" / "sessies"
 
-    if not projects_dir.exists():
-        print(f"[error] CC projects-dir niet gevonden: {projects_dir}", file=sys.stderr)
+    if not src_root.exists():
+        print(f"[error] bron-dir niet gevonden: {src_root}", file=sys.stderr)
         return 2
 
     if not args.dry_run:
         out_dir.mkdir(parents=True, exist_ok=True)
 
-    jsonl_files = sorted(projects_dir.glob("*/*.jsonl"))
+    jsonl_files = collect_jsonl(src_root, flat)
     if args.limit:
         jsonl_files = jsonl_files[: args.limit]
 

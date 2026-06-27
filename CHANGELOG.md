@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **CC transcript-archief (`scripts/archive-transcript.py`, SessionEnd-hook).** Archiveert elk transcript naar `01-raw/transcripts/`, fail-open en idempotent. Overleeft `cleanupPeriodDays`.
+- **`/destilleer`-commando + `scripts/distill-notify.py` (SessionStart).** Piggyback-destillatie: melding van openstaande transcripts plus een commando dat ze via `import-cc-history.py --source` naar `/wiki` ketent. Watermark in `.distilled`.
+- **`import-cc-history.py --source <dir>`.** Importeert een platte transcript-archiefmap.
+- **Settings-store (`scripts/_settings.py`, `kennisbank-settings.json`).** Vier achtergrond-automatieken (auto-archive, distill-notify, embed-index, daily-graphify) zijn individueel aan/uit via een platte JSON-store. Gedeelde `get/set/init`-helper plus CLI; enige lezer/schrijver, geen key-drift.
+- **`/kennisbank:settings`-commando.** Toont de toggles met huidige staat en zet ze aan/uit (genamespacet, deployt naar `~/.claude/commands/kennisbank/settings.md`).
+- **Settings-bootstrap in `setup.sh` en de `kennisbank-upgrade`-skill.** Verse setup schrijft defaults (of vraagt interactief); upgrade vraagt ontbrekende toggles uit.
+
+### Changed
+- **Hooks gaten zichzelf op hun toggle.** `archive-transcript.py` (auto_archive), `distill-notify.py`-meldpad (distill_notify) en `build-embed-index.py` (embed_index) eindigen fail-open als hun toggle uit staat. De daily-graphify-batch in `sessielog`/`wiki`/`destilleer` respecteert `daily_graphify`.
+- **`setup.sh` deployt nu ook genamespacede commands** (`commands/*/*.md`) met behoud van de subdir-structuur.
+
+### Behaviour change
+- **`auto_archive` is default UIT.** Bestaande installaties stoppen na deze update met automatisch archiveren tot `auto_archive` expliciet aan wordt gezet. De `kennisbank-upgrade`-skill vraagt dit actief uit. Reden: opt-in, conform de wens "kan inschakelen".
 ## [0.8.2] - 2026-06-22
 
 Retrieval hooks are now registered automatically, closing the cold-cache footgun
