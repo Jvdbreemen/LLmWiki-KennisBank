@@ -112,3 +112,38 @@ def read_status(path) -> str:
         return status if status in STATUSES else DEFAULT_STATUS
     except Exception:
         return DEFAULT_STATUS
+
+
+def set_status(path, status: str, superseded_by=None) -> bool:
+    """Herschrijf de status-regel binnen het frontmatter-blok; optioneel een
+    superseded_by-link zetten. Return True als het bestand gewijzigd is.
+    Mutatie alleen binnen het frontmatter (tussen de eerste twee --- fences).
+    Fail-soft: return False bij ongeldige status of OSError."""
+    import re
+    if status not in STATUSES:
+        return False
+    p = Path(path)
+    try:
+        raw = p.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    parts = raw.split("---", 2)
+    if len(parts) < 3:
+        return False
+    fm = parts[1]
+    new_fm = re.sub(r"^status:.*$", f"status: {status}", fm, count=1, flags=re.MULTILINE)
+    if superseded_by:
+        link = "[" + ", ".join(f"[[{s}]]" for s in superseded_by) + "]"
+        if re.search(r"^superseded_by:.*$", new_fm, flags=re.MULTILINE):
+            new_fm = re.sub(r"^superseded_by:.*$", f"superseded_by: {link}",
+                            new_fm, count=1, flags=re.MULTILINE)
+        else:
+            new_fm = new_fm.rstrip("\n") + f"\nsuperseded_by: {link}\n"
+    new_raw = parts[0] + "---" + new_fm + "---" + parts[2]
+    if new_raw == raw:
+        return False
+    try:
+        p.write_text(new_raw, encoding="utf-8")
+    except OSError:
+        return False
+    return True
