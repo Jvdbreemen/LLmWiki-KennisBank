@@ -7,8 +7,9 @@ description: Her-extraheer ALLE geheugen uit gearchiveerde transcripts (zwaar, v
 Her-extraheert het ruwe agent-geheugen (`09-memory/`) uit ALLE gearchiveerde
 transcripts in `01-raw/transcripts/`, los van de `.swept`-watermark. Dit is een
 **zware** operatie: het draait de LLM-extractie + judge over je hele
-transcript-backlog. Idempotent — dedup voorkomt dubbele memories, dus herhaald
-draaien is veilig.
+transcript-backlog. Vrijwel idempotent — semantische dedup (cosine) voorkomt
+vrijwel altijd dubbele memories, maar het is geen exacte garantie bij sterk
+afwijkende her-extractie.
 
 **Vraag eerst expliciete bevestiging** (dit kan veel LLM-werk zijn). Pas na "ja":
 

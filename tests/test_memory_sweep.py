@@ -192,6 +192,29 @@ class MemorySweepTest(unittest.TestCase):
         mems = list((self.vault / "09-memory").glob("*.md"))
         self.assertEqual(len(mems), 1)
 
+    def test_rebuild_all_processes_more_than_max_transcripts(self):
+        """IMPORTANT 3: ignore_watermark=True moet ALLE transcripts verwerken, ook > max_transcripts."""
+        tdir = self.vault / "01-raw" / "transcripts"
+        # Maak 11 extra transcripts (s1 bestaat al in setUp → totaal 12).
+        for i in range(2, 13):
+            (tdir / f"s{i}.jsonl").write_text(
+                json.dumps({"type": "user",
+                            "message": {"role": "user", "content": f"feit {i}"}}),
+                encoding="utf-8")
+        # Sanity: normale sweep stopt bij max_transcripts=10 (default).
+        s_normal = self.m.run_sweep(max_transcripts=10)
+        self.assertEqual(s_normal["processed"], 10)
+
+        # Reset watermark: verwijder .swept zodat alle 12 opnieuw pending zijn.
+        swept = tdir / ".swept"
+        if swept.exists():
+            swept.unlink()
+
+        # --all: ALLE 12 moeten verwerkt worden, ongeacht max_transcripts.
+        s_all = self.m.run_sweep(max_transcripts=10, ignore_watermark=True)
+        self.assertEqual(s_all["processed"], 12,
+                         f"ignore_watermark=True moet alle 12 verwerken, got {s_all['processed']}")
+
     def test_embed_down_marks_nothing(self):
         """Embed-follow-up: embed-backend down (chat up) → transcript NIET gemarkeerd.
 
