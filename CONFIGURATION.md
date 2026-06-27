@@ -198,6 +198,13 @@ override the config file; both override the built-in defaults.
   destillatie". Geen LLM. Met `--mark <stem...>` (door `/destilleer`) worden
   exact de verwerkte stems aan de watermark toegevoegd.
 
+### Geheugen-gezondheid-melding (`scripts/memory-notify.py`, SessionStart)
+
+- **Effect:** leest de sweep-heartbeat (`<vault>/.claude/memory-sweep-status.json`)
+  en telt unverified memories ouder dan 48u via `memory-doctor.py`. Meldt ALLEEN
+  als er iets te rapporteren is: model onbereikbaar, sweep-fouten, of ouderdom.
+  Niets mis → geen output (stil). Fail-open.
+
 ### Hookregistratie (`~/.claude/settings.json`)
 
 De scripts worden door `setup.sh` naar `$VAULT/.claude/scripts/` gedeployed. Voeg
@@ -217,10 +224,13 @@ daarna onderstaande entries TOE aan de bestaande `hooks`-arrays in je
     { "type": "command", "command": "py -3 \"<VAULT>/.claude/scripts/archive-transcript.py\"" }
   ]}
 ],
-// onder de BESTAANDE SessionStart-array drie extra hook-blokken:
+// onder de BESTAANDE SessionStart-array vier extra hook-blokken:
 "SessionStart": [
   { "matcher": "", "hooks": [
     { "type": "command", "command": "py -3 \"<VAULT>/.claude/scripts/distill-notify.py\"" }
+  ]},
+  { "matcher": "", "hooks": [
+    { "type": "command", "command": "py -3 \"<VAULT>/.claude/scripts/memory-notify.py\"" }
   ]},
   { "matcher": "", "hooks": [
     { "type": "command", "command": "py -3 \"<VAULT>/.claude/scripts/build-kb-index.py\"" }
