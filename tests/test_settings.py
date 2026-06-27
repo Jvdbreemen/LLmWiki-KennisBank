@@ -20,6 +20,8 @@ if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
 import _settings  # noqa: E402
+import importlib
+import shutil
 
 
 class SettingsTest(unittest.TestCase):
@@ -138,6 +140,43 @@ class SettingsTest(unittest.TestCase):
         _settings.set("memory_recall", False)
         self.assertFalse(_settings.get("memory_recall", True))
         self.assertTrue(_settings.get("memory_capture", True))
+
+
+class SettingsMigrateTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="kb-mig-"))
+        self.vault = self.tmp / "vault"
+        self.vault.mkdir(parents=True)
+        self._saved = os.environ.get("KENNISBANK_VAULT")
+        os.environ["KENNISBANK_VAULT"] = str(self.vault)
+        # herlaad _settings zodat vault_root de temp-vault pakt
+        importlib.reload(_settings)
+        self.s = _settings
+
+    def tearDown(self):
+        if self._saved is None:
+            os.environ.pop("KENNISBANK_VAULT", None)
+        else:
+            os.environ["KENNISBANK_VAULT"] = self._saved
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_migrate_adds_missing_preserves_existing(self):
+        p = self.vault / "kennisbank-settings.json"
+        # oude install: auto_archive bewust op een niet-default waarde
+        p.write_text(json.dumps({"auto_archive": True}), encoding="utf-8")
+        self.assertTrue(self.s.migrate())
+        data = json.loads(p.read_text(encoding="utf-8"))
+        self.assertEqual(data["auto_archive"], True)          # behouden
+        self.assertIn("memory_capture", data)                 # toegevoegd
+        self.assertEqual(data["memory_capture"], True)
+
+    def test_migrate_idempotent(self):
+        self.s.init()
+        self.assertFalse(self.s.migrate())                    # niets ontbreekt
+
+    def test_migrate_absent_file_falls_back_to_init(self):
+        self.assertTrue(self.s.migrate())
+        self.assertTrue((self.vault / "kennisbank-settings.json").exists())
 
 
 if __name__ == "__main__":

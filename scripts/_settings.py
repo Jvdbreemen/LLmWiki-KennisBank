@@ -104,9 +104,26 @@ def init() -> bool:
     return True
 
 
+def migrate() -> bool:
+    """Voeg ontbrekende DEFAULTS-keys toe aan een bestaand settings-bestand zonder
+    bestaande waarden te wijzigen. Bestaat het bestand niet, val terug op init().
+    Return True als er iets geschreven is. Idempotent."""
+    p = settings_path()
+    if not p.exists():
+        return init()
+    data = _load()
+    missing = {k: v for k, v in DEFAULTS.items() if k not in data}
+    if not missing:
+        return False
+    data.update(missing)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return True
+
+
 def _cli(argv: list[str]) -> int:
     if not argv:
-        print("usage: _settings.py get|set|init ...", file=sys.stderr)
+        print("usage: _settings.py get|set|init|migrate ...", file=sys.stderr)
         return 2
     cmd = argv[0]
     if cmd == "get":
@@ -127,6 +144,9 @@ def _cli(argv: list[str]) -> int:
         return 0
     if cmd == "init":
         print("written" if init() else "exists")
+        return 0
+    if cmd == "migrate":
+        print("migrated" if migrate() else "current")
         return 0
     print(f"unknown command: {cmd}", file=sys.stderr)
     return 2
