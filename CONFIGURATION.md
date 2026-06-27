@@ -205,6 +205,14 @@ override the config file; both override the built-in defaults.
   als er iets te rapporteren is: model onbereikbaar, sweep-fouten, of ouderdom.
   Niets mis → geen output (stil). Fail-open.
 
+### Presearch hook (`scripts/kb-presearch.py`, PreToolUse)
+
+- **Effect:** voordat elke `WebSearch` of `WebFetch` wordt uitgevoerd, injecteert
+  `kb-presearch.py` relevante geheugen- en wiki-fragmenten (`additionalContext`)
+  zodat de agent eerst zijn lokale KennisBank raadpleegt vóór externe zoeking.
+  Niet-blokkerend (permissionDecision defer); fail-open op elke fout. Gegate op
+  `memory_recall`.
+
 ### Hookregistratie (`~/.claude/settings.json`)
 
 De scripts worden door `setup.sh` naar `$VAULT/.claude/scripts/` gedeployed. Voeg
@@ -237,6 +245,12 @@ daarna onderstaande entries TOE aan de bestaande `hooks`-arrays in je
   ]},
   { "matcher": "", "hooks": [
     { "type": "command", "command": "py -3 \"<VAULT>/.claude/scripts/sweep-launch.py\"" }
+  ]}
+],
+// PreToolUse presearch-hook (geheugen+wiki vóór WebSearch/WebFetch):
+"PreToolUse": [
+  { "matcher": "WebSearch|WebFetch", "hooks": [
+    { "type": "command", "command": "py -3 \"<VAULT>/.claude/scripts/kb-presearch.py\"" }
   ]}
 ]
 ```
