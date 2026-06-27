@@ -70,6 +70,21 @@ class MemoryDoctorTest(unittest.TestCase):
         self._mem("c.md", "current", old)      # current, geen rot
         self.assertEqual(self.m.rot_count(hours=48), 1)
 
+    def test_nocloud_localhost_evil_com_is_flagged(self):
+        """Bypass via http://localhost.evil.com — naive substring match misses this; parse-based must catch it."""
+        os.environ["KB_LLM_ENDPOINT"] = "http://localhost.evil.com:11434"
+        w = self.m.cloud_warnings()
+        self.assertTrue(any("endpoint" in x.lower() for x in w),
+                        f"Expected endpoint warning for localhost.evil.com, got: {w}")
+
+    def test_nocloud_ollama_not_first_in_chain_still_checked(self):
+        """KB_LLM_PROVIDERS='foo, ollama' + remote endpoint must still warn (ollama not at chain[0])."""
+        os.environ["KB_LLM_PROVIDERS"] = "foo, ollama"
+        os.environ["KB_LLM_ENDPOINT"] = "http://192.168.1.50:11434"
+        w = self.m.cloud_warnings()
+        self.assertTrue(any("endpoint" in x.lower() for x in w),
+                        f"Expected endpoint warning for ollama-not-first, got: {w}")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -10,8 +10,10 @@ Fail-soft: ontbrekende vault/config -> geen waarschuwing / 0. Stdlib only.
 """
 from __future__ import annotations
 
+import ipaddress
 import os
 import sys
+import urllib.parse
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -21,7 +23,24 @@ import _llm  # noqa: E402
 from _frontmatter import parse_frontmatter  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402
 
-_LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
+
+def _is_local_endpoint(ep: str) -> bool:
+    """Return True iff ep resolves to a loopback address.
+
+    Uses strict hostname parsing (urllib.parse) + ipaddress.is_loopback to
+    prevent naive substring bypasses such as http://localhost.evil.com or
+    127.0.0.1 appearing in a query-string.
+    """
+    try:
+        hostname = urllib.parse.urlparse(ep).hostname or ""
+    except Exception:
+        return False
+    if hostname == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(hostname).is_loopback
+    except ValueError:
+        return False
 
 
 def cloud_warnings() -> list:
@@ -34,13 +53,14 @@ def cloud_warnings() -> list:
     if cloud:
         out.append(f"LLM-keten bevat cloud-provider(s): {', '.join(cloud)} "
                    f"- content kan je machine verlaten (#4)")
-    # endpoint-check voor de actieve ollama-provider
-    if chain and chain[0] == "ollama":
+    # endpoint-check: wanneer ollama ERGENS in de keten zit (ook niet-eerste positie)
+    # kan het bij een remote endpoint data buiten de machine sturen (#4).
+    if "ollama" in chain:
         try:
             ep = _llm._endpoint("ollama")
         except Exception:
             ep = ""
-        if ep and not any(h in ep for h in _LOCAL_HOSTS):
+        if ep and not _is_local_endpoint(ep):
             out.append(f"Ollama-endpoint is niet lokaal ({ep}) - embeddings/generatie "
                        f"verlaten je machine (#4)")
     return out

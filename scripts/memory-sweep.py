@@ -139,12 +139,12 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = 6,
         _write_heartbeat(s)
         return s
 
-    # Bouw todo VOOR de probe-guard: ignore_watermark pakt alle transcripts,
-    # normaal alleen pending. De guard checkt todo zodat --all werkt ook als
-    # de watermark-backlog leeg is.
+    # Bouw todo VOOR de probe-guard: ignore_watermark pakt ALLE transcripts (geen cap),
+    # normaal alleen pending met max_transcripts-limiet.
+    # Bij --all belooft het commando volledigheid; de cap breekt die belofte.
     if ignore_watermark:
         tdir = vault_root() / "01-raw" / "transcripts"
-        todo = sorted(tdir.glob("*.jsonl"))[:max_transcripts] if tdir.exists() else []
+        todo = sorted(tdir.glob("*.jsonl")) if tdir.exists() else []
     else:
         todo = ss.pending()[:max_transcripts]
 
@@ -162,7 +162,10 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = 6,
     for tp in todo:
         try:
             transcript = ss.transcript_text(tp)
-            for ch in su.chunk(transcript)[:max_chunks]:
+            chunks = su.chunk(transcript)
+            # Bij --all geen chunk-cap: de rebuild-belofte geldt voor het hele transcript.
+            chunk_iter = chunks if ignore_watermark else chunks[:max_chunks]
+            for ch in chunk_iter:
                 for cand in _extract.extract_candidates(ch):
                     title = cand.get("title", "memory")
                     body = cand.get("body", "")
