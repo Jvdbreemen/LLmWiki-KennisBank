@@ -1,9 +1,10 @@
 ---
 id: TASK-8
 title: Agent-geheugen — Cross-memory onderhoud v2 (supersede/cluster/hercontrole)
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-06-27 11:24'
+updated_date: '2026-06-27 13:39'
 labels:
   - agent-geheugen
 milestone: Agent-geheugen
