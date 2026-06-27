@@ -89,7 +89,9 @@ The setup script will:
 
 After install, run `bash scripts/doctor.sh` to verify, then read [POST-INSTALL.md](POST-INSTALL.md) for the first-session walkthrough.
 
-`setup.sh` also registers two retrieval hooks in `~/.claude/settings.json` (SessionStart -> `build-embed-index.py` warms the embed cache, UserPromptSubmit -> `kb-retrieve.py` injects matching wiki snippets). Skip with `--no-hooks`; verify with `doctor.sh`.
+**Re-running `setup.sh` is safe:** it refreshes tooling and registers the full hookset (SessionStart, SessionEnd, UserPromptSubmit, PreToolUse) without clobbering user data, customizations, or vault contents. Existing vaults upgrade seamlessly in-place — ideal for keeping a deployed vault in sync with upstream releases.
+
+`setup.sh` also registers the full KennisBank hookset in `~/.claude/settings.json`: SessionStart hooks warm the embed cache and launch the memory sweep; SessionEnd archives transcripts; UserPromptSubmit injects wiki context; PreToolUse (WebSearch|WebFetch matcher) injects memory before external search. Skip with `--no-hooks`; verify with `doctor.sh`.
 
 ### Manual installation
 

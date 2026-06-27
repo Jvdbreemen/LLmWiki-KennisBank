@@ -261,23 +261,29 @@ Op macOS/Linux: vervang `py -3` door `python3`.
 
 ### Hook registration (`scripts/register-hooks.py`)
 
-`setup.sh` registers two retrieval hooks into `~/.claude/settings.json`:
+`setup.sh` registers the **full hookset** via `register-hooks.py --manifest`, covering:
 
-- **SessionStart** runs `build-embed-index.py` to warm the wiki embed cache.
-- **UserPromptSubmit** runs `kb-retrieve.py` to inject matching wiki snippets.
+- **SessionStart**: `build-embed-index.py` (warm wiki embed cache), `distill-notify.py` (note pending transcripts), `build-kb-index.py` (refresh memory index), `sweep-launch.py` (launch memory sweep)
+- **SessionEnd**: `archive-transcript.py` (archive transcript to vault)
+- **UserPromptSubmit**: `kb-retrieve.py` (inject matching wiki snippets, hybrid cosine|FTS5)
+- **PreToolUse** (matcher `WebSearch|WebFetch`): `kb-presearch.py` (inject memory+wiki before external search)
 
-Registration is idempotent and non-destructive: existing hooks, permissions, and
-env are preserved, re-running is a no-op, and a stale script path self-heals. An
-unparseable `settings.json` is left untouched (registration refuses rather than
-clobbers). Skip with `setup.sh --no-hooks`. To register manually later:
+Registration is idempotent and non-destructive: existing hooks, permissions, and env are preserved. Re-running `setup.sh` is safe for new **and existing** vaults — it refreshes the tooling without clobbering user data or overwriting customisations. Interpreter is **interpreter-aware**: uses `py -3` on Windows, `python3` elsewhere; a self-heal on stale paths preserves the original interpreter. Skip registration with `setup.sh --no-hooks`.
+
+**Version stamp.** `setup.sh` creates `<vault>/.claude/.kennisbank-version` (current: `0.9.0`). If a hook is stubbornly missing after re-run, force a re-registration by removing the version stamp and re-running:
+
+```bash
+rm ~/KennisBank/.claude/.kennisbank-version
+bash ~/KennisBank/setup.sh --yes
+```
+
+**Manual registration (reference only).** Normally not needed — `bash setup.sh` does it fully. If you want to register manually or post-hoc:
 
 ```
-python3 ~/KennisBank/.claude/scripts/register-hooks.py ~/.claude/settings.json \
-  SessionStart ~/KennisBank/.claude/scripts/build-embed-index.py \
-  UserPromptSubmit ~/KennisBank/.claude/scripts/kb-retrieve.py
+python3 ~/KennisBank/.claude/scripts/register-hooks.py --manifest ~/.claude/settings.json ~/KennisBank
 ```
 
-`doctor.sh` (check #13) reports whether both hooks are registered.
+For individual hooks, see the JSON blocks below as reference (interpreter shown as `py -3` on Windows; use `python3` on macOS/Linux):
 
 ## 4b. Vault-onderhoud layer env vars
 
