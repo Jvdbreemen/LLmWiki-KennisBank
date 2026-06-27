@@ -1,15 +1,17 @@
 ---
 id: TASK-4
 title: Agent-geheugen Fase 3 — recall (kb-recall + hook-gate + lokale MCP-server)
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-06-26 23:22'
-updated_date: '2026-06-27 08:10'
+updated_date: '2026-06-27 08:34'
 labels:
   - agent-geheugen
 milestone: Agent-geheugen
 dependencies:
   - TASK-3
+references:
+  - docs/superpowers/plans/2026-06-27-agent-geheugen-fase3-recall.md
 ordinal: 4000
 ---
 
