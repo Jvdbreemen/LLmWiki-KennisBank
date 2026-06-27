@@ -1,9 +1,10 @@
 ---
 id: TASK-7
 title: Agent-geheugen — Lokale stdio MCP-server (na fase 4)
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-06-27 09:32'
+updated_date: '2026-06-27 13:23'
 labels:
   - agent-geheugen
 milestone: Agent-geheugen
