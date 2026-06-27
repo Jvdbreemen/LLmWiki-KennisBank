@@ -77,6 +77,26 @@ class MemoryFormatTest(unittest.TestCase):
         f.write_text("geen frontmatter", encoding="utf-8")
         self.assertEqual(_memory.read_status(f), "unverified")
 
+    def test_render_sanitizes_quotes_and_newlines_in_title(self):
+        md = _memory.render('Een "rare" titel\nmet newline', "body",
+                            source_session='pad "met" quote', created="2026-06-27")
+        # frontmatter moet pareerbaar blijven (geen kapotte YAML)
+        fm, body = parse_frontmatter(md)
+        self.assertEqual(fm.get("type"), "memory")
+        self.assertNotIn("\n", fm.get("title", ""))   # newline weg
+        self.assertIn("body", body)
+
+    def test_render_tags_accepts_string(self):
+        md = _memory.render("T", "b", tags="losse-string", created="2026-06-27")
+        fm, _ = parse_frontmatter(md)
+        self.assertEqual(fm.get("tags"), ["losse-string"])
+
+    def test_render_superseded_by_accepts_string(self):
+        # een enkele wikilink als string mag niet in characters uiteenvallen
+        md = _memory.render("T", "b", superseded_by="[[ander]]", created="2026-06-27")
+        self.assertIn("[[ander]]", md)
+        self.assertNotIn("[[a]], [[n]]", md)  # niet per-char gesplitst
+
 
 if __name__ == "__main__":
     unittest.main()
