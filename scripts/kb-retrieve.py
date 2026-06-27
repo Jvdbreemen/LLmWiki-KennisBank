@@ -21,10 +21,21 @@ Output contract (verified against the local caveman UserPromptSubmit hook):
 
 Requires KENNISBANK_VAULT in the environment (set in the global settings env).
 """
+import importlib.util as _ilu
 import json
 import os
 import sys
 from pathlib import Path
+
+# kb-recall als module-globaal zodat tests het kunnen patchen (idem kb-presearch).
+kb_recall = None
+try:
+    _krspec = _ilu.spec_from_file_location(
+        "kb_recall", os.path.join(os.path.dirname(os.path.abspath(__file__)), "kb-recall.py"))
+    kb_recall = _ilu.module_from_spec(_krspec)
+    _krspec.loader.exec_module(kb_recall)
+except Exception:
+    kb_recall = None
 
 # Trivial prompts that are not worth an embed (continuation/ack/command noise).
 _TRIVIAL = {
@@ -57,9 +68,9 @@ def _num(env: str, cfg: dict, key: str, default):
 
 
 def _wiki_block(prompt, emb, vault_root, cfg):
-    """Bestaande wiki-cosine-logica. Geeft (wiki_tekst_of_leeg, qvec_of_None).
-
-    qvec wordt teruggegeven zodat de memory-lookup 'm kan hergebruiken."""
+    """Hybride wiki-injectie. Gate = cosine-relevant OF FTS-keyword-match.
+    Selectie via kb_recall.wiki_hits (hybride); fallback naar de cosine-cache.
+    Geeft (wiki_tekst_of_leeg, qvec_of_None)."""
     cache = emb.load_cache()
     if not cache:
         return "", None
@@ -75,23 +86,51 @@ def _wiki_block(prompt, emb, vault_root, cfg):
     qvec = emb.embed(prompt, timeout=timeout)
     if not qvec:
         return "", None
-    top_n = _num("KB_RETRIEVE_TOP_N", cfg, "retrieve_top_n", 3)
+    top_n = int(_num("KB_RETRIEVE_TOP_N", cfg, "retrieve_top_n", 3))
     threshold = _num("KB_RETRIEVE_THRESHOLD", cfg, "retrieve_threshold", 0.60)
+
+    # cosine-signaal (ongewijzigde semantische gate) + de cosine-cache-fallback-lijst
     scored = []
     for k, v in candidates:
         if v.get("dim") and v["dim"] != len(qvec):
             continue
         s = emb.cosine(qvec, v["embedding"])
-        if s >= threshold:
-            scored.append((s, k))
-    if not scored:
-        return "", qvec
+        scored.append((s, k))
     scored.sort(reverse=True)
+    cosine_relevant = bool(scored) and scored[0][0] >= threshold
+
+    # FTS-signaal (exacte termen die vector mist)
+    fts_relevant = False
+    if kb_recall is not None:
+        try:
+            fts_relevant = kb_recall.has_fts_match(prompt, layer="wiki")
+        except Exception:
+            fts_relevant = False
+
+    if not (cosine_relevant or fts_relevant):
+        return "", qvec
+
+    # Selectie: hybride via kb-index; fallback naar cosine-cache-top-N.
+    hits = []
+    if kb_recall is not None:
+        try:
+            hits = kb_recall.wiki_hits(qvec, query_text=prompt, k=top_n)
+        except Exception:
+            hits = []
     lines = ["KennisBank-wiki (semantisch gematcht op je prompt; raadpleeg bij twijfel):"]
-    for s, k in scored[:int(top_n)]:
-        p = Path(k)
-        snippet = emb.doc_text(p, cap=280).replace("\n", " ").strip()
-        lines.append(f"- [[{p.stem}]] ({s:.2f}): {snippet}")
+    if hits:
+        for h in hits:
+            stem = Path(h.get("path", "")).stem
+            lines.append(f"- [[{stem}]] ({h.get('score', 0.0):.2f}): {h.get('snippet', '')}")
+    else:
+        # fallback: oude cosine-cache-selectie (alleen treffers >= drempel)
+        relevant = [(s, k) for s, k in scored if s >= threshold][:top_n]
+        if not relevant:
+            return "", qvec
+        for s, k in relevant:
+            p = Path(k)
+            snippet = emb.doc_text(p, cap=280).replace("\n", " ").strip()
+            lines.append(f"- [[{p.stem}]] ({s:.2f}): {snippet}")
     return "\n".join(lines), qvec
 
 
