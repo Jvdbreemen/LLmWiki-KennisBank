@@ -176,6 +176,49 @@ override the config file; both override the built-in defaults.
 
 - **Effect**: warms/refreshes the wiki embedding cache once per session, off the per-prompt path, and warms the local model. Incremental (only changed files or a model switch trigger real embed calls); prunes vanished files; clears the graphify `.needs-rebuild` flag. Registered as a global `SessionStart` hook.
 
+### Transcript-archief (`scripts/archive-transcript.py`, SessionEnd)
+
+- **Effect:** kopieert het transcript van elke beëindigde sessie naar
+  `$VAULT/01-raw/transcripts/<datum>-<project>-<sid8>.jsonl`. Deterministisch,
+  fail-open, idempotent. Overleeft `cleanupPeriodDays` omdat de vault een
+  backup-locatie is. Lege/`-p`-transcripts (< 200 bytes) worden overgeslagen.
+
+### Destillatie-melding (`scripts/distill-notify.py`, SessionStart)
+
+- **Effect:** telt transcripts in `01-raw/transcripts/` die niet in de
+  `.distilled`-watermark staan en injecteert een melding "N wachten op
+  destillatie". Geen LLM. Met `--mark <stem...>` (door `/destilleer`) worden
+  exact de verwerkte stems aan de watermark toegevoegd.
+
+### Hookregistratie (`~/.claude/settings.json`)
+
+De scripts worden door `setup.sh` naar `$VAULT/.claude/scripts/` gedeployed. Voeg
+daarna onderstaande entries TOE aan de bestaande `hooks`-arrays in je
+`~/.claude/settings.json` (Windows `py -3`-launcher; pas `<VAULT>` aan).
+
+> LET OP: dit is GEEN volledige settings.json. Plak het niet als geheel; dat
+> wist je bestaande hooks, env (incl. `KENNISBANK_VAULT`) en permissions. Voeg
+> alleen deze twee entries toe aan de respectieve arrays. De `SessionStart`-array
+> bevat al `build-embed-index.py` (en evt. caveman) -- zet `distill-notify.py`
+> erNAAST, niet eroverheen.
+
+```jsonc
+// toe te voegen ENTRIES (geen complete settings.json):
+"SessionEnd": [
+  { "matcher": "", "hooks": [
+    { "type": "command", "command": "py -3 \"<VAULT>/.claude/scripts/archive-transcript.py\"" }
+  ]}
+],
+// onder de BESTAANDE SessionStart-array een extra hook-blok:
+"SessionStart": [
+  { "matcher": "", "hooks": [
+    { "type": "command", "command": "py -3 \"<VAULT>/.claude/scripts/distill-notify.py\"" }
+  ]}
+]
+```
+
+Op macOS/Linux: vervang `py -3` door `python3`.
+
 ---
 
 ### Hook registration (`scripts/register-hooks.py`)
@@ -451,6 +494,26 @@ model, not by Python; they still contain literal `~/KennisBank/...` and
 | Symlink `$HOME/KennisBank` to the active vault, swap before each session | Manual, error-prone. No active-vault indicator. |
 | Maintain separate clones of this repo with `setup.sh` pointing to different `VAULT` values, and run `setup.sh` per project | Heavy. Each setup overwrites `$HOME/.claude/commands/` for all projects. |
 | Single vault, internal sectioning via `03-projecten/<project-name>/` and frontmatter tags | Recommended. The system was designed for this. |
+
+---
+
+## 11. Achtergrond-automatiek (settings-toggles)
+
+Vier achtergrond-automatieken zijn individueel aan/uit te zetten via
+`$VAULT/kennisbank-settings.json` (bron van waarheid, gelezen door
+`scripts/_settings.py`).
+
+| toggle | default | effect aan | effect uit |
+|--------|---------|-----------|-----------|
+| `auto_archive` | uit | SessionEnd archiveert het transcript naar `01-raw/transcripts/` | geen archief; gebruik `/sessielog` handmatig |
+| `distill_notify` | aan | SessionStart meldt openstaande transcripts | geen melding; `/destilleer` blijft handmatig werken |
+| `embed_index` | aan | SessionStart ververst de wiki-embeddingcache | retrieval draait op de bestaande (oudere) cache |
+| `daily_graphify` | aan | 1x/dag automatisch `/graphify --update` (kost-gated op 20u) | alleen `.needs-rebuild` bijhouden; graph handmatig |
+
+- **Wijzigen**: draai `/kennisbank:settings` (toont een tabel en zet toggles aan/uit), of bewerk het JSON-bestand (waarden zijn JSON-booleans).
+- **Self-gating**: de hooks blijven statisch geregistreerd in `~/.claude/settings.json`; elk hookscript leest zijn toggle en eindigt fail-open (`exit 0`) als hij uit staat. Een toggle-wijziging werkt vanaf de volgende sessie.
+- **Defaults bij ontbreken**: ontbreekt het bestand of een key, dan geldt de default-kolom hierboven. `setup` en `upgrade` schrijven expliciete waarden.
+- **Interactie**: met `embed_index` uit wordt `graphify-out/.needs-rebuild` niet bij SessionStart geleegd; dat is benign, de flag wordt door de graphify-rebuild zelf geleegd.
 
 ---
 

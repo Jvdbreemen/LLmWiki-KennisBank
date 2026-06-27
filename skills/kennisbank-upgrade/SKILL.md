@@ -82,6 +82,35 @@ Upgrade a deployed vault to the latest **release tag** (never bare main).
     regardless of its name).
 12. Run `bash "$VAULT/.claude/scripts/doctor.sh"` and report the PASS count.
 
+## Ensure settings and ask for missing toggles
+
+Resolve `VAULT="${KENNISBANK_VAULT:-$HOME/KennisBank}"`.
+
+Existing installs may not have a `kennisbank-settings.json` yet. Read each
+canonical toggle's current value:
+
+```bash
+for key in auto_archive distill_notify embed_index daily_graphify; do
+  echo "$key=$(python3 "$VAULT/.claude/scripts/_settings.py" get "$key")"
+done
+```
+
+If the file does not exist yet (every value falls back to its default and
+`$VAULT/kennisbank-settings.json` is absent), ask the user PER toggle whether to
+enable it, suggesting the default:
+
+- auto_archive (default OFF) - archive the transcript at session end
+- distill_notify (default ON) - notify at start that transcripts are pending
+- embed_index (default ON) - refresh the wiki embedding cache at start
+- daily_graphify (default ON) - update the graph automatically once a day
+
+Write each choice with `python3 "$VAULT/.claude/scripts/_settings.py" set <key> <true|false>`.
+Do NOT re-ask keys that are already set. Mention afterwards that the user can
+change this later with `/kennisbank:settings`.
+
+BEHAVIOUR CHANGE: after this upgrade the hook only archives when `auto_archive`
+is ON. Ask for it explicitly, otherwise the transcript archive stops silently.
+
 ## Dry-run
 If invoked with `--dry-run`, perform steps 1-6 and print the planned copies and
 backups, but make no writes (no backup, no copy, no stamp, no checkout side

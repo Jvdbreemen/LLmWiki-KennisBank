@@ -126,6 +126,7 @@ cp skills/autoresearch/SKILL.md ~/.claude/skills/autoresearch/
 | `/stale` | none | Detects articles older than 60 days with newer session data |
 | `/import` | `cc` \| `claudeai <path>` \| `folder <path>` \| `cowork` | Bulk-import old sessions: `cc` (Claude Code history), `claudeai <path>` (claude.ai export bundle), `folder <path>` (any markdown/text folder, recursive), `cowork` (auto-detected Mac desktop Claude data) |
 | `/autoresearch` | topic | Multi-round web research, saves to `~/Claude/research/` |
+| `/destilleer` | none | Imports archived CC transcripts and compiles them into the wiki |
 | `/reconcile` | none | Surface contradictions across wiki articles and produce a reconciliation log |
 | `/uitdaag` | claim or article | Adversarially challenge a claim for weak reasoning, missing evidence, or overgeneralization |
 | `/brug` | two topics | Find conceptual bridges and shared principles between two topics or articles |
@@ -196,6 +197,13 @@ Your memory files live under `~/.claude/projects/`. The path segment is a slug o
    - **autoresearch** (`~/.claude/skills/autoresearch/SKILL.md`) - multi-round research with lazy hierarchy check. Output to `~/Claude/research/`. Trigger: `/autoresearch`
    When the user types `/autoresearch`, invoke the Skill tool with `skill: "autoresearch"` before doing anything else.
    ```
+
+### Achtergrond-automatiek aan/uit
+
+Vier achtergrond-taken (transcript-archief, destillatie-melding, embed-index,
+dagelijkse graph-update) zijn toggles in `kennisbank-settings.json`. Beheer ze
+met `/kennisbank:settings`. `auto_archive` staat default uit; de rest aan. Zie
+CONFIGURATION.md voor de tabel.
 
 ## Optional: graphify integration
 
