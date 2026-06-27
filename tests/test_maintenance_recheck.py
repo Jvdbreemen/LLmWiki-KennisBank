@@ -13,6 +13,7 @@ if str(SCRIPTS_DIR) not in sys.path:
 import _maintenance as mnt  # noqa: E402
 import _memory  # noqa: E402
 import _judge  # noqa: E402
+import _embeddings as _emb  # noqa: E402
 
 
 class RecheckTest(unittest.TestCase):
@@ -24,10 +25,15 @@ class RecheckTest(unittest.TestCase):
         os.environ["KENNISBANK_VAULT"] = str(self.vault)
         self.m = _memory.write("Ruis", "iets nietszeggends", status="current", created="2026-06-01")
         self._orig = _judge.judge
+        # current_items() filtert memories zonder vector eruit; mock get_cached zodat
+        # recheck (oordeelt op TEKST) niet afhangt van een live embed-model (CI heeft geen Ollama).
+        self._orig_gc = _emb.get_cached
+        _emb.get_cached = lambda p, cache, recompute=True: [1.0, 0.0]
 
     def tearDown(self):
         import shutil
         _judge.judge = self._orig
+        _emb.get_cached = self._orig_gc
         if self._saved is None:
             os.environ.pop("KENNISBANK_VAULT", None)
         else:
