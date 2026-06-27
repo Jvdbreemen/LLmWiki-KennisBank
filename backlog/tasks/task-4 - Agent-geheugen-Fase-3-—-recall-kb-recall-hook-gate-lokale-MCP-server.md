@@ -1,10 +1,10 @@
 ---
 id: TASK-4
 title: Agent-geheugen Fase 3 — recall (kb-recall + hook-gate + lokale MCP-server)
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-06-26 23:22'
-updated_date: '2026-06-27 08:34'
+updated_date: '2026-06-27 09:32'
 labels:
   - agent-geheugen
 milestone: Agent-geheugen
@@ -23,10 +23,10 @@ kb-recall query-lib (hybride, beide lagen, current-only, recency-tiebreak) gebru
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 kb-recall fuseert vector+FTS, beide lagen, filtert status!=current, recency-tiebreak
-- [ ] #2 kb-retrieve hook injecteert memory alleen als memory_recall aan (anders enkel wiki, als nu)
+- [x] #1 kb-recall fuseert vector+FTS, beide lagen, filtert status!=current, recency-tiebreak
+- [x] #2 kb-retrieve hook injecteert memory alleen als memory_recall aan (anders enkel wiki, als nu)
 - [ ] #3 Lokale stdio MCP-server exposeert recall; mcp-dep ontbreekt -> fail-soft, hook werkt door
-- [ ] #4 Geen externe host-calls (no-cloud test)
+- [x] #4 Geen externe host-calls (no-cloud test)
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -36,3 +36,9 @@ Recall-pad besluit (advisor-bevestigd): ADDITIEF (2a), GEEN migratie. Laat het b
 
 MCP-server: APPROACH ok (optionele dep, fail-soft, stdio, lokaal) maar UITSTELLEN tot na fase 4 (MCP over lege memory-laag is niet e2e-testbaar; de kb-recall-lib levert ~alle waarde). Pitfalls: SQLite read-only openen (mode=ro/PRAGMA query_only; sweep is concurrent writer); 'db nog niet gebouwd' netjes afvangen; mcp-import achter try/except zodat afwezigheid de hook-recall + no-cloud/decoupling-tests nooit raakt; doctor no-cloud-check behandelt ontbrekende mcp als prima; dunne wrapper over kb-recall + embed-seam, unit-test de lib, smoke-test de wrapper. Fase 3 = kb-recall lib + hook-integratie; MCP-server-wrapper = na fase 4.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Fase 3 (recall) afgerond op feat/agent-geheugen. kb-recall.py (read-only, fail-soft, embed_id-gate, live status-hercheck tegen stale index), additieve memory-injectie in kb-retrieve hook (byte-identiteit waterdicht als memory_recall uit, qvec-reuse), SessionStart-registratie build-kb-index in CONFIGURATION, no-cloud-guard. Commits bd84056, fd5954d, c889673 + review-fix 9069d74. 156 tests groen. Multi-dimensie whole-branch review (17 agents): 0 Critical; 1 Important gefixt (stale-recall hardening, raakt #1-angst); minors gefixt (gate-test via injectable hits_fn, no-cloud default-provider-assert, conn-leak). AC #3 (lokale stdio MCP-server) BEWUST UITGESTELD tot na fase 4 (niet e2e-testbaar over lege memory-laag) -> afgesplitst naar aparte taak.
+<!-- SECTION:FINAL_SUMMARY:END -->

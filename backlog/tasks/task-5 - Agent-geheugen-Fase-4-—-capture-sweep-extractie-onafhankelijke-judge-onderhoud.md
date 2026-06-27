@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-06-26 23:22'
-updated_date: '2026-06-27 08:34'
+updated_date: '2026-06-27 09:31'
 labels:
   - agent-geheugen
 milestone: Agent-geheugen
@@ -35,9 +35,5 @@ SessionStart-sweep (gegate op memory_capture): extraheer kandidaat-memories uit 
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-MODEL-ROUTER (gebruikerseis): bouw _llm.py als generatie-tegenhanger van _embeddings.py VÓÓR de judge. Eén seam generate(prompt, system="", timeout)->str|None, fail-soft. Config-resolutie eerste-match: env (KB_LLM_PROVIDER/KB_LLM_MODEL/KB_LLM_ENDPOINT/KB_LLM_API_KEY_ENV) -> <vault>/.claude/kennisbank-llm.json -> default.
-Providers: ollama (LOKAAL, DEFAULT; POST localhost:11434/api/generate), openrouter (CLOUD opt-in; OpenAI-compat /chat/completions, api_key_env=OPENROUTER_API_KEY), claude-cli (CLOUD opt-in; shellt 'claude -p', gebruikt CC-auth). Default model gemma4:latest (wijzigbaar; qwen3.6 beter/trager, phi snel/CI).
-Helpers: provider(), model_id() (idem embed_id), is_local() (ollama/lokaal True) voor doctor/heartbeat. CLI: 'python3 _llm.py current' + 'test'.
-VEILIGHEID #4: default lokaal; cloud vereist EXPLICIETE config-wijziging. doctor no-cloud-check meldt actieve provider en WAARSCHUWT luid als niet-lokaal (content verlaat machine). De no-cloud-test mag _llm.py's cloud-endpoints als string bevatten (ze zijn opt-in/gegate), maar moet asserteren dat de DEFAULT/actieve config lokaal is.
-judge() = dunne laag op _llm.generate(); mockbare seam (tests monkeypatchen generate). Vervangt het eerdere 'alleen Ollama'-besluit: nu configureerbare router, lokaal-default.
+FALLBACK-KETEN (gebruiker akkoord, optie A): _llm.py leest een GEORDENDE provider-keten, default ["ollama"] (lokaal-only). generate() probeert providers op volgorde tot er één een niet-None resultaat geeft. GEEN automatische cloud-fallback by default — lokaal faalt => fail-safe (judge geeft None => memory blijft unverified, volgende sweep beoordeelt opnieuw; zelf-herstellend, nul leak). Gebruiker zet cloud opt-in door "openrouter"/"claude-cli" aan de keten toe te voegen in kennisbank-llm.json (config = expliciete toestemming, #4). VERPLICHT luid loggen wanneer een cloud-stap vuurt: stderr + heartbeat-status + sessiestart-melding ("judge viel terug op <provider> — content naar cloud"). Nooit stil, ook niet als geconfigureerd. doctor no-cloud-check: meld de keten; waarschuw als die een cloud-provider bevat. Config-vorm bv: {"providers": ["ollama"], "models": {"ollama":"gemma4:latest","openrouter":"...","claude-cli":"-"}} of per-provider model. is_local() = True alleen als de ACTIEVE/eerste-geslaagde provider lokaal is.
 <!-- SECTION:NOTES:END -->
