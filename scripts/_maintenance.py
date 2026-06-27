@@ -127,3 +127,45 @@ def supersede_pass(threshold: float = 0.85, judge_fn=None, get_cached_fn=None) -
                 superseded_paths.add(older["path"])
                 done += 1
     return done
+
+
+def recheck_pass(judge_fn=None, limit: int = 20) -> int:
+    import _judge
+    import _memory
+    judge_fn = judge_fn or _judge.judge
+    items = current_items()
+    done = 0
+    for it in items[:limit]:
+        verdict = judge_fn(it["body"])
+        if verdict.get("verdict") != "current":
+            if _memory.set_status(it["path"], "retracted"):
+                done += 1
+    return done
+
+
+def cluster_promote_pass(threshold: float = 0.80, min_neighbors: int = 2,
+                         get_cached_fn=None) -> int:
+    import re
+    items = current_items(get_cached_fn=get_cached_fn)
+    counts = neighbor_counts(items, threshold)
+    done = 0
+    for it in items:
+        if counts.get(it["path"], 0) < min_neighbors:
+            continue
+        p = Path(it["path"])
+        try:
+            raw = p.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if "promote_candidate:" in raw:
+            continue
+        parts = raw.split("---", 2)
+        if len(parts) < 3:
+            continue
+        new_fm = parts[1].rstrip("\n") + "\npromote_candidate: true\n"
+        try:
+            p.write_text(parts[0] + "---" + new_fm + "---" + parts[2], encoding="utf-8")
+            done += 1
+        except OSError:
+            continue
+    return done
