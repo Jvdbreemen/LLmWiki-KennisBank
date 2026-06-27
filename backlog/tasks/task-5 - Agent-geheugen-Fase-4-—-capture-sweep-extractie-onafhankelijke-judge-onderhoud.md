@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-06-26 23:22'
-updated_date: '2026-06-27 09:31'
+updated_date: '2026-06-27 10:05'
 labels:
   - agent-geheugen
 milestone: Agent-geheugen
@@ -35,5 +35,13 @@ SessionStart-sweep (gegate op memory_capture): extraheer kandidaat-memories uit 
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-FALLBACK-KETEN (gebruiker akkoord, optie A): _llm.py leest een GEORDENDE provider-keten, default ["ollama"] (lokaal-only). generate() probeert providers op volgorde tot er één een niet-None resultaat geeft. GEEN automatische cloud-fallback by default — lokaal faalt => fail-safe (judge geeft None => memory blijft unverified, volgende sweep beoordeelt opnieuw; zelf-herstellend, nul leak). Gebruiker zet cloud opt-in door "openrouter"/"claude-cli" aan de keten toe te voegen in kennisbank-llm.json (config = expliciete toestemming, #4). VERPLICHT luid loggen wanneer een cloud-stap vuurt: stderr + heartbeat-status + sessiestart-melding ("judge viel terug op <provider> — content naar cloud"). Nooit stil, ook niet als geconfigureerd. doctor no-cloud-check: meld de keten; waarschuw als die een cloud-provider bevat. Config-vorm bv: {"providers": ["ollama"], "models": {"ollama":"gemma4:latest","openrouter":"...","claude-cli":"-"}} of per-provider model. is_local() = True alleen als de ACTIEVE/eerste-geslaagde provider lokaal is.
+FASE-4b REQUIREMENTS (uit fase-4a review integratie-dimensie):
+1. CHUNK lange transcripts vóór _extract (BELANGRIJK): extract propt nu het hele transcript in één prompt -> lange sessies vallen stil naar [] (model-context-overflow). 4b moet transcripts splitsen in chunks en per chunk extracten + samenvoegen.
+2. DEDUP-primitief: 4b heeft een dedup nodig (cosine van kandidaat-embedding vs bestaande memory; hergebruik _embeddings + semantic-tiling-patroon, DEDUP_THRESHOLD ~0.92 empirisch).
+3. WRITE-COLLISION-GUARD: _memory.write gebruikt datum-slug; twee kandidaten zelfde dag/slug botsen -> 4b moet uniek pad garanderen (suffix/teller).
+4. SWEEP-BREED TIMEOUT-BUDGET + CANCEL: _llm.generate heeft alleen per-provider timeout (120s, hangt niet oneindig want stream=False). 4b detached sweep heeft een aggregaat-budget + stop-conditie nodig (niet eindeloos doorploegen).
+5. WATERMARK: spiegel distill-notify .distilled-pattern met een .swept-watermark in 01-raw/transcripts/ (pending()/mark()) voor 'nieuw sinds vorige sweep'.
+6. ORKESTRATIE zet zelf status (uit judge-verdict), evidence_basis="agent", source_session (transcript-pad) -> _memory.write accepteert die al, geen seam-gat.
+
+FASE-5 DOCTOR-NOOT: is_local() is provider-NAAM-gebaseerd; doctor no-cloud-check moet ook het ACTIEVE ollama-endpoint checken (waarschuw als niet localhost/127.0.0.1 -> remote-ollama lekt stil).
 <!-- SECTION:NOTES:END -->
