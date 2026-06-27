@@ -117,6 +117,10 @@ chmod +x "$VAULT/.claude/scripts/"*.py "$VAULT/.claude/scripts/"*.sh
 # exists (unless --force), so a user's edited backend config is never clobbered.
 copy_file kennisbank-embed.example.json "$VAULT/.claude/kennisbank-embed.json"
 
+# Python-afhankelijkheden (sqlite-vec voor kb-index)
+python3 -m pip install --quiet "sqlite-vec==0.1.9" 2>/dev/null \
+  || echo "  (let op: 'pip install sqlite-vec==0.1.9' handmatig nodig voor kb-index)"
+
 # Settings-bootstrap: zorg dat kennisbank-settings.json bestaat. De toggles
 # bepalen welke achtergrond-automatiek draait (auto-archive, distill-notify,
 # embed-index, daily-graphify). Interactief vragen we per toggle; niet-

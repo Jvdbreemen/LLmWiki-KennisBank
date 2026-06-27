@@ -98,6 +98,83 @@ class BuildKbIndexTest(unittest.TestCase):
         conn.close()
         self.assertEqual(n, 2)  # alpha + m1, geen duplicaten
 
+    def test_embed_index_false_excludes_wiki(self):
+        """embed_index=false → wiki-docs worden niet geïndexeerd, memory wel."""
+        settings_file = self.vault / "kennisbank-settings.json"
+        import json
+        settings_file.write_text(
+            json.dumps({"embed_index": False, "memory_capture": True,
+                        "auto_archive": False, "distill_notify": True,
+                        "daily_graphify": False}),
+            encoding="utf-8")
+        import importlib, _settings
+        importlib.reload(_settings)
+        self._build(rebuild=True)
+        import _kbindex
+        conn = _kbindex.connect()
+        names = {Path(p).name
+                 for (p,) in conn.execute("SELECT path FROM docs").fetchall()}
+        conn.close()
+        self.assertNotIn("alpha.md", names, "wiki mag niet geïndexeerd zijn bij embed_index=false")
+        self.assertIn("m1.md", names, "memory (current) moet geïndexeerd zijn ook bij embed_index=false")
+
+    def test_memory_capture_false_excludes_memory(self):
+        """memory_capture=false → memory-docs worden niet geïndexeerd, wiki wel."""
+        settings_file = self.vault / "kennisbank-settings.json"
+        import json
+        settings_file.write_text(
+            json.dumps({"embed_index": True, "memory_capture": False,
+                        "auto_archive": False, "distill_notify": True,
+                        "daily_graphify": False}),
+            encoding="utf-8")
+        import importlib, _settings
+        importlib.reload(_settings)
+        self._build(rebuild=True)
+        import _kbindex
+        conn = _kbindex.connect()
+        names = {Path(p).name
+                 for (p,) in conn.execute("SELECT path FROM docs").fetchall()}
+        conn.close()
+        self.assertNotIn("m1.md", names, "memory mag niet geïndexeerd zijn bij memory_capture=false")
+        self.assertIn("alpha.md", names, "wiki moet geïndexeerd zijn ook bij memory_capture=false")
+
+    def test_rebuild_with_model_down_leaves_index_intact(self):
+        """--rebuild met embed=None (model onbereikbaar) mag bestaande index NIET wissen."""
+        # Bouw eerst een geldige index op
+        self._build(rebuild=True)
+        import _kbindex
+        conn = _kbindex.connect()
+        n_before = conn.execute("SELECT count(*) FROM docs").fetchone()[0]
+        conn.close()
+        self.assertGreater(n_before, 0, "precondition: index moet gevuld zijn")
+
+        # Simuleer model-down: embed() → None
+        self.emb.embed = lambda *a, **k: None
+        self._build(rebuild=True)  # mag niet crashen
+        self.emb.embed = lambda *a, **k: [0.1] * DIM  # herstel voor tearDown
+
+        # Index-bestand moet nog bestaan en data intact zijn
+        conn = _kbindex.connect()
+        n_after = conn.execute("SELECT count(*) FROM docs").fetchone()[0]
+        conn.close()
+        self.assertEqual(n_before, n_after,
+                         "index mag niet gewist zijn als het embedmodel onbereikbaar is")
+
+    def test_incremental_skip_does_not_reindex_unchanged_files(self):
+        """Tweede build (rebuild=False) slaat ongewijzigde files over: doc-count stabiel."""
+        self._build(rebuild=True)
+        import _kbindex
+        conn = _kbindex.connect()
+        n_first = conn.execute("SELECT count(*) FROM docs").fetchone()[0]
+        conn.close()
+        # Tweede build zonder wijzigingen: niets mag worden verwijderd of toegevoegd
+        self._build(rebuild=False)
+        conn = _kbindex.connect()
+        n_second = conn.execute("SELECT count(*) FROM docs").fetchone()[0]
+        conn.close()
+        self.assertEqual(n_first, n_second,
+                         "incremental build mag het doc-aantal niet wijzigen als files ongewijzigd zijn")
+
 
 if __name__ == "__main__":
     unittest.main()

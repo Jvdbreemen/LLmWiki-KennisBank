@@ -53,15 +53,15 @@ def _collect():
 def main(rebuild: bool = False) -> None:
     eid = emb.embed_id()
     idx = _kbindex.index_path()
-    if rebuild and idx.exists():
-        idx.unlink()
-    conn = _kbindex.connect()
     # dim van het live model; faal-zacht als het model onbereikbaar is
+    # Probe EERST: bij mislukking de bestaande index NIET wissen.
     probe = emb.embed("dimensie-probe")
     if not probe:
         print("kb-index: embedmodel onbereikbaar, overgeslagen", file=sys.stderr)
-        conn.close()
         return
+    if rebuild and idx.exists():
+        idx.unlink()
+    conn = _kbindex.connect()
     dim = len(probe)
     # embed_id-mismatch => index ongeldig, verse start
     if idx != Path(":memory:") and conn.execute(

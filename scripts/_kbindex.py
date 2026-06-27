@@ -7,7 +7,8 @@ FTS5 keyword. Dimensie komt van het live embedmodel (nooit gehardcode); embed_id
 wordt opgeslagen zodat een modelwissel de index ongeldig maakt.
 
 Pure functies: vectoren komen als argument binnen (geen embed-call hier), zodat
-de module testbaar is zonder embedmodel. sqlite-vec is een pip-dep (gepind).
+de module testbaar is zonder embedmodel. sqlite-vec is een pip-dep (gepind in
+requirements.txt als sqlite-vec==0.1.9).
 
 Stdlib + sqlite-vec.
 """
@@ -124,7 +125,8 @@ def _rrf(rank_lists, k_const: int = 60) -> dict:
 
 def search(conn: sqlite3.Connection, *, query_vector, query_text: str = "",
            k: int = 8, layers=None, statuses=("current",)) -> list:
-    pool = max(k * 4, 20)
+    total = conn.execute("SELECT count(*) FROM docs").fetchone()[0]
+    pool = min(max(k * 4, 20, total), 5000)
     vec_ranking = [r[0] for r in conn.execute(
         "SELECT doc_id FROM vec_docs WHERE embedding MATCH ? ORDER BY distance LIMIT ?",
         (_serialize(query_vector), pool)).fetchall()]
