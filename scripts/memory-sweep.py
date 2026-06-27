@@ -10,7 +10,7 @@ Daarna een deterministische expire-pass. Schrijft een heartbeat-status.
 Gegate op memory_capture. Alle LLM/embed-aanroepen lopen via mockbare seams.
 Fail-soft: model onbereikbaar -> stopt netjes, memory blijft staan, heartbeat meldt.
 
-Stdlib. Usage: python3 memory-sweep.py [--max N]
+Stdlib. Usage: python3 memory-sweep.py [--max N] [--all]
 """
 from __future__ import annotations
 
@@ -110,8 +110,12 @@ def _write_heartbeat(summary: dict) -> None:
         pass
 
 
-def run_sweep(max_transcripts: int = 10, max_chunks: int = 6) -> dict:
-    """Verwerk pending transcripts naar memory-files.
+def run_sweep(max_transcripts: int = 10, max_chunks: int = 6,
+              ignore_watermark: bool = False) -> dict:
+    """Verwerk pending (of alle) transcripts naar memory-files.
+
+    Bij ignore_watermark=True worden ALLE *.jsonl in 01-raw/transcripts/ verwerkt,
+    ongeacht de .swept-watermark. Dedup voorkomt dubbele memory-files (idempotent).
 
     Returns een samenvatting-dict met sleutels:
         enabled, processed, written, current, unverified, duplicates, expired, errors
@@ -135,11 +139,19 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = 6) -> dict:
         _write_heartbeat(s)
         return s
 
-    # IMPORTANT 1: upfront model-bereikbaarheidsprobe — alleen als er pending werk is.
+    # Bouw todo VOOR de probe-guard: ignore_watermark pakt alle transcripts,
+    # normaal alleen pending. De guard checkt todo zodat --all werkt ook als
+    # de watermark-backlog leeg is.
+    if ignore_watermark:
+        tdir = vault_root() / "01-raw" / "transcripts"
+        todo = sorted(tdir.glob("*.jsonl"))[:max_transcripts] if tdir.exists() else []
+    else:
+        todo = ss.pending()[:max_transcripts]
+
+    # IMPORTANT 1: upfront model-bereikbaarheidsprobe — alleen als er werk is.
     # Een sweep tijdens een model-outage mag NOOIT transcripts als 'swept' markeren;
     # anders zijn ze permanent verloren (de .swept-watermark is append-only).
-    pending_list = ss.pending()[:max_transcripts]
-    if pending_list and not _model_reachable():
+    if todo and not _model_reachable():
         s["model_unreachable"] = True
         _write_heartbeat(s)
         return s
@@ -147,7 +159,7 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = 6) -> dict:
     existing = _existing_memory_vectors()
     today = date.today().isoformat()
 
-    for tp in pending_list:
+    for tp in todo:
         try:
             transcript = ss.transcript_text(tp)
             for ch in su.chunk(transcript)[:max_chunks]:
@@ -198,7 +210,8 @@ def main(argv=None) -> int:
             mx = int(argv[argv.index("--max") + 1])
         except Exception:
             mx = 10
-    s = run_sweep(max_transcripts=mx)
+    ignore = "--all" in argv
+    s = run_sweep(max_transcripts=mx, ignore_watermark=ignore)
     if s.get("enabled"):
         print(
             f"memory-sweep: {s['processed']} transcripts, {s['written']} geschreven "

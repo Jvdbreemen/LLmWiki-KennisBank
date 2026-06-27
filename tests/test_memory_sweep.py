@@ -180,6 +180,18 @@ class MemorySweepTest(unittest.TestCase):
         finally:
             self._llm.generate = self._orig_generate
 
+    def test_rebuild_all_reprocesses_marked(self):
+        # eerste sweep markeert s1 als swept
+        self.m.run_sweep()
+        # normale 2e sweep doet niets
+        self.assertEqual(self.m.run_sweep()["processed"], 0)
+        # --all negeert de watermark en verwerkt s1 opnieuw...
+        s = self.m.run_sweep(ignore_watermark=True)
+        self.assertEqual(s["processed"], 1)
+        # ...maar dedup voorkomt een tweede memory-file (idempotent)
+        mems = list((self.vault / "09-memory").glob("*.md"))
+        self.assertEqual(len(mems), 1)
+
     def test_embed_down_marks_nothing(self):
         """Embed-follow-up: embed-backend down (chat up) → transcript NIET gemarkeerd.
 
