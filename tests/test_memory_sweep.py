@@ -159,10 +159,9 @@ class MemorySweepTest(unittest.TestCase):
         self.assertNotIn("status: current", result)
 
     def test_model_down_marks_nothing(self):
-        """IMPORTANT 1 RED: model onbereikbaar → transcript mag NIET gemarkeerd worden."""
-        import _llm
+        """IMPORTANT 1: chat-model onbereikbaar → transcript mag NIET gemarkeerd worden."""
         import _sweepstate as _ss
-        _llm.generate = lambda *a, **k: None  # model down
+        self._llm.generate = lambda *a, **k: None  # chat down (embed blijft truthy)
         try:
             summary = self.m.run_sweep()
             # (a) transcript still pending
@@ -179,7 +178,32 @@ class MemorySweepTest(unittest.TestCase):
             self.assertTrue(data.get("model_unreachable"),
                             "heartbeat must flag model_unreachable")
         finally:
-            _llm.generate = self._orig_generate
+            self._llm.generate = self._orig_generate
+
+    def test_embed_down_marks_nothing(self):
+        """Embed-follow-up: embed-backend down (chat up) → transcript NIET gemarkeerd.
+
+        Spiegel van test_model_down_marks_nothing: een embed-only-outage moet
+        symmetrisch upfront opgevangen worden, anders watermark-burn."""
+        import _sweepstate as _ss
+        self.emb.embed = lambda *a, **k: None  # embed down (chat blijft "ok")
+        try:
+            summary = self.m.run_sweep()
+            # (a) transcript still pending
+            self.assertGreater(len(_ss.pending()), 0,
+                               "transcript should still be pending when embed is down")
+            # (b) no memory written
+            mems = list((self.vault / "09-memory").glob("*.md"))
+            self.assertEqual(len(mems), 0,
+                             "no memory may be written when embed is down")
+            # (c) heartbeat has model_unreachable truthy
+            hb = self.vault / ".claude" / "memory-sweep-status.json"
+            self.assertTrue(hb.exists(), "heartbeat should be written")
+            data = json.loads(hb.read_text(encoding="utf-8"))
+            self.assertTrue(data.get("model_unreachable"),
+                            "heartbeat must flag model_unreachable on embed outage")
+        finally:
+            self.emb.embed = self._orig[2]
 
 
 if __name__ == "__main__":

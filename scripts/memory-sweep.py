@@ -38,8 +38,14 @@ HEARTBEAT = "memory-sweep-status.json"
 
 
 def _model_reachable() -> bool:
-    """Probe het LLM: True als de keten een niet-lege string teruggeeft."""
-    return bool(_llm.generate("ping"))
+    """Probe ZOWEL chat als embed upfront. True alleen als beide beschikbaar zijn.
+
+    Symmetrisch: een embed-only-outage is dezelfde klasse als een chat-outage —
+    als we toch zouden doorgaan, worden alle kandidaten via embed_failed
+    overgeslagen maar het transcript alsnog 'swept' gemarkeerd → permanent
+    capture-verlies (de .swept-watermark is append-only).
+    """
+    return bool(_llm.generate("ping")) and bool(emb.embed("ping"))
 
 
 def _existing_memory_vectors() -> list:

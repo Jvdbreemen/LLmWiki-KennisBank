@@ -68,3 +68,29 @@ Dedup-check vervolgens zonder `vec`-guard (vec is nu zeker niet None).
 ```
 
 Alle tests groen, geen wijzigingen aan `_extract.py`, `_judge.py`, `_llm.py`, `_embeddings.py`, `_kbindex.py`, `kb-retrieve.py`.
+
+## embed-probe-follow-up
+
+**Residu gesloten:** De upfront-reachability-check was asymmetrisch — alleen chat
+werd geprobed. Een embed-only-outage (chat up, embed down) liet de probe slagen,
+waarna elke kandidaat via `embed_failed` werd overgeslagen maar het transcript
+alsnog `swept` werd gemarkeerd → permanent capture-verlies (zelfde klasse als
+IMPORTANT 1, de `.swept`-watermark is append-only).
+
+**Fix:** `scripts/memory-sweep.py`, `_model_reachable()`:
+```python
+return bool(_llm.generate("ping")) and bool(emb.embed("ping"))
+```
+Nu wordt zowel chat als embed upfront geprobed; faalt één van beide → de
+bestaande tak vuurt (`s["model_unreachable"] = True`, heartbeat, `return s`
+zonder iets te markeren of verwerken). Een embed-outage wordt nu symmetrisch
+opgevangen, net als een chat-outage.
+
+**TDD RED→GREEN:** `test_embed_down_marks_nothing` (spiegel van
+`test_model_down_marks_nothing`) — zet `emb.embed = lambda *a, **k: None` (chat
+blijft `"ok"`), faalt op de ongewijzigde chat-only probe (transcript werd
+gemarkeerd: `AssertionError: 0 not greater than 0`), slaagt na de symmetrische
+probe. `test_model_down_marks_nothing` ongewijzigd geldig (chat-down faalt nog
+steeds de `and`).
+
+**Full suite na follow-up:** `204 passed in 117.44s`.
