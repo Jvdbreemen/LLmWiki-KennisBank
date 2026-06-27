@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Hybrid wiki-recall in UserPromptSubmit-hook (`scripts/kb-recall.py`, `scripts/kb-retrieve.py`).** Dual-gate cosine|FTS5 + cosine-fallback — exacte termen vinden nu ook wiki-artikelen. Eval-helper `scripts/eval-wiki-recall.py` demonstreert before/after via `has_fts_match` + `wiki_hits`.
 - **Cross-memory onderhoud v2 (`scripts/memory-sweep.py` + `scripts/_maintenance.py`).** De sweep draait na elke capture-loop drie onderhoudspassen: supersede (nieuwer spreekt ouder tegen → status superseded + link), 2e-lijn-hercontrole (her-judge current → retract bij non-current), en cluster-promotie (markeer `promote_candidate: true` voor /wiki bij ≥2 verwante buren). Gegate op `memory_capture`, fail-soft per pass; samenvatting in de heartbeat (`superseded`, `rechecked_retracted`, `promote_marked`).
 - **Presearch hook (`scripts/kb-presearch.py`, PreToolUse).** Injecteert geheugen+wiki voor WebSearch/WebFetch vóór externe zoekactie (matcher `WebSearch|WebFetch`), niet-blokkerend, gegate op `memory_recall`.
 - **CC transcript-archief (`scripts/archive-transcript.py`, SessionEnd-hook).** Archiveert elk transcript naar `01-raw/transcripts/`, fail-open en idempotent. Overleeft `cleanupPeriodDays`.
