@@ -3,10 +3,10 @@ id: TASK-5
 title: >-
   Agent-geheugen Fase 4 — capture & sweep (extractie + onafhankelijke judge +
   onderhoud)
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-06-26 23:22'
-updated_date: '2026-06-27 10:05'
+updated_date: '2026-06-27 11:24'
 labels:
   - agent-geheugen
 milestone: Agent-geheugen
@@ -24,12 +24,12 @@ SessionStart-sweep (gegate op memory_capture): extraheer kandidaat-memories uit 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Sweep extraheert+judget nieuwe transcripts, verse-context (onafhankelijk van producent)
-- [ ] #2 Judge faalt/twijfelt -> unverified (fail-safe), nooit direct current
-- [ ] #3 Niet-blokkerend bij SessionStart (detached) -- onzichtbaar/snel
+- [x] #1 Sweep extraheert+judget nieuwe transcripts, verse-context (onafhankelijk van producent)
+- [x] #2 Judge faalt/twijfelt -> unverified (fail-safe), nooit direct current
+- [x] #3 Niet-blokkerend bij SessionStart (detached) -- onzichtbaar/snel
 - [ ] #4 Cross-memory: supersede/expire/cluster + hercontrole van current
-- [ ] #5 render() hardening: _yaml_list string-guard + YAML-escape title/source_session
-- [ ] #6 Deterministische plumbing unit-getest; LLM-call mockbaar
+- [x] #5 render() hardening: _yaml_list string-guard + YAML-escape title/source_session
+- [x] #6 Deterministische plumbing unit-getest; LLM-call mockbaar
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -45,3 +45,9 @@ FASE-4b REQUIREMENTS (uit fase-4a review integratie-dimensie):
 
 FASE-5 DOCTOR-NOOT: is_local() is provider-NAAM-gebaseerd; doctor no-cloud-check moet ook het ACTIEVE ollama-endpoint checken (waarschuw als niet localhost/127.0.0.1 -> remote-ollama lekt stil).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Fase 4 (capture & sweep) afgerond via 4a (model-router + seams + render-hardening, TASK-5.1) + 4b (sweep-orkestratie, TASK-5.2). Autonome capture: SessionStart-launcher (detached, lockfile, gegate op memory_capture) -> sweep leest nieuwe transcripts (.swept-watermark) -> chunk -> extract -> dedup -> onafhankelijke judge (fail-safe naar unverified) -> schrijf met status/evidence_basis=agent/source_session -> mark; expire-pass + heartbeat; build-kb-index erna. Model-router _llm.py lokaal-first (opt-in cloud-keten, luid). Upfront chat+embed-probe voorkomt watermark-burn bij outage. ~204 tests groen; twee whole-branch reviews (20+24 agents) + fix-waves. AC#4 cross-memory: expire gedaan; supersede/cluster/hercontrole -> TASK-8 (v2, in ontwerp). AC#5 render-hardening in 4a.
+<!-- SECTION:FINAL_SUMMARY:END -->
