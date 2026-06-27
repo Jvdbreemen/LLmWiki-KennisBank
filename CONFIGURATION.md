@@ -471,6 +471,23 @@ Vier achtergrond-automatieken zijn individueel aan/uit te zetten via
 
 ---
 
+## 12. Lokale MCP-server (kb-mcp.py, optioneel)
+
+`kb-mcp.py` exposeert je KennisBank (geheugen + wiki) als `recall`-tool aan lokale
+MCP-clients (Cursor, LM Studio, Claude Desktop) via **stdio** — lokaal, geen netwerk.
+Vereist eenmalig `pip install mcp`. Registreer bij je MCP-client met commando:
+
+```
+python3 "$HOME/KennisBank/.claude/scripts/kb-mcp.py"
+```
+
+(Windows: `py -3 "%USERPROFILE%/KennisBank/.claude/scripts/kb-mcp.py"`.)
+De server opent `kb-index.db` read-only; embedt query's lokaal via Ollama. Zonder
+het `mcp`-pakket meldt het script netjes dat de dep ontbreekt — de rest van
+KennisBank (hook-recall, sweep) werkt onafhankelijk door.
+
+---
+
 ## Discrepancies found
 
 1. **`THRESHOLD_DAYS` constant does not exist.** `README.md` (line 126) and the original task description reference editing `THRESHOLD_DAYS` in `stale-check.py`. The actual code uses `argparse` with `default=60`. The `--days N` CLI flag is correct.
