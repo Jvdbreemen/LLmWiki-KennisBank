@@ -119,6 +119,25 @@ class KbRecallTest(unittest.TestCase):
             "retracted memory werd teruggegeven via stale index (IMPORTANT 1 regressie)",
         )
 
+    def test_recall_hits_returns_both_layers(self):
+        hits = self.kb.recall_hits([0.1, 0.2, 0.3, 0.4], query_text="bug wiki",
+                                   k=5, layers=("wiki", "memory"))
+        layers = {h["layer"] for h in hits}
+        self.assertIn("memory", layers)
+        self.assertIn("wiki", layers)
+        self.assertTrue(all("layer" in h for h in hits))
+
+    def test_recall_hits_wiki_not_live_rechecked(self):
+        # w1.md staat NIET op disk als geldige memory; toch moet de wiki-hit blijven
+        # (wiki vertrouwt de index-status, geen live read_status-drop).
+        hits = self.kb.recall_hits([0.9, 0.8, 0.7, 0.6], query_text="wiki",
+                                   k=5, layers=("wiki",))
+        self.assertTrue(any(h["layer"] == "wiki" for h in hits))
+
+    def test_memory_hits_still_memory_only(self):
+        hits = self.kb.memory_hits([0.1, 0.2, 0.3, 0.4], query_text="bug", k=5)
+        self.assertTrue(all(Path(h["path"]).name == "m1.md" for h in hits))
+
 
 if __name__ == "__main__":
     unittest.main()

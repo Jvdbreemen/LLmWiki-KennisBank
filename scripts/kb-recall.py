@@ -44,27 +44,29 @@ def _open_ro(db_path: Path):
         return None
 
 
-def memory_hits(query_vector, query_text: str = "", k: int = 3) -> list:
+def recall_hits(query_vector, query_text: str = "", k: int = 3,
+                layers=("wiki", "memory")) -> list:
+    """Recall-hits over de opgegeven lagen (status=current), fail-soft -> [].
+    Live-status-hercheck ALLEEN voor de memory-laag (wiki is gecureerd)."""
     if not query_vector:
         return []
-    db = _kbindex.index_path()
-    conn = _open_ro(db)
+    conn = _open_ro(_kbindex.index_path())
     if conn is None:
         return []
     try:
         if not _kbindex.is_valid_for(conn, emb.embed_id()):
             return []
         rows = _kbindex.search(conn, query_vector=query_vector, query_text=query_text,
-                               k=k, layers=("memory",), statuses=("current",))
+                               k=k, layers=tuple(layers), statuses=("current",))
         out = []
         for r in rows:
-            # Defense-in-depth: hervalideer de live-status van het bestand.
-            # Een stale index (build overgeslagen) kan een ingetrokken/vervangen
-            # geheugen nog als 'current' serveren. Gooi die treffers weg.
-            if _mem.read_status(Path(r["path"])) != "current":
+            layer = r.get("layer", "")
+            # Stale-index-bescherming alleen voor memory: een ingetrokken memory mag
+            # nooit als current geserveerd worden. Wiki vertrouwt de index-status.
+            if layer == "memory" and _mem.read_status(Path(r["path"])) != "current":
                 continue
             snippet = emb.doc_text(Path(r["path"]), cap=280).replace("\n", " ").strip()
-            out.append({"path": r["path"], "title": r.get("title", ""),
+            out.append({"path": r["path"], "layer": layer, "title": r.get("title", ""),
                         "created": r.get("created", ""), "score": r.get("score", 0.0),
                         "snippet": snippet})
         return out
@@ -75,3 +77,8 @@ def memory_hits(query_vector, query_text: str = "", k: int = 3) -> list:
             conn.close()
         except Exception:
             pass
+
+
+def memory_hits(query_vector, query_text: str = "", k: int = 3) -> list:
+    """Dunne wrapper: alleen de memory-laag (backward-compat)."""
+    return recall_hits(query_vector, query_text=query_text, k=k, layers=("memory",))
