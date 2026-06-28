@@ -342,7 +342,7 @@ class SetupDeployTest(unittest.TestCase):
             out = result.stdout
             self.assertRegex(out, r"\[PASS\].*build-kb-index\.py.*registered")
             self.assertRegex(out, r"\[PASS\].*kb-presearch\.py.*registered")
-            self.assertRegex(out, r"kennisbank-versie.*0\.9\.0")
+            self.assertRegex(out, r"kennisbank-schema-versie.*0\.9\.0")
             self.assertEqual(result.returncode, 0, f"doctor exited {result.returncode}:\n{out}")
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
