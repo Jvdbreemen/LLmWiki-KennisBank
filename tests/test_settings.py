@@ -20,6 +20,8 @@ if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
 import _settings  # noqa: E402
+import importlib
+import shutil
 
 
 class SettingsTest(unittest.TestCase):
@@ -138,6 +140,66 @@ class SettingsTest(unittest.TestCase):
         _settings.set("memory_recall", False)
         self.assertFalse(_settings.get("memory_recall", True))
         self.assertTrue(_settings.get("memory_capture", True))
+
+
+class SettingsMigrateTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="kb-mig-"))
+        self.vault = self.tmp / "vault"
+        self.vault.mkdir(parents=True)
+        self._saved = os.environ.get("KENNISBANK_VAULT")
+        os.environ["KENNISBANK_VAULT"] = str(self.vault)
+        # herlaad _settings zodat vault_root de temp-vault pakt
+        importlib.reload(_settings)
+        self.s = _settings
+
+    def tearDown(self):
+        if self._saved is None:
+            os.environ.pop("KENNISBANK_VAULT", None)
+        else:
+            os.environ["KENNISBANK_VAULT"] = self._saved
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_migrate_adds_missing_preserves_existing(self):
+        p = self.vault / "kennisbank-settings.json"
+        # oude install: auto_archive bewust op een niet-default waarde
+        p.write_text(json.dumps({"auto_archive": True}), encoding="utf-8")
+        self.assertTrue(self.s.migrate())
+        data = json.loads(p.read_text(encoding="utf-8"))
+        self.assertEqual(data["auto_archive"], True)          # behouden
+        self.assertIn("memory_capture", data)                 # toegevoegd
+        self.assertEqual(data["memory_capture"], True)
+
+    def test_migrate_idempotent(self):
+        self.s.init()
+        self.assertFalse(self.s.migrate())                    # niets ontbreekt
+
+    def test_migrate_absent_file_falls_back_to_init(self):
+        self.assertTrue(self.s.migrate())
+        self.assertTrue((self.vault / "kennisbank-settings.json").exists())
+
+    def test_migrate_refuses_corrupt_file_and_leaves_bytes_unchanged(self):
+        # F1: corrupt (non-empty) settings.json -> migrate() must return False and NOT
+        # overwrite the file. Bytes must be identical after the call.
+        p = self.vault / "kennisbank-settings.json"
+        corrupt = b"{ this is not json"
+        p.write_bytes(corrupt)
+        result = self.s.migrate()
+        self.assertFalse(result, "migrate() should return False on a corrupt file")
+        self.assertEqual(p.read_bytes(), corrupt,
+                         "migrate() must leave a corrupt file completely untouched")
+
+    def test_migrate_preserves_non_default_values_end_to_end(self):
+        # F7: existing user with non-default toggle -> migrate() must preserve value
+        p = self.vault / "kennisbank-settings.json"
+        p.write_text(json.dumps({"auto_archive": True}), encoding="utf-8")
+        self.s.migrate()
+        data = json.loads(p.read_text(encoding="utf-8"))
+        self.assertTrue(data["auto_archive"], "non-default auto_archive must survive migrate()")
+        self.assertIn("memory_capture", data, "memory_capture must be added by migrate()")
+        self.assertIn("memory_recall", data, "memory_recall must be added by migrate()")
+        self.assertEqual(data["memory_capture"], True,
+                         "memory_capture default (True) must be added correctly")
 
 
 if __name__ == "__main__":

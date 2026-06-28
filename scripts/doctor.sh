@@ -244,63 +244,61 @@ EOF2
   fi
 fi
 
-# 13b. Retrieval hooks registered in settings.json.
-# setup.sh wires two hooks into ~/.claude/settings.json so the wiki embed cache
-# warms on SessionStart (build-embed-index.py) and matching snippets are injected
-# on UserPromptSubmit (kb-retrieve.py). If a user ran `setup.sh --no-hooks`, declined
-# the prompt, or python3 was absent at setup time, they are missing and retrieval
-# (/uitdaag, /brug, /wiki self-rewrite) silently finds nothing. Warn, never fail.
+# 13b. KennisBank-hooks geregistreerd in settings.json (manifest-gedreven).
 SETTINGS="$CLAUDE_DIR/settings.json"
-HOOK_HINT="re-run 'bash setup.sh' or register manually (CONFIGURATION.md, 'Hook registration'): python3 $SCRIPTS_DIR/register-hooks.py $SETTINGS SessionStart $SCRIPTS_DIR/build-embed-index.py UserPromptSubmit $SCRIPTS_DIR/kb-retrieve.py"
+HOOK_HINT="re-run 'bash setup.sh' (of bij een hardnekkig ontbrekende hook: rm \"$VAULT/.claude/.kennisbank-version\" && bash setup.sh)"
 if ! command -v python3 >/dev/null 2>&1; then
-  report_warn "retrieval hooks" "cannot read $SETTINGS without python3; $HOOK_HINT"
+  report_warn "retrieval hooks" "kan $SETTINGS niet lezen zonder python3; $HOOK_HINT"
 else
-  HOOK_STATUS="$(python3 -c '
-import json, sys
-from pathlib import Path
-p = Path(sys.argv[1])
-if not p.exists():
+  HOOK_LINES="$(python3 -c '
+import json, os, sys, importlib.util
+spec = importlib.util.spec_from_file_location("_hooks_manifest",
+    os.path.join(sys.argv[2], "_hooks_manifest.py"))
+man = importlib.util.module_from_spec(spec); spec.loader.exec_module(man)
+p = sys.argv[1]
+if not os.path.exists(p):
     print("NOFILE"); raise SystemExit
 try:
-    text = p.read_text(encoding="utf-8")
+    text = open(p, encoding="utf-8").read()
     data = json.loads(text) if text.strip() else {}
 except (ValueError, OSError):
     print("BADJSON"); raise SystemExit
 if not isinstance(data, dict):
     print("BADJSON"); raise SystemExit
-hooks = data.get("hooks", {})
-hooks = hooks if isinstance(hooks, dict) else {}
+hooks = data.get("hooks", {}) if isinstance(data.get("hooks"), dict) else {}
 def present(event, needle):
-    for group in (hooks.get(event) or []):
-        if not isinstance(group, dict):
-            continue
-        for h in (group.get("hooks") or []):
-            if isinstance(h, dict) and needle in (h.get("command") or ""):
-                return True
+    for g in (hooks.get(event) or []):
+        if isinstance(g, dict):
+            for h in (g.get("hooks") or []):
+                if isinstance(h, dict) and needle in (h.get("command") or ""):
+                    return True
     return False
-print("OK %d %d" % (present("SessionStart", "build-embed-index.py"),
-                    present("UserPromptSubmit", "kb-retrieve.py")))
-' "$SETTINGS" 2>/dev/null)"
-  if [ "$HOOK_STATUS" = "NOFILE" ]; then
-    report_warn "retrieval hooks" "no $SETTINGS yet, so neither hook is registered; $HOOK_HINT"
-  elif [ "$HOOK_STATUS" = "BADJSON" ]; then
-    report_warn "retrieval hooks" "$SETTINGS is not valid JSON; cannot verify hooks. $HOOK_HINT"
-  elif [ -z "$HOOK_STATUS" ]; then
-    report_warn "retrieval hooks" "could not read $SETTINGS (python3 error); $HOOK_HINT"
+for event, script, _m in man.hooks():
+    print(("OK " if present(event, script) else "MISSING ") + event + " " + script)
+' "$SETTINGS" "$SCRIPTS_DIR" 2>/dev/null | tr -d '\r')"
+  if [ "$HOOK_LINES" = "NOFILE" ]; then
+    report_warn "retrieval hooks" "nog geen $SETTINGS; $HOOK_HINT"
+  elif [ "$HOOK_LINES" = "BADJSON" ]; then
+    report_warn "retrieval hooks" "$SETTINGS is geen geldige JSON; kan hooks niet checken. $HOOK_HINT"
+  elif [ -z "$HOOK_LINES" ]; then
+    report_warn "retrieval hooks" "kon $SETTINGS niet lezen (python3-fout); $HOOK_HINT"
   else
-    HOOK_SESSION="$(printf '%s' "$HOOK_STATUS" | cut -d' ' -f2)"
-    HOOK_PROMPT="$(printf '%s' "$HOOK_STATUS" | cut -d' ' -f3)"
-    if [ "$HOOK_SESSION" = "1" ]; then
-      report_pass "hook SessionStart build-embed-index.py" "registered in $SETTINGS"
-    else
-      report_warn "hook SessionStart build-embed-index.py" "not registered; embed cache stays cold. $HOOK_HINT"
-    fi
-    if [ "$HOOK_PROMPT" = "1" ]; then
-      report_pass "hook UserPromptSubmit kb-retrieve.py" "registered in $SETTINGS"
-    else
-      report_warn "hook UserPromptSubmit kb-retrieve.py" "not registered; retrieval injects nothing. $HOOK_HINT"
-    fi
+    while IFS=' ' read -r status event script; do
+      if [ "$status" = "OK" ]; then
+        report_pass "hook $event $script" "registered in $SETTINGS"
+      else
+        report_warn "hook $event $script" "not registered. $HOOK_HINT"
+      fi
+    done <<HOOKEOF
+$HOOK_LINES
+HOOKEOF
   fi
+fi
+
+# 13c. Vault-versie-stamp.
+if command -v python3 >/dev/null 2>&1; then
+  KB_VER="$(python3 "$SCRIPTS_DIR/_migrations.py" version "$VAULT" 2>/dev/null | tr -d '\r')"
+  report_info "kennisbank-versie" "${KB_VER:-onbekend}"
 fi
 
 # Footer.
