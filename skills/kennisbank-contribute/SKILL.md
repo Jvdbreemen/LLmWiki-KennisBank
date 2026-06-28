@@ -22,7 +22,9 @@ Take local tooling edits in a deployed vault and open an upstream PR.
 
 ## Scope filter (NEVER contribute these)
 `CLAUDE.md`, `categories.json`, `embeddings-cache.json`, any `*.bak`, the vault
-content directories `00-*`..`08-*`, and `.kennisbank-version`.
+content directories `00-*`..`08-*`, `.kennisbank-version` (release-tag-stamp), and
+`.kennisbank-schema-version` (migratie-schema-stamp). Beide stempels zijn lokaal
+gegenereerd en nooit upstream-contributabel.
 
 For skills: only skills whose `skills/<name>/SKILL.md` path exists in the repo
 at BASE — verified via `git cat-file -e "$BASE:skills/<name>/SKILL.md"` (exits

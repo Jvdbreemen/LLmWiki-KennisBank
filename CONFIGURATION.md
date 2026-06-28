@@ -270,10 +270,10 @@ Op macOS/Linux: vervang `py -3` door `python3`.
 
 Registration is idempotent and non-destructive: existing hooks, permissions, and env are preserved. Re-running `setup.sh` is safe for new **and existing** vaults — it refreshes the tooling without clobbering user data or overwriting customisations. Interpreter is **interpreter-aware**: uses `py -3` on Windows, `python3` elsewhere; a self-heal on stale paths preserves the original interpreter. Skip registration with `setup.sh --no-hooks`.
 
-**Version stamp.** `setup.sh` creates `<vault>/.claude/.kennisbank-version` (current: `0.9.0`). If a hook is stubbornly missing after re-run, force a re-registration by removing the version stamp and re-running:
+**Version stamp.** `setup.sh` creates `<vault>/.claude/.kennisbank-schema-version` (current: `0.9.0`) — de migratie-schema-versie. Dit is een **apart** bestand van `.kennisbank-version` (de release-tag-stamp die de `kennisbank-upgrade`/`kennisbank-contribute`-skills beheren); ze worden bewust niet gedeeld. If a hook is stubbornly missing after re-run, force a re-registration by removing the schema-version stamp and re-running:
 
 ```bash
-rm ~/KennisBank/.claude/.kennisbank-version
+rm ~/KennisBank/.claude/.kennisbank-schema-version
 bash ~/KennisBank/setup.sh --yes
 ```
 

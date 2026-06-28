@@ -246,7 +246,7 @@ fi
 
 # 13b. KennisBank-hooks geregistreerd in settings.json (manifest-gedreven).
 SETTINGS="$CLAUDE_DIR/settings.json"
-HOOK_HINT="re-run 'bash setup.sh' (of bij een hardnekkig ontbrekende hook: rm \"$VAULT/.claude/.kennisbank-version\" && bash setup.sh)"
+HOOK_HINT="re-run 'bash setup.sh' (of bij een hardnekkig ontbrekende hook: rm \"$VAULT/.claude/.kennisbank-schema-version\" && bash setup.sh)"
 if ! command -v python3 >/dev/null 2>&1; then
   report_warn "retrieval hooks" "kan $SETTINGS niet lezen zonder python3; $HOOK_HINT"
 else
@@ -295,10 +295,11 @@ HOOKEOF
   fi
 fi
 
-# 13c. Vault-versie-stamp.
+# 13c. Vault-migratie-schema-versie (eigen stempel; los van .kennisbank-version
+# dat de upgrade/contribute-skills voor de release-tag gebruiken).
 if command -v python3 >/dev/null 2>&1; then
   KB_VER="$(python3 "$SCRIPTS_DIR/_migrations.py" version "$VAULT" 2>/dev/null | tr -d '\r')"
-  report_info "kennisbank-versie" "${KB_VER:-onbekend}"
+  report_info "kennisbank-schema-versie" "${KB_VER:-onbekend}"
 fi
 
 # Footer.
