@@ -65,15 +65,20 @@ If you use the graphify skill to build a knowledge graph over this vault, the ou
 
 To build the graph: run `/graphify` in a session (requires the graphify skill to be installed in `~/.claude/skills/`).
 
-## Key learnings file (optional)
+## Key learnings file (on by default)
 
-If you maintain a central learnings file (e.g. `~/Claude/learnings.md`), declare the path here as a convention:
+`/sessielog` reads the first uncommented `LEARNINGS_FILE=` line below, creates the
+file if it does not exist yet, and appends Do-Not-Repeat entries, reusable patterns,
+and decision-log entries per session. It is **on by default**; comment the line out
+(add a leading `# `) or delete it to disable the learnings step.
 
-```
 LEARNINGS_FILE=~/Claude/learnings.md
-```
 
-This is a text convention, not parsed config. The `/sessielog` command reads this file and uses the path it sees here to append Do-Not-Repeat entries and technical patterns. If you skip the line, the learnings step is silently skipped.
+This is a text convention, not parsed config: only the path on the uncommented line
+is read. It complements the automatic memory layer (`09-memory/`, which captures and
+recalls lessons on its own) with a human-curated record. Prefer a path inside the
+vault (e.g. `~/KennisBank/06-claude/learnings.md`) if you want the file graphed and
+backed up together with the vault.
 
 ## Language
 

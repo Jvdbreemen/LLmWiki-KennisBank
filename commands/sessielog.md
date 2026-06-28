@@ -124,12 +124,21 @@ Als beschikbaar: python3 $VAULT/.claude/scripts/semantic-tiling.py [pad-naar-art
 
 ## Stap 5: Key learnings bijwerken (optioneel)
 
-Als je een centraal "key learnings"-bestand bijhoudt, scan de sessie-log op:
-- Do-Not-Repeat: fouten, crashes, mislukte aanpakken
-- Key Learnings: technische patronen, herbruikbare werkwijzen
-- Decision Log: significante architectuur- of toolingkeuzes
+Lees het learnings-pad deterministisch uit `$VAULT/CLAUDE.md` — grep de EERSTE
+ongecommente `LEARNINGS_FILE=`-regel (een regel die met `#` begint telt als
+uitgeschakeld), en expandeer een leidende `~` naar `$HOME`:
 
-Configureer het pad in $VAULT/CLAUDE.md (zie `LEARNINGS_FILE`). Als het pad niet geconfigureerd is: sla over.
+```bash
+LEARN=$(grep -E '^[[:space:]]*LEARNINGS_FILE=' "$VAULT/CLAUDE.md" | head -1 | sed -E 's/^[[:space:]]*LEARNINGS_FILE=//' | tr -d '"' | sed "s#^~#$HOME#")
+```
+
+- Leeg (geen ongecommente regel): sla deze stap over en meld "geen learnings-bestand geconfigureerd".
+- Anders: dit is het learnings-bestand. Maak het aan als het nog niet bestaat (`mkdir -p "$(dirname "$LEARN")"` + touch). Scan de sessie-log en append één sessie-blok `## YYYY-MM-DD sessie (onderwerp)` met de subsecties die van toepassing zijn:
+  - `### Do-Not-Repeat`: fouten, crashes, mislukte aanpakken
+  - `### Key Learnings`: technische patronen, herbruikbare werkwijzen
+  - `### Decision Log`: significante architectuur- of toolingkeuzes
+
+Sla alleen over als er niets configureerds gevonden is — niet als het bestand nog niet bestaat (maak het dan aan). Het learnings-bestand vult de automatische `09-memory/`-laag aan met een mens-gecureerd record.
 
 ---
 

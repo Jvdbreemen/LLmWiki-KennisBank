@@ -31,13 +31,18 @@ Do this:
 2. Replace `[YOUR PROJECTS]` (under "Active projects") with one line per active project. Format: `- **Name**: short description`. Three to six projects is plenty.
 3. Save and close.
 
-Optional: configure a central learnings file. If you keep a personal `learnings.md`, uncomment and edit the line near the bottom of the file:
+Central learnings file: **on by default.** Near the bottom of `CLAUDE.md` there is an
+active line:
 
 ```
-LEARNINGS_FILE=$HOME/Claude/learnings.md
+LEARNINGS_FILE=~/Claude/learnings.md
 ```
 
-`/sessielog` will append Do-Not-Repeat entries and reusable patterns there. Skip this if you do not keep a learnings file; the command will silently skip step 5.
+`/sessielog` reads the first uncommented `LEARNINGS_FILE=` line, creates the file if it
+does not exist, and appends Do-Not-Repeat entries and reusable patterns per session.
+Edit the path if you like (a path inside the vault gets graphed and backed up with it),
+or comment the line out (add a leading `# `) / delete it to disable the learnings step.
+This complements the automatic `09-memory/` layer with a human-curated record.
 
 ---
 
