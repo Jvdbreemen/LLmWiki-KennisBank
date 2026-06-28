@@ -67,13 +67,17 @@ To build the graph: run `/graphify` in a session (requires the graphify skill to
 
 ## Key learnings file (optional)
 
-If you maintain a central learnings file (e.g. `~/Claude/learnings.md`), declare the path here as a convention:
+Maintain a central learnings file? Remove the leading `# ` from the line below to
+enable it. `/sessielog` reads the first uncommented `LEARNINGS_FILE=` line in this
+file, creates the file if it does not exist yet, and appends Do-Not-Repeat entries,
+reusable patterns, and decision-log entries per session. Leave the line commented
+(or delete it) to skip the learnings step.
 
-```
-LEARNINGS_FILE=~/Claude/learnings.md
-```
+# LEARNINGS_FILE=~/Claude/learnings.md
 
-This is a text convention, not parsed config. The `/sessielog` command reads this file and uses the path it sees here to append Do-Not-Repeat entries and technical patterns. If you skip the line, the learnings step is silently skipped.
+This is a text convention, not parsed config: only the path on the uncommented line
+is read. It complements the automatic memory layer (`09-memory/`, which captures and
+recalls lessons on its own) with a human-curated record.
 
 ## Language
 
