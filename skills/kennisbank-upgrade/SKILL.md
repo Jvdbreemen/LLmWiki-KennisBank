@@ -12,15 +12,17 @@ Upgrade a deployed vault to the latest **release tag** (never bare main).
 - `REPO="${KENNISBANK_REPO}"` — if empty, ask the user for the path to their
   LLmWiki-KennisBank git checkout. Confirm it is a git repo (`git -C "$REPO" rev-parse`).
 
-## Deploy map
+## Deploy map (referentie — stap 9 voert dit uit via `setup.sh`)
 | Repo source | Deploy destination |
 |---|---|
 | `scripts/*.py`, `scripts/*.sh` | `$VAULT/.claude/scripts/` |
 | `templates/*.md` | `$VAULT/04-templates/` |
-| `commands/*.md` | `$HOME/.claude/commands/` |
+| `commands/*.md`, `commands/*/*.md` | `$HOME/.claude/commands/` |
 | `skills/*/SKILL.md` (each skill dir) | `$HOME/.claude/skills/<name>/` |
 
-`CLAUDE.md` is personalized and is NEVER overwritten.
+De feitelijke deploy in stap 9 gebeurt via `bash setup.sh --yes` (sinds v0.9.0 de
+idempotent-veilige installer); deze tabel is alleen referentie voor wat waar landt.
+`CLAUDE.md` is personalized and is NEVER overwritten (setup.sh respecteert dat).
 
 ## Procedure
 1. `git -C "$REPO" fetch --tags --quiet`.
@@ -68,15 +70,23 @@ Upgrade a deployed vault to the latest **release tag** (never bare main).
    Only back up a non-skill category if it actually has drift; skip clean ones.
    The backup set provably covers every skill that step 9 will overwrite — no false safety promise.
 8. `git -C "$REPO" -c advice.detachedHead=false checkout "$LATEST"`.
-9. Copy per the deploy map: `scripts/*.py` and `scripts/*.sh` -> vault scripts;
-   `templates/*.md` -> vault templates; `commands/*.md` -> `~/.claude/commands/`;
-   for each `skills/*/` directory in the checked-out tag, copy its `SKILL.md`
-   to `~/.claude/skills/<name>/SKILL.md` (this refreshes the kennisbank-upgrade
-   and kennisbank-contribute skills themselves).
-   `chmod +x` the vault `.py` and `.sh` files. Do not touch `CLAUDE.md`.
-   Note: this step may update the kennisbank-* skills themselves; if their
-   behavior changed, re-invoke the relevant skill to pick up the new version.
-10. Write `$VAULT/.claude/.kennisbank-version`:
+9. Deploy by delegating to the installer — it is the single, idempotent-safe
+   deploy mechanism (sinds v0.9.0): refresh ALL tooling (scripts/commands/skills/
+   templates), register the FULL hookset in `~/.claude/settings.json`
+   (interpreter-aware: `py -3` op Windows / `python3` elders; PreToolUse-matcher),
+   install the runtime-deps (`sqlite-vec`) onder de juiste interpreter, en draai
+   de version-gated migraties (die stempelen `$VAULT/.claude/.kennisbank-schema-version`).
+   User-data (`CLAUDE.md`, `kennisbank-embed.json`, bestaande settings-WAARDEN)
+   blijft behouden.
+   ```bash
+   ( cd "$REPO" && KENNISBANK_VAULT="$VAULT" bash setup.sh --yes )
+   ```
+   Dit vervangt de oude hand-gerolde kopie: zonder dit zou een upgrade de nieuwe
+   scripts deployen maar de hooks NIET registreren en de deps NIET installeren —
+   de feature shipt dan dood. setup.sh ververst ook de kennisbank-* skills zelf;
+   als hun gedrag veranderde, her-invoke de relevante skill.
+10. Write `$VAULT/.claude/.kennisbank-version` (de RELEASE-tag-stamp; los van de
+    migratie-schema-stamp `.kennisbank-schema-version` die setup.sh in stap 9 zet):
     `{"tag":"$LATEST","commit":"<git rev-parse --short $LATEST>","installed_at":"<UTC ISO 8601>"}`.
 11. `git -C "$REPO" checkout -` (return to the previously checked-out branch,
     regardless of its name).
@@ -86,8 +96,10 @@ Upgrade a deployed vault to the latest **release tag** (never bare main).
 
 Resolve `VAULT="${KENNISBANK_VAULT:-$HOME/KennisBank}"`.
 
-Existing installs may not have a `kennisbank-settings.json` yet. Read each
-canonical toggle's current value:
+Stap 9's `setup.sh` heeft `kennisbank-settings.json` al gebootstrapt (defaults) of
+additief gemigreerd (ontbrekende toggles toegevoegd, bestaande WAARDEN behouden).
+Toon daarom de huidige waarden en bied aan ze te tunen — niet "vraag-indien-afwezig".
+Lees elke canonieke toggle's huidige waarde:
 
 ```bash
 for key in auto_archive distill_notify embed_index daily_graphify memory_capture memory_recall; do

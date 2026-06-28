@@ -329,7 +329,7 @@ class SetupDeployTest(unittest.TestCase):
     def test_version_stamp_written(self):
         tmp, vault = self.run_setup()
         try:
-            stamp = vault / ".claude" / ".kennisbank-version"
+            stamp = vault / ".claude" / ".kennisbank-schema-version"
             self.assertTrue(stamp.is_file())
             self.assertEqual(stamp.read_text(encoding="utf-8").strip(), "0.9.0")
         finally:
@@ -342,7 +342,7 @@ class SetupDeployTest(unittest.TestCase):
             out = result.stdout
             self.assertRegex(out, r"\[PASS\].*build-kb-index\.py.*registered")
             self.assertRegex(out, r"\[PASS\].*kb-presearch\.py.*registered")
-            self.assertRegex(out, r"kennisbank-versie.*0\.9\.0")
+            self.assertRegex(out, r"kennisbank-schema-versie.*0\.9\.0")
             self.assertEqual(result.returncode, 0, f"doctor exited {result.returncode}:\n{out}")
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
@@ -387,7 +387,7 @@ class SetupDeployTest(unittest.TestCase):
             # Setup mag slagen (exitcode 0); als python3 mist kan het anders zijn
             # maar dan zijn de asserts ook niet zinvol — we controleren op output.
             settings_json = tmp / ".claude" / "settings.json"
-            stamp = vault / ".claude" / ".kennisbank-version"
+            stamp = vault / ".claude" / ".kennisbank-schema-version"
             # Migrations ran (vault scripts deployed → stamp exists)
             self.assertTrue(stamp.is_file(),
                             f"Vault stamp ontbreekt — migratie heeft niet gedraaid.\n"
