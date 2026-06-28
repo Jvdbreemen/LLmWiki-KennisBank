@@ -2,7 +2,10 @@
 """_migrations.py - version-gated migratie-runner voor de KennisBank-vault.
 
 Brengt een vault deterministisch naar VERSION via geordende, idempotente
-migraties (dirs, hooks, toggles) en stempelt <vault>/.claude/.kennisbank-version.
+migraties (dirs, hooks, toggles) en stempelt <vault>/.claude/.kennisbank-schema-version.
+Bewust een EIGEN bestand: .kennisbank-version is van de upgrade/contribute-skills
+(JSON met de release-tag); de migratie-schema-versie is een ander concept en mag
+dat bestand niet clobberen.
 Het framework is vooruitkijkend: de huidige migraties zijn idempotent-altijd-
 toepasbaar, de version-gating betaalt zich uit bij toekomstige eenrichtings-
 migraties. Stdlib-only.
@@ -19,7 +22,7 @@ import sys
 from pathlib import Path
 
 VERSION = "0.9.0"
-STAMP_REL = ".claude/.kennisbank-version"
+STAMP_REL = ".claude/.kennisbank-schema-version"
 
 
 def _vtuple(v: str):
