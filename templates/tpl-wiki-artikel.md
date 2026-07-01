@@ -34,5 +34,6 @@ author: claude
        - <kernpunt, kort>: [[raw-sessie-YYYY-MM-DD-slug]]
      Altijd een wikilink, nooit een backtick-pad of alleen proza: pad-tekst
      is onzichtbaar voor backlinks en de kennisgraaf. De datum zit al in de
-     bestandsnaam van de sessie. -->
+     bestandsnaam van de sessie. Komt het artikel uit een import (geen
+     sessie), link dan de bron: [[05-bronnen/pad/naar/bron.md]]. -->
 - {{kernpunt}}: [[raw-sessie-{{sessie}}]]
