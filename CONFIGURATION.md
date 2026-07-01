@@ -361,6 +361,24 @@ The five env vars below control the behavior of the vault-onderhoud scripts
 - **To change**: set the environment variable or pass the level explicitly to
   `context-budget.py`.
 
+### RECONCILE_THRESHOLD / TOP_K (write-time invalidatie)
+
+- **Default**: `0.75` / `2`
+- **Where set**: `scripts/_reconcile.py` (module-constanten).
+- **Effect**: bij het wegschrijven van een nieuw kandidaat-memory worden de
+  top-`TOP_K` bestaande memories (status current of unverified) met cosine
+  boven `RECONCILE_THRESHOLD` aan de reconcile-judge voorgelegd
+  (ADD/SUPERSEDE/NOOP). De band loopt tot de dup-drempel (`0.92` in
+  `_sweeputil.is_duplicate`): daarboven wordt een kandidaat als exacte
+  her-capture geskipt zonder LLM-call (idempotentie van `--all`-rebuilds).
+  Tegenspraken die boven 0.92 embedden vangt de supersede-pass (0.85,
+  current-only) als vangnet. Tuned voor `qwen3-embedding:8b`.
+- **Bi-temporeel**: `valid_from` = sessiedatum uit de transcriptnaam (fallback:
+  capture-datum); superseden/expiren stempelt `valid_until`. Zie het
+  frontmatter-contract in `scripts/_memory.py`.
+- **To change**: pas de constanten in `_reconcile.py` aan. Herkalibreer per
+  embeddingmodel, samen met de dup- en supersede-drempels.
+
 ---
 
 ## 5. autoresearch skill

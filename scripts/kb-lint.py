@@ -79,7 +79,14 @@ def collect_session_stems(root: Path) -> set[str]:
     """
     stems: set[str] = set()
     for f in root.rglob(f"{SESSION_PREFIX}*.md"):
-        if SKIP_DIRS.isdisjoint(p.name for p in f.parents):
+        # Alleen de directories BINNEN de vault tellen; f.parents zou ook
+        # ancestors boven de vault-root meenemen (een vault die zelf onder
+        # een .claude/ of graphify-out/ pad ligt zou anders nul stems krijgen).
+        try:
+            rel_dirs = f.relative_to(root).parts[:-1]
+        except ValueError:
+            rel_dirs = ()
+        if SKIP_DIRS.isdisjoint(rel_dirs):
             stems.add(f.stem)
     return stems
 

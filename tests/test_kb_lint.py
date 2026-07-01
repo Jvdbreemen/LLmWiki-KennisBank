@@ -145,6 +145,19 @@ class TestLintVault(VaultCase):
         report = self.kl.lint_vault(self.root)
         self.assertEqual([w["type"] for w in report["warnings"]], ["dangling"])
 
+    def test_vault_under_skip_named_ancestor_still_resolves(self):
+        # Alleen directories BINNEN de vault tellen als skip; een vault die
+        # zelf onder een .claude/ of graphify-out/ pad ligt moet gewoon werken.
+        base = self.root / ".claude" / "diepe" / "vault"
+        (base / "01-raw" / "sessies").mkdir(parents=True)
+        (base / "02-wiki").mkdir(parents=True)
+        (base / "01-raw" / "sessies" / "raw-sessie-2026-06-28-x.md").write_text(
+            "log", encoding="utf-8")
+        (base / "02-wiki" / "a.md").write_text(
+            "- punt: [[raw-sessie-2026-06-28-x]]\n", encoding="utf-8")
+        report = self.kl.lint_vault(base)
+        self.assertEqual(report["warnings"], [])
+
     def test_index_and_log_skipped(self):
         self.add_article("index.md", "geen herkomst nodig\n")
         self.add_article("log.md", "geen herkomst nodig\n")
