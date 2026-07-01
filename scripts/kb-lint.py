@@ -18,9 +18,11 @@ Checks per artikel:
    onzichtbaar voor Obsidian-backlinks en de kennisgraaf; maak er een
    wikilink van.
 
-Alleen ``[[raw-sessie-...]]``-links tellen als herkomst; verwijzingen naar
-memories of andere artikelen zijn verbanden, geen bron. ``index.md`` en
-``log.md`` zijn structuurbestanden en worden overgeslagen.
+Herkomst telt in twee vormen: een ``[[raw-sessie-...]]``-wikilink (sessie-
+herkomst) of een expliciete ``[[05-bronnen/...]]``-wikilink (bron-herkomst,
+voor artikelen die uit een import komen in plaats van uit een sessie).
+Verwijzingen naar memories of andere artikelen zijn verbanden, geen bron.
+``index.md`` en ``log.md`` zijn structuurbestanden en worden overgeslagen.
 
 Gebruik: python3 kb-lint.py [--json]
 
@@ -91,7 +93,33 @@ def collect_session_stems(root: Path) -> set[str]:
     return stems
 
 
-def lint_article(path: Path, stems: set[str]) -> list[dict]:
+def _clean_target(target: str) -> str:
+    """Strip alias en kop-anker van een wikilink-target, behoud het pad."""
+    return target.split("|", 1)[0].split("#", 1)[0].strip().replace("\\", "/")
+
+
+def resolving_bron_links(text: str, root: Path) -> tuple[list, list]:
+    """(resolvend, dangling) voor expliciete [[05-bronnen/...]]-wikilinks.
+
+    Bron-herkomst voor artikelen die uit een import (bv. Evernote) komen in
+    plaats van uit een sessie. Alleen path-stijl links die met ``05-bronnen/``
+    beginnen tellen; kale artikel-links blijven verbanden.
+    """
+    ok, dead = [], []
+    for t in WIKILINK_RE.findall(text):
+        target = _clean_target(t)
+        if not target.startswith("05-bronnen/"):
+            continue
+        p = root / target
+        if p.exists() or (not target.endswith(".md")
+                          and (root / (target + ".md")).exists()):
+            ok.append(target)
+        else:
+            dead.append(target)
+    return ok, dead
+
+
+def lint_article(path: Path, stems: set[str], root: Path) -> list[dict]:
     """Lint één artikel. Geeft een lijst findings terug (leeg = schoon).
 
     Elke finding is ``{"file": str, "type": str, "detail": str}`` met type
@@ -107,8 +135,9 @@ def lint_article(path: Path, stems: set[str]) -> list[dict]:
         for t in WIKILINK_RE.findall(text)
         if normalize_target(t).startswith(SESSION_PREFIX)
     ]
-    resolving = [t for t in session_links if t in stems]
-    dangling = [t for t in session_links if t not in stems]
+    bron_ok, bron_dead = resolving_bron_links(text, root)
+    resolving = [t for t in session_links if t in stems] + bron_ok
+    dangling = [t for t in session_links if t not in stems] + bron_dead
 
     # Pad-verwijzingen buiten wikilinks om: eerst alle wikilinks wegknippen,
     # dan pas naar losse pad-tekst zoeken.
@@ -120,7 +149,7 @@ def lint_article(path: Path, stems: set[str]) -> list[dict]:
         findings.append({
             "file": path.name,
             "type": "dangling",
-            "detail": f"dode sessie-link [[{target}]]: bestand niet gevonden in 01-raw/sessies/ of 08-archive/",
+            "detail": f"dode herkomst-link [[{target}]]: bestand niet gevonden in de vault",
         })
     if not resolving:
         if path_refs:
@@ -133,7 +162,7 @@ def lint_article(path: Path, stems: set[str]) -> list[dict]:
             findings.append({
                 "file": path.name,
                 "type": "missing",
-                "detail": "geen sessie-herkomst: geen enkele [[raw-sessie-...]]-verwijzing",
+                "detail": "geen herkomst: geen [[raw-sessie-...]]- of [[05-bronnen/...]]-verwijzing",
             })
     return findings
 
@@ -151,7 +180,7 @@ def lint_vault(root: Path) -> dict:
         if f.name in SKIP_FILES:
             continue
         articles += 1
-        warnings.extend(lint_article(f, stems))
+        warnings.extend(lint_article(f, stems, root))
 
     warned_files = {w["file"] for w in warnings}
     return {
