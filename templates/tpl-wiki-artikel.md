@@ -25,8 +25,14 @@ author: claude
 - Gerelateerd project: [[]]
 
 ## Bronnen
-<!-- APA7 formatted -->
+<!-- Alleen EXTERNE bronnen (APA7). Sessieverwijzingen horen hier niet,
+     die gaan naar Sessie-herkomst hieronder. -->
 
 ## Sessie-herkomst
-<!-- Uit welke sessie(s) komt deze kennis? -->
-- [[01-raw/sessies/]]
+<!-- Per kernpunt: uit welke raw-sessie komt deze claim? Verplicht formaat
+     (kb-lint.py valideert):
+       - <kernpunt, kort>: [[raw-sessie-YYYY-MM-DD-slug]]
+     Altijd een wikilink, nooit een backtick-pad of alleen proza: pad-tekst
+     is onzichtbaar voor backlinks en de kennisgraaf. De datum zit al in de
+     bestandsnaam van de sessie. -->
+- {{kernpunt}}: [[raw-sessie-{{sessie}}]]

@@ -302,6 +302,34 @@ if command -v python3 >/dev/null 2>&1; then
   report_info "kennisbank-schema-versie" "${KB_VER:-onbekend}"
 fi
 
+# 13d. Provenance-lint: elk wiki-artikel moet herleidbare sessie-herkomst
+# hebben (resolvende [[raw-sessie-...]]-wikilink). Read-only; details via
+# `python3 kb-lint.py` los draaien.
+if command -v python3 >/dev/null 2>&1 && [ -f "$SCRIPTS_DIR/kb-lint.py" ]; then
+  LINT_SUMMARY="$(python3 "$SCRIPTS_DIR/kb-lint.py" --json 2>/dev/null | python3 -c '
+import json, sys
+try:
+    r = json.load(sys.stdin)
+    print("%d %d" % (r["articles"], r["warned"]))
+except Exception:
+    print("ERR")
+' 2>/dev/null | tr -d '\r')"
+  case "$LINT_SUMMARY" in
+    ""|ERR)
+      report_warn "provenance-lint" "kon kb-lint.py niet draaien (bestaat 02-wiki/?)"
+      ;;
+    *)
+      LINT_ARTICLES="${LINT_SUMMARY%% *}"
+      LINT_WARNED="${LINT_SUMMARY##* }"
+      if [ "$LINT_WARNED" = "0" ]; then
+        report_pass "provenance-lint" "$LINT_ARTICLES artikelen, alle sessie-herkomst herleidbaar"
+      else
+        report_warn "provenance-lint" "$LINT_WARNED van $LINT_ARTICLES artikelen zonder herleidbare sessie-herkomst; draai: python3 $SCRIPTS_DIR/kb-lint.py"
+      fi
+      ;;
+  esac
+fi
+
 # Footer.
 printf "\n%sSummary%s\n" "$C_BOLD" "$C_RESET"
 printf "  %s[PASS]%s %d\n" "$C_GREEN" "$C_RESET" "$PASS_COUNT"
