@@ -22,15 +22,17 @@ from _frontmatter import parse_frontmatter  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402
 
 
-def current_items(get_cached_fn=None) -> list:
-    """Laad alle current-memories uit 09-memory/ met hun embeddings.
+def current_items(get_cached_fn=None, statuses=("current",)) -> list:
+    """Laad memories uit 09-memory/ met hun embeddings, gefilterd op status.
 
-    Returns een list[dict] met sleutels: path, title, created, body, vec.
-    Items zonder vector worden overgeslagen.
+    Returns een list[dict] met sleutels: path, title, created, valid_from,
+    body, vec. Items zonder vector worden overgeslagen.
 
     Args:
         get_cached_fn: optionele injectable get_cached(path, cache, recompute=True)
                        om de echte emb.get_cached te vervangen in tests.
+        statuses: welke status-waarden meedoen (default alleen "current";
+                  de write-time reconcile gebruikt ("current", "unverified")).
     """
     gc = get_cached_fn or (lambda p, cache, recompute=True: emb.get_cached(p, cache))
     cache = emb.load_cache()
@@ -43,7 +45,7 @@ def current_items(get_cached_fn=None) -> list:
             fm, body = parse_frontmatter(f.read_text(encoding="utf-8"))
         except Exception:
             continue
-        if fm.get("status") != "current":
+        if fm.get("status") not in statuses:
             continue
         vec = gc(f, cache)
         if not vec:
@@ -51,7 +53,9 @@ def current_items(get_cached_fn=None) -> list:
         out.append({
             "path": str(f),
             "title": fm.get("title", ""),
+            "status": fm.get("status", ""),
             "created": fm.get("created", ""),
+            "valid_from": fm.get("valid_from", fm.get("created", "")),
             "body": body.strip(),
             "vec": vec,
         })
@@ -142,13 +146,22 @@ def supersede_pass(threshold: float = 0.85, judge_fn=None, get_cached_fn=None) -
     done = 0
     superseded_paths = set()
     for a, b, _sim in similar_pairs(items, threshold):
-        # bepaal nieuwer/ouder op created (string ISO sorteert correct)
-        newer, older = (a, b) if (a["created"] >= b["created"]) else (b, a)
+        # Bepaal nieuwer/ouder op EVENT-tijd (valid_from, fallback created;
+        # tie-break op created). Ordenen op created alleen zou een laat
+        # gecaptured OUD feit als 'nieuwer' aanmerken en het echt nieuwere
+        # feit sluiten met een geinverteerd geldigheidsinterval.
+        def _when(it):
+            return (it.get("valid_from") or it.get("created") or "",
+                    it.get("created") or "")
+        newer, older = (a, b) if _when(a) >= _when(b) else (b, a)
         if older["path"] in superseded_paths or newer["path"] in superseded_paths:
             continue
         if judge_fn(newer["body"], older["body"]):
+            # Bi-temporele sluiting: het oude feit gold tot het nieuwe inging.
+            until = newer.get("valid_from") or newer.get("created") or ""
             if _memory.set_status(older["path"], "superseded",
-                                  superseded_by=[Path(newer["path"]).stem]):
+                                  superseded_by=[Path(newer["path"]).stem],
+                                  valid_until=until or None):
                 superseded_paths.add(older["path"])
                 done += 1
     return done

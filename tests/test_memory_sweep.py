@@ -115,6 +115,148 @@ class MemorySweepTest(unittest.TestCase):
         self.m.run_sweep()
         self.assertIn("status: expired", old.read_text(encoding="utf-8"))
 
+    def test_expire_pass_stamps_valid_until(self):
+        import _memory
+        old = _memory.write("Vluchtig", "iets", status="current",
+                            expires="2000-01-01", created="1999-06-27")
+        self.m.run_sweep()
+        self.assertIn("valid_until: 2000-01-01", old.read_text(encoding="utf-8"))
+
+    def test_new_memory_gets_valid_from(self):
+        # s1.jsonl heeft geen datum-prefix -> valid_from valt terug op created.
+        self.m.run_sweep()
+        mem = list((self.vault / "09-memory").glob("*.md"))[0]
+        txt = mem.read_text(encoding="utf-8")
+        self.assertIn("valid_from: ", txt)
+
+    def _dated_transcript_in_reconcile_band(self):
+        """Vervang s1.jsonl door een gedateerd transcript en zet de embeddings
+        zo dat de kandidaat in de reconcile-band valt (cosine 0.9 met bestaand:
+        boven RECONCILE_THRESHOLD 0.75, onder dup-drempel 0.92)."""
+        tdir = self.vault / "01-raw" / "transcripts"
+        (tdir / "s1.jsonl").unlink()
+        (tdir / "2026-06-25-jim.jsonl").write_text(
+            json.dumps({"type": "user", "message": {"role": "user", "content": "Jim update"}}),
+            encoding="utf-8")
+        self.emb.embed = lambda text, timeout=30.0: [0.9, 0.4358899, 0.0]
+        self.emb.get_cached = lambda f, cache, recompute=True: [1.0, 0.0, 0.0]
+
+    def test_reconcile_supersedes_existing_at_write(self):
+        import _memory
+        import _reconcile
+        old = _memory.write("Jim zoekt baan", "Jim zoekt een baan",
+                            status="current", created="2026-01-01")
+        self._dated_transcript_in_reconcile_band()
+        orig = _reconcile.judge_reconcile
+        _reconcile.judge_reconcile = lambda new, o: "SUPERSEDE"
+        self.addCleanup(lambda: setattr(_reconcile, "judge_reconcile", orig))
+        summary = self.m.run_sweep()
+        self.assertEqual(summary.get("reconciled_superseded", 0), 1)
+        old_txt = old.read_text(encoding="utf-8")
+        self.assertIn("status: superseded", old_txt)
+        self.assertIn("valid_until: 2026-06-25", old_txt)
+        new_files = [f for f in (self.vault / "09-memory").glob("*.md") if f != old]
+        self.assertEqual(len(new_files), 1)
+        new_txt = new_files[0].read_text(encoding="utf-8")
+        self.assertIn("valid_from: 2026-06-25", new_txt)
+        self.assertIn(new_files[0].stem, old_txt)  # superseded_by-link
+
+    def test_reconcile_noop_skips_writing(self):
+        import _memory
+        import _reconcile
+        _memory.write("Jim zoekt baan", "Jim zoekt een baan",
+                      status="current", created="2026-01-01")
+        self._dated_transcript_in_reconcile_band()
+        orig = _reconcile.judge_reconcile
+        _reconcile.judge_reconcile = lambda new, o: "NOOP"
+        self.addCleanup(lambda: setattr(_reconcile, "judge_reconcile", orig))
+        summary = self.m.run_sweep()
+        self.assertEqual(summary.get("written", 0), 0)
+        self.assertGreaterEqual(summary.get("reconcile_noop", 0), 1)
+        self.assertEqual(len(list((self.vault / "09-memory").glob("*.md"))), 1)
+
+    def test_unverified_candidate_does_not_supersede_current(self):
+        # Quarantaine-kennis mag geen geverifieerd feit sluiten: judge zegt
+        # unverified -> supersedes worden NIET toegepast.
+        import _memory
+        import _reconcile
+        old = _memory.write("Jim zoekt baan", "Jim zoekt een baan",
+                            status="current", created="2026-01-01")
+        self._dated_transcript_in_reconcile_band()
+        self._judge.judge = lambda cand, context="": {"verdict": "unverified", "reason": "vaag"}
+        orig = _reconcile.judge_reconcile
+        _reconcile.judge_reconcile = lambda new, o: "SUPERSEDE"
+        self.addCleanup(lambda: setattr(_reconcile, "judge_reconcile", orig))
+        summary = self.m.run_sweep()
+        self.assertEqual(summary.get("reconciled_superseded", 0), 0)
+        self.assertIn("status: current", old.read_text(encoding="utf-8"))
+        self.assertEqual(summary.get("unverified", 0), 1)  # kandidaat wel geschreven
+
+    def test_flipback_against_closed_memory_reaches_reconcile(self):
+        # Her-assertie van een eerder GESLOTEN feit met latere valid_from is
+        # geen duplicaat: de kandidaat moet de reconcile-laag bereiken.
+        import _memory
+        closed = _memory.write("Jim zoekt baan", "Jim zoekt een baan",
+                               status="superseded", created="2026-01-01",
+                               valid_from="2026-01-01", valid_until="2026-02-01")
+        self._dated_transcript_in_reconcile_band()
+        # kandidaat embedt IDENTIEK aan het gesloten memory (cosine 1.0)
+        self.emb.embed = lambda text, timeout=30.0: [1.0, 0.0, 0.0]
+        summary = self.m.run_sweep()
+        self.assertEqual(summary.get("duplicates", 0), 0)
+        self.assertEqual(summary.get("written", 0), 1)
+        self.assertIn("status: superseded", closed.read_text(encoding="utf-8"))
+
+    def test_same_era_recapture_of_closed_memory_still_dedups(self):
+        # Her-capture uit hetzelfde tijdperk (valid_from <= valid_until van het
+        # gesloten memory) blijft een duplicaat: --all-rebuild idempotentie.
+        import _memory
+        _memory.write("Jim zoekt baan", "Jim zoekt een baan",
+                      status="superseded", created="2026-01-01",
+                      valid_from="2026-01-01", valid_until="2026-02-01")
+        tdir = self.vault / "01-raw" / "transcripts"
+        (tdir / "s1.jsonl").unlink()
+        (tdir / "2026-01-15-jim.jsonl").write_text(
+            json.dumps({"type": "user", "message": {"role": "user", "content": "Jim"}}),
+            encoding="utf-8")
+        self.emb.embed = lambda text, timeout=30.0: [1.0, 0.0, 0.0]
+        self.emb.get_cached = lambda f, cache, recompute=True: [1.0, 0.0, 0.0]
+        summary = self.m.run_sweep()
+        self.assertEqual(summary.get("written", 0), 0)
+        self.assertGreaterEqual(summary.get("duplicates", 0), 1)
+
+    def test_expire_pass_failure_does_not_break_sweep(self):
+        # Een exception in de expire-pass mag de sweep-afronding (heartbeat)
+        # niet blokkeren: errors telt op, run_sweep keert normaal terug.
+        def _boom():
+            raise RuntimeError("malformed memory-file")
+        self.m._expire_pass = _boom
+        summary = self.m.run_sweep()
+        self.assertGreaterEqual(summary.get("errors", 0), 1)
+        self.assertTrue((self.vault / ".claude" / "memory-sweep-status.json").exists())
+
+    def test_reconcile_temporal_guard_blocks_old_transcript(self):
+        # Kandidaat uit een OUDER transcript (2025) mag een nieuwer feit
+        # (valid_from 2026-01-01) niet sluiten -> gewoon ADD, geen supersede.
+        import _memory
+        import _reconcile
+        old = _memory.write("Jim heeft baan", "Jim heeft een baan",
+                            status="current", created="2026-01-01")
+        tdir = self.vault / "01-raw" / "transcripts"
+        (tdir / "s1.jsonl").unlink()
+        (tdir / "2025-01-01-jim.jsonl").write_text(
+            json.dumps({"type": "user", "message": {"role": "user", "content": "Jim oud"}}),
+            encoding="utf-8")
+        self.emb.embed = lambda text, timeout=30.0: [0.9, 0.4358899, 0.0]
+        self.emb.get_cached = lambda f, cache, recompute=True: [1.0, 0.0, 0.0]
+        orig = _reconcile.judge_reconcile
+        _reconcile.judge_reconcile = lambda new, o: "SUPERSEDE"
+        self.addCleanup(lambda: setattr(_reconcile, "judge_reconcile", orig))
+        summary = self.m.run_sweep()
+        self.assertEqual(summary.get("reconciled_superseded", 0), 0)
+        self.assertIn("status: current", old.read_text(encoding="utf-8"))
+        self.assertEqual(summary.get("written", 0), 1)
+
 
     def test_per_transcript_error_increments_errors(self):
         """COVERAGE: per-transcript exception → errors telt mee, transcript blijft pending."""
