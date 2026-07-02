@@ -5,12 +5,19 @@ Pure stdlib-bibliotheek: rendert en pareert memory-markdown met frontmatter,
 en bouwt paden. Geen netwerk, geen embeddings, geen side-effects bij import.
 Underscore-naam zodat scripts het importeren na sys.path.insert (idem _settings).
 
-Frontmatter-contract (spec fase 1):
+Frontmatter-contract (spec fase 1, bi-temporeel uitgebreid):
     title: vrije tekst (verplicht)
     type: memory
+    memory_type: feit | voorkeur | procedure | beslissing
+    importance: 1-5 (judge-oordeel bij capture; 3 = neutraal)
     status: unverified | current | superseded | retracted | expired
     evidence_basis: getypt | cc-sessie | audio | import | autoresearch | agent
     source_session, created, updated, expires?, superseded_by?, tags
+    valid_from: vanaf wanneer het feit geldt (event-tijd; default = created).
+        Bewust apart van created (capture-tijd): een laat geïmporteerd
+        transcript levert een feit dat al eerder gold.
+    valid_until?: tot wanneer het feit gold. Gezet bij superseden en
+        expiren; een memory zonder valid_until is open-einde geldig.
 """
 from __future__ import annotations
 
@@ -26,8 +33,29 @@ from _vaultpath import vault_root  # noqa: E402
 
 STATUSES = ("unverified", "current", "superseded", "retracted", "expired")
 EVIDENCE_BASES = ("getypt", "cc-sessie", "audio", "import", "autoresearch", "agent")
+# Kennistypes verouderen verschillend: een beslissing heeft lange geldigheid
+# met expliciete supersession, een voorkeur is zachter, een procedure is
+# stabiel tot de tooling wijzigt, een feit tot de wereld wijzigt. Het type
+# maakt verval en retrieval per soort differentieerbaar (CrewAI/Cognee-les).
+MEMORY_TYPES = ("feit", "voorkeur", "procedure", "beslissing")
 DEFAULT_STATUS = "unverified"
 DEFAULT_EVIDENCE = "cc-sessie"
+DEFAULT_MEMORY_TYPE = "feit"
+
+
+def coerce_memory_type(value) -> str:
+    """Sanitize een (LLM-geleverd) memory-type; onbekend -> 'feit'."""
+    v = str(value or "").strip().lower()
+    return v if v in MEMORY_TYPES else DEFAULT_MEMORY_TYPE
+
+
+def coerce_importance(value) -> int:
+    """Sanitize importance naar 1..5; onparseerbaar -> neutraal 3."""
+    try:
+        imp = int(value)
+    except (TypeError, ValueError):
+        return 3
+    return min(5, max(1, imp))
 
 
 def memory_dir() -> Path:
@@ -71,21 +99,32 @@ def _yaml_list(items) -> str:
 def render(title: str, body: str, *, status: str = DEFAULT_STATUS,
            evidence_basis: str = DEFAULT_EVIDENCE, source_session: str = "",
            created: str | None = None, updated: str | None = None,
-           expires: str | None = None, superseded_by=None, tags=None) -> str:
+           valid_from: str | None = None, valid_until: str | None = None,
+           expires: str | None = None, superseded_by=None, tags=None,
+           memory_type: str = DEFAULT_MEMORY_TYPE, importance: int = 3) -> str:
     if status not in STATUSES:
         raise ValueError(f"ongeldige status: {status!r} (verwacht een van {STATUSES})")
     if evidence_basis not in EVIDENCE_BASES:
         raise ValueError(f"ongeldige evidence_basis: {evidence_basis!r}")
+    if memory_type not in MEMORY_TYPES:
+        raise ValueError(f"ongeldig memory_type: {memory_type!r} (verwacht een van {MEMORY_TYPES})")
+    importance = coerce_importance(importance)
     created = created or _today_iso()
     updated = updated or created
+    valid_from = valid_from or created
     lines = ["---",
              f"title: {_yaml_scalar(title)}",
              "type: memory",
+             f"memory_type: {memory_type}",
+             f"importance: {importance}",
              f"status: {status}",
              f"evidence_basis: {evidence_basis}",
              f"source_session: {_yaml_scalar(source_session)}",
              f"created: {created}",
-             f"updated: {updated}"]
+             f"updated: {updated}",
+             f"valid_from: {valid_from}"]
+    if valid_until:
+        lines.append(f"valid_until: {valid_until}")
     if expires:
         lines.append(f"expires: {expires}")
     if superseded_by:
@@ -114,9 +153,10 @@ def read_status(path) -> str:
         return DEFAULT_STATUS
 
 
-def set_status(path, status: str, superseded_by=None) -> bool:
+def set_status(path, status: str, superseded_by=None, valid_until: str | None = None) -> bool:
     """Herschrijf de status-regel binnen het frontmatter-blok; optioneel een
-    superseded_by-link zetten. Return True als het bestand gewijzigd is.
+    superseded_by-link en/of valid_until (bi-temporele sluiting) zetten.
+    Return True als het bestand gewijzigd is.
     Mutatie alleen binnen het frontmatter (tussen de eerste twee --- fences).
     Fail-soft: return False bij ongeldige status of OSError."""
     import re
@@ -131,14 +171,23 @@ def set_status(path, status: str, superseded_by=None) -> bool:
     if len(parts) < 3:
         return False
     fm = parts[1]
-    new_fm = re.sub(r"^status:.*$", f"status: {status}", fm, count=1, flags=re.MULTILINE)
+    # Replacement altijd via een lambda: een string-replacement interpreteert
+    # backslashes als regex-escapes (re.PatternError op bv. een pad of "\x").
+    new_fm = re.sub(r"^status:.*$", lambda _m: f"status: {status}",
+                    fm, count=1, flags=re.MULTILINE)
     if superseded_by:
         link = "[" + ", ".join(f"[[{s}]]" for s in superseded_by) + "]"
         if re.search(r"^superseded_by:.*$", new_fm, flags=re.MULTILINE):
-            new_fm = re.sub(r"^superseded_by:.*$", f"superseded_by: {link}",
+            new_fm = re.sub(r"^superseded_by:.*$", lambda _m: f"superseded_by: {link}",
                             new_fm, count=1, flags=re.MULTILINE)
         else:
             new_fm = new_fm.rstrip("\n") + f"\nsuperseded_by: {link}\n"
+    if valid_until:
+        if re.search(r"^valid_until:.*$", new_fm, flags=re.MULTILINE):
+            new_fm = re.sub(r"^valid_until:.*$", lambda _m: f"valid_until: {valid_until}",
+                            new_fm, count=1, flags=re.MULTILINE)
+        else:
+            new_fm = new_fm.rstrip("\n") + f"\nvalid_until: {valid_until}\n"
     new_raw = parts[0] + "---" + new_fm + "---" + parts[2]
     if new_raw == raw:
         return False

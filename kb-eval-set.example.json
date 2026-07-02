@@ -1,0 +1,11 @@
+[
+  {"q": "Hoe zet ik inkomende WireGuard-toegang op achter CGNAT?",
+   "expect": ["mikrotik-routeros-wireguard-cgnat"],
+   "type": "single-hop"},
+  {"q": "Exception 3 LoadStoreAlignmentCause op de ESP8266, waar komt dat door?",
+   "expect": ["esp8266-progmem-alignment-bug"],
+   "type": "keyword"},
+  {"q": "Mijn laptop voelt extreem traag maar de CPU is niet vol, hoe diagnosticeer ik dat?",
+   "expect": ["windows-hoge-cpu-load-diagnose"],
+   "type": "paraphrase"}
+]

@@ -23,8 +23,14 @@ EXTRACT_SYSTEM = (
     "Je extraheert herbruikbare kennis uit een werk-transcript voor een persoonlijke "
     "kennisbank. Vang alleen: lessons learned, bug-fixes (oorzaak+oplossing), genomen "
     "besluiten, en duurzame feiten. NEGEER smalltalk, tussenstappen en vluchtige status. "
-    "Elke memory is atomair en zelf-verklarend. Antwoord UITSLUITEND met een JSON-lijst: "
-    "[{\"title\": \"<kort>\", \"body\": \"<2-4 zinnen>\"}]. Leeg = []."
+    "Elke memory is atomair en zelf-verklarend. Typeer elke memory: "
+    "\"feit\" (duurzaam waar over de wereld of het project), "
+    "\"voorkeur\" (hoe de gebruiker het wil), "
+    "\"procedure\" (hoe je iets doet: stappen, werkwijze), "
+    "\"beslissing\" (gemaakte keuze met reden). "
+    "Antwoord UITSLUITEND met een JSON-lijst: "
+    "[{\"title\": \"<kort>\", \"body\": \"<2-4 zinnen>\", "
+    "\"type\": \"feit|voorkeur|procedure|beslissing\"}]. Leeg = []."
 )
 
 
@@ -48,7 +54,8 @@ def extract_candidates(transcript_text: str, max_n: int = 8) -> list:
         title = str(item.get("title", "")).strip()
         body = str(item.get("body", "")).strip()
         if title and body:
-            out.append({"title": title, "body": body})
+            out.append({"title": title, "body": body,
+                        "type": str(item.get("type", "")).strip().lower()})
         if len(out) >= max_n:
             break
     return out

@@ -17,6 +17,7 @@ HOOKS = [
     ("SessionStart",     "distill-notify.py",     None),
     ("UserPromptSubmit", "kb-retrieve.py",        None),
     ("SessionEnd",       "archive-transcript.py", None),
+    ("SessionEnd",       "kb-usage-scan.py",      None),
     ("PreToolUse",       "kb-presearch.py",       "WebSearch|WebFetch"),
 ]
 
