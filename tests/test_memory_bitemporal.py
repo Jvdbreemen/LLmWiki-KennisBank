@@ -111,5 +111,27 @@ class TestSetStatusValidUntil(unittest.TestCase):
         self.assertTrue(ok)
 
 
+class TestMemoryType(unittest.TestCase):
+    def test_default_type_is_feit(self):
+        fm, _ = parse_frontmatter(_memory.render("t", "b"))
+        self.assertEqual(fm.get("memory_type"), "feit")
+
+    def test_explicit_type_rendered(self):
+        fm, _ = parse_frontmatter(_memory.render("t", "b", memory_type="beslissing"))
+        self.assertEqual(fm.get("memory_type"), "beslissing")
+
+    def test_invalid_type_raises(self):
+        with self.assertRaises(ValueError):
+            _memory.render("t", "b", memory_type="smalltalk")
+
+    def test_coerce_valid_passthrough(self):
+        self.assertEqual(_memory.coerce_memory_type("Voorkeur"), "voorkeur")
+
+    def test_coerce_invalid_falls_back_to_feit(self):
+        self.assertEqual(_memory.coerce_memory_type("nonsense"), "feit")
+        self.assertEqual(_memory.coerce_memory_type(None), "feit")
+        self.assertEqual(_memory.coerce_memory_type(""), "feit")
+
+
 if __name__ == "__main__":
     unittest.main()

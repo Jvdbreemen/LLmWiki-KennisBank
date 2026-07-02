@@ -111,17 +111,21 @@ def _wiki_block(prompt, emb, vault_root, cfg):
         return "", qvec
 
     # Selectie: hybride via kb-index; fallback naar cosine-cache-top-N.
+    # Graafbuur-expansie (één hop langs wikilinks) staat default aan;
+    # uitschakelen met KB_RETRIEVE_EXPAND=0 of "retrieve_expand": 0 in config.
+    expand = bool(int(_num("KB_RETRIEVE_EXPAND", cfg, "retrieve_expand", 1)))
     hits = []
     if kb_recall is not None:
         try:
-            hits = kb_recall.wiki_hits(qvec, query_text=prompt, k=top_n)
+            hits = kb_recall.wiki_hits(qvec, query_text=prompt, k=top_n, expand=expand)
         except Exception:
             hits = []
     lines = ["KennisBank-wiki (semantisch gematcht op je prompt; raadpleeg bij twijfel):"]
     if hits:
         for h in hits:
             stem = Path(h.get("path", "")).stem
-            lines.append(f"- [[{stem}]] ({h.get('score', 0.0):.2f}): {h.get('snippet', '')}")
+            label = " (buur)" if h.get("neighbor") else f" ({h.get('score', 0.0):.2f})"
+            lines.append(f"- [[{stem}]]{label}: {h.get('snippet', '')}")
     else:
         # fallback: oude cosine-cache-selectie (alleen treffers >= drempel)
         relevant = [(s, k) for s, k in scored if s >= threshold][:top_n]
