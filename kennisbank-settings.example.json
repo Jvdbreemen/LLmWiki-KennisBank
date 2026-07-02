@@ -4,5 +4,6 @@
   "embed_index": true,
   "daily_graphify": true,
   "memory_capture": true,
-  "memory_recall": true
+  "memory_recall": true,
+  "usage_telemetry": true
 }

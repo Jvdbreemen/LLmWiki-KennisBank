@@ -1,76 +1,76 @@
 # LLmWiki-KennisBank
 
-A personal LLM wiki layer for [Claude Code](https://claude.ai/code). Captures knowledge from Claude sessions, compiles it into a searchable wiki, and keeps it fresh over time.
+**A memory that learns, for people who work with AI.**
 
-Based on [Andrej Karpathy's LLM Wiki pattern](https://x.com/karpathy): raw sessions go in, structured knowledge comes out.
+Every Claude session ends the same way: the model forgets everything, and the knowledge you built together evaporates. KennisBank fixes that. It is a local-first knowledge and memory layer for [Claude Code](https://claude.ai/code) that captures what you learn, compiles it into a durable wiki, remembers facts with a validity window, retrieves the right knowledge automatically into every new session, and then measures whether that knowledge actually helped.
 
-## The pattern
+Plain markdown. Local models. Your own machine. You stay the editor-in-chief: the system proposes, quarantines, and flags, but a human merges, supersedes, and decides. No cloud dependency, no vendor lock-in, no data leaving your house. Open the vault in Obsidian and it is just... notes. Very well-organized notes that happen to power an AI memory.
+
+Based on [Andrej Karpathy's LLM Wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f): raw sessions go in, structured knowledge comes out. KennisBank extends the pattern into a closed loop:
 
 ```
-raw sessions → compile → wiki → query
+capture ──> consolidate ──> retrieve ──> measure
+   ^                                        │
+   └────────────── learn <─────────────────┘
 ```
 
-Every Claude session produces a session log. The `/wiki` command compiles logs into structured articles. The `/stale` command flags articles that need updating. The `/autoresearch` skill researches any topic and feeds its output back into the same pipeline.
+- **Capture**: session logs, transcript archiving, and an autonomous memory sweep that extracts, types, and judges candidate memories after each session.
+- **Consolidate**: `/wiki` compiles sessions into wiki articles with per-claim provenance; new facts reconcile against old ones at write time (add, supersede, or drop) with a bi-temporal validity model.
+- **Retrieve**: hooks inject relevant wiki articles and memories into every prompt, in any project: hybrid semantic + keyword search, ranked by relevance x recency x importance, expanded with the best-connected graph neighbour.
+- **Measure**: a recall@k eval harness and a threshold calibration harness make every retrieval change testable instead of vibes-based.
+- **Learn**: usage telemetry tracks which injected knowledge was actually used, boosting warm documents and keeping recently-used articles out of the stale list.
 
-## What's included
+## Why this exists
 
-| Component | Purpose |
-|-----------|---------|
-| `commands/sessielog.md` | `/sessielog` command: write session log + compile wiki candidates |
-| `commands/sessiestart.md` | `/sessiestart` command: vault briefing at session start |
-| `commands/wiki.md` | `/wiki` command: compile raw logs into wiki articles |
-| `commands/intake.md` | `/intake` command: process files dropped in `00-inbox/` |
-| `commands/stale.md` | `/stale` command: detect and update stale wiki articles |
-| `commands/import.md` | `/import` command: orchestrates the three importers |
-| `commands/reconcile.md` | `/reconcile` command: surface and resolve contradictions across wiki articles |
-| `commands/uitdaag.md` | `/uitdaag` command: adversarially challenge a claim or article for weak reasoning |
-| `commands/brug.md` | `/brug` command: find conceptual bridges between two topics or articles |
-| `commands/kennisbank-upgrade.md` | `/kennisbank-upgrade` command: launcher for the kennisbank-upgrade skill |
-| `commands/kennisbank-contribute.md` | `/kennisbank-contribute` command: launcher for the kennisbank-contribute skill |
-| `skills/autoresearch/` | `/autoresearch` skill: iterative multi-round web research |
-| `scripts/safe-edit.py` | Hybrid-autonomy edit engine: guards `/wiki` rewrites by line-change count, heading removal, and net deletion count |
-| `scripts/find-similar.py` | Candidate match finder: returns the most semantically similar wiki articles for a query or article |
-| `scripts/kb-search.py` | Query retrieval CLI: search the vault by natural-language query and return ranked results |
-| `scripts/conflict-scan.py` | Contradiction detection: compares wiki passage pairs and flags semantically similar but factually diverging claims |
-| `scripts/context-budget.py` | Progressive L0-L3 context layers: selects how much vault context to load at session start |
-| `scripts/auto-crosslink.py` | Add backlinks based on knowledge graph (graphify integration) |
-| `scripts/stale-check.py` | Detect wiki articles older than threshold with newer session logs |
-| `scripts/intake-scan.py` | Scan inbox and classify files by type |
-| `scripts/semantic-tiling.py` | Detect near-duplicate articles via Ollama embeddings |
-| `scripts/import-cc-history.py` | Import Claude Code session history |
-| `scripts/import-claudeai-export.py` | Import claude.ai export bundle |
-| `scripts/import-folder.py` | Recursive import from any markdown/txt folder |
-| `scripts/build-karpathy-index.py` | Build Karpathy-format `index.md` + `log.md` (for `/understand-knowledge`) |
-| `scripts/doctor.sh` | Health-check script: verifies vault, scripts, commands, skill |
-| `templates/tpl-sessie-log.md` | Session log template |
-| `templates/tpl-wiki-artikel.md` | Wiki article template |
-| `vault-structure/README.md` | Documentation of the vault directory layout |
-| `CLAUDE.md.template` | Template for `~/KennisBank/CLAUDE.md` |
-| `setup.sh` | One-command setup |
+Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: your knowledge lives in their store, behind their API, on their pricing tier. KennisBank takes the two mechanisms that actually matter from that literature, temporal validity of facts and invalidation-at-write, and rebuilds them in plain markdown frontmatter plus SQLite. What you own stays portable; what the agent needs stays fast.
+
+The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
+
+## Feature highlights (v0.9.0)
+
+### Knowledge (the wiki layer)
+- `/wiki` compiles raw session logs into interlinked wiki articles, updating existing ones via a guarded rewrite engine (`safe-edit.py`) instead of clobbering them.
+- **Provenance-lint** (`kb-lint.py`): every article must trace back to its sources with resolving wikilinks to a raw session or an imported source; `/wiki` writes that provenance per key point at distillation time. A hallucination during distillation can no longer become a permanent "fact" that nobody can check.
+- `/stale` finds outdated articles, and usage telemetry keeps warm articles out of the list: an article you used last week is not stale, however old its `updated` date.
+- Thinking tools: `/reconcile` surfaces contradictions between articles, `/uitdaag` adversarially challenges a claim, `/brug` finds conceptual bridges between two topics.
+
+### Memory (the agent layer)
+- An autonomous **capture sweep** runs detached in the background (launched at session start, over transcripts archived at session end): extract candidates, type them (`feit`, `voorkeur`, `procedure`, `beslissing`), deduplicate, and let an independent judge decide `current` versus quarantine (`unverified`) with an importance score (1-5).
+- **Bi-temporal validity**: every memory carries `valid_from` (event time, from the session date) separate from `created` (capture time); superseding or expiring a fact stamps `valid_until`. The system knows not just what is true, but since when and until when.
+- **Write-time invalidation** (Mem0 pattern, local): a new fact reconciles against the most similar existing memories at write time: ADD, SUPERSEDE (the old fact is closed and linked), or NOOP. A deterministic temporal guard ensures an older fact can never invalidate a newer one, so bulk re-imports are safe.
+- Cross-memory maintenance: supersede pass, noise recheck, and cluster promotion (recurring themes get flagged as wiki candidates).
+
+### Retrieval (the hooks layer)
+- **Every prompt, every project**: a UserPromptSubmit hook embeds your prompt and injects the top-matching wiki articles and memories as context. A PreToolUse hook checks the vault before Claude searches the web.
+- Hybrid index (`kb-index.db`): semantic vectors (sqlite-vec) fused with FTS5 keyword search, so exact terms are found even when embeddings miss them.
+- Ranking: relevance x recency (half-life per memory type) x importance, plus a usage boost for documents that recently proved useful.
+- **Graph-neighbour expansion**: the most-referenced wikilink neighbour of your hits rides along as one extra entry, turning loose hits into a coherent knowledge neighbourhood.
+
+### Measurement (the trust layer)
+- `kb-eval.py`: recall@1/3/5 and MRR against your personal eval set of questions. Run it before and after any retrieval change; a drop is a regression, not an opinion.
+- `kb-calibrate.py`: checks all cosine thresholds (dedup, rewrite, reconcile, conflict, retrieve) against the active embedding model using a hand-labelled pair set, and proposes boundaries with separation margins. It writes nothing: you decide. Switch embedding models without silently degrading.
+- `doctor.sh`: one command verifies the whole install, from vault layout and hook registration to provenance coverage.
+
+### Sovereignty (the whole point)
+- Local Ollama models for both embeddings and judgment, swappable via config (`kennisbank-embed.json`, `kennisbank-llm.json`); OpenAI-compatible endpoints supported when you choose to.
+- Everything is markdown + SQLite in a folder you own. Obsidian-compatible. MIT-licensed.
+- Human update authority: agents never silently delete; superseded knowledge is closed and linked, quarantined knowledge cannot displace verified knowledge, and large rewrites require your confirmation.
 
 ## Prerequisites
 
 - [Claude Code](https://claude.ai/code) (CLI)
 - Python 3.10+
-- [Ollama](https://ollama.com) with `qwen3-embedding:8b` (optional, for semantic deduplication; multilingual default. English-only vaults can use the lighter `nomic-embed-text`)
+- [Ollama](https://ollama.com) with:
+  - `qwen3-embedding:8b` (embeddings; multilingual default. English-only vaults can use the lighter `nomic-embed-text`)
+  - a chat model for the memory judge/extraction (default `gemma4:latest`; pin another via `<vault>/.claude/kennisbank-llm.json`)
+
+Ollama is optional in the sense that everything fails open without it, but the memory sweep, semantic retrieval, and deduplication are the heart of the system: install it.
 
 The setup creates two root directories:
-- `~/KennisBank/` — the vault (wiki, logs, templates, scripts)
-- `~/Claude/research/` — output directory for `/autoresearch` (separate from the vault so research files stay editable without cluttering raw logs)
+- `~/KennisBank/` — the vault (wiki, logs, memory, templates, scripts)
+- `~/Claude/research/` — output directory for `/autoresearch`
 
 Both paths are configurable — see [Customization](#customization).
-
-## Documentation
-
-| File | For |
-|------|-----|
-| [AGENTS.md](AGENTS.md) | AI coding agents (Claude Code, Cursor, Aider) installing this on a user's behalf |
-| [POST-INSTALL.md](POST-INSTALL.md) | First-session walkthrough after `setup.sh` finishes |
-| [CONFIGURATION.md](CONFIGURATION.md) | Every configurable knob: paths, thresholds, models |
-| [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | Symptom / cause / fix for common problems |
-| [OBSIDIAN.md](OBSIDIAN.md) | Open the vault in Obsidian, recommended free plugins |
-| [CHANGELOG.md](CHANGELOG.md) | Release history, Keep a Changelog format |
-| [vault-structure/README.md](vault-structure/README.md) | Directory-by-directory reference |
 
 ## Installation
 
@@ -82,40 +82,32 @@ bash setup.sh --yes     # non-interactive (recommended for AI agents)
 bash scripts/doctor.sh  # verify install
 ```
 
-The setup script will:
-1. Create the vault directory structure under `~/KennisBank/`
-2. Copy scripts and templates into place
-3. Ask whether to install commands and the autoresearch skill into `~/.claude/` (skipped with `--yes`)
+In one idempotent run, the setup script:
+- creates the vault directory structure under `~/KennisBank/`
+- copies scripts and templates into place
+- bootstraps the settings toggles and runs version-gated migrations
+- asks whether to install commands and skills into `~/.claude/` (auto-yes with `--yes`)
+- registers the full hookset in `~/.claude/settings.json` (skip with `--no-hooks`)
 
-After install, run `bash scripts/doctor.sh` to verify, then read [POST-INSTALL.md](POST-INSTALL.md) for the first-session walkthrough.
+**Re-running `setup.sh` is safe and is the upgrade mechanism**: it refreshes tooling without clobbering user data, customizations, or vault contents. The `/kennisbank-upgrade` skill wraps it with release-tag checkout, drift detection, and backups.
 
-**Re-running `setup.sh` is safe:** it refreshes tooling and registers the full hookset (SessionStart, SessionEnd, UserPromptSubmit, PreToolUse) without clobbering user data, customizations, or vault contents. Existing vaults upgrade seamlessly in-place — ideal for keeping a deployed vault in sync with upstream releases.
+After install, read [POST-INSTALL.md](POST-INSTALL.md) for the first-session walkthrough.
 
-`setup.sh` also registers the full KennisBank hookset in `~/.claude/settings.json`: SessionStart hooks warm the embed cache and launch the memory sweep; SessionEnd archives transcripts; UserPromptSubmit injects wiki context; PreToolUse (WebSearch|WebFetch matcher) injects memory before external search. Skip with `--no-hooks`; verify with `doctor.sh`.
+### The hookset
 
-### Manual installation
+| Hook | Script | What it does |
+|------|--------|--------------|
+| SessionStart | `build-embed-index.py` | Warm the wiki embedding cache (incremental) |
+| SessionStart | `build-kb-index.py` | Refresh the hybrid vector+FTS index |
+| SessionStart | `sweep-launch.py` | Launch the detached memory capture sweep |
+| SessionStart | `memory-notify.py` | Report memory-quarantine health |
+| SessionStart | `distill-notify.py` | Report transcripts waiting for distillation |
+| UserPromptSubmit | `kb-retrieve.py` | Inject matching wiki + memory context into the prompt |
+| SessionEnd | `archive-transcript.py` | Archive the session transcript into the vault |
+| SessionEnd | `kb-usage-scan.py` | Mark which injected knowledge was actually used |
+| PreToolUse (WebSearch\|WebFetch) | `kb-presearch.py` | Consult the vault before searching the web |
 
-```bash
-# Create vault
-mkdir -p ~/KennisBank/{00-inbox,01-raw/sessies,02-wiki,03-projecten,04-templates,05-bronnen,06-claude,07-media,08-archive}
-mkdir -p ~/KennisBank/.claude/scripts ~/KennisBank/graphify-out
-
-# Scripts
-cp scripts/*.py ~/KennisBank/.claude/scripts/
-
-# Templates
-cp templates/*.md ~/KennisBank/04-templates/
-
-# CLAUDE.md
-cp CLAUDE.md.template ~/KennisBank/CLAUDE.md
-
-# Commands (Claude Code reads these as slash commands)
-cp commands/*.md ~/.claude/commands/
-
-# autoresearch skill
-mkdir -p ~/.claude/skills/autoresearch
-cp skills/autoresearch/SKILL.md ~/.claude/skills/autoresearch/
-```
+The hooks are fail-open by design: an error means no injected context or a skipped background step, never a blocked session.
 
 ## Commands reference
 
@@ -123,17 +115,20 @@ cp skills/autoresearch/SKILL.md ~/.claude/skills/autoresearch/
 |---------|-----------|--------------|
 | `/sessielog` | none | Writes session log, compiles wiki candidates, runs semantic tiling |
 | `/sessiestart` | none | Read vault context, memory, wiki status, suggest next actions |
-| `/wiki` | optional topic | Compiles raw logs (last 7 days) into wiki articles |
+| `/wiki` | optional topic | Compiles raw logs (last 7 days) into wiki articles with per-key-point provenance, validated by kb-lint |
 | `/intake` | none | Processes files in `~/KennisBank/00-inbox/` |
-| `/stale` | none | Detects articles older than 60 days with newer session data |
-| `/import` | `cc` \| `claudeai <path>` \| `folder <path>` \| `cowork` | Bulk-import old sessions: `cc` (Claude Code history), `claudeai <path>` (claude.ai export bundle), `folder <path>` (any markdown/text folder, recursive), `cowork` (auto-detected Mac desktop Claude data) |
-| `/autoresearch` | topic | Multi-round web research, saves to `~/Claude/research/` |
+| `/stale` | none | Detects articles older than 60 days, skipping recently-used ones |
+| `/import` | `cc` \| `claudeai <path>` \| `folder <path> [prefix]` \| `cowork` \| `all` | Bulk-import old sessions from Claude Code history, a claude.ai export bundle, any markdown folder, or Mac desktop Claude data; `all` runs every detected source, no argument asks interactively |
 | `/destilleer` | none | Imports archived CC transcripts and compiles them into the wiki |
-| `/reconcile` | none | Surface contradictions across wiki articles and produce a reconciliation log |
-| `/uitdaag` | claim or article | Adversarially challenge a claim for weak reasoning, missing evidence, or overgeneralization |
-| `/brug` | two topics | Find conceptual bridges and shared principles between two topics or articles |
-| `/kennisbank-upgrade` | optional `--dry-run` | Launcher for the kennisbank-upgrade skill: upgrade the deployed vault to the latest release tag |
-| `/kennisbank-contribute` | optional `--dry-run` | Launcher for the kennisbank-contribute skill: PR local tooling edits upstream |
+| `/autoresearch` | topic | Multi-round web research via the autoresearch skill (not a command file), saves to `~/Claude/research/` |
+| `/reconcile` | optional topic | Surface contradictions across wiki articles and produce a reconciliation log |
+| `/uitdaag` | claim or decision | Adversarially challenge a claim for weak reasoning or missing evidence |
+| `/brug` | two topics | Find conceptual bridges and shared principles between two topics |
+| `/kennisbank:settings` | none | Show and flip the background-automation toggles |
+| `/kennisbank:rebuild-index` | none | Rebuild the hybrid search index from the vault markdown |
+| `/kennisbank:rebuild-memory` | none | Re-extract ALL memory from archived transcripts (heavy; semantic dedup makes it near-idempotent) |
+| `/kennisbank-upgrade` | optional `--dry-run` | Upgrade the deployed vault to the latest release tag |
+| `/kennisbank-contribute` | optional `--dry-run` | PR local tooling edits back upstream |
 
 ## Vault structure
 
@@ -142,99 +137,97 @@ cp skills/autoresearch/SKILL.md ~/.claude/skills/autoresearch/
   00-inbox/        Drop files here for processing
   01-raw/
     sessies/       Session logs (raw-sessie-YYYY-MM-DD-topic.md)
+    transcripts/   Archived Claude Code transcripts (SessionEnd hook)
   02-wiki/         Compiled wiki articles
   03-projecten/    Project-specific notes
   04-templates/    Article and log templates
   05-bronnen/      Source materials and references
-  06-claude/       Claude-internal context files
-  07-media/        Media descriptions and assets
+  06-claude/       Claude-internal context files, eval + calibration sets
+  07-media/        Media descriptions and asset metadata (not the binaries)
   08-archive/      Archived articles
+  09-memory/       Agent memory (typed, judged, bi-temporal; archive/ for retired items)
   .claude/
-    scripts/       Python utility scripts
+    scripts/       Python + shell tooling (incl. doctor.sh)
+    kb-index.db    Hybrid vector + FTS index (refreshed incrementally each session)
+    kb-usage.db    Usage telemetry (survives rebuilds and model switches)
   graphify-out/    Knowledge graph output (optional)
 ```
 
-## Migrating from older Claude tooling
+## Background automation toggles
 
-The `/import` command lets you backfill the vault from existing Claude history before you started using this wiki layer. It handles Claude Code session JSONL files under `~/.claude/projects/`, claude.ai export bundles, Mac desktop Claude (Cowork) conversation data, and any generic markdown or text folder. Each importer writes raw session files into `~/KennisBank/01-raw/sessies/` in the same format `/sessielog` produces, so `/wiki` can compile them afterwards.
+Seven background behaviours are individual toggles in `kennisbank-settings.json`, managed with `/kennisbank:settings`:
 
-- `/import cc`: pull from Claude Code's local session history
-- `/import claudeai ~/Downloads/claude-export.zip`: pull from a claude.ai export bundle
-- `/import cowork`: auto-detect and pull from Mac desktop Claude data
+| Toggle | Default | Controls |
+|--------|---------|----------|
+| `auto_archive` | off | Archive the transcript at session end |
+| `distill_notify` | on | Notify at start that transcripts are pending |
+| `embed_index` | on | Refresh the wiki embedding cache at start |
+| `daily_graphify` | on | Update the knowledge graph once a day |
+| `memory_capture` | on | Extract and judge memories into `09-memory/` |
+| `memory_recall` | on | Inject memories into context via hooks |
+| `usage_telemetry` | on | Track which injected knowledge gets used |
 
-See [POST-INSTALL.md](POST-INSTALL.md) for first-time use.
+## Measuring your retrieval
 
-## Memory path
-
-Commands in this system detect your Claude memory file automatically:
+Two harnesses keep the system honest:
 
 ```bash
-ls ~/.claude/projects/*/memory/MEMORY.md 2>/dev/null | head -1
+# recall@k against your personal eval set (06-claude/kb-eval-set.json)
+python3 ~/KennisBank/.claude/scripts/kb-eval.py
+
+# threshold calibration against the active embedding model
+python3 ~/KennisBank/.claude/scripts/kb-calibrate.py
 ```
 
-Your memory files live under `~/.claude/projects/`. The path segment is a slug of your working directory.
+Maintain the eval set as your vault grows (questions you know the answer to, with the expected article), and run both harnesses after any change to thresholds, models, or ranking. Example sets ship in the repo root.
+
+## Migrating from older Claude tooling
+
+The `/import` command backfills the vault from existing Claude history. It handles Claude Code session JSONL files under `~/.claude/projects/`, claude.ai export bundles, Mac desktop Claude (Cowork) conversation data, and any generic markdown or text folder. Each importer writes raw session files that `/wiki` can compile afterwards. For the memory layer, `/kennisbank:rebuild-memory` re-extracts all archived transcripts through the full sweep (semantic dedup makes re-runs near-idempotent).
+
+## Documentation
+
+| File | For |
+|------|-----|
+| [AGENTS.md](AGENTS.md) | AI coding agents (Claude Code, Cursor, Aider) installing this on a user's behalf |
+| [POST-INSTALL.md](POST-INSTALL.md) | First-session walkthrough after `setup.sh` finishes |
+| [CONFIGURATION.md](CONFIGURATION.md) | Every configurable knob: paths, thresholds, models, toggles |
+| [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | Symptom / cause / fix for common problems |
+| [OBSIDIAN.md](OBSIDIAN.md) | Open the vault in Obsidian, recommended free plugins |
+| [CHANGELOG.md](CHANGELOG.md) | Release history, Keep a Changelog format |
+| [vault-structure/README.md](vault-structure/README.md) | Directory-by-directory reference |
 
 ## Customization
 
 1. Edit `~/KennisBank/CLAUDE.md` after setup. Replace `[YOUR NAME]` and `[YOUR PROJECTS]` with your own.
-2. **Vault path.** The Python scripts and `doctor.sh` honor the `KENNISBANK_VAULT` environment variable (default `~/KennisBank`). To point them at another vault:
-   ```bash
-   export KENNISBANK_VAULT=/path/to/your/KennisBank
-   ```
-   The slash-command prompt files still reference `~/KennisBank` literally; for them, patch the paths or symlink. See [CONFIGURATION.md](CONFIGURATION.md) section 9.
-3. **Wiki categories.** `build-karpathy-index.py` groups articles using a built-in taxonomy. It is fully customizable: drop a `categories.json` next to the script (`~/KennisBank/.claude/scripts/categories.json`) or in your vault root and it overrides the defaults; without one, the defaults apply. Copy [`categories.example.json`](categories.example.json) as a starting point. Every key is optional and falls back to its default.
-4. The commands are in Dutch by default (they follow prompt language). Change section headings if you prefer English.
-5. To change the stale threshold (default 60 days): pass `--days N` on the CLI, or change the `default=60` in the `argparse` block of `stale-check.py`.
-6. `auto-crosslink.py` has two tunables at the top of the file: `MIN_CONFIDENCE` (default `0.75`) and `MAX_NEW_LINKS` (default `5`). Lower confidence to get more links, raise it to be stricter.
-7. To change the research output path from `~/Claude/research/` to something else, edit two places:
-   - `setup.sh`: change the `RESEARCH` variable
-   - `skills/autoresearch/SKILL.md`: change the output path in the "Output aanmaken" section and the report
-8. Semantic tiling requires Ollama (default model is multilingual):
-   ```bash
-   ollama pull qwen3-embedding:8b
-   ```
-9. To enable the `/autoresearch` trigger in Claude Code, add this to your global `~/.claude/CLAUDE.md`:
-   ```
-   # autoresearch
-   - **autoresearch** (`~/.claude/skills/autoresearch/SKILL.md`) - multi-round research with lazy hierarchy check. Output to `~/Claude/research/`. Trigger: `/autoresearch`
-   When the user types `/autoresearch`, invoke the Skill tool with `skill: "autoresearch"` before doing anything else.
-   ```
-
-### Achtergrond-automatiek aan/uit
-
-Vier achtergrond-taken (transcript-archief, destillatie-melding, embed-index,
-dagelijkse graph-update) zijn toggles in `kennisbank-settings.json`. Beheer ze
-met `/kennisbank:settings`. `auto_archive` staat default uit; de rest aan. Zie
-CONFIGURATION.md voor de tabel.
+2. **Vault path.** All Python scripts and `doctor.sh` honor the `KENNISBANK_VAULT` environment variable (default `~/KennisBank`). See [CONFIGURATION.md](CONFIGURATION.md) section 9 for what the slash-command prompt files still hardcode.
+3. **Embedding backend.** Swappable via `<vault>/.claude/kennisbank-embed.json` or `KB_EMBED_*` env vars: local Ollama by default, OpenAI-compatible endpoints when configured. Switching models invalidates the cache by design; run `kb-calibrate.py` afterwards to check the thresholds against the new model (it proposes values, you set them).
+4. **LLM backend** (judge/extraction): `<vault>/.claude/kennisbank-llm.json` or `KB_LLM_*` env vars. Default Ollama `gemma4:latest`.
+5. **Wiki categories.** `build-karpathy-index.py` groups articles using a built-in taxonomy; override with a `categories.json` (copy [`categories.example.json`](categories.example.json)).
+6. The commands are in Dutch by default (they follow prompt language). Change section headings if you prefer English.
+7. Stale threshold (default 60 days): pass `--days N` or edit `stale-check.py`.
+8. `auto-crosslink.py` tunables: `MIN_CONFIDENCE` (default `0.75`) and `MAX_NEW_LINKS` (default `5`).
+9. Research output path: changing it touches several places (`setup.sh`, the autoresearch skill, and the command prose) — see [CONFIGURATION.md](CONFIGURATION.md) section 5.
+10. To enable the `/autoresearch` trigger, add this snippet to your global `~/.claude/CLAUDE.md`:
+    ```
+    # autoresearch
+    - **autoresearch** (`~/.claude/skills/autoresearch/SKILL.md`) - multi-round research with lazy hierarchy check. Output to `~/Claude/research/`. Trigger: `/autoresearch`
+    When the user types `/autoresearch`, invoke the Skill tool with `skill: "autoresearch"` before doing anything else.
+    ```
 
 ## Optional: graphify integration
 
-The `auto-crosslink.py` script reads from `~/KennisBank/graphify-out/graph.json`. This is produced by the graphify skill when run on the vault. Without it, the crosslink step is silently skipped.
+`auto-crosslink.py` reads from `~/KennisBank/graphify-out/graph.json`, produced by the graphify skill when run on the vault. Without it, the crosslink step is silently skipped. Retrieval benefits indirectly: the graph-neighbour expansion follows the wikilinks that crosslinking maintains.
 
 ## Optional: knowledge graph dashboard
 
-[Understand-Anything](https://github.com/Lum1104/Understand-Anything) is a separate Claude Code plugin (MIT) that turns a Karpathy-pattern wiki into an interactive knowledge graph dashboard with categorised layers, guided tours, and fuzzy search. It complements graphify rather than replacing it: graphify clusters semantically with confidence scores, Understand-Anything builds nodes-and-edges from your wikilinks plus LLM analysis.
-
-To use it on your vault:
-
-```bash
-# 1. Install the plugin
-claude plugin marketplace add Lum1104/Understand-Anything
-claude plugin install understand-anything
-
-# 2. Build the Karpathy-format index that the parser requires
-python3 scripts/build-karpathy-index.py
-
-# 3. In a Claude Code session inside ~/KennisBank/02-wiki, run
-/understand-knowledge
-```
-
-The detector requires `index.md` (with `## Section` headings + `[[wikilink]]` rows) and `log.md` (with `## [YYYY-MM-DD] OPERATION | Title` entries) inside the wiki directory. `/wiki` does not write those, so `scripts/build-karpathy-index.py` generates them by scanning `02-wiki/` frontmatter and `01-raw/sessies/` filenames. Run it whenever you want to refresh the dashboard. See `scripts/build-karpathy-index.py --help` for flags (`--dry-run`, `--force`, custom paths). The category grouping is customizable via `categories.json` (see Customization, item 3).
+[Understand-Anything](https://github.com/Lum1104/Understand-Anything) is a separate Claude Code plugin (MIT) that turns a Karpathy-pattern wiki into an interactive knowledge graph dashboard. Build the required index with `python3 scripts/build-karpathy-index.py`, then run `/understand-knowledge` inside `~/KennisBank/02-wiki`. See `--help` for flags; categories are customizable via `categories.json`.
 
 ## Credits
 
 - Pattern: [Andrej Karpathy's LLM Wiki gist](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
 - Vault/CMS inspiration: [claude-obsidian by AgriciDaniel](https://github.com/AgriciDaniel/claude-obsidian)
+- Memory-architecture lessons: the public work around Mem0, Zep/Graphiti, Letta, and Cognee, rebuilt here local-first
 
 ## License
 

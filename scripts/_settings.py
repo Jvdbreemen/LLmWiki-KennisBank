@@ -42,6 +42,8 @@ DEFAULTS = {
     # bewust afwijkend van de opt-in-conventie van auto_archive.
     "memory_capture": True,
     "memory_recall": True,
+    # Retrieval-feedbackloop: passief en lokaal, dus default aan.
+    "usage_telemetry": True,
 }
 
 _TRUTHY = ("1", "true", "yes", "y", "on")

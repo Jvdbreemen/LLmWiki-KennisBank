@@ -602,7 +602,7 @@ model, not by Python; they still contain literal `~/KennisBank/...` and
 
 ## 11. Achtergrond-automatiek (settings-toggles)
 
-Vier achtergrond-automatieken zijn individueel aan/uit te zetten via
+De achtergrond-automatieken zijn individueel aan/uit te zetten via
 `$VAULT/kennisbank-settings.json` (bron van waarheid, gelezen door
 `scripts/_settings.py`).
 
@@ -614,6 +614,7 @@ Vier achtergrond-automatieken zijn individueel aan/uit te zetten via
 | `daily_graphify` | aan | 1x/dag automatisch `/graphify --update` (kost-gated op 20u) | alleen `.needs-rebuild` bijhouden; graph handmatig |
 | `memory_capture` | aan | extractie + judge van memories naar `09-memory/` + onderhoud | geen automatische memory-extractie; `/wiki` blijft werken |
 | `memory_recall` | aan | injecteer relevante memories in de context via hook + lokale MCP | geen memory-injectie; context bevat alleen wiki-retrieval |
+| `usage_telemetry` | aan | registreer geinjecteerde + gebruikte kennis in `kb-usage.db` (ranking-boost, stale-warm-skip) | geen gebruiksmeting; ranking en stale-check vallen terug op leeftijd |
 
 - **Wijzigen**: draai `/kennisbank:settings` (toont een tabel en zet toggles aan/uit), of bewerk het JSON-bestand (waarden zijn JSON-booleans).
 - **Self-gating**: de hooks blijven statisch geregistreerd in `~/.claude/settings.json`; elk hookscript leest zijn toggle en eindigt fail-open (`exit 0`) als hij uit staat. Een toggle-wijziging werkt vanaf de volgende sessie.
