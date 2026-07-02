@@ -27,8 +27,20 @@ JUDGE_SYSTEM = (
     "persoonlijke kennisbank. Keur streng. Promoot ALLEEN tot 'current' als dit een "
     "duidelijke, herbruikbare lesson learned, bug-fix, besluit of duurzaam feit is. "
     "Bij twijfel, ruis, smalltalk of vaagheid: 'unverified'. "
-    "Antwoord UITSLUITEND met JSON: {\"verdict\": \"current\"|\"unverified\", \"reason\": \"<kort>\"}."
+    "Ken ook een belang toe: importance 1-5 "
+    "(5 = cruciale duurzame kennis, 3 = nuttig, 1 = marginaal). "
+    "Antwoord UITSLUITEND met JSON: "
+    "{\"verdict\": \"current\"|\"unverified\", \"importance\": 1-5, \"reason\": \"<kort>\"}."
 )
+
+
+def _clamp_importance(value) -> int:
+    """Sanitize importance naar 1..5; onparseerbaar -> neutraal 3."""
+    try:
+        imp = int(value)
+    except (TypeError, ValueError):
+        return 3
+    return min(5, max(1, imp))
 
 
 def judge(candidate: str, context: str = "") -> dict:
@@ -36,14 +48,19 @@ def judge(candidate: str, context: str = "") -> dict:
              f"Kandidaat-geheugen:\n{candidate}\n\nOordeel (alleen JSON):"
     raw = _llm.generate(prompt, system=JUDGE_SYSTEM)
     if not raw:
-        return {"verdict": "unverified", "reason": "geen model-respons (fail-safe)"}
+        return {"verdict": "unverified", "importance": 3,
+                "reason": "geen model-respons (fail-safe)"}
     try:
         start = raw.find("{")
         end = raw.rfind("}")
         obj = json.loads(raw[start:end + 1]) if start >= 0 and end > start else {}
     except Exception:
-        return {"verdict": "unverified", "reason": "onparseerbaar (fail-safe)"}
+        return {"verdict": "unverified", "importance": 3,
+                "reason": "onparseerbaar (fail-safe)"}
     verdict = obj.get("verdict")
+    importance = _clamp_importance(obj.get("importance"))
     if verdict == "current":
-        return {"verdict": "current", "reason": str(obj.get("reason", ""))[:200]}
-    return {"verdict": "unverified", "reason": str(obj.get("reason", ""))[:200] or "geen current (fail-safe)"}
+        return {"verdict": "current", "importance": importance,
+                "reason": str(obj.get("reason", ""))[:200]}
+    return {"verdict": "unverified", "importance": importance,
+            "reason": str(obj.get("reason", ""))[:200] or "geen current (fail-safe)"}

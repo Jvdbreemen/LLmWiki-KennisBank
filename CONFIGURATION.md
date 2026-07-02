@@ -361,6 +361,53 @@ The five env vars below control the behavior of the vault-onderhoud scripts
 - **To change**: set the environment variable or pass the level explicitly to
   `context-budget.py`.
 
+### Usage-telemetrie (`scripts/_usage.py`, `scripts/kb-usage-scan.py`)
+
+- **Default**: aan (`usage_telemetry`-toggle in `kennisbank-settings.json`).
+- **Where set**: `scripts/_usage.py` (store, `<vault>/.claude/kb-usage.db`); SessionEnd-hook `kb-usage-scan.py` in het hooks-manifest.
+- **Effect**: kb-retrieve logt geïnjecteerde stems; de SessionEnd-scan markeert stems die in assistant-tekst/tool-calls voorkwamen als gebruikt. Voedt de gebruiks-boost in `_rank.usage_factor` (×1.10 ≤30d, ×1.05 ≤90d, beide lagen) en de warm-skip in `stale-check.py` (recent gebruikt = niet staal).
+- **To change**: toggle uit via `/kennisbank:settings` of `_settings.py set usage_telemetry false`; boost-waarden in `_rank.py`.
+
+### Drempel-kalibratie (`scripts/kb-calibrate.py`)
+
+- **Default set**: `<vault>/06-claude/kb-calibrate-set.json` (voorbeeld in `kb-calibrate-set.example.json`).
+- **CLI**: `python3 kb-calibrate.py [--set pad] [--json]`. Exit 0 = schone scheiding, 2 = overlap (set of model scheidt de klassen niet).
+- **Effect**: embedt gelabelde paren (duplicate/related/unrelated) met het ACTIEVE model en stelt de duplicate- en related-grens voor, met OK/HERIJK-oordeel per huidige knop (dedup/rewrite/reconcile/conflict/retrieve). Draai na elke modelwissel, vóór je de drempels vertrouwt.
+- **To change**: onderhoud de parenset; het harnas schrijft zelf geen drempels (mens beslist).
+
+### Retrieval-scoring en graafbuur (`scripts/_rank.py`, `kb-recall.py`)
+
+- **Defaults**: halfwaardetijden `HALF_LIFE_DAYS` (voorkeur 180, feit/procedure 365, beslissing 730 dagen), `RECENCY_FLOOR 0.6`, importance-factor 0.9-1.1 (neutraal 3 = ×1.0).
+- **Where set**: `scripts/_rank.py` (module-constanten).
+- **Effect**: memory-hits worden herwogen op relevance × recency × importance; wiki blijft ongewogen. De één-hop graafbuur-expansie voegt de meest-verwezen wikilink-buur van de wiki-hits toe als extra `(buur)`-entry in de hook-injectie.
+- **Uitzetten expansie**: env `KB_RETRIEVE_EXPAND=0` of `"retrieve_expand": 0` in `kennisbank-settings.json`.
+- **To change**: pas de constanten aan en hermeet met `kb-eval.py` (voor en na; een daling is een regressie).
+
+### Recall-eval (`scripts/kb-eval.py`)
+
+- **Default set**: `<vault>/06-claude/kb-eval-set.json` (persoonlijk; voorbeeld in `kb-eval-set.example.json`).
+- **CLI**: `python3 kb-eval.py [--set pad] [--json] [--verbose]`.
+- **Effect**: meet recall@1/3/5 en MRR van de hook-retrieval-route tegen vragen met verwachte documenten. Draai voor en na elke wijziging aan drempels, embeddingmodel of ranking; een daling is een regressie.
+- **To change**: onderhoud de eval-set in de vault (voeg vragen toe bij nieuwe kennisdomeinen); de metriek-k's staan als `KS` in het script.
+
+### RECONCILE_THRESHOLD / TOP_K (write-time invalidatie)
+
+- **Default**: `0.75` / `2`
+- **Where set**: `scripts/_reconcile.py` (module-constanten).
+- **Effect**: bij het wegschrijven van een nieuw kandidaat-memory worden de
+  top-`TOP_K` bestaande memories (status current of unverified) met cosine
+  boven `RECONCILE_THRESHOLD` aan de reconcile-judge voorgelegd
+  (ADD/SUPERSEDE/NOOP). De band loopt tot de dup-drempel (`0.92` in
+  `_sweeputil.is_duplicate`): daarboven wordt een kandidaat als exacte
+  her-capture geskipt zonder LLM-call (idempotentie van `--all`-rebuilds).
+  Tegenspraken die boven 0.92 embedden vangt de supersede-pass (0.85,
+  current-only) als vangnet. Tuned voor `qwen3-embedding:8b`.
+- **Bi-temporeel**: `valid_from` = sessiedatum uit de transcriptnaam (fallback:
+  capture-datum); superseden/expiren stempelt `valid_until`. Zie het
+  frontmatter-contract in `scripts/_memory.py`.
+- **To change**: pas de constanten in `_reconcile.py` aan. Herkalibreer per
+  embeddingmodel, samen met de dup- en supersede-drempels.
+
 ---
 
 ## 5. autoresearch skill

@@ -25,6 +25,18 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _embeddings as emb  # noqa: E402
 import _kbindex  # noqa: E402
 import _memory as _mem  # noqa: E402  # live-status hervalidatie (IMPORTANT 1)
+import _rank  # noqa: E402  # relevance x recency x importance + graafbuur
+from _frontmatter import parse_frontmatter as _parse_fm  # noqa: E402
+from _vaultpath import vault_root as _vault_root  # noqa: E402
+
+
+def _frontmatter_of(path: str) -> dict:
+    """Frontmatter-reader voor de re-ranking; fail-soft -> {}."""
+    try:
+        fm, _ = _parse_fm(Path(path).read_text(encoding="utf-8", errors="replace"))
+        return fm
+    except Exception:
+        return {}
 
 
 def _open_ro(db_path: Path):
@@ -46,9 +58,18 @@ def _open_ro(db_path: Path):
 
 
 def recall_hits(query_vector, query_text: str = "", k: int = 3,
-                layers=("wiki", "memory")) -> list:
+                layers=("wiki", "memory"), expand: bool = False) -> list:
     """Recall-hits over de opgegeven lagen (status=current), fail-soft -> [].
-    Live-status-hercheck ALLEEN voor de memory-laag (wiki is gecureerd)."""
+    Live-status-hercheck ALLEEN voor de memory-laag (wiki is gecureerd).
+
+    Ranking: de hybride RRF-score wordt voor de memory-laag herwogen met
+    recency (halfwaardetijd per memory_type) en importance (judge, 1-5);
+    wiki blijft ongewogen (zie _rank).
+
+    ``expand=True`` voegt na de directe hits de meest-verwezen wiki-buur toe
+    (wikilink-expansie, één hop) als extra entry met ``neighbor: True`` —
+    altijd ACHTERAAN, verdringt nooit een directe hit.
+    """
     if not query_vector:
         return []
     conn = _open_ro(_kbindex.index_path())
@@ -70,6 +91,24 @@ def recall_hits(query_vector, query_text: str = "", k: int = 3,
             out.append({"path": r["path"], "layer": layer, "title": r.get("title", ""),
                         "created": r.get("created", ""), "score": r.get("score", 0.0),
                         "snippet": snippet})
+        try:
+            import _usage
+            _lu = _usage.last_used_of
+        except Exception:
+            _lu = None
+        out = _rank.rerank(out, _frontmatter_of, last_used_fn=_lu)
+        if expand and out:
+            try:
+                root = _vault_root()
+                stem = _rank.one_hop_neighbor(out, root)
+                if stem:
+                    p = root / "02-wiki" / f"{stem}.md"
+                    snippet = emb.doc_text(p, cap=280).replace("\n", " ").strip()
+                    out.append({"path": str(p), "layer": "wiki", "title": stem,
+                                "created": "", "score": 0.0, "snippet": snippet,
+                                "neighbor": True})
+            except Exception:
+                pass
         return out
     except Exception:
         return []
@@ -112,6 +151,8 @@ def has_fts_match(query_text: str, layer: str = "wiki") -> bool:
             pass
 
 
-def wiki_hits(query_vector, query_text: str = "", k: int = 3) -> list:
-    """Dunne wrapper: alleen de wiki-laag (hybride)."""
-    return recall_hits(query_vector, query_text=query_text, k=k, layers=("wiki",))
+def wiki_hits(query_vector, query_text: str = "", k: int = 3,
+              expand: bool = False) -> list:
+    """Dunne wrapper: alleen de wiki-laag (hybride, optioneel met graafbuur)."""
+    return recall_hits(query_vector, query_text=query_text, k=k,
+                       layers=("wiki",), expand=expand)

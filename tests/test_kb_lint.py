@@ -145,6 +145,48 @@ class TestLintVault(VaultCase):
         report = self.kl.lint_vault(self.root)
         self.assertEqual([w["type"] for w in report["warnings"]], ["dangling"])
 
+    def test_bron_herkomst_link_counts_as_provenance(self):
+        # Import-origin artikelen (bv. Evernote) citeren 05-bronnen i.p.v.
+        # een raw-sessie; een resolvende [[05-bronnen/...]]-link is schoon.
+        bron = self.root / "05-bronnen" / "evernote" / "Notitie"
+        bron.mkdir(parents=True)
+        (bron / "Notitie.md").write_text("bron", encoding="utf-8")
+        self.add_article("a.md", "- [[05-bronnen/evernote/Notitie/Notitie.md]]\n")
+        report = self.kl.lint_vault(self.root)
+        self.assertEqual(report["warnings"], [])
+
+    def test_bron_herkomst_link_without_extension_resolves(self):
+        bron = self.root / "05-bronnen"
+        bron.mkdir(exist_ok=True)
+        (bron / "notitie.md").write_text("bron", encoding="utf-8")
+        self.add_article("a.md", "- [[05-bronnen/notitie]]\n")
+        report = self.kl.lint_vault(self.root)
+        self.assertEqual(report["warnings"], [])
+
+    def test_dead_bron_link_is_dangling(self):
+        self.add_article("a.md", "- [[05-bronnen/bestaat/niet.md]]\n")
+        report = self.kl.lint_vault(self.root)
+        self.assertEqual([w["type"] for w in report["warnings"]], ["dangling"])
+
+    def test_plain_article_link_is_not_provenance(self):
+        # Kale wiki-links zijn verbanden, geen herkomst.
+        self.add_article("a.md", "Zie ook [[ander-artikel]].\n")
+        report = self.kl.lint_vault(self.root)
+        self.assertEqual([w["type"] for w in report["warnings"]], ["missing"])
+
+    def test_vault_under_skip_named_ancestor_still_resolves(self):
+        # Alleen directories BINNEN de vault tellen als skip; een vault die
+        # zelf onder een .claude/ of graphify-out/ pad ligt moet gewoon werken.
+        base = self.root / ".claude" / "diepe" / "vault"
+        (base / "01-raw" / "sessies").mkdir(parents=True)
+        (base / "02-wiki").mkdir(parents=True)
+        (base / "01-raw" / "sessies" / "raw-sessie-2026-06-28-x.md").write_text(
+            "log", encoding="utf-8")
+        (base / "02-wiki" / "a.md").write_text(
+            "- punt: [[raw-sessie-2026-06-28-x]]\n", encoding="utf-8")
+        report = self.kl.lint_vault(base)
+        self.assertEqual(report["warnings"], [])
+
     def test_index_and_log_skipped(self):
         self.add_article("index.md", "geen herkomst nodig\n")
         self.add_article("log.md", "geen herkomst nodig\n")
