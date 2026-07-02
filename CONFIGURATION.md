@@ -98,6 +98,18 @@ The four root paths are declared at the top of `setup.sh`. Scripts and commands 
 
 ---
 
+## 3b. Provenance-lint (`scripts/kb-lint.py`)
+
+### Sessie-herkomst validatie
+
+- **Where set**: `scripts/kb-lint.py` (constanten `SKIP_FILES`, `SESSION_PREFIX`).
+- **CLI**: `python3 kb-lint.py` (mens-leesbaar) of `python3 kb-lint.py --json` (voor `doctor.sh`, sectie 13d).
+- **Read by**: `commands/wiki.md` stap 4.5 (validatie direct na schrijven) en `scripts/doctor.sh` (samenvatting als PASS/WARN).
+- **Effect**: elk artikel in `02-wiki/` (behalve `index.md` en `log.md`) moet minstens één resolvende `[[raw-sessie-...]]`-wikilink hebben naar `01-raw/sessies/` of `08-archive/`. Finding-types: `missing` (geen enkele sessieverwijzing), `dangling` (dode wikilink), `path-only` (herkomst alleen als pad-tekst). Exit codes: 0 schoon, 1 fout, 2 waarschuwingen.
+- **To change**: voeg bestandsnamen toe aan `SKIP_FILES` om structuurbestanden uit te sluiten; het herkomst-formaat zelf staat in `templates/tpl-wiki-artikel.md` en `commands/wiki.md` stap 4.
+
+---
+
 ## 4. Embedding backend, semantic tiling, and retrieval (`scripts/_embeddings.py`)
 
 The embedding backend is a config-driven, swappable provider shared by

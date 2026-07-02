@@ -41,6 +41,9 @@ Patroonherkenning over sessies heen — destilleer herbruikbare kennis als wiki-
        uit het gelezen bestand. Behoud `type`, `created`, `tags`, `status` ongewijzigd.
        Wijzig uitsluitend `updated` naar de huidige datum.
      - **Backlinks** (in de body): behoud alle bestaande backlinks ongewijzigd.
+     - **Sessie-herkomst:** behoud alle bestaande regels onder `## Sessie-herkomst`
+       ongewijzigd en voeg per nieuw of gewijzigd kernpunt een regel toe in het
+       verplichte formaat (zie stap 4). Verwijder nooit bestaande herkomst-regels.
    - Schrijf de volledige nieuwe inhoud naar een tijdelijk bestand via het file-write tool:
      ```
      /tmp/wiki-rewrite-<slug>.md
@@ -63,9 +66,26 @@ Patroonherkenning over sessies heen — destilleer herbruikbare kennis als wiki-
 
 4. Per wiki-artikel:
    - YAML frontmatter: type: wiki, tags, status, created, updated
-   - Backlinks naar bron-logs en gerelateerde artikelen
+   - Backlinks naar gerelateerde artikelen (in `## Verbanden`)
    - Kernpunten met toelichting, geen essay
-   - Bronvermelding naar raw-logs onderaan
+   - **`## Sessie-herkomst` (verplicht):** per kernpunt een regel in dit formaat:
+     ```
+     - <kernpunt, kort>: [[raw-sessie-YYYY-MM-DD-slug]]
+     ```
+     Altijd een wikilink naar de raw-sessie, nooit een backtick-pad of alleen
+     proza: pad-tekst is onzichtbaar voor backlinks en de kennisgraaf. Leg de
+     koppeling op destillatiemoment — dan is de bron nog bekend; achteraf
+     reconstrueren kan niet. Komt een kernpunt uit meerdere sessies, geef dan
+     meerdere links op één regel.
+   - **`## Bronnen`:** alleen externe bronnen (APA7), geen sessieverwijzingen.
+
+4.5. Valideer de herkomst met de lint:
+   ```
+   python3 $VAULT/.claude/scripts/kb-lint.py
+   ```
+   Los waarschuwingen voor de zojuist geschreven of herschreven artikelen
+   direct op (dode links, pad-tekst, ontbrekende herkomst). Waarschuwingen
+   over oudere artikelen mag je laten staan; meld ze wel in de rapportage.
 
 5. Rapporteer per artikel één van de drie uitkomsten:
    - **herschreven** — bestaand artikel bijgewerkt via safe-edit; vermeld pad en similarity-score
@@ -74,6 +94,7 @@ Patroonherkenning over sessies heen — destilleer herbruikbare kennis als wiki-
 
 ## Regels
 - Compilatie, niet kopieer-en-plak
+- Sessie-herkomst per kernpunt, altijd als wikilink (zie stap 4); kb-lint.py is de scheidsrechter
 - Bij twijfel: status: concept
 - Taal: volgt de bron
 - Dagelijkse graphify-batch respecteert de `daily_graphify`-toggle in `kennisbank-settings.json`: staat die uit, werk alleen `$VAULT/graphify-out/.needs-rebuild` bij en draai geen automatische `/graphify --update`. Lezen: `python3 -c "import sys; sys.path.insert(0,'$VAULT/.claude/scripts'); import _settings; print(_settings.get('daily_graphify', True))"`.
