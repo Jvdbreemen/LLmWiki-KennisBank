@@ -361,6 +361,13 @@ The five env vars below control the behavior of the vault-onderhoud scripts
 - **To change**: set the environment variable or pass the level explicitly to
   `context-budget.py`.
 
+### Recall-eval (`scripts/kb-eval.py`)
+
+- **Default set**: `<vault>/06-claude/kb-eval-set.json` (persoonlijk; voorbeeld in `kb-eval-set.example.json`).
+- **CLI**: `python3 kb-eval.py [--set pad] [--json] [--verbose]`.
+- **Effect**: meet recall@1/3/5 en MRR van de hook-retrieval-route tegen vragen met verwachte documenten. Draai voor en na elke wijziging aan drempels, embeddingmodel of ranking; een daling is een regressie.
+- **To change**: onderhoud de eval-set in de vault (voeg vragen toe bij nieuwe kennisdomeinen); de metriek-k's staan als `KS` in het script.
+
 ### RECONCILE_THRESHOLD / TOP_K (write-time invalidatie)
 
 - **Default**: `0.75` / `2`
