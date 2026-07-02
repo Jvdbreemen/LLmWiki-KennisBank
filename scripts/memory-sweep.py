@@ -259,6 +259,8 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = 6,
                         source_session=tp.name,
                         created=today,
                         valid_from=valid_from,
+                        memory_type=_memory.coerce_memory_type(cand.get("type")),
+                        importance=_memory.coerce_importance(verdict.get("importance")),
                     )
                     path.parent.mkdir(parents=True, exist_ok=True)
                     path.write_text(rendered, encoding="utf-8")

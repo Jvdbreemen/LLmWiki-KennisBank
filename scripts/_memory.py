@@ -8,6 +8,8 @@ Underscore-naam zodat scripts het importeren na sys.path.insert (idem _settings)
 Frontmatter-contract (spec fase 1, bi-temporeel uitgebreid):
     title: vrije tekst (verplicht)
     type: memory
+    memory_type: feit | voorkeur | procedure | beslissing
+    importance: 1-5 (judge-oordeel bij capture; 3 = neutraal)
     status: unverified | current | superseded | retracted | expired
     evidence_basis: getypt | cc-sessie | audio | import | autoresearch | agent
     source_session, created, updated, expires?, superseded_by?, tags
@@ -31,8 +33,29 @@ from _vaultpath import vault_root  # noqa: E402
 
 STATUSES = ("unverified", "current", "superseded", "retracted", "expired")
 EVIDENCE_BASES = ("getypt", "cc-sessie", "audio", "import", "autoresearch", "agent")
+# Kennistypes verouderen verschillend: een beslissing heeft lange geldigheid
+# met expliciete supersession, een voorkeur is zachter, een procedure is
+# stabiel tot de tooling wijzigt, een feit tot de wereld wijzigt. Het type
+# maakt verval en retrieval per soort differentieerbaar (CrewAI/Cognee-les).
+MEMORY_TYPES = ("feit", "voorkeur", "procedure", "beslissing")
 DEFAULT_STATUS = "unverified"
 DEFAULT_EVIDENCE = "cc-sessie"
+DEFAULT_MEMORY_TYPE = "feit"
+
+
+def coerce_memory_type(value) -> str:
+    """Sanitize een (LLM-geleverd) memory-type; onbekend -> 'feit'."""
+    v = str(value or "").strip().lower()
+    return v if v in MEMORY_TYPES else DEFAULT_MEMORY_TYPE
+
+
+def coerce_importance(value) -> int:
+    """Sanitize importance naar 1..5; onparseerbaar -> neutraal 3."""
+    try:
+        imp = int(value)
+    except (TypeError, ValueError):
+        return 3
+    return min(5, max(1, imp))
 
 
 def memory_dir() -> Path:
@@ -77,17 +100,23 @@ def render(title: str, body: str, *, status: str = DEFAULT_STATUS,
            evidence_basis: str = DEFAULT_EVIDENCE, source_session: str = "",
            created: str | None = None, updated: str | None = None,
            valid_from: str | None = None, valid_until: str | None = None,
-           expires: str | None = None, superseded_by=None, tags=None) -> str:
+           expires: str | None = None, superseded_by=None, tags=None,
+           memory_type: str = DEFAULT_MEMORY_TYPE, importance: int = 3) -> str:
     if status not in STATUSES:
         raise ValueError(f"ongeldige status: {status!r} (verwacht een van {STATUSES})")
     if evidence_basis not in EVIDENCE_BASES:
         raise ValueError(f"ongeldige evidence_basis: {evidence_basis!r}")
+    if memory_type not in MEMORY_TYPES:
+        raise ValueError(f"ongeldig memory_type: {memory_type!r} (verwacht een van {MEMORY_TYPES})")
+    importance = coerce_importance(importance)
     created = created or _today_iso()
     updated = updated or created
     valid_from = valid_from or created
     lines = ["---",
              f"title: {_yaml_scalar(title)}",
              "type: memory",
+             f"memory_type: {memory_type}",
+             f"importance: {importance}",
              f"status: {status}",
              f"evidence_basis: {evidence_basis}",
              f"source_session: {_yaml_scalar(source_session)}",
