@@ -80,6 +80,17 @@ def main():
     stale_with_sessies = []
     stale_without_sessies = []
 
+    # Gebruiksdecay: een artikel dat recent daadwerkelijk gebruikt is
+    # (usage-telemetrie, kb-usage.db) is niet staal, hoe oud zijn
+    # updated-datum ook is. Een warm artikel blijft warm. Fail-soft:
+    # zonder telemetrie valt alles terug op de leeftijdsklok.
+    try:
+        import _usage
+        last_used = _usage.all_last_used()
+    except Exception:
+        last_used = {}
+    warm_skipped = 0
+
     for wiki_file in sorted(WIKI_DIR.glob("*.md")):
         if wiki_file.name.startswith("_") or wiki_file.name == "index.md":
             continue
@@ -94,6 +105,12 @@ def main():
 
         age = (today - updated).days
         if age <= threshold:
+            continue
+
+        used_raw = last_used.get(wiki_file.stem, "")
+        used_date = parse_date(used_raw) if used_raw else None
+        if used_date is not None and (today - used_date).days <= threshold:
+            warm_skipped += 1
             continue
 
         title = fm.get("title", "")
@@ -125,6 +142,9 @@ def main():
     total = len(stale_with_sessies) + len(stale_without_sessies)
 
     print(f"## Verouderde wiki-artikelen (>{threshold} dagen, {today})\n")
+    if warm_skipped:
+        print(f"({warm_skipped} oud-maar-warm artikel(en) overgeslagen: "
+              f"recent gebruikt volgens usage-telemetrie)\n")
 
     if total == 0:
         print(f"Geen verouderde artikelen gevonden.")

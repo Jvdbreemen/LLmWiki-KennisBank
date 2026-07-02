@@ -62,12 +62,34 @@ def importance_factor(importance) -> float:
     return 1.0 + 0.05 * (imp - 3)
 
 
-def rerank(hits: list, meta_fn, today: date | None = None) -> list:
-    """Herweeg memory-hits op relevance x recency x importance en hersorteer.
+#: Gebruiks-boost: een document dat recent daadwerkelijk gebruikt is
+#: (usage-telemetrie, kb-usage.db) is bewezen nuttig voor deze gebruiker.
+USAGE_BOOST_RECENT = 1.10   # laatst gebruikt <= 30 dagen geleden
+USAGE_BOOST_WARM = 1.05     # laatst gebruikt <= 90 dagen geleden
+
+
+def usage_factor(last_used_iso: str, today: date | None = None) -> float:
+    """Boost op recency-of-use. Nooit gebruikt of onbekend -> neutraal 1.0."""
+    if not last_used_iso:
+        return 1.0
+    age = _age_days(last_used_iso, today or date.today())
+    if age <= 30:
+        return USAGE_BOOST_RECENT
+    if age <= 90:
+        return USAGE_BOOST_WARM
+    return 1.0
+
+
+def rerank(hits: list, meta_fn, today: date | None = None,
+           last_used_fn=None) -> list:
+    """Herweeg hits op relevance x recency x importance x usage, hersorteer.
 
     ``hits``: dicts met minstens ``path``, ``layer``, ``score``.
-    ``meta_fn(path) -> dict``: frontmatter-reader (injecteerbaar). Wiki-hits
-    en hits zonder metadata blijven ongewogen. Geeft een NIEUWE lijst terug.
+    ``meta_fn(path) -> dict``: frontmatter-reader (injecteerbaar).
+    ``last_used_fn(stem) -> iso-datum``: usage-telemetrie-reader (optioneel);
+    de gebruiks-boost geldt voor BEIDE lagen (een warm wiki-artikel is
+    bewezen nuttig), recency/importance alleen voor de memory-laag.
+    Geeft een NIEUWE lijst terug.
     """
     today = today or date.today()
     out = []
@@ -83,6 +105,11 @@ def rerank(hits: list, meta_fn, today: date | None = None) -> list:
                      * recency_factor(_age_days(ref, today),
                                       fm.get("memory_type", "feit"))
                      * importance_factor(fm.get("importance", 3)))
+        if last_used_fn is not None:
+            try:
+                score *= usage_factor(last_used_fn(Path(h.get("path", "")).stem), today)
+            except Exception:
+                pass
         out.append({**h, "score": score})
     out.sort(key=lambda x: x.get("score", 0.0), reverse=True)
     return out

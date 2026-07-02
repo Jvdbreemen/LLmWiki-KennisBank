@@ -91,7 +91,12 @@ def recall_hits(query_vector, query_text: str = "", k: int = 3,
             out.append({"path": r["path"], "layer": layer, "title": r.get("title", ""),
                         "created": r.get("created", ""), "score": r.get("score", 0.0),
                         "snippet": snippet})
-        out = _rank.rerank(out, _frontmatter_of)
+        try:
+            import _usage
+            _lu = _usage.last_used_of
+        except Exception:
+            _lu = None
+        out = _rank.rerank(out, _frontmatter_of, last_used_fn=_lu)
         if expand and out:
             try:
                 root = _vault_root()

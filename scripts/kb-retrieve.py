@@ -213,7 +213,18 @@ def main() -> None:
 
     parts = [t for t in (wiki_text, mem_text) if t]
     if parts:
-        _emit("\n\n".join(parts))
+        ctx = "\n\n".join(parts)
+        _emit(ctx)
+        # Feedbackloop: registreer welke stems geinjecteerd zijn, zodat
+        # kb-usage-scan.py (SessionEnd) daadwerkelijk gebruik kan meten.
+        # Fail-open: telemetrie mag de hook nooit vertragen of breken.
+        try:
+            import re as _re2
+            import _usage
+            stems = sorted({m for m in _re2.findall(r"\[\[([^\[\]|#]+)\]\]", ctx)})
+            _usage.log_injected(stems, session_id=str(data.get("session_id") or ""))
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
