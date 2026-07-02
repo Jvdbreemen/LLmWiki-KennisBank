@@ -130,6 +130,18 @@ The hooks are fail-open by design: an error means no injected context or a skipp
 | `/kennisbank-upgrade` | optional `--dry-run` | Upgrade the deployed vault to the latest release tag |
 | `/kennisbank-contribute` | optional `--dry-run` | PR local tooling edits back upstream |
 
+## Skills
+
+Three skills ship with the system and are installed into `~/.claude/skills/` by `setup.sh`. Commands are single prompts; skills are multi-step procedures with their own guardrails.
+
+| Skill | Invoked via | What it does |
+|-------|-------------|--------------|
+| `autoresearch` | `/autoresearch <topic>` or "research/deep dive/onderzoek [topic]" | Autonomous iterative research loop: multi-round web searches, synthesis, and one structured, cited document in `~/Claude/research/`. Checks your own vault first (lazy hierarchy) so research fills gaps instead of repeating what you already know. Built on Karpathy's autoresearch pattern. |
+| `kennisbank-upgrade` | `/kennisbank-upgrade [--dry-run]` | Upgrades a deployed vault to the latest official release tag (never bare main): fetches tags, shows the changelog delta, detects local drift with a CRLF-agnostic diff, backs up drifted categories, deploys via `setup.sh`, stamps the installed version, and verifies with `doctor.sh`. |
+| `kennisbank-contribute` | `/kennisbank-contribute [--dry-run]` | The reverse direction: isolates local tooling edits in a deployed vault (scripts, templates, commands, skills), filters out personal vault content, then branches, commits, pushes, and opens an upstream PR. Ownership equals durability: improvements survive the next upgrade because they land upstream. |
+
+Upgrade and contribute are two halves of one loop: `contribute` sends your local improvements upstream, `upgrade` brings released improvements back down. A vault that follows both never drifts permanently from the project.
+
 ## Vault structure
 
 ```
