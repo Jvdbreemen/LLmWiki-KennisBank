@@ -55,7 +55,7 @@ class WikiBlockTest(unittest.TestCase):
 
     def test_cosine_relevant_injects_hybrid(self):
         self.emb.cosine = lambda a, b: 0.9  # boven drempel -> gate slaagt
-        self.m.kb_recall.wiki_hits = lambda qv, query_text="", k=3: [
+        self.m.kb_recall.wiki_hits = lambda qv, query_text="", k=3, expand=False: [
             {"path": "/v/02-wiki/art.md", "layer": "wiki", "title": "Art",
              "created": "2026-06-01", "score": 0.5, "snippet": "hybride treffer"}]
         text, qvec = self.m._wiki_block("een relevante vraag over het artikel",
@@ -66,7 +66,7 @@ class WikiBlockTest(unittest.TestCase):
     def test_fts_only_triggers_when_cosine_low(self):
         self.emb.cosine = lambda a, b: 0.1  # onder drempel -> alleen FTS kan triggeren
         self.m.kb_recall.has_fts_match = lambda q, layer="wiki": True
-        self.m.kb_recall.wiki_hits = lambda qv, query_text="", k=3: [
+        self.m.kb_recall.wiki_hits = lambda qv, query_text="", k=3, expand=False: [
             {"path": "/v/02-wiki/art.md", "layer": "wiki", "title": "Art",
              "created": "2026-06-01", "score": 0.5, "snippet": "exacte-term-treffer"}]
         text, _ = self.m._wiki_block("FunctieNaamXYZ aanroep",
@@ -82,7 +82,7 @@ class WikiBlockTest(unittest.TestCase):
 
     def test_fallback_to_cosine_when_hybrid_empty(self):
         self.emb.cosine = lambda a, b: 0.9  # gate slaagt
-        self.m.kb_recall.wiki_hits = lambda qv, query_text="", k=3: []  # index leeg
+        self.m.kb_recall.wiki_hits = lambda qv, query_text="", k=3, expand=False: []  # index leeg
         text, _ = self.m._wiki_block("relevante vraag over het artikel",
                                      self.emb, self.vault_root, self._cfg())
         # fallback naar cosine-cache-selectie: het wiki-artikel staat er
