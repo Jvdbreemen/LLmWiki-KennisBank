@@ -385,10 +385,11 @@ The five env vars below control the behavior of the vault-onderhoud scripts
 
 ### Recall-eval (`scripts/kb-eval.py`)
 
-- **Default set**: `<vault>/06-claude/kb-eval-set.json` (persoonlijk; voorbeeld in `kb-eval-set.example.json`).
-- **CLI**: `python3 kb-eval.py [--set pad] [--json] [--verbose]`.
-- **Effect**: meet recall@1/3/5 en MRR van de hook-retrieval-route tegen vragen met verwachte documenten. Draai voor en na elke wijziging aan drempels, embeddingmodel of ranking; een daling is een regressie.
-- **To change**: onderhoud de eval-set in de vault (voeg vragen toe bij nieuwe kennisdomeinen); de metriek-k's staan als `KS` in het script.
+- **Default sets**: `<vault>/06-claude/kb-eval-set.json` (wiki) + `<vault>/06-claude/kb-memory-eval-set.json` (geheugen); voorbeelden in `kb-eval-set.example.json` en `kb-memory-eval-set.example.json`.
+- **CLI**: `python3 kb-eval.py [--set pad] [--layer wiki|memory] [--json] [--verbose]`. Zonder `--set` draait het beide sets in één run.
+- **Fidelity (belangrijk)**: het harnas meet PER LAAG, niet gefuseerd — de wiki-set wiki-only, de geheugen-set memory-only. Dat spiegelt de hook, die wiki en geheugen als twee gescheiden blokken injecteert (`_wiki_block` / `_memory_block`) en nooit fuseert. Een gefuseerde meting geeft vals signaal (memories verdringen wiki-artikelen in één ranked lijst terwijl ze in productie in aparte blokken staan).
+- **Effect**: meet recall@1/3/5 en MRR per laag tegen vragen met verwachte documenten. Draai voor en na elke wijziging aan drempels, embeddingmodel of ranking; een daling is een regressie.
+- **To change**: onderhoud beide eval-sets in de vault (voeg vragen toe bij nieuwe kennisdomeinen); de metriek-k's staan als `KS` in het script.
 
 ### RECONCILE_THRESHOLD / TOP_K (write-time invalidatie)
 

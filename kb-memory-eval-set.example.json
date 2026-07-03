@@ -1,0 +1,19 @@
+[
+  {"q": "Waarom is een push-hook betrouwbaarder dan een pull-mechanisme via CLAUDE.md voor kennisretrieval?", "expect": ["2026-07-02-pull-vs-push-mechanismen-voor-kennisretrieval"], "type": "beslissing"},
+  {"q": "Hoe onderschept de UserPromptSubmit-hook de prompt en wat injecteert hij?", "expect": ["2026-07-02-werking-van-userpromptsubmit-hook"], "type": "procedure"},
+  {"q": "Wat moet een hook-script doen als zijn toggle uit staat?", "expect": ["2026-06-27-hook-gating-mechanisme"], "type": "procedure"},
+  {"q": "Waarvoor dient de SessionEnd-hook in de KennisBank?", "expect": ["2026-06-27-sessionend-hook-fundament"], "type": "feit"},
+  {"q": "Welke frontmatter-velden beheren stale data in een memory en hoe weegt recall die?", "expect": ["2026-07-02-truth-maintenance-via-frontmatter"], "type": "feit"},
+  {"q": "Hoe is de model-router opgebouwd en welke provider is de standaard?", "expect": ["2026-07-02-model-router-architectuur"], "type": "feit"},
+  {"q": "Waarom een lokaal generatie-model via Ollama gebruiken voor de judge in plaats van headless Claude?", "expect": ["2026-07-02-judge-mechanisme-fase-4"], "type": "beslissing"},
+  {"q": "Wat doet de eenmalige backfill over oude transcripts bij een upgrade?", "expect": ["2026-07-02-upgrade-backfill-voor-transcripten"], "type": "procedure"},
+  {"q": "Welk permissionDecision en output gebruikt het PreToolUse-contract bij WebSearch/WebFetch?", "expect": ["2026-07-02-pretooluse-contract-specificaties"], "type": "feit"},
+  {"q": "Waarom serveert kb-recall soms verouderde current-data na een gefaalde build?", "expect": ["2026-07-02-stale-status-bij-gefaalde-build"], "type": "feit"},
+  {"q": "Waarom een verse subagent per taak gebruiken en wat volgt na elke taak?", "expect": ["2026-07-02-subagent-gedreven-ontwikkeling"], "type": "procedure"},
+  {"q": "Mogen plannen TBD, TODO of vage instructies bevatten?", "expect": ["2026-07-02-geen-placeholders-in-plannen"], "type": "voorkeur"},
+  {"q": "Hoe extraheer je de volledige taaktekst voordat je een implementer aanroept?", "expect": ["2026-07-02-task-brief-procedure"], "type": "procedure"},
+  {"q": "Wat is de prioriteitsvolgorde van de gefaseerde data-inname strategie?", "expect": ["2026-06-27-gefaseerde-data-inname-strategie"], "type": "beslissing"},
+  {"q": "Waarom is een watermarking-mechanisme verplicht bij transcript-archivering?", "expect": ["2026-06-27-vereiste-robuustheidsmaatregelen"], "type": "beslissing"},
+  {"q": "Wat houdt actieve truth-maintenance optie B in voor het geheugen?", "expect": ["2026-07-02-actieve-truth-maintenance-optie-b"], "type": "beslissing"},
+  {"q": "Via welk script en naar welke map archiveert de SessionEnd-hook transcripts?", "expect": ["2026-06-27-archivering-van-transcripts-component-1"], "type": "feit"}
+]

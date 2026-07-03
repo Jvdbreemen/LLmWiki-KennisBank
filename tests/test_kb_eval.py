@@ -99,5 +99,31 @@ class TestLoadSet(unittest.TestCase):
             self.ev.load_set(self._write([{"q": "v", "expect": "a"}]))
 
 
+class TestLayerWiring(unittest.TestCase):
+    def setUp(self):
+        self.ev = _ev()
+
+    def test_memory_set_constant_defined(self):
+        # de geheugen-set moet een eigen default-pad hebben, los van de wiki-set
+        self.assertTrue(self.ev.MEMORY_SET.endswith("kb-memory-eval-set.json"))
+        self.assertNotEqual(self.ev.DEFAULT_SET, self.ev.MEMORY_SET)
+
+    def test_run_one_reports_load_error_without_model(self):
+        # _run_one faalt-soft op een onbruikbare set VOOR het model geraadpleegd
+        # wordt (faalt bij load_set, geen embedding nodig).
+        name, res = self.ev._run_one(Path("bestaat-niet-xyz.json"), "wiki")
+        self.assertIsInstance(res, str)
+        self.assertIn("niet bruikbaar", res)
+
+    def test_repo_example_memory_set_is_valid(self):
+        # de meegeleverde voorbeeld-geheugenset moet de schema-validatie passeren
+        root = Path(__file__).resolve().parent.parent
+        example = root / "kb-memory-eval-set.example.json"
+        if example.exists():
+            entries = self.ev.load_set(example)
+            self.assertTrue(all("memory" not in e for e in entries))  # geen laag-veld nodig
+            self.assertGreater(len(entries), 0)
+
+
 if __name__ == "__main__":
     unittest.main()
