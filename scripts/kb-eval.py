@@ -1,13 +1,22 @@
 #!/usr/bin/env python3
 """kb-eval.py - recall@k eval-harnas voor de KennisBank-retrieval.
 
-Meet hoe goed de recall-route (dezelfde hybride cosine|FTS5-route als de
-UserPromptSubmit-hook: embed -> kb-recall.recall_hits over kb-index.db) de
-juiste documenten terugvindt voor een persoonlijke eval-set van vragen.
-Zonder meting is elke retrieval-wijziging gevoelsmatig; dit harnas maakt
-verbeteringen (en regressies) toetsbaar: draai voor en na elke wijziging.
+Meet hoe goed de recall-route de juiste documenten terugvindt voor een
+persoonlijke eval-set van vragen. Zonder meting is elke retrieval-wijziging
+gevoelsmatig; dit harnas maakt verbeteringen (en regressies) toetsbaar: draai
+voor en na elke wijziging.
 
-Eval-set: JSON-lijst van entries, default <vault>/06-claude/kb-eval-set.json:
+FIDELITY: de UserPromptSubmit-hook injecteert wiki en geheugen als TWEE
+gescheiden, gelabelde blokken (kb-retrieve._wiki_block via wiki_hits,
+_memory_block via memory_hits) — hij fuseert de lagen NOOIT in één ranking.
+Daarom meet dit harnas per laag: de wiki-set (default) wordt wiki-only
+gemeten, de geheugen-set memory-only. Een gefuseerde meting zou een topologie
+scoren die de hook niet gebruikt en vals signaal geven (een geheugen-hit die
+een wiki-artikel in een gefuseerde lijst verdringt telt in productie niet,
+want ze staan in aparte blokken).
+
+Eval-set: JSON-lijst van entries, default <vault>/06-claude/kb-eval-set.json
+(wiki) en <vault>/06-claude/kb-memory-eval-set.json (geheugen):
 
     [
       {"q": "hoe zet ik wireguard op achter cgnat?",
@@ -20,11 +29,16 @@ Eval-set: JSON-lijst van entries, default <vault>/06-claude/kb-eval-set.json:
 - ``expect``: bestandsstammen (zonder .md) die het antwoord dragen; een hit
   telt zodra een ervan in de top-k staat.
 - ``type``: vrij label voor de breakdown (bv. single-hop, keyword,
-  paraphrase, temporal, multi-hop).
+  paraphrase, temporal, multi-hop; of feit/voorkeur/procedure/beslissing).
 
 Metrics: recall@k voor k in (1, 3, 5), MRR (mean reciprocal rank van de
 eerste verwachte hit), en een per-type breakdown. ``--json`` voor
 machine-leesbare uitvoer, ``--verbose`` toont per vraag de gevonden top-k.
+``--layer wiki|memory`` overschrijft de laag voor een custom ``--set``.
+
+Zonder ``--set`` draait het harnas BEIDE sets als ze bestaan: de wiki-set
+wiki-only en de geheugen-set memory-only, en rapporteert per laag — precies
+de twee blokken die de hook injecteert.
 
 Vereist een gebouwde kb-index (build-kb-index.py) en een bereikbare
 embedding-backend. Exit: 0 = rapport gedraaid, 1 = set/index/embedding
@@ -45,6 +59,7 @@ from _vaultpath import vault_root  # noqa: E402
 
 KS = (1, 3, 5)
 DEFAULT_SET = "06-claude/kb-eval-set.json"
+MEMORY_SET = "06-claude/kb-memory-eval-set.json"
 
 
 def load_set(path: Path) -> list:
@@ -106,8 +121,12 @@ def evaluate(entries: list, hits_fn, ks=KS) -> dict:
     return report
 
 
-def _live_hits_fn():
-    """Bouw de echte hits_fn op de hook-route: embed + hybride recall.
+def _live_hits_fn(layers=("wiki",)):
+    """Bouw de echte hits_fn op de hook-route: embed + recall over EEN laag.
+
+    ``layers`` is de laag-tuple die de hook voor dit blok gebruikt: ("wiki",)
+    voor _wiki_block, ("memory",) voor _memory_block. Bewust GEEN gefuseerde
+    ("wiki","memory") — dat is niet hoe de hook injecteert (zie module-docstring).
 
     Returns (hits_fn, None) of (None, foutmelding).
     """
@@ -124,43 +143,14 @@ def _live_hits_fn():
         qv = emb.embed(q)
         if qv is None:
             return []
-        rows = kb_recall.recall_hits(qv, query_text=q, k=k,
-                                     layers=("wiki", "memory"))
+        rows = kb_recall.recall_hits(qv, query_text=q, k=k, layers=tuple(layers))
         return [Path(r["path"]).stem for r in rows]
 
     return hits_fn, None
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="recall@k eval over kb-index.db")
-    parser.add_argument("--set", dest="set_path", default=None,
-                        help=f"pad naar eval-set (default: <vault>/{DEFAULT_SET})")
-    parser.add_argument("--json", action="store_true", help="machine-leesbare uitvoer")
-    parser.add_argument("--verbose", action="store_true", help="toon per vraag de top-k")
-    args = parser.parse_args()
-
-    set_path = Path(args.set_path) if args.set_path else vault_root() / DEFAULT_SET
-    try:
-        entries = load_set(set_path)
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
-        print(f"kb-eval: eval-set niet bruikbaar: {exc}", file=sys.stderr)
-        return 1
-
-    hits_fn, err = _live_hits_fn()
-    if hits_fn is None:
-        print(f"kb-eval: {err}", file=sys.stderr)
-        return 1
-
-    report = evaluate(entries, hits_fn)
-
-    if args.json:
-        out = dict(report)
-        if not args.verbose:
-            out.pop("results")
-        print(json.dumps(out, ensure_ascii=False))
-        return 0
-
-    print(f"kb-eval: {report['questions']} vragen uit {set_path.name}")
+def _print_report(name: str, layer: str, report: dict, verbose: bool) -> None:
+    print(f"\nkb-eval [{layer}]: {report['questions']} vragen uit {name}")
     for k, v in report["recall"].items():
         print(f"  recall{k}: {v}")
     print(f"  MRR: {report['mrr']}")
@@ -172,12 +162,70 @@ def main() -> int:
         print(f"  gemist ({len(misses)}):")
         for r in misses:
             print(f"    - {r['q']!r} (verwacht: {', '.join(r['expect'])})")
-    if args.verbose:
+    if verbose:
         for r in report["results"]:
             print(f"  Q: {r['q']!r} rank={r['rank']}")
             for i, h in enumerate(r["hits"], start=1):
                 mark = "*" if h in r["expect"] else " "
                 print(f"    {mark}{i}. {h}")
+
+
+def _run_one(set_path: Path, layer: str):
+    """Laad set, bouw laag-specifieke hits_fn, evalueer. Returns (name, report)
+    of (name, foutmelding-str)."""
+    try:
+        entries = load_set(set_path)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        return set_path.name, f"eval-set niet bruikbaar: {exc}"
+    hits_fn, err = _live_hits_fn(layers=(layer,))
+    if hits_fn is None:
+        return set_path.name, err
+    return set_path.name, evaluate(entries, hits_fn)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="recall@k eval over kb-index.db")
+    parser.add_argument("--set", dest="set_path", default=None,
+                        help=f"pad naar eval-set (default: beide, <vault>/{DEFAULT_SET} + {MEMORY_SET})")
+    parser.add_argument("--layer", choices=("wiki", "memory"), default=None,
+                        help="laag voor een custom --set (default: wiki)")
+    parser.add_argument("--json", action="store_true", help="machine-leesbare uitvoer")
+    parser.add_argument("--verbose", action="store_true", help="toon per vraag de top-k")
+    args = parser.parse_args()
+
+    # Bepaal welke (set, laag)-paren te draaien. Custom --set: één paar met de
+    # opgegeven (of default wiki) laag. Zonder --set: beide standaardsets, elk
+    # tegen zijn eigen laag — precies de twee blokken die de hook injecteert.
+    if args.set_path:
+        jobs = [(Path(args.set_path), args.layer or "wiki")]
+    else:
+        jobs = [(vault_root() / DEFAULT_SET, "wiki")]
+        mem = vault_root() / MEMORY_SET
+        if mem.exists():
+            jobs.append((mem, "memory"))
+
+    reports = {}
+    any_ok = False
+    for set_path, layer in jobs:
+        name, res = _run_one(set_path, layer)
+        if isinstance(res, str):
+            print(f"kb-eval [{layer}] {name}: {res}", file=sys.stderr)
+            continue
+        any_ok = True
+        reports[layer] = {"name": name, "report": res}
+        if not args.json:
+            _print_report(name, layer, res, args.verbose)
+
+    if not any_ok:
+        return 1
+    if args.json:
+        out = {}
+        for layer, r in reports.items():
+            rep = dict(r["report"])
+            if not args.verbose:
+                rep.pop("results")
+            out[layer] = {"set": r["name"], **rep}
+        print(json.dumps(out, ensure_ascii=False))
     return 0
 
 

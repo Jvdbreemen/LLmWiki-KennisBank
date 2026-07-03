@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [Unreleased]
+
+### Fixed
+- **kb-eval fidelity: per-laag meten i.p.v. gefuseerde ranking (`scripts/kb-eval.py`).** Het harnas fuseerde wiki+memory in één ranked lijst, maar de UserPromptSubmit-hook injecteert die lagen als TWEE gescheiden, gelabelde blokken (`_wiki_block` via wiki_hits, `_memory_block` via memory_hits) en fuseert nooit. De gefuseerde meting scoorde daardoor een topologie die de hook niet gebruikt en gaf vals signaal: op een vault met een gevulde geheugenlaag kelderde de gerapporteerde wiki-recall@1 van 0.914 naar 0.314 doordat memories in de gefuseerde lijst wiki-artikelen verdrongen — een "regressie" die in productie niet bestaat (de blokken staan los). kb-eval meet nu per laag (wiki-set wiki-only, geheugen-set memory-only) en draait zonder `--set` beide sets in één run, elk tegen zijn eigen laag. `--layer wiki|memory` voor een custom set.
+
+### Added
+- **Geheugen-eval-set (`06-claude/kb-memory-eval-set.json`, `kb-memory-eval-set.example.json`).** Aparte eval-set met geheugen-verwachte antwoorden, zodat de nuttigheid van het geheugen-blok meetbaar is i.p.v. als ruis geteld te worden tegen de wiki-set. Eerste baseline op de Kluis-vault (588 memories na backfill, qwen3): memory recall@1 0.529, recall@3 0.882, MRR 0.686 — de over-extractie van de mega-sessies (148 memories uit één transcript) verdunt de rang-1-precisie meetbaar, terwijl top-3 gezond blijft.
+
 ## [0.9.0] - 2026-07-02
 
 ### Added
