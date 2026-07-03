@@ -7,9 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [Unreleased]
+## [0.10.0] - 2026-07-03
 
 ### Added
+- **LLM-backend example + documentatie (`kennisbank-llm.example.json`, CONFIGURATION sectie 4a).** De embedding-backend had een voorbeeld-config en documentatie, maar de LLM-backend voor de memory judge/extractie (`scripts/_llm.py`) stond nergens in CONFIGURATION.md en had geen voorbeeld. Nu beide: een voorbeeld-config (default ollama/gemma4:latest, opt-in cloud openrouter/claude-cli, per-provider model-overrides, ordered local-then-cloud fallback-chain) en sectie 4a (provider-keten, `KB_LLM_*` env-vars, config-precedentie, en de noot dat dit bestand niet auto-gedeployed wordt). Met de 'pin your model'-gotcha: de code-default is de tag `gemma4:latest`; heeft je lokale Ollama een andere tag (bv. `gemma4:12b`) dan faalt de sweep-probe stil en meldt de heartbeat `model_unreachable: true` terwijl Ollama draait — capture produceert dan niets. Check `ollama list` en pin de tag.
 - **Provenance met tanden: fail-closed op niet-herleidbare herkomst (`kb-lint.py --strict`, doctor 13d FAIL-tier, `/wiki` stap 4.5).** Tot nu toe was elke provenance-poort zacht: `/wiki` stap 4.5 was een model-prompt met ontsnapping ("waarschuwingen mag je laten staan") en doctor 13d mapte alles naar WARN. Een destillatie-hallucinatie die een `[[raw-sessie]]`-link sloopt (missing/dangling artikel) kon zo ongezien landen. kb-lint onderscheidt nu HARD findings (missing/dangling = niet-auditeerbaar) van advisory (path-only): `--strict` geeft exit 2 alleen op HARD (path-only blijft exit 0), het JSON-rapport draagt een `hard`-teller, doctor 13d promoveert HARD naar FAIL (path-only blijft WARN), en `/wiki` stap 4.5 draait `--strict` als harde stop vóór afronden. Deterministisch, nul LLM-kosten, werkt op elke topologie (geen git-hook/CI, geen cloud-push). Bewust NIET als green-CI merge-gate (vault staat buiten de repo; zou soevereiniteit schenden) — governance-hardening binnen de bestaande hook/command-laag. TASK-13.
 
 ### Fixed
