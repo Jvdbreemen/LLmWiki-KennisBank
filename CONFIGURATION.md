@@ -298,6 +298,21 @@ python3 ~/KennisBank/.claude/scripts/register-hooks.py --manifest ~/.claude/sett
 
 For individual hooks, see the JSON blocks below as reference (interpreter shown as `py -3` on Windows; use `python3` on macOS/Linux):
 
+## 4a. LLM backend for the memory judge/extraction (`scripts/_llm.py`)
+
+Separate from the embedding backend (section 4): the memory sweep uses a
+generative LLM to extract candidate memories, judge current-vs-quarantine,
+reconcile, and supersede. Mirrors the embedding config — config-driven,
+pluggable, fail-soft.
+
+### Provider chain / model / endpoint (`KB_LLM_*`)
+
+- **Default**: providers `["ollama"]`, model `gemma4:latest`, endpoint `http://localhost:11434`. No file required.
+- **Where set** (first match wins): env `KB_LLM_PROVIDERS` (comma list), `KB_LLM_MODEL`, `KB_LLM_ENDPOINT`, `KB_LLM_API_KEY_ENV`; then `<vault>/.claude/kennisbank-llm.json` (`{"providers":[...], "model":"...", "models":{prov:model}, "endpoint":"..."}`); then the code default above. Example: `kennisbank-llm.example.json`.
+- **Provider chain**: `providers` is ORDERED; `generate()` tries each until one returns a non-empty string. `ollama` is local (default). `openrouter` and `claude-cli` are **opt-in** cloud providers: putting them in the chain is explicit consent, and each cloud step logs LOUDLY to stderr, never silently. `claude-cli` shells the existing `claude` binary (uses your Claude Code auth, no key).
+- **PIN YOUR MODEL (common gotcha)**: the code default is the tag `gemma4:latest`. If your local Ollama has a differently-tagged model (e.g. `gemma4:12b`), the sweep probe fails and the heartbeat (`<vault>/.claude/memory-sweep-status.json`) reports `model_unreachable: true` even though Ollama is running — capture then silently produces nothing. Check `ollama list` and pin the tag you actually have in `kennisbank-llm.json`.
+- **To change**: set the env vars, or create `kennisbank-llm.json` from the example. This file is NOT auto-deployed by `setup.sh` (unlike the embedding config) because the code default already works; create it only to override.
+
 ## 4b. Vault-onderhoud layer env vars
 
 The five env vars below control the behavior of the vault-onderhoud scripts
