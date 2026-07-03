@@ -47,6 +47,11 @@ from _vaultpath import vault_root  # noqa: E402
 SKIP_FILES = {"index.md", "log.md"}
 SESSION_PREFIX = "raw-sessie-"
 
+# Findings die de auditeerbaarheid ECHT breken (geen herleidbare herkomst).
+# In --strict-modus zijn dit fail-closed; path-only blijft advisory (de link
+# bestaat wel, maar als pad-tekst i.p.v. wikilink).
+HARD_TYPES = ("missing", "dangling")
+
 # [[target]], [[target|alias]], [[pad/naar/target#kop]]
 WIKILINK_RE = re.compile(r"\[\[([^\[\]]+?)\]\]")
 # Pad-tekst naar een sessielog buiten een wikilink om (backticks of proza).
@@ -183,10 +188,12 @@ def lint_vault(root: Path) -> dict:
         warnings.extend(lint_article(f, stems, root))
 
     warned_files = {w["file"] for w in warnings}
+    hard = sum(1 for w in warnings if w["type"] in HARD_TYPES)
     return {
         "articles": articles,
         "clean": articles - len(warned_files),
         "warned": len(warned_files),
+        "hard": hard,          # aantal missing/dangling findings (fail-closed in --strict)
         "warnings": warnings,
     }
 
@@ -199,12 +206,20 @@ def main() -> int:
         "--json", action="store_true",
         help="machine-leesbare JSON-uitvoer (voor doctor.sh)",
     )
+    parser.add_argument(
+        "--strict", action="store_true",
+        help="fail-closed op missing/dangling (exit 2); path-only blijft advisory (exit 0). "
+             "Voor gate-gebruik: /wiki hard-stop en doctor FAIL-tier.",
+    )
     args = parser.parse_args()
 
     root = vault_root()
     try:
         report = lint_vault(root)
     except FileNotFoundError as exc:
+        # Fail-open bij een operationele fout (geen vault): exit 1, geen valse
+        # block. Een gate die kb-lint aanroept moet exit 1 als "kon niet
+        # controleren" behandelen, niet als "provenance kapot".
         print(str(exc), file=sys.stderr)
         return 1
 
@@ -212,12 +227,20 @@ def main() -> int:
         print(json.dumps(report, ensure_ascii=False))
     else:
         for w in report["warnings"]:
-            print(f"[WARN] 02-wiki/{w['file']}: {w['detail']}")
+            hard = " [HARD]" if w["type"] in HARD_TYPES else ""
+            print(f"[WARN]{hard} 02-wiki/{w['file']}: {w['detail']}")
         print(
             f"Samenvatting: {report['articles']} artikelen, "
-            f"{report['warned']} met waarschuwingen, {report['clean']} schoon"
+            f"{report['warned']} met waarschuwingen ({report['hard']} hard), "
+            f"{report['clean']} schoon"
         )
 
+    # Exit-contract:
+    #   1 = operationele fout (geen vault) — hierboven al afgehandeld
+    #   --strict: 2 alleen bij hard (missing/dangling); path-only = 0 (advisory)
+    #   default:  2 bij welke waarschuwing dan ook; 0 = schoon
+    if args.strict:
+        return 2 if report["hard"] else 0
     return 2 if report["warnings"] else 0
 
 

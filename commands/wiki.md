@@ -79,13 +79,25 @@ Patroonherkenning over sessies heen — destilleer herbruikbare kennis als wiki-
      meerdere links op één regel.
    - **`## Bronnen`:** alleen externe bronnen (APA7), geen sessieverwijzingen.
 
-4.5. Valideer de herkomst met de lint:
+4.5. Valideer de herkomst met de lint — FAIL-CLOSED op niet-herleidbare herkomst:
    ```
-   python3 $VAULT/.claude/scripts/kb-lint.py
+   python3 $VAULT/.claude/scripts/kb-lint.py --strict
    ```
-   Los waarschuwingen voor de zojuist geschreven of herschreven artikelen
-   direct op (dode links, pad-tekst, ontbrekende herkomst). Waarschuwingen
-   over oudere artikelen mag je laten staan; meld ze wel in de rapportage.
+   **Harde stop (verplicht):** `--strict` geeft exit 2 zodra ÉÉN artikel een
+   `missing`- of `dangling`-herkomst heeft (geen resolvende `[[raw-sessie-...]]`-
+   of `[[05-bronnen/...]]`-link). Een niet-herleidbaar artikel is niet
+   auditeerbaar — een destillatie-hallucinatie zou anders een duurzaam "feit"
+   worden dat nooit tegen de bron te checken valt. Rond dit command NIET af
+   zolang exit 2: los de missing/dangling-herkomst van de zojuist geschreven of
+   herschreven artikelen op en draai opnieuw tot exit 0.
+   - Exit 2 → herkomst kapot: FIX EERST, niet afronden.
+   - Exit 1 → operationele fout (geen `02-wiki/`): kon niet controleren, meld het.
+   - Exit 0 → schoon of alleen advisory (`path-only`): afronden mag.
+
+   `path-only`-waarschuwingen (herkomst bestaat wel, maar als pad-tekst i.p.v.
+   wikilink) blijven advisory: los ze op voor de zojuist geraakte artikelen,
+   maar ze blokkeren niet. Waarschuwingen over oudere artikelen mag je laten
+   staan; meld ze wel in de rapportage.
 
 5. Rapporteer per artikel één van de drie uitkomsten:
    - **herschreven** — bestaand artikel bijgewerkt via safe-edit; vermeld pad en similarity-score

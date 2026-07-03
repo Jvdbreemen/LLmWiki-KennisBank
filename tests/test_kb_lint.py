@@ -6,6 +6,7 @@ KENNISBANK_VAULT is niet nodig.
 """
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -70,6 +71,39 @@ class VaultCase(unittest.TestCase):
 
     def add_article(self, name: str, body: str):
         (self.root / "02-wiki" / name).write_text(body, encoding="utf-8")
+
+
+class TestHardSeverity(VaultCase):
+    """De --strict fail-closed tak: alleen missing/dangling zijn hard."""
+
+    def test_hard_count_missing(self):
+        self.add_article("a.md", "# geen herkomst\n")
+        report = self.kl.lint_vault(self.root)
+        self.assertEqual(report["hard"], 1)
+
+    def test_hard_count_dangling(self):
+        self.add_article("a.md", "- p: [[raw-sessie-2026-01-01-weg]]\n")
+        report = self.kl.lint_vault(self.root)
+        self.assertEqual(report["hard"], 1)
+
+    def test_path_only_is_not_hard(self):
+        self.add_session("raw-sessie-2026-06-28-x")
+        self.add_article("a.md", "Bron: `01-raw/sessies/raw-sessie-2026-06-28-x.md`\n")
+        report = self.kl.lint_vault(self.root)
+        self.assertEqual(report["warned"], 1)
+        self.assertEqual(report["hard"], 0)  # path-only is advisory, niet hard
+
+    def test_clean_has_zero_hard(self):
+        self.add_session("raw-sessie-2026-06-28-x")
+        self.add_article("a.md", "- p: [[raw-sessie-2026-06-28-x]]\n")
+        report = self.kl.lint_vault(self.root)
+        self.assertEqual(report["hard"], 0)
+
+    def test_hard_types_constant(self):
+        # missing en dangling zijn de fail-closed types; path-only niet
+        self.assertIn("missing", self.kl.HARD_TYPES)
+        self.assertIn("dangling", self.kl.HARD_TYPES)
+        self.assertNotIn("path-only", self.kl.HARD_TYPES)
 
 
 class TestLintVault(VaultCase):
@@ -221,6 +255,70 @@ class TestLintVault(VaultCase):
         self.assertEqual(len(report["warnings"]), 2)
         self.assertEqual(report["warned"], 1)
         self.assertEqual(report["clean"], 0)
+
+
+class TestStrictExitCodes(unittest.TestCase):
+    """Integratie: main() via subprocess. Dekt het exit-contract dat de
+    /wiki-hard-stop en doctor-FAIL-tier aanroepen."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        (self.root / "01-raw" / "sessies").mkdir(parents=True)
+        (self.root / "02-wiki").mkdir()
+        self.addCleanup(self._tmp.cleanup)
+        self.script = Path(__file__).resolve().parent.parent / "scripts" / "kb-lint.py"
+
+    def _run(self, *args):
+        import subprocess
+        import sys as _sys
+        env = dict(os.environ)
+        env["KENNISBANK_VAULT"] = str(self.root)
+        return subprocess.run([_sys.executable, str(self.script), *args],
+                              capture_output=True, text=True, env=env)
+
+    def _sessie(self, stem):
+        (self.root / "01-raw" / "sessies" / f"{stem}.md").write_text("x", encoding="utf-8")
+
+    def _art(self, name, body):
+        (self.root / "02-wiki" / name).write_text(body, encoding="utf-8")
+
+    def test_strict_exit0_on_clean(self):
+        self._sessie("raw-sessie-2026-06-28-x")
+        self._art("a.md", "- p: [[raw-sessie-2026-06-28-x]]\n")
+        self.assertEqual(self._run("--strict").returncode, 0)
+
+    def test_strict_exit2_on_missing(self):
+        self._art("a.md", "# geen herkomst\n")
+        self.assertEqual(self._run("--strict").returncode, 2)
+
+    def test_strict_exit2_on_dangling(self):
+        self._art("a.md", "- p: [[raw-sessie-2026-01-01-weg]]\n")
+        self.assertEqual(self._run("--strict").returncode, 2)
+
+    def test_strict_exit0_on_path_only(self):
+        # path-only is advisory: --strict blokkeert NIET
+        self._sessie("raw-sessie-2026-06-28-x")
+        self._art("a.md", "Bron: `01-raw/sessies/raw-sessie-2026-06-28-x.md`\n")
+        self.assertEqual(self._run("--strict").returncode, 0)
+
+    def test_nonstrict_exit2_on_path_only(self):
+        # zonder --strict blijft elke waarschuwing exit 2 (backward-compat)
+        self._sessie("raw-sessie-2026-06-28-x")
+        self._art("a.md", "Bron: `01-raw/sessies/raw-sessie-2026-06-28-x.md`\n")
+        self.assertEqual(self._run().returncode, 2)
+
+    def test_strict_exit1_on_no_vault(self):
+        # operationele fout (geen 02-wiki) -> exit 1, geen valse block
+        import shutil
+        shutil.rmtree(self.root / "02-wiki")
+        self.assertEqual(self._run("--strict").returncode, 1)
+
+    def test_json_has_hard_field(self):
+        self._art("a.md", "# geen herkomst\n")
+        import json as _json
+        out = self._run("--json").stdout
+        self.assertEqual(_json.loads(out)["hard"], 1)
 
 
 if __name__ == "__main__":

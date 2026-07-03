@@ -304,13 +304,14 @@ fi
 
 # 13d. Provenance-lint: elk wiki-artikel moet herleidbare sessie-herkomst
 # hebben (resolvende [[raw-sessie-...]]-wikilink). Read-only; details via
-# `python3 kb-lint.py` los draaien.
+# `python3 kb-lint.py` los draaien. FAIL-tier op HARD findings (missing/
+# dangling = niet-auditeerbaar); path-only blijft advisory (WARN).
 if command -v python3 >/dev/null 2>&1 && [ -f "$SCRIPTS_DIR/kb-lint.py" ]; then
   LINT_SUMMARY="$(python3 "$SCRIPTS_DIR/kb-lint.py" --json 2>/dev/null | python3 -c '
 import json, sys
 try:
     r = json.load(sys.stdin)
-    print("%d %d" % (r["articles"], r["warned"]))
+    print("%d %d %d" % (r["articles"], r["warned"], r.get("hard", 0)))
 except Exception:
     print("ERR")
 ' 2>/dev/null | tr -d '\r')"
@@ -319,12 +320,15 @@ except Exception:
       report_warn "provenance-lint" "kon kb-lint.py niet draaien (bestaat 02-wiki/?)"
       ;;
     *)
-      LINT_ARTICLES="${LINT_SUMMARY%% *}"
-      LINT_WARNED="${LINT_SUMMARY##* }"
-      if [ "$LINT_WARNED" = "0" ]; then
-        report_pass "provenance-lint" "$LINT_ARTICLES artikelen, alle sessie-herkomst herleidbaar"
+      LINT_ARTICLES="$(printf '%s' "$LINT_SUMMARY" | cut -d' ' -f1)"
+      LINT_WARNED="$(printf '%s' "$LINT_SUMMARY" | cut -d' ' -f2)"
+      LINT_HARD="$(printf '%s' "$LINT_SUMMARY" | cut -d' ' -f3)"
+      if [ "$LINT_HARD" != "0" ]; then
+        report_fail "provenance-lint" "$LINT_HARD artikel(en) met NIET-herleidbare herkomst (missing/dangling); niet-auditeerbaar. Fix: python3 $SCRIPTS_DIR/kb-lint.py --strict"
+      elif [ "$LINT_WARNED" != "0" ]; then
+        report_warn "provenance-lint" "$LINT_WARNED van $LINT_ARTICLES artikelen met pad-tekst-herkomst (advisory); draai: python3 $SCRIPTS_DIR/kb-lint.py"
       else
-        report_warn "provenance-lint" "$LINT_WARNED van $LINT_ARTICLES artikelen zonder herleidbare sessie-herkomst; draai: python3 $SCRIPTS_DIR/kb-lint.py"
+        report_pass "provenance-lint" "$LINT_ARTICLES artikelen, alle herkomst herleidbaar"
       fi
       ;;
   esac

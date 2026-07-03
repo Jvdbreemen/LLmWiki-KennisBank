@@ -102,11 +102,12 @@ The four root paths are declared at the top of `setup.sh`. Scripts and commands 
 
 ### Sessie-herkomst validatie
 
-- **Where set**: `scripts/kb-lint.py` (constanten `SKIP_FILES`, `SESSION_PREFIX`).
-- **CLI**: `python3 kb-lint.py` (mens-leesbaar) of `python3 kb-lint.py --json` (voor `doctor.sh`, sectie 13d).
-- **Read by**: `commands/wiki.md` stap 4.5 (validatie direct na schrijven) en `scripts/doctor.sh` (samenvatting als PASS/WARN).
-- **Effect**: elk artikel in `02-wiki/` (behalve `index.md` en `log.md`) moet minstens één resolvende `[[raw-sessie-...]]`-wikilink hebben naar `01-raw/sessies/` of `08-archive/`. Finding-types: `missing` (geen enkele sessieverwijzing), `dangling` (dode wikilink), `path-only` (herkomst alleen als pad-tekst). Exit codes: 0 schoon, 1 fout, 2 waarschuwingen.
-- **To change**: voeg bestandsnamen toe aan `SKIP_FILES` om structuurbestanden uit te sluiten; het herkomst-formaat zelf staat in `templates/tpl-wiki-artikel.md` en `commands/wiki.md` stap 4.
+- **Where set**: `scripts/kb-lint.py` (constanten `SKIP_FILES`, `SESSION_PREFIX`, `HARD_TYPES`).
+- **CLI**: `python3 kb-lint.py` (mens-leesbaar), `--json` (voor `doctor.sh`, sectie 13d), `--strict` (fail-closed gate).
+- **Read by**: `commands/wiki.md` stap 4.5 (`--strict` als harde stop direct na schrijven) en `scripts/doctor.sh` sectie 13d (FAIL-tier op HARD findings).
+- **Effect**: elk artikel in `02-wiki/` (behalve `index.md` en `log.md`) moet minstens één resolvende `[[raw-sessie-...]]`- of `[[05-bronnen/...]]`-wikilink hebben. Finding-types: `missing` (geen enkele verwijzing), `dangling` (dode wikilink) — beide **HARD** (niet-auditeerbaar) — en `path-only` (herkomst alleen als pad-tekst, **advisory**).
+- **Exit-contract**: `1` = operationele fout (geen `02-wiki/`; fail-open, geen valse block). Default: `2` bij welke waarschuwing dan ook, `0` schoon. `--strict`: `2` **alleen** bij HARD (missing/dangling); path-only geeft `0` (advisory blokkeert niet). Het JSON-rapport draagt een `hard`-teller die doctor 13d naar FAIL vs WARN mapt.
+- **To change**: voeg bestandsnamen toe aan `SKIP_FILES` om structuurbestanden uit te sluiten; verplaats een type tussen HARD en advisory via `HARD_TYPES`; het herkomst-formaat zelf staat in `templates/tpl-wiki-artikel.md` en `commands/wiki.md` stap 4.
 
 ---
 
