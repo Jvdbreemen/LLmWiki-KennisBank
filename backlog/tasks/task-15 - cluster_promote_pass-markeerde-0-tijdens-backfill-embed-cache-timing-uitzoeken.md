@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-07-03 18:39'
+updated_date: '2026-07-03 19:13'
 labels: []
 dependencies: []
 ordinal: 17000
@@ -36,3 +37,23 @@ RISICO/NUANCE: dit is diagnose, geen bevestigde bug. Mogelijk is 0 correct (de f
 - [ ] #3 Als het een cache-timing-bug is: fix zodat de cluster-stap op betrouwbare vectoren draait (recompute-on-miss of pas op warme index), met een test die de cache-miss-tak dekt
 - [ ] #4 Geen wijziging als 0 correct blijkt; dan documenteren waarom (drempel/min_neighbors-gedrag) zodat het niet opnieuw als bug wordt opgepakt
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+GEMETEN CONCLUSIE (2026-07-03, read-only diagnostic op de 505 current-memories mét vector). De koude-cache-hypothese is GEFALSIFIEERD; promote_marked=0 is CORRECT gedrag, geen bug.
+
+Bewijs:
+1. Cache is WARM, niet koud: 505/544 current-memories hebben een geldige vector in embeddings-cache.json (576 entries). De vermoede store-mismatch (kb-index.db vs JSON-cache) is niet de oorzaak.
+2. current_items recompute't sowieso live op cache-miss: get_cached default recompute=True (_embeddings.py:200); current_items' lambda (_maintenance.py:37) geeft recompute niet door maar de default is True -> op miss embedt hij live via Ollama.
+3. Zelfde-run bewijs: supersede_pass (ook via current_items) vond WEL 6 paren -> current_items leverde een gevulde lijst met vectoren.
+
+Buren-distributie (numpy, cosine-matrix over 505 items, self-diagonal 0):
+- 0.80: 445 items 0 buren, 60 items 1 buur, 0 items 2+ buren.
+- 0.85 en 0.90: idem, geen enkel item met 2+ buren.
+- max cosine tussen twee memories: 1.000 (er is 1 exact-duplicaat-paar), maar geen enkele CLUSTER (item met >=2 buren).
+
+ECHTE OORZAAK: (a) qwen3-embedding:8b (4096-dim) spreidt verwante-maar-verschillende tekst ver uiteen; 0.80 zit aan het PLAFOND van het matchbereik (config-noot: 'echte match 0.73-0.80'). min_neighbors=2 op 0.80 is praktisch onbereikbaar. (b) de over-extractie levert diverse atomaire facetten, geen duplicaten -> topisch verwant maar semantisch te ver uiteen voor clusters.
+
+GEVOLG - dit is een KALIBRATIE-vraag, geen bug: cluster_promote_pass vuurt bij dit model/deze drempel vrijwel nooit (near-dead code). Opties (afwegen, niet nu): (1) min_neighbors verlagen naar 1 -> promote op paren i.p.v. clusters; (2) drempel verlagen -> RISICO, 0.80 is al het matchplafond, lager = ruis; (3) accepteren dat de puur-cosine cluster-stap geen bereik heeft en op de LLM-judge-paden (supersede) leunen. Ties aan kb-calibrate (drempels per embeddingmodel). Herclassificeer deze task van 'diagnose bug' naar 'kalibratie-beslissing cluster_promote'.
+<!-- SECTION:NOTES:END -->
