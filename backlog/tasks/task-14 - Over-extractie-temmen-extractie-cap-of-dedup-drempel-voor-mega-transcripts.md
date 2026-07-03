@@ -4,6 +4,7 @@ title: 'Over-extractie temmen: extractie-cap of dedup-drempel voor mega-transcri
 status: To Do
 assignee: []
 created_date: '2026-07-03 18:38'
+updated_date: '2026-07-03 19:04'
 labels: []
 dependencies: []
 ordinal: 16000
@@ -43,3 +44,17 @@ Meet elke optie met kb-eval memory-only (recall@1 moet omhoog zonder recall@3 te
 - [ ] #3 Een drempelwijziging wordt geherijkt met kb-calibrate.py; de reguliere per-sessie sweep (max_chunks=6) blijft ongewijzigd tenzij bewezen nodig
 - [ ] #4 Geen legitiem-verschillende feiten worden gemerged (steekproef-verificatie na een facet-merge of dedup-verlaging)
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+CORRECTIE OORZAAK (2026-07-03, na code-verificatie memory-sweep.py:230, regel 'chunk_iter = chunks if ignore_watermark else chunks[:max_chunks]').
+
+De eerdere framing ('mijn backfill-runner draaide met max_chunks=999') was misleidend. De 999 was een RODE HARING: in --all-modus (ignore_watermark=True) wordt max_chunks VOLLEDIG GENEGEERD — alle chunks worden verwerkt, ongeacht de cap. Mijn runner-waarde deed er dus niet toe.
+
+De echte oorzaak is VERSCHEEPT gedrag: het officiele /kennisbank:rebuild-memory command draait memory-sweep.py --all, en die uncapped-chunk-tak geldt voor ELKE gebruiker die een backfill draait op grote transcripts, niet alleen voor mijn runner. Concreet:
+- Per-sessie sweep (run_sweep zonder --all): chunk_iter = chunks[:max_chunks], max_chunks=6 -> GECAPT, over-extraheert niet.
+- rebuild-memory / --all (ignore_watermark=True): chunk_iter = chunks -> ONGECAPT + geen per-transcript memory-cap -> een mega-transcript dumpt 148 facetten.
+
+GEVOLG voor de ingrepen: optie 1 (extractie-cap per transcript) moet specifiek de --all/rebuild-pad raken, niet de reguliere sweep (die is al gecapt). Een per-source_session memory-cap in run_sweep werkt voor beide paden en is topologie-onafhankelijk. Overweeg ook: rebuild-memory zou vooraf kunnen waarschuwen bij extreem grote transcripts, of --all een expliciete --max-per-transcript N kunnen geven.
+<!-- SECTION:NOTES:END -->
