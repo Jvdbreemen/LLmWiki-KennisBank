@@ -4,7 +4,7 @@ title: 'Over-extractie temmen: extractie-cap of dedup-drempel voor mega-transcri
 status: To Do
 assignee: []
 created_date: '2026-07-03 18:38'
-updated_date: '2026-07-03 19:04'
+updated_date: '2026-07-03 19:13'
 labels: []
 dependencies: []
 ordinal: 16000
@@ -57,4 +57,8 @@ De echte oorzaak is VERSCHEEPT gedrag: het officiele /kennisbank:rebuild-memory 
 - rebuild-memory / --all (ignore_watermark=True): chunk_iter = chunks -> ONGECAPT + geen per-transcript memory-cap -> een mega-transcript dumpt 148 facetten.
 
 GEVOLG voor de ingrepen: optie 1 (extractie-cap per transcript) moet specifiek de --all/rebuild-pad raken, niet de reguliere sweep (die is al gecapt). Een per-source_session memory-cap in run_sweep werkt voor beide paden en is topologie-onafhankelijk. Overweeg ook: rebuild-memory zou vooraf kunnen waarschuwen bij extreem grote transcripts, of --all een expliciete --max-per-transcript N kunnen geven.
+
+MEET-VERFIJNING VAN DE LEVER (2026-07-03, uit de TASK-15 buren-analyse). De over-extractie is GEEN duplicatie: op de 505 current-memories heeft 445 nul buren boven cosine 0.80 en niemand >=2 buren. De 148 facetten uit één mega-sessie zijn dus semantisch DIVERS (atomaire, zelfstandige uitspraken), niet near-duplicaat.
+
+GEVOLG voor de ingreep-opties: optie 3 (dedup-drempel verlagen) en een facet-merge-pass RAKEN DEZE FACETTEN NAUWELIJKS — ze liggen te ver uit elkaar in de embedding-ruimte om gemerged te worden zonder legitiem-verschillende feiten samen te klappen. De effectieve lever is dus optie 1 (EXTRACTIE-CAP per source_session in run_sweep, raakt zowel --all als de reguliere sweep) of importance-gebaseerd snoeien (alleen judge-importance >= drempel bewaren), NIET similarity-merging. Prioriteer optie 1.
 <!-- SECTION:NOTES:END -->
