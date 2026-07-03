@@ -1,0 +1,14 @@
+{
+  "_comment": "Example LLM-backend config for the KennisBank judge/extraction (memory-sweep: extract candidates, judge current-vs-quarantine, reconcile, supersede). Read by scripts/_llm.py. This file is OPTIONAL: without it the code default (ollama + gemma4:latest) applies. Copy it to <vault>/.claude/kennisbank-llm.json only to override. Env vars take precedence at runtime (KB_LLM_PROVIDERS, KB_LLM_MODEL, KB_LLM_ENDPOINT, KB_LLM_API_KEY_ENV). See CONFIGURATION.md section 4a.",
+  "_pin_your_model": "IMPORTANT: the code default is the tag 'gemma4:latest'. If your local Ollama has a differently-tagged model (e.g. 'gemma4:12b'), the sweep probe fails and the heartbeat reports model_unreachable=true even though Ollama is running — capture then silently produces nothing. Pin the tag you actually have (check with `ollama list`) in 'model' below.",
+  "providers": ["ollama"],
+  "model": "gemma4:latest",
+  "endpoint": "http://localhost:11434",
+  "_switching": {
+    "_comment": "providers is an ORDERED chain; generate() tries each until one returns a non-empty string. Local ('ollama') is default. Cloud providers ('openrouter', 'claude-cli') are OPT-IN: putting them in the chain is explicit consent, and each cloud step logs LOUDLY to stderr, never silently. Per-provider model overrides go in 'models'. Set api_key_env to the NAME of the env var holding the key; never put the key itself here.",
+    "ollama_pinned": {"providers": ["ollama"], "model": "gemma4:12b", "endpoint": "http://localhost:11434"},
+    "openrouter": {"providers": ["openrouter"], "model": "google/gemma-2-27b-it", "endpoint": "https://openrouter.ai/api/v1", "api_key_env": "OPENROUTER_API_KEY"},
+    "claude_cli": {"providers": ["claude-cli"], "_note": "shells the existing `claude` binary; uses your Claude Code auth, no key needed"},
+    "local_then_cloud_fallback": {"providers": ["ollama", "openrouter"], "models": {"ollama": "gemma4:12b", "openrouter": "google/gemma-2-27b-it"}, "api_key_env": "OPENROUTER_API_KEY", "_note": "try local first, fall back to cloud only when local returns empty"}
+  }
+}
