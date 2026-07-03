@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-07-03 21:48'
+updated_date: '2026-07-03 21:54'
 labels: []
 dependencies: []
 ordinal: 19000
@@ -41,3 +42,55 @@ Raakt: TASK-16 (usage-scan-tuning werd daar al genoemd als de echt-bijtende zwak
 - [ ] #3 Elke nieuwe factor blijft klein/begrensd (anti-runaway) en deterministisch waar mogelijk; geen LLM in de SessionEnd-hotpath zonder expliciete rechtvaardiging
 - [ ] #4 Geen signaal-uitbreiding zonder kb-eval-bewijs dat het huidige used-signaal tekortschiet; gefaseerd, meet elke stap
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+CODE-VOORBEELDEN + YESMEM-BRONREFERENTIES (2026-07-03)
+
+CORRECTIE op het aantal signalen: de README noemt "match/inject/use/save/noise" (marketing), maar de echte mechaniek (docs/features/cognition.md, sectie "Cognitive Signals & Reflection" + "Learning Clustering") gebruikt DRIE persisted kolommen: inject_count, use_count, noise_count. "match/save/fail collapse into inject_count". De aggregatie zit in IncrementClusterScore() en is SIGNED:
+
+  yesmem (docs/features/cognition.md, functie IncrementClusterScore):
+    clusterScore = 1.0 + useRate - noiseRate*0.5
+  signalen: _signal_learning_used vs _signal_noise (increment_use / increment_noise)
+
+Dat is de kern-steel: een SIGNED score die ONDER 1.0 kan. Ons usage_factor is boost-only:
+
+  HUIDIG (scripts/_rank.py, usage_factor):
+    USAGE_BOOST_RECENT = 1.10   # <=30d
+    USAGE_BOOST_WARM   = 1.05   # <=90d
+    def usage_factor(last_used_iso, today=None) -> float:
+        if not last_used_iso: return 1.0
+        age = _age_days(last_used_iso, today or date.today())
+        if age <= 30: return USAGE_BOOST_RECENT
+        if age <= 90: return USAGE_BOOST_WARM
+        return 1.0            # <-- vloer 1.0: kan NOOIT straffen
+
+VOORGESTELD (spiegelt yesmem's signed aggregate; noise_count naast used):
+  # _usage.py: usage-tabel krijgt een noise-kolom
+  #   usage(stem PK, injected, used, noise, last_injected, last_used, last_noise)
+  # en een mark_noise(stems) analoog aan mark_used.
+
+  # _rank.py: signed factor i.p.v. boost-only
+  def usage_factor(injected, used, noise) -> float:
+      if not injected: return 1.0
+      use_rate   = used  / injected
+      noise_rate = noise / injected
+      # begrensd (anti-runaway), kan onder 1.0 zakken (yesmem-patroon)
+      return max(0.8, min(1.10, 1.0 + 0.10*use_rate - 0.10*noise_rate))
+
+STAP 1 (goedkoopst, doe eerst): fix de vals-positief in kb-usage-scan.py.
+Nu telt regel 82 een enkel GENOEMDE stem als "used":
+    used = [stem for stem in pending if stem and stem in text]
+  Probleem: kb-retrieve injecteert die [[stem]]-links met "raadpleeg bij twijfel",
+  het model praat ze na -> we tellen onze eigen injectie. Scheid GENOEMD van
+  LOAD-BEARING (alleen tellen als de stem in een tool_use-input voorkomt = echt
+  geraadpleegd, niet enkel in prozaverwijzing):
+    used = [s for s in pending if s in toolcall_text]      # load-bearing
+    # optioneel zwak signaal: s in prose_text zonder toolcall = geen 'use'
+  Meet met kb-eval memory-only voor/na.
+
+Bronbestanden yesmem (Go, Apache-2.0, github.com/carsteneu/yesmem):
+- docs/features/cognition.md — IncrementClusterScore, inject/use/noise_count, signed aggregate.
+- internal/daemon/handler_learnings.go, internal/extraction/consolidate.go — waar de counters worden bijgewerkt.
+<!-- SECTION:NOTES:END -->
