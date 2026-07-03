@@ -4,6 +4,7 @@ title: 'embed_failed tijdens sweep: kandidaten verloren bij tijdelijke Ollama-hi
 status: To Do
 assignee: []
 created_date: '2026-07-03 18:39'
+updated_date: '2026-07-03 19:35'
 labels: []
 dependencies: []
 ordinal: 18000
@@ -34,3 +35,19 @@ AANBEVELING: begin met optie 1 (retry) als de goedkoopste risico-arme verbeterin
 - [ ] #3 Geen per-kandidaat herverwerking die dubbele memories introduceert zonder dedup-garantie (optie 2 alleen met per-kandidaat watermarking)
 - [ ] #4 Beslissing gedocumenteerd, inclusief WONTFIX-optie als de impact verwaarloosbaar blijkt
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+GEMETEN UITBREIDING (2026-07-03, cosine + body-hash audit van de 588 memories). embed_failed heeft een TWEEDE, ernstiger gevolg dan alleen verloren kandidaten: het laat EXACTE DUPLICATEN door dedup glippen.
+
+BEWIJS: de vault bevat nu 25 exacte-body duplicaat-paren (588 memories, 563 unieke bodies, 4.3% exact dubbel). 18/25 spreiden over meerdere datums. Cosine-audit bevestigt: 26 paren >= 0.92 (dedup-drempel), ~23 op cosine 1.000 (identieke body). Patronen: cross-datum (2026-07-02-X.md + 2026-07-03-X.md, zelfde body) en zelfde-dag -2-suffix (X.md + X-2.md).
+
+MECHANISME: de backfill liep over de middernachtgrens en werd meermaals gekilld/herstart. Elke memory-sweep --all negeert de watermark en her-extraheert ALLE transcripts. dedup (_dup_skip, 0.92) moet re-extracties vangen via de existing-pool (_dedup_items), die per file get_cached(recompute=True) aanroept. Onder Ollama-druk gaf dat None voor de ~83 vector-loze memories -> die vallen uit de dedup-pool ('if not v: continue') -> hun her-geextraheerde tweeling ontsnapt en wordt geschreven met nieuwe datum of -2-suffix.
+
+STRUCTURELE FIX (hoger geprioriteerd dan de embed-retry alleen): voeg een DETERMINISTISCHE body-hash pre-dedup toe VOOR de cosine-stap. Exacte-duplicaat-detectie mag nooit van Ollama afhangen; de cosine-0.92-dedup is voor NEAR-duplicaten. Een body-hash check (md5 van de gestripte body) tegen zowel de bestaande 09-memory files als de binnen-run geschreven set had alle 25 gevangen, ongeacht embed-toestand, en maakt --all reprocessing idempotent voor exacte re-extracties. Dit is klein, deterministisch, fail-open (geen model nodig) en past bij het 'deterministisch waar mogelijk'-principe.
+
+REVISIE PRIORITEIT: van 'laag/eenmalig' naar 'medium' — de dedup-escape is een doorlopend risico bij elke --all/rebuild-memory reprocessing, niet alleen een eenmalig backfill-verlies. De embed-retry (oorspronkelijke optie 1) blijft nuttig maar lost de dedup-escape NIET volledig op (een retry kan alsnog falen); de body-hash pre-dedup wel.
+
+BESTAANDE CRUFT: 25 exacte duplicaten staan nu in de vault (deterministisch identificeerbaar via body-hash). Aparte opruim-actie mogelijk (behoud 1 per paar, superseded of verwijder de andere) -> 588 zou naar 563 zakken. Raakt retrieval: twee identieke hits verspillen top-k slots. Vault-content-mutatie, dus met mens-akkoord.
+<!-- SECTION:NOTES:END -->
