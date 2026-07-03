@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-07-03 21:49'
-updated_date: '2026-07-03 21:55'
+updated_date: '2026-07-03 22:55'
 labels: []
 dependencies: []
 ordinal: 20000
@@ -107,4 +107,33 @@ documenteer als bewust-niet-doen bij nul effect.
 Bronbestanden yesmem:
 - internal/storage/trust.go — TrustLevel, ClassifyTrust, TrustScore, source-multipliers.
 - SYSTEM.md / configs/SYSTEM.md — de user_stated>agreed_upon>claude_suggested>llm_extracted tekst.
+
+--- TWEEDE REFERENTIE-IMPLEMENTATIE: OB1 rankMemory (2026-07-04) ---
+Bron: OB1 (github.com/NateBJones-Projects/OB1, FSL-1.1-MIT), integrations/agent-memory-api/index.ts r249-260. GEVERIFIEERD tegen broncode via 35-agent adversariele pass (research: ~/Claude/research/2026-07-04-ob1-openbrain-vs-kennisbank.md). Dit is RIJKER dan YesMem's enkele source-multiplier: OB1 heeft DRIE signed herkomst/beleid-assen + confidence, additief op de cosine-similarity. Precies deze task, al in productie gebouwd.
+
+OB1-MODEL (rankMemory = additieve herweging bovenop cosine match_thoughts):
+  score = similarity
+        + provenance:  user_confirmed 0.30 / imported 0.22 / observed 0.15 / generated 0.05
+        + policy:      instruction    0.20 / evidence   0.08 / else -0.20
+        + review:      confirmed      0.15 / pending   -0.08 / else -0.25
+        + confidence * 0.15
+
+LES VOOR ONZE trust_factor:
+- OB1's 'provenance'-as is EXACT onze evidence_basis-trust-as. Hun orde
+  user_confirmed>imported>observed>generated spiegelt onze getypt>mens-in-lus>agent.
+  Concrete gewichten (0.30..0.05) zijn een referentie voor de spreiding.
+- OB1 is ADDITIEF op de similarity (score = sim + bonus), wij zijn MULTIPLICATIEF
+  (score *= factor). Additief laat trust bij lage cosine relatief zwaarder wegen;
+  multiplicatief houdt de verhouding gelijk. Bij onze DUNNE embedding-ruimte
+  (TASK-15: p99 cosine 0.577) is dit een echte keuze: additief kan trust MEER laten
+  bijten bij bijna-gelijke sims. Overweeg additief i.p.v. de voorgestelde *factor.
+- OB1's 'review'-as (confirmed/pending) is signed: unverified memories worden
+  NEGATIEF gewogen (-0.08/-0.25), niet enkel geboost. Dat spiegelt onze
+  current/unverified-status — overweeg die ook in de rank te trekken, mens-gated.
+- OB1's 'policy'-as (instruction/evidence) heeft bij ons geen equivalent; niet
+  overnemen zonder use-case (YAGNI).
+
+KANTTEKENING BLIJFT: meet eerst (kb-eval memory-only). OB1 heeft dit model maar
+GEEN recall@k-harnas om te bewijzen dat het loont — wij hebben dat wel, gebruik het.
+Bronbestand OB1: integrations/agent-memory-api/index.ts (rankMemory), schemas/agent-memory/schema.sql (provenance_status/review_status enums).
 <!-- SECTION:NOTES:END -->

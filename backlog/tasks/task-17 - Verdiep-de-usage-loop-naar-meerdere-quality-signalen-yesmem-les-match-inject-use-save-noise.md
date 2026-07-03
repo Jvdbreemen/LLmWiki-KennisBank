@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-07-03 21:48'
-updated_date: '2026-07-03 21:54'
+updated_date: '2026-07-03 22:55'
 labels: []
 dependencies: []
 ordinal: 19000
@@ -93,4 +93,9 @@ Nu telt regel 82 een enkel GENOEMDE stem als "used":
 Bronbestanden yesmem (Go, Apache-2.0, github.com/carsteneu/yesmem):
 - docs/features/cognition.md — IncrementClusterScore, inject/use/noise_count, signed aggregate.
 - internal/daemon/handler_learnings.go, internal/extraction/consolidate.go — waar de counters worden bijgewerkt.
+
+--- OB1-CHECK (2026-07-04): GEEN steel-doel hier, wel validatie ---
+Bron: OB1 (github.com/NateBJones-Projects/OB1), geverifieerd via 35-agent adversariele pass (~/Claude/research/2026-07-04-ob1-openbrain-vs-kennisbank.md). OB1 heeft recall_traces + recall_items (ranking_score, used-bool) + een /recall/{id}/usage endpoint + audit_events -> maar dat is TELEMETRIE/observability voor een dashboard; het voedt de ranking-score NIET terug (geverifieerd: rankMemory gebruikt provenance/policy/review/confidence, GEEN usage-signaal).
+
+CONCLUSIE: OB1 zit op precies onze PRE-fix staat (usage = telemetrie, niet in de rank). Dus OB1 levert hier GEEN over te nemen mechaniek. Het valideert wel de premisse: zelfs een systeem met 4070 sterren laat usage als losse telemetrie liggen -> een echte usage->rank feedbackloop met signed noise (deze task) zou ons juist ONDERSCHEIDEN, niet imiteren. YesMem (IncrementClusterScore, signed) blijft de enige referentie met usage-in-de-score. Geen wijziging aan de aanpak; OB1 bevestigt dat de YesMem-route de juiste is.
 <!-- SECTION:NOTES:END -->
