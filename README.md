@@ -197,6 +197,79 @@ Maintain the eval set as your vault grows (questions you know the answer to, wit
 
 The `/import` command backfills the vault from existing Claude history. It handles Claude Code session JSONL files under `~/.claude/projects/`, claude.ai export bundles, Mac desktop Claude (Cowork) conversation data, and any generic markdown or text folder. Each importer writes raw session files that `/wiki` can compile afterwards. For the memory layer, `/kennisbank:rebuild-memory` re-extracts all archived transcripts through the full sweep (semantic dedup makes re-runs near-idempotent).
 
+## Using KennisBank from other agents (Codex, Copilot, ChatGPT)
+
+The vault is not Claude-Code-only. `scripts/kb-mcp.py` is a local **MCP server** exposing three primitives — `recall` (search memory + wiki), `capture` (save a new memory), and an `instructions` resource (a nudge to pull before searching externally). MCP is the one protocol every modern agent already speaks, so any client running **on this machine** can use the vault.
+
+**The hard boundary: local only.** The MCP server binds nothing to the network (stdio transport); the vault never leaves your machine. Agents that run *on your machine* (Codex CLI, GitHub Copilot in VS Code, Claude Code, Cursor, Cline, Windsurf) reach it directly. Agents that run *in the cloud* (hosted ChatGPT) cannot reach a local stdio server, and the answer is **not** to tunnel your sovereign vault to the internet — it is the manual bridge below.
+
+### Codex CLI — clean fit
+
+Codex supports MCP over stdio. Register the server once:
+
+```bash
+codex mcp add kennisbank -- python3 /absolute/path/to/vault/.claude/scripts/kb-mcp.py
+```
+
+Or add it by hand to `~/.codex/config.toml` (or project-scoped `.codex/config.toml`):
+
+```toml
+[mcp_servers.kennisbank]
+command = "python3"
+args = ["/absolute/path/to/vault/.claude/scripts/kb-mcp.py"]
+```
+
+`recall` and `capture` are now available in Codex.
+
+### GitHub Copilot (VS Code agent mode) — works, with one caveat
+
+Copilot's agent mode supports MCP **tools** over stdio, but **not** MCP resources or prompts. So `recall` and `capture` work, but the `instructions` nudge (a resource) will not surface. Put the nudge in `.github/copilot-instructions.md` instead:
+
+```markdown
+You have a local KennisBank via MCP tools `recall` and `capture`.
+Call `recall` before searching externally; call `capture` to save a reusable fact.
+```
+
+Register the server in VS Code settings (`mcp.json` / `"servers"`):
+
+```json
+{
+  "servers": {
+    "kennisbank": {
+      "command": "python3",
+      "args": ["/absolute/path/to/vault/.claude/scripts/kb-mcp.py"]
+    }
+  }
+}
+```
+
+### ChatGPT — the manual bridge (sovereignty first)
+
+Hosted ChatGPT can only connect to **remote** MCP servers on the public internet; exposing a local server means tunnelling (Secure Tunnel / ngrok / Cloudflare), which routes your queries **and** the returned knowledge through OpenAI's infrastructure. That breaks the whole point of a sovereign vault, so KennisBank does not do it by default. Instead, **you** stay the gate:
+
+```bash
+python3 .claude/scripts/kb-ask.py "how did I fix the ESP32 BLE crash"
+python3 .claude/scripts/kb-ask.py "my topic" --k 8 --clip   # also copy to clipboard
+```
+
+`kb-ask` retrieves locally and prints a ready-to-paste context block (a short instruction for the model, then the hits, then your question). Paste it at the top of your ChatGPT message. Nothing leaves the machine automatically — you choose what to share.
+
+### ChatGPT data export — get control of your own chats back
+
+You can pull your ChatGPT history *into* the sovereign vault, so lessons from those conversations become your own retrievable knowledge instead of living only in OpenAI's cloud:
+
+1. In ChatGPT, open **Settings → Data controls → Export data** and confirm. (Requires being signed in on the web app.)
+2. OpenAI emails you a download link within minutes to a day; the link is time-limited. Download the ZIP — it contains `conversations.json` (plus `chat.html`, media).
+3. Import it into the vault:
+   ```bash
+   python3 .claude/scripts/import-chatgpt-export.py --input ~/Downloads/chatgpt-export.zip
+   # preview first if you like:
+   python3 .claude/scripts/import-chatgpt-export.py --input ~/Downloads/chatgpt-export.zip --dry-run --verbose
+   ```
+   Each conversation becomes a raw session log under `01-raw/sessies/`. Then run `/wiki` to compile them into articles and `/kennisbank:rebuild-memory` to extract the memory layer. Re-imports are skip-by-default (idempotent); pass `--force` to overwrite.
+
+The importer walks ChatGPT's message *tree* (`mapping`), orders turns by timestamp, and keeps only your and the assistant's turns — system and tool nodes are dropped. It runs fully locally; nothing is sent anywhere.
+
 ## Documentation
 
 | File | For |
