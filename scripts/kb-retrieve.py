@@ -138,6 +138,27 @@ def _wiki_block(prompt, emb, vault_root, cfg):
     return "\n".join(lines), qvec
 
 
+def _provenance_tag(path: str) -> str:
+    """Deterministische herkomst/status-tag voor een geinjecteerde MEMORY.
+
+    Leest evidence_basis + status uit de frontmatter van het memory-bestand
+    (die velden zitten NIET in het hit-dict) via de bestaande frontmatter-parser
+    en delegeert de vormgeving aan _memory.provenance_tag. Puur lookup, geen LLM.
+    Fail-soft: welke fout dan ook -> "" (geen tag, nooit crash).
+    """
+    try:
+        scripts_dir = os.path.dirname(os.path.abspath(__file__))
+        if scripts_dir not in sys.path:
+            sys.path.insert(0, scripts_dir)
+        from _frontmatter import parse_frontmatter
+        import _memory
+        fm, _ = parse_frontmatter(
+            Path(path).read_text(encoding="utf-8", errors="replace"))
+        return _memory.provenance_tag(fm.get("evidence_basis", ""), fm.get("status", ""))
+    except Exception:
+        return ""
+
+
 def _memory_block(qvec, prompt, cfg, hits_fn=None):
     """Additief memory-blok via kb-recall. Leeg bij geen hits / fail-soft.
 
@@ -163,7 +184,11 @@ def _memory_block(qvec, prompt, cfg, hits_fn=None):
     lines = ["KennisBank-geheugen (eerdere sessies/lessons; mogelijk relevant):"]
     for h in hits:
         stem = Path(h["path"]).stem
-        lines.append(f"- [[{stem}]] ({h['score']:.2f}): {h['snippet']}")
+        # Herkomst-tag per memory (evidence_basis+status uit frontmatter). WIKI-hits
+        # in _wiki_block blijven bewust ongetagd: die zijn evergreen/gecureerd.
+        tag = _provenance_tag(h.get("path", ""))
+        tag_txt = f" {tag}" if tag else ""
+        lines.append(f"- [[{stem}]] ({h['score']:.2f}){tag_txt}: {h['snippet']}")
     return "\n".join(lines)
 
 
