@@ -23,6 +23,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import Mock
 
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
 HOOK = SCRIPTS_DIR / "kb-retrieve.py"
@@ -99,16 +100,92 @@ class KbRetrieveMemoryBlockTest(unittest.TestCase):
         """Stub-hits resulteren in een blok met KennisBank-geheugen en [[stem]]."""
         fake_hits = [{"path": "/x/foo.md", "title": "Foo", "created": "2026-06-01",
                       "score": 0.9, "snippet": "iets"}]
+        # Mock i.p.v. kale lambda: assert_called bewijst dat _memory_block de
+        # hits_fn echt aanroept i.p.v. stil een leeg blok te produceren.
+        hits_fn = Mock(side_effect=lambda *a, **k: fake_hits)
         result = self.mod._memory_block(
-            [0.1, 0.2], "test prompt", {}, hits_fn=lambda *a, **k: fake_hits)
+            [0.1, 0.2], "test prompt", {}, hits_fn=hits_fn)
         self.assertIn("KennisBank-geheugen", result)
         self.assertIn("[[foo]]", result)
+        hits_fn.assert_called()
 
     def test_memory_block_with_no_hits_returns_empty_string(self):
         """Lege hits_fn -> leeg resultaat (geen kopregels, geen ruis)."""
+        hits_fn = Mock(side_effect=lambda *a, **k: [])
         result = self.mod._memory_block(
-            [0.1, 0.2], "test prompt", {}, hits_fn=lambda *a, **k: [])
+            [0.1, 0.2], "test prompt", {}, hits_fn=hits_fn)
         self.assertEqual(result, "")
+        hits_fn.assert_called()
+
+
+@unittest.skipUnless(
+    os.environ.get("KB_INTEGRATION") == "1",
+    "integratie-tier: zet KB_INTEGRATION=1 (vereist een draaiende Ollama met het "
+    "embedmodel). Default geskipt zodat de unit-CI hermetisch en snel blijft.")
+class KbRetrieveIntegrationTest(unittest.TestCase):
+    """Opt-in end-to-end: de ECHTE embed->cache(index)->retrieval-pijplijn.
+
+    Dit is precies het pad dat de unit-suite bewust DOOD pint (tests/__init__.py):
+    hier draaien we het één keer echt, tegen een mini-fixture, zodat het volledige
+    pad ook daadwerkelijk gedekt is (nu alleen /kb-eval het handmatig raakt).
+
+    Gated op KB_INTEGRATION=1: de suite-hermeticiteit (dead endpoint) wordt in
+    tests/__init__.py overgeslagen wanneer die vlag staat, zodat emb.embed de
+    echte Ollama bereikt. Op CI (geen Ollama, vlag niet gezet) blijft dit geskipt.
+    """
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="kb-int-"))
+        self.vault = self.tmp / "vault"
+        (self.vault / "02-wiki").mkdir(parents=True)
+        (self.vault / ".claude").mkdir(parents=True)
+        self._saved = os.environ.get("KENNISBANK_VAULT")
+        os.environ["KENNISBANK_VAULT"] = str(self.vault)
+        # lage drempel: we toetsen de PLUMBING (embed->cache->select), niet de
+        # exacte similarity-waarde van dit modelpaar.
+        self._saved_thr = os.environ.get("KB_RETRIEVE_THRESHOLD")
+        os.environ["KB_RETRIEVE_THRESHOLD"] = "0.1"
+        sys.path.insert(0, str(SCRIPTS_DIR))
+        self.mod = _load_kb_retrieve()
+        import _embeddings as emb
+        from _vaultpath import vault_root
+        self.emb, self.vault_root = emb, vault_root
+
+    def tearDown(self):
+        for key, saved in (("KENNISBANK_VAULT", self._saved),
+                           ("KB_RETRIEVE_THRESHOLD", self._saved_thr)):
+            if saved is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = saved
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_real_embed_index_retrieval_roundtrip(self):
+        note = self.vault / "02-wiki" / "art.md"
+        note.write_text(
+            "---\ntitle: OpenTherm MQTT configuratie\n---\n"
+            "Zo configureer je de MQTT-broker voor de OpenTherm-gateway: "
+            "vul broker-host, poort en credentials in bij de instellingen.\n",
+            encoding="utf-8")
+
+        # ECHTE embed van de note (raakt Ollama) -> in-memory cache (de 'index').
+        body = self.emb.doc_text(note)
+        vec = self.emb.embed(body)
+        self.assertTrue(vec, "integratie vereist een bereikbaar embedmodel; kreeg geen vector")
+        cache = {str(note): {"hash": self.emb.file_hash(note), "id": self.emb.embed_id(),
+                             "dim": len(vec), "embedding": vec}}
+        orig_load = self.emb.load_cache
+        self.emb.load_cache = lambda: cache
+        try:
+            # ECHTE query-embed + cosine-selectie tegen de cache -> retrieval.
+            text, qvec = self.mod._wiki_block(
+                "Hoe stel ik de MQTT-broker in voor de OpenTherm gateway?",
+                self.emb, self.vault_root, {})
+        finally:
+            self.emb.load_cache = orig_load
+        self.assertIsNotNone(qvec)
+        self.assertIn("[[art]]", text)
 
 
 if __name__ == "__main__":

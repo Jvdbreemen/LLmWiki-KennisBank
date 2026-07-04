@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import Mock
 
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
 
@@ -55,38 +56,51 @@ class WikiBlockTest(unittest.TestCase):
 
     def test_cosine_relevant_injects_hybrid(self):
         self.emb.cosine = lambda a, b: 0.9  # boven drempel -> gate slaagt
-        self.m.kb_recall.wiki_hits = lambda qv, query_text="", k=3, expand=False: [
+        # Mock i.p.v. kale lambda: assert_called bewijst dat het hybride pad
+        # DAADWERKELIJK is gelopen. Zonder die guard kan een signatuur-drift de
+        # fail-soft except raken en stil naar de fallback vallen (false green).
+        wiki_hits = Mock(side_effect=lambda qv, query_text="", k=3, expand=False: [
             {"path": "/v/02-wiki/art.md", "layer": "wiki", "title": "Art",
-             "created": "2026-06-01", "score": 0.5, "snippet": "hybride treffer"}]
+             "created": "2026-06-01", "score": 0.5, "snippet": "hybride treffer"}])
+        self.m.kb_recall.wiki_hits = wiki_hits
         text, qvec = self.m._wiki_block("een relevante vraag over het artikel",
                                         self.emb, self.vault_root, self._cfg())
         self.assertIn("hybride treffer", text)
         self.assertIsNotNone(qvec)
+        wiki_hits.assert_called()
 
     def test_fts_only_triggers_when_cosine_low(self):
         self.emb.cosine = lambda a, b: 0.1  # onder drempel -> alleen FTS kan triggeren
-        self.m.kb_recall.has_fts_match = lambda q, layer="wiki": True
-        self.m.kb_recall.wiki_hits = lambda qv, query_text="", k=3, expand=False: [
+        has_fts = Mock(side_effect=lambda q, layer="wiki": True)
+        wiki_hits = Mock(side_effect=lambda qv, query_text="", k=3, expand=False: [
             {"path": "/v/02-wiki/art.md", "layer": "wiki", "title": "Art",
-             "created": "2026-06-01", "score": 0.5, "snippet": "exacte-term-treffer"}]
+             "created": "2026-06-01", "score": 0.5, "snippet": "exacte-term-treffer"}])
+        self.m.kb_recall.has_fts_match = has_fts
+        self.m.kb_recall.wiki_hits = wiki_hits
         text, _ = self.m._wiki_block("FunctieNaamXYZ aanroep",
                                      self.emb, self.vault_root, self._cfg())
         self.assertIn("exacte-term-treffer", text)
+        has_fts.assert_called()   # FTS-gate is echt geraadpleegd
+        wiki_hits.assert_called()  # en het hits-pad is echt gelopen
 
     def test_irrelevant_no_injection(self):
         self.emb.cosine = lambda a, b: 0.1
-        self.m.kb_recall.has_fts_match = lambda q, layer="wiki": False
+        has_fts = Mock(side_effect=lambda q, layer="wiki": False)
+        self.m.kb_recall.has_fts_match = has_fts
         text, _ = self.m._wiki_block("totaal iets anders zonder match",
                                      self.emb, self.vault_root, self._cfg())
         self.assertEqual(text, "")
+        has_fts.assert_called()  # de FTS-gate is echt geraadpleegd (geen stille skip)
 
     def test_fallback_to_cosine_when_hybrid_empty(self):
         self.emb.cosine = lambda a, b: 0.9  # gate slaagt
-        self.m.kb_recall.wiki_hits = lambda qv, query_text="", k=3, expand=False: []  # index leeg
+        wiki_hits = Mock(side_effect=lambda qv, query_text="", k=3, expand=False: [])  # index leeg
+        self.m.kb_recall.wiki_hits = wiki_hits
         text, _ = self.m._wiki_block("relevante vraag over het artikel",
                                      self.emb, self.vault_root, self._cfg())
         # fallback naar cosine-cache-selectie: het wiki-artikel staat er
         self.assertIn("[[art]]", text)
+        wiki_hits.assert_called()  # hybride is echt geprobeerd voordat de fallback liep
 
 
 if __name__ == "__main__":

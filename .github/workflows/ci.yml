@@ -7,6 +7,10 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # Hang-vangnet: de suite draait normaal in ~5-8 min. Een test die op een
+    # echte netwerk-call blijft hangen (zie tests/__init__.py) faalt zo snel
+    # i.p.v. de runner-limiet vol te draaien.
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,5 +29,20 @@ jobs:
       - name: Shell syntax check
         run: bash -n setup.sh scripts/doctor.sh
 
-      - name: Run unittest suite
-        run: python3 -m unittest discover -s tests -v
+      - name: Run unittest suite under coverage
+        run: python3 -m coverage run -m unittest discover -s tests -v
+
+      - name: Coverage report (gate + job summary)
+        if: always()
+        run: |
+          python3 -m coverage report
+          # --fail-under net onder de lokaal gemeten baseline (totaal 77%),
+          # zodat een echte dekkingsregressie de job breekt maar ruis dat niet doet.
+          python3 -m coverage report --fail-under=75
+          {
+            echo '### Coverage'
+            echo ''
+            echo '```'
+            python3 -m coverage report
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
