@@ -58,6 +58,54 @@ def coerce_importance(value) -> int:
     return min(5, max(1, imp))
 
 
+# Herkomst-klassen voor de injectie-tag (TASK-20). Puur presentatie: mapt
+# (evidence_basis, status) op een korte, deterministische herkomst-tag zodat
+# het consumerende model mens-herkomst autoritatief leest en autonoom/onbevestigd
+# als hint. Geen nieuw frontmatter-veld, geen LLM. 'getypt' = mens typte letterlijk
+# (autoritatief, geen kwalificatie); cc-sessie/import/autoresearch/audio = mens-in-lus
+# (autoritatief); agent = autonoom geextraheerd (hint).
+_HUMAN_IN_LOOP_BASES = ("cc-sessie", "import", "autoresearch", "audio")
+
+
+def provenance_tag(evidence_basis, status="") -> str:
+    """Korte deterministische herkomst/status-tag voor een geinjecteerde memory.
+
+    Twee ORTHOGONALE assen, bewust gescheiden (TASK-20):
+      - herkomst-as (wie/hoe vastgelegd): getypt = geen marker (autoritatief);
+        cc-sessie/import/autoresearch/audio = "mens-in-lus"; agent = "autonoom" (hint).
+      - status-as (is het geverifieerd): status=unverified voegt ", onbevestigd" toe,
+        ongeacht de herkomst. "onbevestigd" trackt dus UITSLUITEND de status, niet de
+        herkomst -- een agent-memory met status=current is judge-geverifieerd en heet
+        daarom NIET onbevestigd, wel "autonoom".
+
+    Vormen:
+        getypt (current)     -> "(bron: getypt)"
+        cc-sessie (current)  -> "(bron: cc-sessie, mens-in-lus)"
+        agent (current)      -> "(bron: agent, autonoom)"
+        agent (unverified)   -> "(bron: agent, autonoom, onbevestigd)"
+        getypt (unverified)  -> "(bron: getypt, onbevestigd)"
+
+    Fail-soft: onbekende/ontbrekende evidence_basis -> "" (geen tag, nooit crash).
+    """
+    basis = str(evidence_basis or "").strip().lower()
+    stat = str(status or "").strip().lower()
+    if basis not in EVIDENCE_BASES:
+        return ""
+    quals = []
+    if basis == "getypt":
+        pass  # mens typte letterlijk -> autoritatief, geen herkomst-marker
+    elif basis == "agent":
+        quals.append("autonoom")  # autonoom geextraheerd -> hint (origin-as, niet status)
+    elif basis in _HUMAN_IN_LOOP_BASES:
+        quals.append("mens-in-lus")  # mens-in-lus -> autoritatief
+    if stat == "unverified":
+        quals.append("onbevestigd")  # status-as: los van de herkomst
+    inner = "bron: " + basis
+    if quals:
+        inner += ", " + ", ".join(quals)
+    return f"({inner})"
+
+
 def memory_dir() -> Path:
     return vault_root() / "09-memory"
 
