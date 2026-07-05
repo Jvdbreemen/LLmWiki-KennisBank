@@ -3,10 +3,10 @@ id: TASK-23
 title: >-
   memory-doctor rejudge: her-judge fail-safe-unverified memories na een
   LLM/Ollama-outage
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-05 10:59'
-updated_date: '2026-07-05 11:00'
+updated_date: '2026-07-05 11:07'
 labels:
   - agent-geheugen
 dependencies: []
@@ -20,3 +20,9 @@ Probleem (gemeten deze sessie): tijdens een Ollama/LLM-outage laat de capture-ju
 
 Voorstel: een subcommando `memory-doctor.py rejudge [--limit N] [--dry-run]` (of `memory-sweep --rejudge-unverified`). Logica: itereer 09-memory-files met status=unverified, her-judge de body via _judge.judge, en zet status naar current ALLEEN bij een expliciet 'current'-verdict. FAIL-SAFE: twijfel/model-down/unverified-verdict laat de memory unverified; nooit retracten, nooit ruis promoten. Gebruikt de bestaande _judge + _memory.set_status seams. Referentie-implementatie staat als one-off in de scratchpad (rejudge-unverified.py). Overwegingen: (a) gate op reachability zoals de sweep-maintenance (draai niet op dode judge); (b) na promotie de kb-index verversen (of de sweep-launch build-kb-index laat dat al doen); (c) optioneel een --hours filter zodat alleen oud-genoeg unverified meegaat; (d) doctor/heartbeat kan het aantal promootbare tonen. Overweeg of dit een aparte doctor-subcommando is of een pass in de sweep-maintenance (na de reachability-gate). Verwant maar apart van TASK-16 (embed_failed/verloren kandidaten) en TASK-15 (cluster-timing).
 <!-- SECTION:DESCRIPTION:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+memory-doctor rejudge geimplementeerd + gedeployd. Nieuw subcommando `memory-doctor.py rejudge [--limit N] [--hours N] [--dry-run]` + rejudge_pass(): her-judge unverified 09-memory-files via _judge.judge, promoot naar current ALLEEN bij expliciet 'current'-verdict. FAIL-SAFE: twijfel/model-down/exception laat unverified, nooit retract/ruis. 6 TDD-tests groen (promote/keep/dry-run/hours-filter/exception). PR #23 gemerged naar main (8014443), gedeployd op Kluis, live geverifieerd (dry-run: 6 resterende blijven terecht unverified). Verwant maar apart van TASK-16/15. Docstring vermeldt build-kb-index na promotie. Deze sessie: 25/31 fail-safe-unverified (Ollama-outage) gepromoot, rot 30->4, index herbouwd.
+<!-- SECTION:FINAL_SUMMARY:END -->
