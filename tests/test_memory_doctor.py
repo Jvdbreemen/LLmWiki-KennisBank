@@ -70,6 +70,52 @@ class MemoryDoctorTest(unittest.TestCase):
         self._mem("c.md", "current", old)      # current, geen rot
         self.assertEqual(self.m.rot_count(hours=48), 1)
 
+    def _status(self, name):
+        import re
+        txt = (self.vault / "09-memory" / name).read_text(encoding="utf-8")
+        mm = re.search(r"^status:\s*(\w+)", txt, re.MULTILINE)
+        return mm.group(1) if mm else None
+
+    def test_rejudge_promotes_on_current_verdict(self):
+        d = date.today().isoformat()
+        self._mem("a.md", "unverified", d)
+        self._mem("b.md", "unverified", d)
+        r = self.m.rejudge_pass(judge_fn=lambda body: {"verdict": "current"})
+        self.assertEqual(r["promoted"], 2)
+        self.assertEqual(self._status("a.md"), "current")
+
+    def test_rejudge_keeps_on_unverified_verdict(self):
+        d = date.today().isoformat()
+        self._mem("a.md", "unverified", d)
+        r = self.m.rejudge_pass(judge_fn=lambda body: {"verdict": "unverified"})
+        self.assertEqual(r, {"promoted": 0, "kept": 1, "failed": 0})
+        self.assertEqual(self._status("a.md"), "unverified")
+
+    def test_rejudge_dry_run_writes_nothing(self):
+        d = date.today().isoformat()
+        self._mem("a.md", "unverified", d)
+        r = self.m.rejudge_pass(judge_fn=lambda body: {"verdict": "current"}, dry_run=True)
+        self.assertEqual(r["promoted"], 1)
+        self.assertEqual(self._status("a.md"), "unverified")  # niet geschreven
+
+    def test_rejudge_hours_filter_only_old(self):
+        old = (date.today() - timedelta(days=3)).isoformat()
+        new = date.today().isoformat()
+        self._mem("old.md", "unverified", old)
+        self._mem("new.md", "unverified", new)
+        r = self.m.rejudge_pass(judge_fn=lambda body: {"verdict": "current"}, hours=48)
+        self.assertEqual(r["promoted"], 1)          # alleen de oude
+        self.assertEqual(self._status("new.md"), "unverified")
+
+    def test_rejudge_failsafe_on_judge_exception(self):
+        d = date.today().isoformat()
+        self._mem("a.md", "unverified", d)
+        def boom(body):
+            raise RuntimeError("model down")
+        r = self.m.rejudge_pass(judge_fn=boom)
+        self.assertEqual(r, {"promoted": 0, "kept": 0, "failed": 1})
+        self.assertEqual(self._status("a.md"), "unverified")
+
     def test_nocloud_localhost_evil_com_is_flagged(self):
         """Bypass via http://localhost.evil.com — naive substring match misses this; parse-based must catch it."""
         os.environ["KB_LLM_ENDPOINT"] = "http://localhost.evil.com:11434"
