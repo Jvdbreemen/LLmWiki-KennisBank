@@ -3,9 +3,11 @@ id: TASK-19
 title: >-
   Herkalibreer alle cosine-drempels voor qwen3-embedding:8b (gemeten: niet
   optimaal)
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-07-03 21:56'
+updated_date: '2026-07-04 04:20'
 labels: []
 dependencies: []
 ordinal: 21000
@@ -57,3 +59,27 @@ Raakt: kb-calibrate.py (het harnas), TASK-14 (dedup te hoog -> facet-escape), TA
 - [ ] #4 dedup-verlaging merget geen legitiem-verschillende feiten (steekproef-verificatie); cluster-drempel/min_neighbors-beslissing gedocumenteerd
 - [ ] #5 Nieuwe waarden + de meting waaruit ze volgen vastgelegd in CONFIGURATION.md; de herkalibratie-procedure is herhaalbaar gedocumenteerd voor een volgende modelwissel
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+--- MEETRESULTAAT set-uitbreiding + per-paar diagnose (2026-07-04) ---
+Set uitgebreid 24 -> 42 paren (14/14/14), 06-claude/kb-calibrate-set.json (UNCOMMITTED in vault, gebruiker commit zelf). kb-calibrate exit 2: BEIDE grenzen overlappen nu (duplicate-grens 0.712 met overlap; was schoon 0.786 op 24 paren; related-grens 0.333 overlap onveranderd).
+
+PER-PAAR DIAGNOSE (embed alle 42, cosine gesorteerd) bewijst dat dit GEEN labeling-fout is maar een MODEL-eigenschap. Alle labels correct geverifieerd. Cruciale overlap:
+  0.773 related    PROGMEM-ESP8266 <-> F()/PSTR()-RAM (twee ESP8266-feiten, veel gedeelde woorden)
+  0.758 duplicate  sessiestart-hook herbouwt index (parafrase)
+  0.705 duplicate  Marvin brein-als-planeet <-> chronische depressie (parafrase, andere woorden)
+  0.651 duplicate  hybride retrieval <-> sqlite-vec+FTS5 via RRF (parafrase, concreet vs abstract)
+Klasse-spreiding: duplicate 0.651-0.915, related 0.269-0.773, unrelated 0.143-0.396.
+
+CONCLUSIE (hard onderbouwd): qwen3-embedding:8b volgt LEXICALE overlap, niet SEMANTISCHE equivalentie, op korte teksten. Een vocabulair-disjuncte parafrase (RRF 0.651) zakt ONDER een lexicaal-overlappend related-paar (PROGMEM 0.773). Geen cosine-drempel scheidt duplicate van related. Het kalibratie-harnas levert hier een NEGATIEF resultaat: voor dit model zijn geen schone drempels afleidbaar. Dat is de meting, niet een setgebrek.
+
+HERIJK-BESLISSINGEN (data-onderbouwd, GEEN blinde tweak):
+- dedup 0.92: KEEP. Lager zetten merget related-feiten (PROGMEM 0.773 zou bij dedup<=0.77 gemerged worden). 0.92 is de VEILIGE keuze: alleen bijna-identieke tekst, accepteert dat vocabulair-disjuncte parafrasen ontsnappen (TASK-14/16).
+- cluster 0.80: LIGT BOVEN ELK related-paar (related max 0.773). cluster_promote kan dus vrijwel nooit vuren -> bevestigt TASK-15. Kies: verlaag naar ~0.75 om top-related te vangen, OF accepteer near-dead + documenteer.
+- reconcile 0.75 / conflict 0.62 / retrieve 0.60: verdedigbaar tegen de related-spreiding (0.27-0.77). retrieve 0.60 vangt de bovenste helft related (gewenst voor recall); reconcile 0.75 vuurt alleen op near-duplicate (juist voor supersede). KEEP.
+- FACET-ESCAPE (TASK-14/16) is NIET met een drempel op te lossen: een lagere dedup merget related-feiten. Echte fix = ander mechanisme: exacte body-hash pre-dedup (vangt identieke facetten) OF een parafrase-getraind model/cross-encoder ALLEEN voor de dedup-beslissing, niet voor retrieval.
+
+MODEL-KEUZE-IMPLICATIE: voor threshold-gebaseerde parafrase-dedup is qwen3 ongeschikt; cosine != parafrase-detectie hier. Retrieval-rol mag qwen3 blijven (relevance-ranking werkt). Overweeg een paraphrase/STS-model (of cross-encoder rerank) uitsluitend voor de dedup/supersede-beslissing. Zie [[embedding-model-keuze]]. Model-specifiek: herhaal deze meting bij elke modelwissel.
+<!-- SECTION:NOTES:END -->
