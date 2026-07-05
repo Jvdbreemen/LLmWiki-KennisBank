@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-07-03 18:39'
-updated_date: '2026-07-03 19:13'
+updated_date: '2026-07-04 04:20'
 labels: []
 dependencies: []
 ordinal: 17000
@@ -56,4 +56,7 @@ Buren-distributie (numpy, cosine-matrix over 505 items, self-diagonal 0):
 ECHTE OORZAAK: (a) qwen3-embedding:8b (4096-dim) spreidt verwante-maar-verschillende tekst ver uiteen; 0.80 zit aan het PLAFOND van het matchbereik (config-noot: 'echte match 0.73-0.80'). min_neighbors=2 op 0.80 is praktisch onbereikbaar. (b) de over-extractie levert diverse atomaire facetten, geen duplicaten -> topisch verwant maar semantisch te ver uiteen voor clusters.
 
 GEVOLG - dit is een KALIBRATIE-vraag, geen bug: cluster_promote_pass vuurt bij dit model/deze drempel vrijwel nooit (near-dead code). Opties (afwegen, niet nu): (1) min_neighbors verlagen naar 1 -> promote op paren i.p.v. clusters; (2) drempel verlagen -> RISICO, 0.80 is al het matchplafond, lager = ruis; (3) accepteren dat de puur-cosine cluster-stap geen bereik heeft en op de LLM-judge-paden (supersede) leunen. Ties aan kb-calibrate (drempels per embeddingmodel). Herclassificeer deze task van 'diagnose bug' naar 'kalibratie-beslissing cluster_promote'.
+
+--- BEVESTIGD via kb-calibrate per-paar diagnose (2026-07-04, zie TASK-19) ---
+cluster-drempel 0.80 ligt BOVEN elk gemeten related-paar (related max cosine = 0.773 op qwen3-embedding:8b, 42-paren kalibratieset). cluster_promote_pass(threshold=0.80, min_neighbors=2) kan daardoor vrijwel nooit vuren: geen enkel legitiem-gerelateerd paar haalt 0.80. Dit is GEEN cache-timing-bug (die hypothese was al gefalsifieerd) maar een drempel-boven-bereik. Beslissing: (a) verlaag threshold naar ~0.75 om top-related clusters te vangen, OF (b) verlaag min_neighbors naar 1, OF (c) accepteer near-dead en documenteer als bewuste keuze. Meet met kb-eval memory-only voor je (a)/(b) houdt.
 <!-- SECTION:NOTES:END -->
