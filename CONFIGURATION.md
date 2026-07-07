@@ -654,20 +654,35 @@ De achtergrond-automatieken zijn individueel aan/uit te zetten via
 
 ---
 
-## 12. Lokale MCP-server (kb-mcp.py, optioneel)
+## 12. Lokale MCP-server (kb-mcp.py)
 
 `kb-mcp.py` exposeert je KennisBank (geheugen + wiki) als `recall`-tool aan lokale
 MCP-clients (Cursor, LM Studio, Claude Desktop) via **stdio** — lokaal, geen netwerk.
-Vereist eenmalig `pip install mcp`. Registreer bij je MCP-client met commando:
+Voor Codex/OpenCode is dit geen losse handmatige stap meer: `setup.sh --agents
+codex` of `setup.sh --agents opencode` installeert `mcp==1.28.1` in dezelfde
+Python-interpreter als de gegenereerde MCP-config en valideert daarna een echte
+MCP initialize/list-tools handshake. `doctor.sh` faalt voortaan als Codex of
+OpenCode KennisBank MCP geconfigureerd heeft maar de Python MCP runtime mist.
+
+Handmatige MCP-registratie vereist nog steeds dat je dezelfde interpreter
+vooraf voorziet van de SDK:
+
+```
+python3 -m pip install mcp==1.28.1
+```
+
+Registreer daarna bij je MCP-client met commando:
 
 ```
 python3 "$HOME/KennisBank/.claude/scripts/kb-mcp.py"
 ```
 
-(Windows: `py -3 "%USERPROFILE%/KennisBank/.claude/scripts/kb-mcp.py"`.)
+(Windows: eerst `py -3 -m pip install mcp==1.28.1`, daarna
+`py -3 "%USERPROFILE%/KennisBank/.claude/scripts/kb-mcp.py"`.)
 De server opent `kb-index.db` read-only; embedt query's lokaal via Ollama. Zonder
-het `mcp`-pakket meldt het script netjes dat de dep ontbreekt — de rest van
-KennisBank (hook-recall, sweep) werkt onafhankelijk door.
+het `mcp`-pakket meldt het script netjes dat de dep ontbreekt; hook-recall en
+sweep blijven fail-open, maar een geconfigureerde MCP-agent geldt dan als
+onvolledig geinstalleerd.
 
 ---
 

@@ -17,6 +17,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -72,6 +73,32 @@ def _norm_path(raw: str | Path) -> Path:
 
 def _posix(p: Path) -> str:
     return str(p).replace("\\", "/")
+
+
+def _is_windows_like() -> bool:
+    return os.name == "nt" or sys.platform.startswith(("win", "msys", "cygwin"))
+
+
+def _agent_python_argv() -> list[str]:
+    return ["py", "-3"] if _is_windows_like() else ["python3"]
+
+
+def _mcp_server_argv(vault: Path) -> list[str]:
+    return [*_agent_python_argv(), _posix(vault / ".claude" / "scripts" / "kb-mcp.py")]
+
+
+def _shell_join(argv: list[str]) -> str:
+    parts = []
+    for arg in argv:
+        s = str(arg)
+        if _is_windows_like():
+            if re.search(r'[\s"]', s):
+                parts.append('"' + s.replace('"', '\\"') + '"')
+            else:
+                parts.append(s)
+        else:
+            parts.append(shlex.quote(s))
+    return " ".join(parts)
 
 
 def _home() -> Path:
@@ -205,7 +232,7 @@ def install_codex(repo: Path, vault: Path) -> dict:
 
 
 def _codex_command(script: str, vault: Path) -> str:
-    return f'py -3 "{_posix(vault / ".claude" / "scripts" / script)}"'
+    return _shell_join([*_agent_python_argv(), _posix(vault / ".claude" / "scripts" / script)])
 
 
 def _hook_group(script: str, vault: Path, matcher: str | None = None, timeout: int = 60) -> dict:
@@ -282,10 +309,12 @@ def _toml_quote(value: str) -> str:
 
 def _ensure_codex_mcp(path: Path, vault: Path) -> None:
     text = _read_text(path)
+    argv = _mcp_server_argv(vault)
+    args = ", ".join(_toml_quote(a) for a in argv[1:])
     block = f"""
 [mcp_servers.kennisbank]
-command = "py"
-args = ["-3", "{_posix(vault / ".claude" / "scripts" / "kb-mcp.py")}"]
+command = {_toml_quote(argv[0])}
+args = [{args}]
 
 [mcp_servers.kennisbank.env]
 KB_LLM_ENDPOINT = "http://localhost:11434"
@@ -387,7 +416,7 @@ def _ensure_opencode_config(path: Path, vault: Path, plugin: Path) -> Path:
     data["mcp"]["kennisbank"] = {
         "type": "local",
         "enabled": True,
-        "command": ["py", "-3", _posix(vault / ".claude" / "scripts" / "kb-mcp.py")],
+        "command": _mcp_server_argv(vault),
         "environment": {
             "KENNISBANK_VAULT": _posix(vault),
             "KB_LLM_PROVIDERS": "ollama",
@@ -473,6 +502,98 @@ def validate_files(repo: Path, vault: Path, agents: list[str]) -> list[str]:
             if need not in combined:
                 errors.append(f"OpenCode config lacks {need}")
     return errors
+
+
+def validate_mcp_runtime(vault: Path, timeout: int = 15) -> list[str]:
+    """Validate that the configured stdio MCP server can initialize."""
+    script = vault / ".claude" / "scripts" / "kb-mcp.py"
+    if not script.is_file():
+        return [f"missing KennisBank MCP server script: {script}"]
+
+    py = _agent_python_argv()
+    dep_check = "import mcp; import mcp.client.stdio; import mcp.server.fastmcp"
+    try:
+        proc = subprocess.run(
+            [*py, "-c", dep_check],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+        )
+    except FileNotFoundError:
+        return [f"KennisBank MCP python interpreter not found: {_shell_join(py)}"]
+    except subprocess.TimeoutExpired:
+        return [f"KennisBank MCP dependency check timed out: {_shell_join(py)}"]
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout or "").strip()
+        return [
+            "KennisBank MCP dependency missing or broken for "
+            f"{_shell_join(py)}; run: {_shell_join([*py, '-m', 'pip', 'install', 'mcp==1.28.1'])}"
+            + (f" ({detail})" if detail else "")
+        ]
+
+    payload = {
+        "command": _mcp_server_argv(vault)[0],
+        "args": _mcp_server_argv(vault)[1:],
+        "env": {
+            "KENNISBANK_VAULT": _posix(vault),
+            "KB_LLM_PROVIDERS": "ollama",
+            "KB_LLM_MODEL": "gemma4:12b",
+            "KB_LLM_ENDPOINT": "http://localhost:11434",
+        },
+    }
+    client_code = r'''
+import anyio
+import json
+import os
+import sys
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+
+async def main():
+    cfg = json.loads(sys.argv[1])
+    env = dict(os.environ)
+    env.update(cfg.get("env") or {})
+    params = StdioServerParameters(
+        command=cfg["command"],
+        args=cfg["args"],
+        env=env,
+    )
+    async with stdio_client(params) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            tools = await session.list_tools()
+            names = {t.name for t in tools.tools}
+            missing = {"recall", "capture"} - names
+            if missing:
+                raise SystemExit("missing MCP tools: " + ", ".join(sorted(missing)))
+            print("MCP handshake OK: " + ", ".join(sorted(names)))
+
+anyio.run(main)
+'''
+    env = dict(os.environ)
+    env.update(payload["env"])
+    try:
+        proc = subprocess.run(
+            [*py, "-c", client_code, json.dumps(payload)],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=env,
+            timeout=timeout,
+        )
+    except FileNotFoundError:
+        return [f"KennisBank MCP python interpreter not found: {_shell_join(py)}"]
+    except subprocess.TimeoutExpired:
+        return [f"KennisBank MCP handshake timed out: {_shell_join(_mcp_server_argv(vault))}"]
+    if proc.returncode != 0:
+        detail = "\n".join(x for x in (proc.stderr.strip(), proc.stdout.strip()) if x).strip()
+        if len(detail) > 1200:
+            detail = detail[:1200] + "..."
+        return [f"KennisBank MCP handshake failed for {_shell_join(_mcp_server_argv(vault))}: {detail}"]
+    return []
 
 
 def _json_file(path: Path) -> dict:
@@ -730,6 +851,8 @@ def main(argv: list[str] | None = None) -> int:
                 result["install"]["opencode"] = install_opencode(repo, vault)
         if args.validate:
             result["validation_errors"].extend(validate_files(repo, vault, agents))
+            if "codex" in agents or "opencode" in agents:
+                result["validation_errors"].extend(validate_mcp_runtime(vault))
             if not args.skip_models:
                 result["validation_errors"].extend(validate_models(vault))
     except Exception as e:

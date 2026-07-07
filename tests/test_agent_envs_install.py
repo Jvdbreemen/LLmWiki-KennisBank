@@ -2,9 +2,11 @@ import importlib.util
 import json
 import os
 import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 try:
     import tomllib
@@ -120,6 +122,46 @@ command = "other"
         self.assertNotIn("fake-openrouter-token-for-test", json.dumps(cfg))
         secrets = json.loads((self.tmp / ".config" / "kennisbank" / "secrets.json").read_text(encoding="utf-8"))
         self.assertEqual(secrets["OPENROUTER_API_KEY"], "fake-openrouter-token-for-test")
+
+    def test_validate_mcp_runtime_reports_missing_dependency(self):
+        def fake_run(args, **_kwargs):
+            return subprocess.CompletedProcess(args, 1, "", "No module named mcp")
+
+        with patch.object(self.m.subprocess, "run", side_effect=fake_run):
+            errors = self.m.validate_mcp_runtime(self.vault)
+
+        self.assertEqual(len(errors), 1)
+        self.assertIn("MCP dependency missing", errors[0])
+        self.assertIn("pip install mcp==1.28.1", errors[0])
+
+    def test_validate_mcp_runtime_reports_handshake_failure(self):
+        calls = []
+
+        def fake_run(args, **_kwargs):
+            calls.append(args)
+            if len(calls) == 1:
+                return subprocess.CompletedProcess(args, 0, "", "")
+            return subprocess.CompletedProcess(args, 1, "", "missing MCP tools: capture")
+
+        with patch.object(self.m.subprocess, "run", side_effect=fake_run):
+            errors = self.m.validate_mcp_runtime(self.vault)
+
+        self.assertEqual(len(errors), 1)
+        self.assertIn("MCP handshake failed", errors[0])
+        self.assertIn("missing MCP tools: capture", errors[0])
+
+    def test_validate_mcp_runtime_success(self):
+        calls = []
+
+        def fake_run(args, **_kwargs):
+            calls.append(args)
+            return subprocess.CompletedProcess(args, 0, "MCP handshake OK: capture, recall", "")
+
+        with patch.object(self.m.subprocess, "run", side_effect=fake_run):
+            errors = self.m.validate_mcp_runtime(self.vault)
+
+        self.assertEqual(errors, [])
+        self.assertEqual(len(calls), 2)
 
 
 if __name__ == "__main__":

@@ -16,8 +16,8 @@ KENNISBANK_VAULT="/absolute/path/to/vault" bash setup.sh --yes --agents claude,c
 
 `setup.sh` is the only supported install and upgrade entrypoint. It refreshes the
 deployed tooling, repairs agent configuration, runs migrations, validates hooks
-and skills, and runs local Ollama model smoke tests unless
-`--skip-model-check` is explicitly used.
+and skills, validates MCP runtime startup for MCP-enabled agents, and runs local
+Ollama model smoke tests unless `--skip-model-check` is explicitly used.
 
 ## Claude Code
 
@@ -54,8 +54,14 @@ slash commands. For example:
 Codex should use the installed skills for reusable workflows and the MCP tools
 `recall` and `capture` for live vault access. Hooks are installed for lifecycle
 maintenance and best-effort recall, but MCP is the durable cross-client API.
+Setup installs the Python MCP SDK and validates Codex MCP with a real
+initialize/list-tools handshake before it reports success.
 
 Manual MCP shape:
+
+```bash
+py -3 -m pip install mcp==1.28.1
+```
 
 ```toml
 [mcp_servers.kennisbank]
@@ -81,9 +87,14 @@ Installed by `--agents opencode`.
 
 OpenCode supports real custom command names, so `/sessielog`,
 `/sessiestart`, `/kennisbank-upgrade`, and the other KennisBank commands are
-available directly after restart.
+available directly after restart. Setup validates OpenCode's generated MCP
+server command with the same local Python MCP runtime used by Codex.
 
 Manual MCP shape:
+
+```bash
+py -3 -m pip install mcp==1.28.1
+```
 
 ```json
 {
@@ -113,7 +124,8 @@ local KennisBank maintenance scripts.
 Cursor, Cline, Windsurf, Gemini CLI, and similar local MCP clients can point to
 the same stdio server. Use the client's native MCP config format and include
 `KENNISBANK_VAULT` in the server environment when the vault is not at the
-default path.
+default path. Manual clients must install the MCP SDK into the same Python
+interpreter used by the configured command.
 
 ```json
 {

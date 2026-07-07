@@ -241,15 +241,28 @@ configure_llm_backend() {
 
 configure_llm_backend
 
-# Python-afhankelijkheden (sqlite-vec voor kb-index)
-# F3: op Windows draait py -3 (de hooks-interpreter); gebruik diezelfde interpreter
-# voor pip zodat sqlite-vec in dezelfde omgeving terechtkomt.
+# Python-afhankelijkheden (sqlite-vec voor kb-index, mcp voor Codex/OpenCode).
+# F3: op Windows draait py -3 (de hooks/MCP-interpreter); gebruik diezelfde
+# interpreter voor pip zodat dependencies in dezelfde omgeving terechtkomen.
 case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*) PIP_PYTHON="py -3" ;;
   *) PIP_PYTHON="python3" ;;
 esac
-$PIP_PYTHON -m pip install --quiet "sqlite-vec==0.1.9" 2>/dev/null \
-  || echo "  (let op: '$PIP_PYTHON -m pip install sqlite-vec==0.1.9' handmatig nodig voor kb-index)"
+install_python_dep() {
+  local spec="$1"
+  local import_name="$2"
+  local purpose="$3"
+  if $PIP_PYTHON -c "import importlib.util, sys; sys.exit(0 if importlib.util.find_spec('$import_name') else 1)" >/dev/null 2>&1; then
+    echo "  dependency aanwezig: $spec ($purpose)"
+    return 0
+  fi
+  $PIP_PYTHON -m pip install --quiet "$spec" 2>/dev/null \
+    || echo "  (let op: '$PIP_PYTHON -m pip install $spec' handmatig nodig voor $purpose)"
+}
+install_python_dep "sqlite-vec==0.1.9" "sqlite_vec" "kb-index"
+if has_agent codex || has_agent opencode; then
+  install_python_dep "mcp==1.28.1" "mcp" "KennisBank MCP"
+fi
 
 # Settings-bootstrap: zorg dat kennisbank-settings.json bestaat. De toggles
 # bepalen welke achtergrond-automatiek draait (auto-archive, distill-notify,
