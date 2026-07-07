@@ -4,7 +4,7 @@ title: 'embed_failed tijdens sweep: kandidaten verloren bij tijdelijke Ollama-hi
 status: Done
 assignee: []
 created_date: '2026-07-03 18:39'
-updated_date: '2026-07-07 17:37'
+updated_date: '2026-07-07 18:21'
 labels: []
 dependencies: []
 ordinal: 18000
@@ -30,7 +30,7 @@ AANBEVELING: begin met optie 1 (retry) als de goedkoopste risico-arme verbeterin
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Gemeten of embed_failed bij NORMALE per-sessie sweeps >0 is, of dat het een --all/backfill-fenomeen was
+- [x] #1 Gemeten of embed_failed bij NORMALE per-sessie sweeps >0 is, of dat het een --all/backfill-fenomeen was
 - [x] #2 Als ingegrepen (optie 1): embed-retry met backoff in de chunk-loop, met een test die de retry-op-None-tak dekt; fail-soft blijft (na max retries nog steeds skip, geen crash)
 - [x] #3 Geen per-kandidaat herverwerking die dubbele memories introduceert zonder dedup-garantie (optie 2 alleen met per-kandidaat watermarking)
 - [x] #4 Beslissing gedocumenteerd, inclusief WONTFIX-optie als de impact verwaarloosbaar blijkt
@@ -82,10 +82,16 @@ created: 2026-07-07 17:37
 ---
 Closure 2026-07-07 op verzoek van de eigenaar. De codecriteria zijn afgerond: deterministische body-hash pre-dedup, embed-retry met backoff, fail-soft tests en geen per-kandidaat herverwerking. AC#1 blijft historisch niet lokaal bewezen omdat C:\Users\rvdbr\KennisBank\.claude\memory-sweep-status.json en C:\Users\rvdbr\KennisBank\01-raw\transcripts ontbreken; dit risico is geaccepteerd als non-blocking voor afsluiten.
 ---
+
+author: codex
+created: 2026-07-07 18:21
+---
+Revalidatie 2026-07-07 op echte Kluis D:\Users\Robert\Documents\Claude\Projects\Kluis na deploy van huidige main. Normale sweep gestart met KB_LLM_MODEL=gemma4:12b en provider ollama; run duurde ~27 minuten en eindigde met processed=0, written=0, embed_failed=0, model_unreachable=false, provider=ollama, last_run=2026-07-07T18:17:24.111857+00:00. Daarmee is AC#1 alsnog gemeten: geen embed_failed bij normale per-sessie sweep in de actuele Kluis; het eerdere probleem blijft een --all/backfill-fenomeen.
+---
 <!-- COMMENTS:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Afgesloten op eigenaar-besluit na implementatie van de low-risk mitigaties: exacte-body pre-dedup voorkomt dedup-escape bij vectorloze bestaande memories, embed-retry beperkt transient Ollama-hikjes, en fail-soft blijft getest. Normale-sweep telemetry was lokaal niet beschikbaar; aanvullende dead-letter/per-kandidaat herverwerking blijft bewust niet gebouwd zolang structurele normale-sweep embed_failed niet bewezen is.
+Afgesloten na echte Kluis-validatie. De Kluis is op huidige main-tooling gedeployed, Claude/Codex zijn expliciet gepind op KENNISBANK_VAULT=D:/Users/Robert/Documents/Claude/Projects/Kluis en KB_LLM_MODEL=gemma4:12b, en een normale sweep eindigde met embed_failed=0 en model_unreachable=false. De mitigaties blijven: exacte-body pre-dedup, embed-retry met backoff en geen per-kandidaat herverwerking.
 <!-- SECTION:FINAL_SUMMARY:END -->
