@@ -7,11 +7,13 @@ GitHub Copilot in VS Code, Cline, Windsurf, LM Studio, Claude Desktop) kan de
 vault gebruiken zonder platform-specifieke hook. MCP is het enige protocol dat
 al die omgevingen al spreken, dus dit is het brede-bereik-oppervlak.
 
-Drie primitieven:
+Primitieven:
   - recall (tool)        : doorzoek geheugen+wiki (PULL-retrieval). Read-only.
   - capture (tool)       : leg een nieuwe memory vast (PULL-write). Landt als
                            unverified/agent zodat de sweep-judge of de mens 'm
                            later promoot (mens = update-autoriteit).
+  - what_did_i_do/timeline/weeklog/topic_timeline (tools): temporal activity
+                           recall over de lokale activity index.
   - instructions (resource): de pull-nudge die een client zonder push-hook toch
                            naar recall stuurt. NB: GitHub Copilot ondersteunt
                            GEEN MCP-resources, alleen tools -> zet de nudge daar
@@ -30,6 +32,7 @@ bruikbaar. Stdlib + optioneel mcp.
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import sys
 from pathlib import Path
@@ -56,6 +59,12 @@ try:
     _spec.loader.exec_module(kb_recall)
 except Exception:
     kb_recall = None
+
+activity = None
+try:
+    import _activity as activity  # type: ignore
+except Exception:
+    activity = None
 
 
 def recall_tool(query: str, k: int = 5) -> str:
@@ -115,6 +124,86 @@ def capture_tool(title: str, body: str, memory_type: str = "feit",
         return f"Kon de memory niet vastleggen ({type(e).__name__}). Niets geschreven."
 
 
+def _activity_json(payload: dict) -> str:
+    return json.dumps(payload, indent=2, ensure_ascii=False)
+
+
+def _activity_unavailable() -> str:
+    return _activity_json({
+        "ok": False,
+        "warnings": ["Temporal Activity Recall module is niet beschikbaar."],
+        "events": [],
+    })
+
+
+def what_did_i_do_tool(date_or_period: str, topic: str = "", project: str = "",
+                       max_events: int = 25) -> str:
+    """Temporal activity recall voor een datum/periode, als JSON."""
+    if activity is None:
+        return _activity_unavailable()
+    try:
+        result = activity.what_did_i_do(
+            date_or_period or "today",
+            topic=topic or "",
+            project=project or "",
+            max_events=int(max_events),
+        )
+        return _activity_json(result)
+    except Exception as e:
+        return _activity_json({"ok": False, "warnings": [f"what_did_i_do failed: {type(e).__name__}"], "events": []})
+
+
+def timeline_tool(period: str, topic: str = "", project: str = "",
+                  max_events: int = 50) -> str:
+    """Chronologische temporal activity timeline, als JSON."""
+    if activity is None:
+        return _activity_unavailable()
+    try:
+        result = activity.timeline(
+            period or "today",
+            topic=topic or "",
+            project=project or "",
+            max_events=int(max_events),
+        )
+        return _activity_json(result)
+    except Exception as e:
+        return _activity_json({"ok": False, "warnings": [f"timeline failed: {type(e).__name__}"], "events": []})
+
+
+def weeklog_tool(period: str = "vorige week", topic: str = "", project: str = "",
+                 max_events: int = 100) -> str:
+    """Weekoverzicht met rollup en source_refs, als JSON."""
+    if activity is None:
+        return _activity_unavailable()
+    try:
+        result = activity.weeklog(
+            period or "vorige week",
+            topic=topic or "",
+            project=project or "",
+            max_events=int(max_events),
+        )
+        return _activity_json(result)
+    except Exception as e:
+        return _activity_json({"ok": False, "warnings": [f"weeklog failed: {type(e).__name__}"], "events": []})
+
+
+def topic_timeline_tool(topic: str, period: str = "afgelopen 90 dagen",
+                        project: str = "", max_events: int = 80) -> str:
+    """Volg een onderwerp of entity door de tijd, als JSON."""
+    if activity is None:
+        return _activity_unavailable()
+    try:
+        result = activity.topic_timeline(
+            topic or "",
+            period_text=period or "afgelopen 90 dagen",
+            project=project or "",
+            max_events=int(max_events),
+        )
+        return _activity_json(result)
+    except Exception as e:
+        return _activity_json({"ok": False, "warnings": [f"topic_timeline failed: {type(e).__name__}"], "events": []})
+
+
 # Pull-nudge voor MCP-clients zonder push-hook (zie module-docstring). Aangeboden
 # als resource; clients die resources ondersteunen (Cursor, Claude Desktop) tonen
 # 'm. Copilot ondersteunt geen resources -> README verwijst naar copilot-instructions.md.
@@ -125,6 +214,8 @@ INSTRUCTIONS_TEXT = (
     "eerdere lessen, beslissingen en bugfixes staan er mogelijk al in.\n"
     "- Roep `capture` aan wanneer er een herbruikbaar feit, voorkeur, procedure of "
     "beslissing ontstaat die je in een volgende sessie terug wilt zien.\n"
+    "- Roep `what_did_i_do`, `timeline`, `weeklog` of `topic_timeline` aan voor "
+    "vragen over wat er op een datum, in een week of rond een onderwerp gebeurde.\n"
     "- De KennisBank is lokaal en soeverein: er gaat niets naar de cloud."
 )
 
@@ -147,6 +238,35 @@ def build_server():
         """Leg een herbruikbaar feit/voorkeur/procedure/beslissing vast in je
         KennisBank. Landt als unverified; de sweep of jijzelf bevestigt 'm later."""
         return capture_tool(title, body, memory_type=memory_type, importance=importance)
+
+    @srv.tool()
+    def what_did_i_do(date_or_period: str, topic: str = "", project: str = "",
+                      max_events: int = 25) -> str:
+        """Beantwoord wat er lokaal gebeurde op een datum of in een periode.
+        Geeft JSON met events, source_refs, waarschuwingen en summary."""
+        return what_did_i_do_tool(date_or_period, topic=topic, project=project,
+                                  max_events=max_events)
+
+    @srv.tool()
+    def timeline(period: str, topic: str = "", project: str = "",
+                 max_events: int = 50) -> str:
+        """Geef een chronologische activity timeline voor een periode/topic."""
+        return timeline_tool(period, topic=topic, project=project,
+                             max_events=max_events)
+
+    @srv.tool()
+    def weeklog(period: str = "vorige week", topic: str = "", project: str = "",
+                max_events: int = 100) -> str:
+        """Geef een weekoverzicht met deterministic rollup en bronrefs."""
+        return weeklog_tool(period=period, topic=topic, project=project,
+                            max_events=max_events)
+
+    @srv.tool()
+    def topic_timeline(topic: str, period: str = "afgelopen 90 dagen",
+                       project: str = "", max_events: int = 80) -> str:
+        """Volg een onderwerp/entity door de tijd via activity events."""
+        return topic_timeline_tool(topic, period=period, project=project,
+                                   max_events=max_events)
 
     # Instructions-resource (best-effort: niet elke MCP-SDK-versie kent .resource()).
     try:

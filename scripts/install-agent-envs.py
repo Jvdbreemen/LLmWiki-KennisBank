@@ -45,6 +45,9 @@ ROOT_COMMANDS = {
     "reconcile": "Reconcile tegenstrijdige wiki-informatie.",
     "uitdaag": "Daag een idee uit met KennisBank-context.",
     "brug": "Zoek bruggen tussen KennisBank-onderwerpen.",
+    "weeklog": "Maak een temporal activity weeklog met source refs.",
+    "timeline": "Maak een chronologische activity timeline.",
+    "watdeedik": "Beantwoord wat je deed op een datum of in een periode.",
     "destilleer": "Destilleer ruwe sessies naar bruikbare kennis.",
     "kennisbank-upgrade": "Upgrade de KennisBank tooling naar de nieuwste release.",
     "kennisbank-contribute": "Breng lokale KennisBank-toolingverbeteringen upstream.",
@@ -264,6 +267,7 @@ def _ensure_codex_hooks(path: Path, vault: Path) -> None:
         "SessionStart": [
             ("build-embed-index.py", "startup|resume|clear|compact", 180),
             ("build-kb-index.py", "startup|resume|clear|compact", 180),
+            ("build-activity-index.py", "startup|resume|clear|compact", 180),
             ("sweep-launch.py", "startup|resume|clear|compact", 30),
             ("memory-notify.py", "startup|resume|clear|compact", 30),
             ("distill-notify.py", "startup|resume|clear|compact", 30),
@@ -387,6 +391,7 @@ export const KennisBankPlugin = async ({{ client }}) => {{
       if (input.event?.type === "session.idle") {{
         await run("build-embed-index.py");
         await run("build-kb-index.py");
+        await run("build-activity-index.py");
         await run("sweep-launch.py");
         await run("memory-notify.py");
         await run("distill-notify.py");
@@ -438,6 +443,9 @@ def validate_files(repo: Path, vault: Path, agents: list[str]) -> list[str]:
         vault / ".claude" / "scripts" / "kb-mcp.py",
         vault / ".claude" / "scripts" / "kb-retrieve.py",
         vault / ".claude" / "scripts" / "kb-presearch.py",
+        vault / ".claude" / "scripts" / "build-activity-index.py",
+        vault / ".claude" / "scripts" / "kb-activity.py",
+        vault / ".claude" / "scripts" / "kb-activity-eval.py",
         vault / ".claude" / "kennisbank-embed.json",
         vault / ".claude" / "kennisbank-llm.json",
     ):
@@ -446,7 +454,7 @@ def validate_files(repo: Path, vault: Path, agents: list[str]) -> list[str]:
 
     if "claude" in agents:
         base = _home() / ".claude"
-        for cmd in ("sessielog", "sessiestart", "kennisbank-upgrade"):
+        for cmd in ("sessielog", "sessiestart", "kennisbank-upgrade", "weeklog", "timeline", "watdeedik"):
             if not (base / "commands" / f"{cmd}.md").is_file():
                 errors.append(f"missing Claude command: {cmd}")
         for skill in ("autoresearch", "kennisbank-upgrade", "kennisbank-contribute"):
@@ -455,7 +463,7 @@ def validate_files(repo: Path, vault: Path, agents: list[str]) -> list[str]:
         settings = base / "settings.json"
         if settings.is_file():
             txt = settings.read_text(encoding="utf-8")
-            for need in ("kb-retrieve.py", "kb-presearch.py", "build-kb-index.py"):
+            for need in ("kb-retrieve.py", "kb-presearch.py", "build-kb-index.py", "build-activity-index.py"):
                 if need not in txt:
                     errors.append(f"missing Claude hook for {need}")
             if "KENNISBANK_VAULT" not in txt:
@@ -468,7 +476,7 @@ def validate_files(repo: Path, vault: Path, agents: list[str]) -> list[str]:
         for skill in ("autoresearch", "kennisbank-upgrade", "kennisbank-contribute"):
             if not (_home() / ".agents" / "skills" / skill / "SKILL.md").is_file():
                 errors.append(f"missing Codex shared skill: {skill}")
-        for prompt in ("sessielog", "sessiestart", "kennisbank-upgrade"):
+        for prompt in ("sessielog", "sessiestart", "kennisbank-upgrade", "weeklog", "timeline", "watdeedik"):
             if not (codex / "prompts" / f"{prompt}.md").is_file():
                 errors.append(f"missing Codex prompt alias: {prompt}")
         for p in (codex / "AGENTS.md", codex / "hooks.json", codex / "config.toml"):
@@ -484,14 +492,14 @@ def validate_files(repo: Path, vault: Path, agents: list[str]) -> list[str]:
                 tomllib.loads(codex_config)
             except Exception as e:
                 errors.append(f"Codex config.toml is not valid TOML: {e}")
-        for need in ("kb-retrieve.py", "kb-presearch.py", "mcp_servers.kennisbank", _posix(vault)):
+        for need in ("kb-retrieve.py", "kb-presearch.py", "build-activity-index.py", "mcp_servers.kennisbank", _posix(vault)):
             combined = _read_text(codex / "hooks.json") + "\n" + codex_config
             if need not in combined:
                 errors.append(f"Codex config lacks {need}")
 
     if "opencode" in agents:
         cfg = _opencode_home()
-        for cmd in ("sessielog", "sessiestart", "kennisbank-upgrade"):
+        for cmd in ("sessielog", "sessiestart", "kennisbank-upgrade", "weeklog", "timeline", "watdeedik"):
             if not (cfg / "commands" / f"{cmd}.md").is_file():
                 errors.append(f"missing OpenCode command: {cmd}")
         for p in (cfg / "AGENTS.md", cfg / "plugins" / "kennisbank.js", cfg / "opencode.json"):
@@ -565,7 +573,7 @@ async def main():
             await session.initialize()
             tools = await session.list_tools()
             names = {t.name for t in tools.tools}
-            missing = {"recall", "capture"} - names
+            missing = {"recall", "capture", "what_did_i_do", "timeline", "weeklog", "topic_timeline"} - names
             if missing:
                 raise SystemExit("missing MCP tools: " + ", ".join(sorted(missing)))
             print("MCP handshake OK: " + ", ".join(sorted(names)))

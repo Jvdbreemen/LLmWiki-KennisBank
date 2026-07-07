@@ -155,7 +155,7 @@ else
 fi
 
 # 7. Slash commands installed.
-COMMAND_FILES="sessielog wiki intake stale sessiestart import reconcile uitdaag brug"
+COMMAND_FILES="sessielog wiki intake stale sessiestart import reconcile uitdaag brug weeklog timeline watdeedik"
 if [ ! -d "$COMMANDS_DIR" ]; then
   report_warn "commands dir" "$COMMANDS_DIR not found (user may have opted out)"
 else
@@ -240,6 +240,53 @@ else
       report_fail "kennisbank MCP runtime" "missing Python package for ${MCP_PY[*]} (run: ${MCP_PY[*]} -m pip install mcp==1.28.1) ${MCP_IMPORT_OUT}"
     fi
   fi
+  if [ -f "$SCRIPTS_DIR/kb-mcp.py" ]; then
+    MCP_TEMPORAL_OUT="$("${MCP_PY[@]}" -c '
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("kb_mcp", sys.argv[1])
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+missing = [n for n in ("what_did_i_do_tool", "timeline_tool", "weeklog_tool", "topic_timeline_tool") if not hasattr(m, n)]
+print("OK" if not missing else "MISSING " + ",".join(missing))
+' "$SCRIPTS_DIR/kb-mcp.py" 2>&1)"
+    if [ "$MCP_TEMPORAL_OUT" = "OK" ]; then
+      report_pass "kennisbank MCP temporal tools" "what_did_i_do timeline weeklog topic_timeline"
+    else
+      report_fail "kennisbank MCP temporal tools" "$MCP_TEMPORAL_OUT"
+    fi
+  fi
+fi
+
+# 11c. Temporal Activity Recall index.
+if command -v python3 >/dev/null 2>&1 && [ -f "$SCRIPTS_DIR/kb-activity.py" ]; then
+  ACTIVITY_STATUS="$(python3 "$SCRIPTS_DIR/kb-activity.py" --vault "$VAULT" --json status 2>/dev/null)"
+  if [ -z "$ACTIVITY_STATUS" ]; then
+    report_warn "activity index" "kon status niet lezen; run: python3 $SCRIPTS_DIR/build-activity-index.py --vault $VAULT --full"
+  else
+    ACTIVITY_SUMMARY="$(printf '%s' "$ACTIVITY_STATUS" | python3 -c '
+import json, sys
+try:
+    r=json.load(sys.stdin)
+    print("%s %s %s %s %s" % (r.get("ok"), r.get("schema_version"), r.get("events"), r.get("sources"), r.get("stale_sources")))
+except Exception:
+    print("ERR")
+' 2>/dev/null | tr -d '\r')"
+    if [ "$ACTIVITY_SUMMARY" = "ERR" ]; then
+      report_warn "activity index" "ongeldige status-output"
+    else
+      ACTIVITY_OK="$(printf '%s' "$ACTIVITY_SUMMARY" | cut -d' ' -f1)"
+      ACTIVITY_SCHEMA="$(printf '%s' "$ACTIVITY_SUMMARY" | cut -d' ' -f2)"
+      ACTIVITY_EVENTS="$(printf '%s' "$ACTIVITY_SUMMARY" | cut -d' ' -f3)"
+      ACTIVITY_SOURCES="$(printf '%s' "$ACTIVITY_SUMMARY" | cut -d' ' -f4)"
+      ACTIVITY_STALE="$(printf '%s' "$ACTIVITY_SUMMARY" | cut -d' ' -f5)"
+      if [ "$ACTIVITY_OK" = "True" ]; then
+        report_pass "activity index" "schema=$ACTIVITY_SCHEMA events=$ACTIVITY_EVENTS sources=$ACTIVITY_SOURCES stale=$ACTIVITY_STALE"
+      else
+        report_warn "activity index" "schema=$ACTIVITY_SCHEMA events=$ACTIVITY_EVENTS sources=$ACTIVITY_SOURCES stale=$ACTIVITY_STALE; run build-activity-index.py --full"
+      fi
+    fi
+  fi
+else
+  report_warn "activity index" "kb-activity.py ontbreekt of python3 niet beschikbaar"
 fi
 
 # 12. Ollama and the embedding model (optional).

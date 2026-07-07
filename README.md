@@ -38,7 +38,27 @@ Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: 
 
 The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
 
-## Feature highlights (v0.12.2)
+## Feature highlights (v0.13.0)
+
+### New in v0.13
+- **Temporal Activity Recall.** Ask what happened on a date, during a week, or
+  around a topic with `/watdeedik`, `/timeline`, and `/weeklog`. The feature
+  builds a local `<vault>/.claude/kb-activity.db` from raw sessions,
+  transcripts, memories, wiki updates, and usage telemetry.
+- **Strict time-aware retrieval.** Dates and periods are parsed deterministically
+  in Dutch and English (`vorige week`, `2026-07-03`, `3 juli 2026`,
+  `between 2026-07-01 and 2026-07-07`). Range filtering is hard: events outside
+  the requested period are not silently mixed in.
+- **Topic timelines with evidence.** Follow subjects such as "Codex MCP" or
+  "OpenRouter" through time using entities, tags, aliases, FTS and source refs.
+  Local aliases can be configured in `<vault>/.claude/activity-topic-aliases.json`.
+- **MCP temporal tools.** The local `kennisbank` MCP server now exposes
+  `what_did_i_do`, `timeline`, `weeklog`, and `topic_timeline` alongside
+  `recall` and `capture`, so Codex, OpenCode and other local agents use the same
+  API as the slash commands.
+- **Measured recall.** `kb-activity-eval.py` provides a temporal eval harness for
+  date recall, period recall, topic timelines, negative controls and provenance
+  coverage. The repo ships a non-personal example eval set.
 
 ### New in v0.12
 - **One setup for install and upgrade.** `setup.sh` is now the authoritative
@@ -86,6 +106,7 @@ The design bias throughout: **deterministic where possible, LLM only where it ad
 
 ### Measurement (the trust layer)
 - `kb-eval.py`: recall@1/3/5 and MRR against your personal eval set of questions. Run it before and after any retrieval change; a drop is a regression, not an opinion.
+- `kb-activity-eval.py`: temporal recall evals for date questions, period questions, topic timelines, negative controls and source-ref coverage.
 - `kb-calibrate.py`: checks all cosine thresholds (dedup, rewrite, reconcile, conflict, retrieve) against the active embedding model using a hand-labelled pair set, and proposes boundaries with separation margins. It writes nothing: you decide. Switch embedding models without silently degrading.
 - `doctor.sh`: one command verifies the whole install, from vault layout and hook registration to provenance coverage.
 
@@ -158,6 +179,7 @@ Claude Code receives the full hookset below in `~/.claude/settings.json`. Codex 
 |------|--------|--------------|
 | SessionStart | `build-embed-index.py` | Warm the wiki embedding cache (incremental) |
 | SessionStart | `build-kb-index.py` | Refresh the hybrid vector+FTS index |
+| SessionStart | `build-activity-index.py` | Refresh the temporal activity index for `/weeklog`, `/timeline`, and MCP temporal tools |
 | SessionStart | `sweep-launch.py` | Launch the detached memory capture sweep |
 | SessionStart | `memory-notify.py` | Report memory-quarantine health |
 | SessionStart | `distill-notify.py` | Report transcripts waiting for distillation |
@@ -183,6 +205,9 @@ The hooks are fail-open by design: an error means no injected context or a skipp
 | `/reconcile` | optional topic | Surface contradictions across wiki articles and produce a reconciliation log |
 | `/uitdaag` | claim or decision | Adversarially challenge a claim for weak reasoning or missing evidence |
 | `/brug` | two topics | Find conceptual bridges and shared principles between two topics |
+| `/weeklog` | optional period/topic | Weekly activity rollup with decisions, releases/tasks, open loops and source refs |
+| `/timeline` | date/period/topic | Chronological temporal activity timeline with strict range filtering |
+| `/watdeedik` | date/period/topic | Compact answer to "what did I do then?" with evidence links |
 | `/kennisbank:settings` | none | Show and flip the background-automation toggles |
 | `/kennisbank:rebuild-index` | none | Rebuild the hybrid search index from the vault markdown |
 | `/kennisbank:rebuild-memory` | none | Re-extract ALL memory from archived transcripts (heavy; semantic dedup makes it near-idempotent) |
