@@ -24,6 +24,11 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10 support.
+    tomllib = None
+
 
 AGENTS = ("claude", "codex", "opencode")
 KB_START = "<!-- BEGIN LLmWiki-KennisBank -->"
@@ -289,7 +294,7 @@ KB_LLM_PROVIDERS = "ollama"
 KENNISBANK_VAULT = "{_posix(vault)}"
 """.strip()
     pattern = re.compile(
-        r"\n?\[mcp_servers\.kennisbank\]\n.*?(?=\n\[mcp_servers\.|\n\[marketplaces\.|\n\[plugins\.|\n\[\[skills\.|\n\[tui\]|\n\[notice\]|\n\[features\]|\n\[desktop\]|\Z)",
+        r"\n?\[mcp_servers\.kennisbank\]\n.*?(?=\n\[(?!mcp_servers\.kennisbank(?:\.|\]))|\Z)",
         re.S,
     )
     if "[mcp_servers.kennisbank]" in text:
@@ -440,8 +445,18 @@ def validate_files(repo: Path, vault: Path, agents: list[str]) -> list[str]:
         for p in (codex / "AGENTS.md", codex / "hooks.json", codex / "config.toml"):
             if not p.is_file():
                 errors.append(f"missing Codex config file: {p}")
+        codex_config = _read_text(codex / "config.toml")
+        if codex_config.count("[mcp_servers.kennisbank]") != 1:
+            errors.append("Codex config.toml must contain exactly one [mcp_servers.kennisbank] block")
+        if codex_config.count("[mcp_servers.kennisbank.env]") != 1:
+            errors.append("Codex config.toml must contain exactly one [mcp_servers.kennisbank.env] block")
+        if tomllib is not None:
+            try:
+                tomllib.loads(codex_config)
+            except Exception as e:
+                errors.append(f"Codex config.toml is not valid TOML: {e}")
         for need in ("kb-retrieve.py", "kb-presearch.py", "mcp_servers.kennisbank", _posix(vault)):
-            combined = _read_text(codex / "hooks.json") + "\n" + _read_text(codex / "config.toml")
+            combined = _read_text(codex / "hooks.json") + "\n" + codex_config
             if need not in combined:
                 errors.append(f"Codex config lacks {need}")
 

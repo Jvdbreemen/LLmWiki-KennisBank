@@ -6,6 +6,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
+try:
+    import tomllib
+except ModuleNotFoundError:
+    tomllib = None
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts" / "install-agent-envs.py"
 
@@ -57,6 +62,36 @@ class AgentEnvInstallTest(unittest.TestCase):
         config = (codex / "config.toml").read_text(encoding="utf-8")
         self.assertIn("[mcp_servers.kennisbank]", config)
         self.assertIn(str(self.vault).replace("\\", "/"), config)
+
+    def test_codex_mcp_repair_does_not_duplicate_env_subtable(self):
+        codex = self.tmp / ".codex"
+        codex.mkdir(parents=True)
+        (codex / "config.toml").write_text(
+            """
+model = "gpt-5"
+
+[mcp_servers.kennisbank]
+command = "py"
+args = ["-3", "old/kb-mcp.py"]
+
+[mcp_servers.kennisbank.env]
+KENNISBANK_VAULT = "old"
+
+[mcp_servers.other]
+command = "other"
+""".lstrip(),
+            encoding="utf-8",
+        )
+        self.m.install_codex(REPO_ROOT, self.vault)
+        self.m.install_codex(REPO_ROOT, self.vault)
+
+        config = (codex / "config.toml").read_text(encoding="utf-8")
+        self.assertEqual(config.count("[mcp_servers.kennisbank]"), 1)
+        self.assertEqual(config.count("[mcp_servers.kennisbank.env]"), 1)
+        self.assertIn("[mcp_servers.other]", config)
+        self.assertIn(str(self.vault).replace("\\", "/"), config)
+        if tomllib is not None:
+            tomllib.loads(config)
 
     def test_opencode_install_creates_commands_skills_plugin_and_mcp(self):
         self.m.install_opencode(REPO_ROOT, self.vault)
