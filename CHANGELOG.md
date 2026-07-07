@@ -7,8 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-07-07
+
+### Added
+- **MCP-first toegang buiten Claude Code (`scripts/kb-mcp.py`, `scripts/kb-ask.py`, `docs/agent-integrations.md`, `adapters/registry.json`).** De lokale KennisBank is nu ook bruikbaar door andere agent-clients via een dunne stdio MCP-server met `recall`, `capture` en instructions. `kb-ask.py` biedt een CLI-brug voor handmatige vraag/antwoordflows, de adapter-registry legt client-integraties vast, en `.github/copilot-instructions.md` is de eerste native push-adapter.
+- **ChatGPT-export/import (`scripts/import-chatgpt-export.py`).** ChatGPT-conversaties kunnen nu naar raw sessies worden geïmporteerd, zodat de wiki- en memory-laag niet Claude-only blijven.
+- **`memory-doctor rejudge` (`scripts/memory-doctor.py`).** Na een LLM/Ollama-outage kunnen oude `unverified` memories opnieuw gejudged worden. Alleen een expliciet `current`-verdict promoveert; twijfel, model-down of exceptions blijven fail-safe op `unverified`.
+
+### Changed
+- **Herkomst/trust wordt zichtbaar en licht meegewogen in retrieval (`scripts/_memory.py`, `scripts/kb-retrieve.py`, `scripts/_rank.py`).** Memory-hits krijgen een compacte deterministische herkomst/status-tag in het injectieblok, en de memory-ranking gebruikt een kleine bounded trust-factor op `evidence_basis` (`getypt` > mens-in-lus > agent). Wiki-hits blijven ongetagd.
+- **Usage-scan telt alleen load-bearing gebruik (`scripts/kb-usage-scan.py`).** Een losse prose-verwijzing naar een geïnjecteerde stem telt niet langer als `used`; alleen tool-use input geldt als werkelijk geraadpleegd. Dit voorkomt dat de agent zijn eigen injectie terugpraat en daarmee vals-positieve usage-boosts maakt.
+- **Testsuite-hardening en CI-dekkingspoort (`tests/__init__.py`, `.github/workflows/ci.yml`, `requirements.txt`).** De suite is hermetischer tegen echte netwerk/model-calls, de CI-run heeft een timeout-vangnet en draait onder `coverage` met een `--fail-under=75` gate.
+
 ### Fixed
 - **Backfill-cap voor mega-transcripts (`scripts/memory-sweep.py`, `--max-per-transcript`).** De `--all` her-extractie kreeg een per-transcript write-cap zodat een grote source_session niet onbeperkt facetten dumpt. De normale per-sessie sweep blijft ongewijzigd; dit raakt alleen het aantal geschreven memories per transcript in de backfill-route.
+- **Deterministische exacte-body dedup vóór embeddings (`scripts/_sweeputil.py`, `scripts/memory-sweep.py`).** Exacte re-extracties worden nu op body-hash gevangen voordat cosine/embedding nodig is, zodat een tijdelijke vectorloze bestaande memory geen duplicate-escape meer veroorzaakt.
 - **Embed-retry bij tijdelijke embedding-hikjes (`scripts/memory-sweep.py`).** Kandidaten waarvan `emb.embed(body)` tijdelijk `None` teruggeeft worden nu kort opnieuw geprobeerd voordat `embed_failed` telt. De route blijft fail-soft na de maximale retries en introduceert geen per-kandidaat herverwerking of extra watermark-risico.
 
 ## [0.10.0] - 2026-07-03
