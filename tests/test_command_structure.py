@@ -128,6 +128,28 @@ class SessiestartCommandStructureTest(unittest.TestCase):
         self.assertIn("context-budget", self.content)
 
 
+class TemporalActivityCommandStructureTest(unittest.TestCase):
+    """Controleert dat temporal commands de gedeelde activity scripts gebruiken."""
+
+    def test_weeklog_uses_activity_cli(self):
+        content = (COMMANDS_DIR / "weeklog.md").read_text(encoding="utf-8")
+        self.assertIn("kb-activity.py", content)
+        self.assertIn("build-activity-index.py", content)
+        self.assertIn("source_ref", content)
+
+    def test_timeline_uses_activity_cli(self):
+        content = (COMMANDS_DIR / "timeline.md").read_text(encoding="utf-8")
+        self.assertIn("kb-activity.py", content)
+        self.assertIn("timeline", content)
+        self.assertIn("$ARGUMENTS", content)
+
+    def test_watdeedik_uses_activity_cli(self):
+        content = (COMMANDS_DIR / "watdeedik.md").read_text(encoding="utf-8")
+        self.assertIn("kb-activity.py", content)
+        self.assertIn("watdeedik", content)
+        self.assertIn("$ARGUMENTS", content)
+
+
 
 class KennisbankUpgradeCommandStructureTest(unittest.TestCase):
     """Controleert dat commands/kennisbank-upgrade.md de skill aanstuurt."""

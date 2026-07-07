@@ -210,6 +210,43 @@ override the config file; both override the built-in defaults.
 
 - **Effect**: bouwt/verfrist `kb-index.db` (de hybride sqlite-vec + FTS5 zoekindex over wiki + memory) eenmaal per sessie, buiten het per-prompt-pad. Incrementeel: alleen gewijzigde bestanden of een model-switch triggert echte embed-aanroepen; verwijderde bestanden worden gepruned. Hergebruikt de JSON embed-cache (`emb.get_cached`) zodat vectoren niet opnieuw berekend worden. Registered as a global `SessionStart` hook naast `build-embed-index.py`. Gegate op `embed_index` (wiki-laag) en `memory_capture` (memory-laag).
 
+### Temporal Activity index (`scripts/build-activity-index.py`, SessionStart)
+
+- **Effect**: builds/refresht `<vault>/.claude/kb-activity.db`, a derived SQLite
+  index for `/weeklog`, `/timeline`, `/watdeedik` and the MCP temporal tools.
+  Sources are raw session logs, archived transcripts, `09-memory`, `02-wiki` and
+  `.claude/kb-usage.db` when present.
+- **Design**: see
+  `docs/superpowers/specs/2026-07-08-temporal-activity-recall-design.md` for the
+  research comparison and schema rationale.
+- **Storage**: local SQLite only. Tables include `activity_events`,
+  `activity_entities`, `activity_topics`, `activity_artifacts`,
+  `source_watermarks`, `rollup_cache`, and FTS5 table `activity_fts`.
+- **Time model**: `event_time` is when the work happened; `captured_at` is when
+  the source was captured/modified. Local vault dates use `Europe/Amsterdam`.
+- **Parser**: deterministic Dutch/English date and period parsing for
+  `vandaag`, `gisteren`, `vorige week`, `afgelopen 7 dagen`, `2026-07-03`,
+  `3 juli 2026`, `July 3 2026`, and explicit ranges. `vorige week` is the local
+  ISO week: Monday inclusive to Monday exclusive.
+- **Manual rebuild**:
+  `python3 <vault>/.claude/scripts/build-activity-index.py --vault <vault> --full`
+- **Query CLI**:
+  `python3 <vault>/.claude/scripts/kb-activity.py --vault <vault> weeklog vorige week`
+  or `timeline 2026-07-03` or `watdeedik onderwerp "Codex MCP" afgelopen 7 dagen`.
+- **Topic aliases**: optional JSON file
+  `<vault>/.claude/activity-topic-aliases.json`, e.g.
+  `{"codex mcp": ["kennisbank mcp", "mcp hotfix"]}`.
+- **Progress**: long rebuilds emit progress lines with source counts, indexed
+  events and elapsed time at least every 300 seconds. This is intentionally more
+  verbose than a dot-only sweep.
+- **Doctor**: reports missing, corrupt, stale, or schema-mismatched activity
+  indexes and suggests a full rebuild. Missing indexes are recoverable because
+  the DB is a derived cache.
+- **Eval**:
+  `python3 <vault>/.claude/scripts/kb-activity-eval.py --vault <vault> --json`.
+  Personal eval sets live at `<vault>/06-claude/kb-activity-eval-set.json`; the
+  repo ships `kb-activity-eval-set.example.json`.
+
 ### Autonome capture-sweep (`scripts/sweep-launch.py`, SessionStart)
 
 - **Effect**: dun launcher voor de autonome memory-sweep; gegate op `memory_capture`. Neemt een single-flight lockfile (`<vault>/.claude/.sweep.lock`, PID + mtime, stale-reclaim na 1u) zodat nooit twee sweeps gelijktijdig draaien. Spawnt `memory-sweep.py` DETACHED (niet-blokkerend: Windows DETACHED_PROCESS|CREATE_NO_WINDOW, POSIX start_new_session) en daarna `build-kb-index.py` (sweep-voor-index-ordening zodat verse memories meteen in de index landen). Eindigt met exit 0 fail-open. De zware LLM-sweep draait los van SessionStart en houdt de sessiestart onzichtbaar/snel. Draait naast de directe `build-kb-index.py`-hook (die de wiki-laag via `embed_index` bedient onafhankelijk van `memory_capture`; de dubbele run is benign want incrementeel en idempotent).

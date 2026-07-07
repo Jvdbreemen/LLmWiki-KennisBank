@@ -49,11 +49,16 @@ slash commands. For example:
 /prompts:sessielog
 /prompts:sessiestart
 /prompts:kennisbank-upgrade
+/prompts:weeklog
+/prompts:timeline
+/prompts:watdeedik
 ```
 
 Codex should use the installed skills for reusable workflows and the MCP tools
-`recall` and `capture` for live vault access. Hooks are installed for lifecycle
-maintenance and best-effort recall, but MCP is the durable cross-client API.
+`recall` and `capture` for live vault access. For temporal questions, use
+`what_did_i_do`, `timeline`, `weeklog`, or `topic_timeline` before generic
+recall. Hooks are installed for lifecycle maintenance and best-effort recall,
+but MCP is the durable cross-client API.
 Setup installs the Python MCP SDK and validates Codex MCP with a real
 initialize/list-tools handshake before it reports success.
 
@@ -89,6 +94,9 @@ OpenCode supports real custom command names, so `/sessielog`,
 `/sessiestart`, `/kennisbank-upgrade`, and the other KennisBank commands are
 available directly after restart. Setup validates OpenCode's generated MCP
 server command with the same local Python MCP runtime used by Codex.
+Temporal commands `/weeklog`, `/timeline`, and `/watdeedik` are installed as
+regular OpenCode commands; temporal agent recall should use the MCP temporal
+tools when a structured API is available.
 
 Manual MCP shape:
 
@@ -139,6 +147,24 @@ interpreter used by the configured command.
     }
   }
 }
+```
+
+The server exposes:
+
+- `recall(query, k)` for wiki/memory retrieval.
+- `capture(title, body, memory_type, importance)` for unverified memory capture.
+- `what_did_i_do(date_or_period, topic, project, max_events)` for compact date
+  or period recall.
+- `timeline(period, topic, project, max_events)` for chronological activity.
+- `weeklog(period, topic, project, max_events)` for weekly rollups.
+- `topic_timeline(topic, period, project, max_events)` for following an
+  entity/topic through time.
+
+All temporal tools read `<vault>/.claude/kb-activity.db`. If the index is
+missing or stale, run:
+
+```bash
+python3 <vault>/.claude/scripts/build-activity-index.py --vault <vault> --full
 ```
 
 ## Hosted Agents

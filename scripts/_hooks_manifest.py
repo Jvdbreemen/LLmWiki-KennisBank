@@ -12,6 +12,7 @@ from __future__ import annotations
 HOOKS = [
     ("SessionStart",     "build-embed-index.py",  None),
     ("SessionStart",     "build-kb-index.py",     None),
+    ("SessionStart",     "build-activity-index.py", None),
     ("SessionStart",     "sweep-launch.py",       None),
     ("SessionStart",     "memory-notify.py",      None),
     ("SessionStart",     "distill-notify.py",     None),

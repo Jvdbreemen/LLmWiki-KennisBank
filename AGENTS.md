@@ -16,6 +16,11 @@ integrations. It is not Claude-Code-only. Supported install targets are:
 upgrade. Do not hand-copy files unless `setup.sh` itself is broken and you are
 repairing it.
 
+The current feature set includes Temporal Activity Recall. Setup must deploy
+`build-activity-index.py`, `kb-activity.py`, `kb-activity-eval.py`, the commands
+`/weeklog`, `/timeline`, `/watdeedik`, and MCP tools `what_did_i_do`,
+`timeline`, `weeklog`, and `topic_timeline`.
+
 ## Vault Path Rule
 
 Never assume the active vault is `~/KennisBank` or
@@ -99,6 +104,7 @@ Interactive setup asks which agent environments to install unless `--yes` or
 - vault files and scripts are deployed,
 - selected agent configs are installed or repaired,
 - migrations have run,
+- the temporal activity index has been built/refreshed,
 - `doctor.sh` has passed,
 - selected agent hooks/skills/MCP config validate,
 - local Ollama and/or OpenRouter backend smoke checks pass, unless
@@ -114,6 +120,8 @@ Claude Code:
 - Commands go to `~/.claude/commands/`.
 - Skills go to `~/.claude/skills/`.
 - Hooks go to `~/.claude/settings.json`.
+- Temporal commands `/weeklog`, `/timeline`, and `/watdeedik` are installed
+  alongside the existing KennisBank commands.
 
 Codex:
 
@@ -123,6 +131,8 @@ Codex:
 - MCP server `kennisbank` goes in `~/.codex/config.toml`.
 - Hooks go in `~/.codex/hooks.json`.
 - Global KennisBank instructions go in `~/.codex/AGENTS.md`.
+- Temporal prompt aliases go to `~/.codex/prompts/weeklog.md`,
+  `timeline.md`, and `watdeedik.md`.
 
 OpenCode:
 
@@ -132,6 +142,7 @@ OpenCode:
 - MCP server `kennisbank` goes in `~/.config/opencode/opencode.json`.
 - The local plugin goes to `~/.config/opencode/plugins/kennisbank.js`.
 - Global rules go in `~/.config/opencode/AGENTS.md`.
+- Temporal commands go to `~/.config/opencode/commands/`.
 
 ## Validation
 
@@ -140,6 +151,7 @@ After setup, verify:
 ```bash
 KENNISBANK_VAULT="/absolute/path/to/vault" bash "<vault>/.claude/scripts/doctor.sh"
 python3 scripts/install-agent-envs.py --vault "/absolute/path/to/vault" --agents claude,codex --validate
+python3 "<vault>/.claude/scripts/kb-activity.py" --vault "/absolute/path/to/vault" status
 ```
 
 Expected: no `[FAIL]` from doctor and `validation: PASS` from the agent
@@ -153,6 +165,8 @@ codex mcp list
 
 Expected: a `kennisbank` server pointing to
 `<vault>/.claude/scripts/kb-mcp.py`.
+The MCP validator must list `recall`, `capture`, `what_did_i_do`, `timeline`,
+`weeklog`, and `topic_timeline`.
 
 For OpenCode, inspect:
 
@@ -170,6 +184,8 @@ Expected: KennisBank commands present and an MCP server named `kennisbank`.
 - Never overwrite user agent settings with a full template. Merge only the
   KennisBank entries.
 - Keep hook scripts fail-open.
+- Long backfills or sweeps must emit meaningful progress at least every five
+  minutes; do not replace progress with dot-only output.
 - Do not force-close setup as complete when model validation failed, unless
   the user explicitly requested `--skip-model-check`.
 - Do not tunnel the local vault to hosted/cloud agents unless the user

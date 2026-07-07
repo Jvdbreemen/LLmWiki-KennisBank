@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-07-08
+
+### Added
+- **Temporal Activity Recall.** New local activity-memory layer with canonical activity events, deterministic Dutch/English date parsing, strict period filtering, topic/entity timelines, deterministic daily/weekly rollups, and a derived SQLite index at `<vault>/.claude/kb-activity.db`.
+- **New user commands.** `/weeklog`, `/timeline`, and `/watdeedik` build/query the same activity API and always return source refs or a recoverable warning.
+- **MCP temporal API.** `kb-mcp.py` now exposes `what_did_i_do`, `timeline`, `weeklog`, and `topic_timeline` alongside the existing `recall` and `capture` tools. Codex/OpenCode validation now requires these tools during the stdio MCP handshake.
+- **Temporal eval harness.** `scripts/kb-activity-eval.py` measures date recall, period recall, topic timeline behavior, negative controls, and provenance coverage. The repo ships `kb-activity-eval-set.example.json`.
+- **Architecture spec.** `docs/superpowers/specs/2026-07-08-temporal-activity-recall-design.md` records the local SQLite/file-first decision and compares the design with Mem0, Zep/Graphiti, Letta/MemGPT, and ClawMem.
+
+### Changed
+- **Setup/doctor now cover temporal recall.** `setup.sh` deploys temporal scripts and commands, builds/refreshed the activity index before the final validation gate, and SessionStart hooks include `build-activity-index.py`. `doctor.sh` reports missing/corrupt/stale activity indexes and checks temporal MCP wrappers when MCP is configured.
+- **Agent integrations install temporal aliases.** Codex gets `/prompts:weeklog`, `/prompts:timeline`, and `/prompts:watdeedik`; OpenCode gets matching commands; Claude Code gets slash commands.
+- **Progress output is more explicit.** Activity index rebuilds report counts, current source and elapsed time at least every 300 seconds during long backfills.
+
 ## [0.12.2] - 2026-07-07
 
 ### Fixed
@@ -384,7 +398,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.12.2...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.12.2...v0.13.0
 [0.12.2]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.12.1...v0.12.2
 [0.12.1]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.11.0...v0.12.0

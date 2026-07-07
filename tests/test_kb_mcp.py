@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import sys
 import tempfile
@@ -71,6 +72,42 @@ class KbMcpTest(unittest.TestCase):
             self.assertIsNone(self.m.build_server())
         else:
             self.assertIsNotNone(self.m.build_server())
+
+
+class KbMcpTemporalToolTest(unittest.TestCase):
+    def setUp(self):
+        self.m = _load()
+        self.orig = self.m.activity
+
+        class FakeActivity:
+            @staticmethod
+            def what_did_i_do(*_a, **_k):
+                return {"ok": True, "mode": "what_did_i_do", "events": [{"id": "e1", "source_ref": "x#L1"}]}
+
+            @staticmethod
+            def timeline(*_a, **_k):
+                return {"ok": True, "mode": "timeline", "events": []}
+
+            @staticmethod
+            def weeklog(*_a, **_k):
+                return {"ok": True, "mode": "weeklog", "rollup": {"event_count": 0}, "events": []}
+
+            @staticmethod
+            def topic_timeline(*_a, **_k):
+                return {"ok": True, "mode": "topic_timeline", "events": []}
+
+        self.m.activity = FakeActivity
+
+    def tearDown(self):
+        self.m.activity = self.orig
+
+    def test_temporal_tool_wrappers_return_json(self):
+        out = json.loads(self.m.what_did_i_do_tool("2026-07-03"))
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["events"][0]["source_ref"], "x#L1")
+        self.assertEqual(json.loads(self.m.timeline_tool("vorige week"))["mode"], "timeline")
+        self.assertEqual(json.loads(self.m.weeklog_tool())["mode"], "weeklog")
+        self.assertEqual(json.loads(self.m.topic_timeline_tool("Codex MCP"))["mode"], "topic_timeline")
 
 
 if __name__ == "__main__":

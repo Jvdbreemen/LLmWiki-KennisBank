@@ -90,10 +90,15 @@ class SetupDeployTest(unittest.TestCase):
         env["USERPROFILE"] = _bash_path(tmp)
         env["KENNISBANK_VAULT"] = _bash_path(vault)
         bash = _find_bash()
-        subprocess.run(
+        result = subprocess.run(
             [bash, "setup.sh", "--yes", "--skip-model-check"],
-            cwd=REPO_ROOT, env=env, check=True,
+            cwd=REPO_ROOT, env=env, check=False,
             capture_output=True, text=True,
+        )
+        self.assertEqual(
+            result.returncode,
+            0,
+            f"setup.sh failed with {result.returncode}\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}",
         )
         return tmp, vault
 
@@ -203,6 +208,19 @@ class SetupDeployTest(unittest.TestCase):
                     (commands / name).is_file(),
                     f"{name} not installed at {commands / name}",
                 )
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_temporal_activity_commands_and_scripts_deployed(self):
+        tmp, vault = self.run_setup()
+        try:
+            commands = tmp / ".claude" / "commands"
+            scripts = vault / ".claude" / "scripts"
+            for name in ("weeklog.md", "timeline.md", "watdeedik.md"):
+                self.assertTrue((commands / name).is_file(), f"{name} not installed")
+            for name in ("_activity.py", "build-activity-index.py", "kb-activity.py", "kb-activity-eval.py"):
+                self.assertTrue((scripts / name).is_file(), f"{name} not deployed")
+            self.assertTrue((vault / ".claude" / "kb-activity.db").is_file(), "activity index not built by setup")
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
@@ -317,7 +335,7 @@ class SetupDeployTest(unittest.TestCase):
             settings = json.loads((tmp / ".claude" / "settings.json").read_text(encoding="utf-8"))
             session = " ".join(_hook_commands(settings, "SessionStart"))
             for need in ("build-embed-index.py", "build-kb-index.py", "sweep-launch.py",
-                         "memory-notify.py"):
+                         "memory-notify.py", "build-activity-index.py"):
                 self.assertIn(need, session, f"{need} niet op SessionStart")
             pre = settings.get("hooks", {}).get("PreToolUse", [])
             self.assertTrue(pre, "geen PreToolUse-hook")

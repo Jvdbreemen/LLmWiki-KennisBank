@@ -409,6 +409,14 @@ if command -v python3 >/dev/null 2>&1; then
     || echo "  migraties niet (volledig) uitgevoerd; her-run 'bash setup.sh'." >&2
 fi
 
+# Temporal Activity Recall: build/refresh the local activity index before the
+# final doctor gate. This is deterministic and model-free; long vaults emit
+# progress lines at least every five minutes.
+if command -v python3 >/dev/null 2>&1 && [ -f "$VAULT/.claude/scripts/build-activity-index.py" ]; then
+  python3 "$VAULT/.claude/scripts/build-activity-index.py" --vault "$VAULT" --progress-interval 300 \
+    || echo "  activity-index niet opgebouwd; doctor meldt de herstelactie." >&2
+fi
+
 # Agent-integraties (Codex/OpenCode) en harde post-install validatie. Dit is
 # idempotent en bedoeld voor zowel initiële installatie als upgrades.
 if command -v python3 >/dev/null 2>&1; then

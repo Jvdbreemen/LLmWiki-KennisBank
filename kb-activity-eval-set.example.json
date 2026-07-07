@@ -1,0 +1,19 @@
+{
+  "description": "Example temporal activity recall eval set. Copy this into <vault>/06-claude/kb-activity-eval-set.json and replace fixture-specific refs with your own source refs.",
+  "cases": [
+    {
+      "id": "empty-ancient-period",
+      "mode": "timeline",
+      "query": "1900-01-01",
+      "max_events": 0,
+      "require_provenance": true
+    },
+    {
+      "id": "parser-smoke-previous-week",
+      "mode": "weeklog",
+      "query": "vorige week",
+      "min_events": 0,
+      "require_provenance": true
+    }
+  ]
+}
