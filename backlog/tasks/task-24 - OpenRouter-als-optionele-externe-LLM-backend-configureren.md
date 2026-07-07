@@ -4,7 +4,7 @@ title: OpenRouter als optionele externe LLM-backend configureren
 status: Done
 assignee: []
 created_date: '2026-07-07 19:23'
-updated_date: '2026-07-07 20:30'
+updated_date: '2026-07-07 20:40'
 labels:
   - config llm openrouter setup
 dependencies: []
@@ -48,6 +48,8 @@ Maak KennisBank configureerbaar zodat gebruikers naast lokale Ollama-modellen oo
 Ollama blijft de default LLM-backend in setup. Interactive setup biedt OpenRouter als expliciete opt-in met model slug en API-key env-var; optioneel ingevoerde keys worden alleen user-local opgeslagen buiten repo en vault. Agentinstall/validatie dekt Claude, Codex en OpenCode, inclusief backend smoke-tests. Validatie: 41 unittest setup/LLM/agent tests OK, echte setup tegen D:/Users/Robert/Documents/Claude/Projects/Kluis exit 0 met validation PASS en doctor 91 PASS / 1 WARN / 0 FAIL.
 
 Releasevoorbereiding toegevoegd: README productintro bijgewerkt voor v0.12.0, CHANGELOG.md release-entry en compare-links bijgewerkt.
+
+Hotfix toegevoegd na lokale Codex-verificatie: dubbele [mcp_servers.kennisbank.env] in ~/.codex/config.toml gerepareerd, TOML-validatie toegevoegd, codex mcp list gevalideerd.
 <!-- SECTION:FINAL_SUMMARY:END -->
 
 ## Definition of Done

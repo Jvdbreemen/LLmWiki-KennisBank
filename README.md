@@ -38,9 +38,9 @@ Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: 
 
 The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
 
-## Feature highlights (v0.12.0)
+## Feature highlights (v0.12.1)
 
-### New in v0.12.0
+### New in v0.12
 - **One setup for install and upgrade.** `setup.sh` is now the authoritative
   path for first install, repair, and upgrade: it refreshes tooling, preserves
   user data, runs migrations, installs selected agent integrations, and blocks
@@ -58,6 +58,9 @@ The design bias throughout: **deterministic where possible, LLM only where it ad
 - **Agent-friendly operating contract.** `AGENTS.md`, `CONFIGURATION.md`, and
   the agent integration docs now spell out the active vault path, setup
   validation, Codex/OpenCode behavior, hooks, MCP, and privacy boundaries.
+- **v0.12.1 Codex hotfix.** Re-running setup now repairs the Codex MCP TOML
+  block without duplicating `[mcp_servers.kennisbank.env]`, and validation
+  catches malformed Codex TOML before setup reports success.
 
 ### Knowledge (the wiki layer)
 - `/wiki` compiles raw session logs into interlinked wiki articles, updating existing ones via a guarded rewrite engine (`safe-edit.py`) instead of clobbering them.

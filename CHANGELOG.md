@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-07-07
+
+### Fixed
+- **Codex MCP config repair is now TOML-safe.** Re-running setup no longer duplicates `[mcp_servers.kennisbank.env]` in `~/.codex/config.toml`; the replacement now consumes the full KennisBank MCP table plus subtables before writing the refreshed block.
+- **Codex validation now catches malformed TOML.** The agent installer validates that Codex has exactly one KennisBank MCP table and env subtable, and parses `config.toml` with `tomllib` where available. This prevents `codex mcp list` from failing after a seemingly successful setup.
+
 ## [0.12.0] - 2026-07-07
 
 ### Added
@@ -372,7 +378,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.12.1...HEAD
+[0.12.1]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.9.0...v0.10.0
