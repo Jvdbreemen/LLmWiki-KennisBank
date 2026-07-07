@@ -1,10 +1,10 @@
 ---
 id: TASK-16
 title: 'embed_failed tijdens sweep: kandidaten verloren bij tijdelijke Ollama-hikjes'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-03 18:39'
-updated_date: '2026-07-07 09:26'
+updated_date: '2026-07-07 17:37'
 labels: []
 dependencies: []
 ordinal: 18000
@@ -76,4 +76,16 @@ created: 2026-07-07 09:26
 ---
 Decision documented: gekozen voor de laag-risico optie 1 (embed retry) plus de eerder toegevoegde deterministische body-hash pre-dedup. Optie 2/3 en WONTFIX blijven expliciet niet gekozen zolang normale-sweep telemetry ontbreekt; AC#1 blijft daarom open.
 ---
+
+author: codex
+created: 2026-07-07 17:37
+---
+Closure 2026-07-07 op verzoek van de eigenaar. De codecriteria zijn afgerond: deterministische body-hash pre-dedup, embed-retry met backoff, fail-soft tests en geen per-kandidaat herverwerking. AC#1 blijft historisch niet lokaal bewezen omdat C:\Users\rvdbr\KennisBank\.claude\memory-sweep-status.json en C:\Users\rvdbr\KennisBank\01-raw\transcripts ontbreken; dit risico is geaccepteerd als non-blocking voor afsluiten.
+---
 <!-- COMMENTS:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Afgesloten op eigenaar-besluit na implementatie van de low-risk mitigaties: exacte-body pre-dedup voorkomt dedup-escape bij vectorloze bestaande memories, embed-retry beperkt transient Ollama-hikjes, en fail-soft blijft getest. Normale-sweep telemetry was lokaal niet beschikbaar; aanvullende dead-letter/per-kandidaat herverwerking blijft bewust niet gebouwd zolang structurele normale-sweep embed_failed niet bewezen is.
+<!-- SECTION:FINAL_SUMMARY:END -->
