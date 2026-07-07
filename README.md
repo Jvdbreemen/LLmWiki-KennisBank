@@ -38,7 +38,7 @@ Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: 
 
 The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
 
-## Feature highlights (v0.12.1)
+## Feature highlights (v0.12.2)
 
 ### New in v0.12
 - **One setup for install and upgrade.** `setup.sh` is now the authoritative
@@ -61,6 +61,10 @@ The design bias throughout: **deterministic where possible, LLM only where it ad
 - **v0.12.1 Codex hotfix.** Re-running setup now repairs the Codex MCP TOML
   block without duplicating `[mcp_servers.kennisbank.env]`, and validation
   catches malformed Codex TOML before setup reports success.
+- **v0.12.2 MCP runtime hotfix.** Setup now installs the Python MCP SDK for
+  Codex/OpenCode targets and validates the stdio server with a real
+  initialize/list-tools handshake, so a configured `kennisbank` MCP server no
+  longer fails only when the agent starts.
 
 ### Knowledge (the wiki layer)
 - `/wiki` compiles raw session logs into interlinked wiki articles, updating existing ones via a guarded rewrite engine (`safe-edit.py`) instead of clobbering them.
@@ -125,7 +129,7 @@ In one idempotent run, the setup script:
 - installs Codex shared skills, `/prompts:*` aliases, hooks, MCP config, and global `AGENTS.md` when `codex` is selected
 - installs OpenCode commands, shared skills, MCP config, global `AGENTS.md`, and a local plugin hook when `opencode` is selected
 - asks for the LLM backend in interactive mode: default `ollama`, optional `openrouter` with model slug and API key env-var
-- validates the install before returning: `doctor.sh`, agent config checks, local Ollama smoke tests, and OpenRouter smoke tests when OpenRouter is selected
+- validates the install before returning: `doctor.sh`, agent config checks, MCP runtime handshake for Codex/OpenCode, local Ollama smoke tests, and OpenRouter smoke tests when OpenRouter is selected
 
 **Re-running `setup.sh` is safe and is the upgrade mechanism**: it refreshes tooling and repairs agent config without clobbering user data, customizations, or vault contents. The `/kennisbank-upgrade` skill wraps it with release-tag checkout, drift detection, backups, version stamping, and the same post-install validation.
 
@@ -268,9 +272,13 @@ The vault is not Claude-Code-only. `scripts/kb-mcp.py` is a local **MCP server**
 - `~/.codex/hooks.json` with KennisBank lifecycle hooks
 - `~/.codex/config.toml` MCP server `kennisbank`
 
-Codex does not expose arbitrary bare slash commands like `/sessielog`; its reusable prompt files are invoked as `/prompts:<name>`, and reusable workflows should prefer skills. MCP tools `recall` and `capture` are available through the configured `kennisbank` server.
+Codex does not expose arbitrary bare slash commands like `/sessielog`; its reusable prompt files are invoked as `/prompts:<name>`, and reusable workflows should prefer skills. MCP tools `recall` and `capture` are available through the configured `kennisbank` server. Setup installs the required Python MCP SDK and proves the server starts before it reports success.
 
 Manual MCP equivalent:
+
+```bash
+py -3 -m pip install mcp==1.28.1
+```
 
 
 ```toml

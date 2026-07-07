@@ -212,6 +212,36 @@ else
   fi
 fi
 
+# 11b. MCP runtime, required when Codex/OpenCode KennisBank MCP is configured.
+MCP_CONFIGURED=0
+CODEX_CONFIG="$HOME/.codex/config.toml"
+OPENCODE_CONFIG="$HOME/.config/opencode/opencode.json"
+if [ -f "$CODEX_CONFIG" ] && grep -q "\[mcp_servers\.kennisbank\]" "$CODEX_CONFIG" 2>/dev/null; then
+  MCP_CONFIGURED=1
+fi
+if [ -f "$OPENCODE_CONFIG" ] && grep -q '"kennisbank"' "$OPENCODE_CONFIG" 2>/dev/null && grep -q '"mcp"' "$OPENCODE_CONFIG" 2>/dev/null; then
+  MCP_CONFIGURED=1
+fi
+if [ "$MCP_CONFIGURED" = "0" ]; then
+  report_info "kennisbank MCP runtime" "not configured for Codex/OpenCode"
+else
+  case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*) MCP_PY=(py -3) ;;
+    *) MCP_PY=(python3) ;;
+  esac
+  if ! command -v "${MCP_PY[0]}" >/dev/null 2>&1; then
+    report_fail "kennisbank MCP runtime" "interpreter not found: ${MCP_PY[*]}"
+  else
+    MCP_IMPORT_OUT="$("${MCP_PY[@]}" -c 'import mcp; import mcp.client.stdio; import mcp.server.fastmcp' 2>&1)"
+    MCP_IMPORT_RC=$?
+    if [ "$MCP_IMPORT_RC" = "0" ]; then
+      report_pass "kennisbank MCP runtime" "${MCP_PY[*]} imports mcp"
+    else
+      report_fail "kennisbank MCP runtime" "missing Python package for ${MCP_PY[*]} (run: ${MCP_PY[*]} -m pip install mcp==1.28.1) ${MCP_IMPORT_OUT}"
+    fi
+  fi
+fi
+
 # 12. Ollama and the embedding model (optional).
 # Default is qwen3-embedding:8b (multilingual); nomic-embed-text is the
 # lighter English-only fallback. Respect OLLAMA_EMBED_MODEL if the user set it.

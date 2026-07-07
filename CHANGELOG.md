@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.2] - 2026-07-07
+
+### Fixed
+- **Codex/OpenCode MCP startup is now runtime-validated.** `setup.sh` installs `mcp==1.28.1` into the same Python interpreter used by the generated MCP command, and `scripts/install-agent-envs.py` now performs a real stdio MCP initialize/list-tools handshake that requires both `recall` and `capture`.
+- **Doctor now catches configured-but-broken MCP installs.** If Codex or OpenCode has a KennisBank MCP server configured, `doctor.sh` verifies that the Python MCP SDK imports successfully and fails the install when it is missing instead of leaving the agent to fail at startup.
+
 ## [0.12.1] - 2026-07-07
 
 ### Fixed
@@ -378,7 +384,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.12.1...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.12.2...HEAD
+[0.12.2]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.12.1...v0.12.2
 [0.12.1]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.10.0...v0.11.0
