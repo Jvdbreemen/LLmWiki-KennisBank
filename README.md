@@ -243,6 +243,9 @@ Register the server in VS Code settings (`mcp.json` / `"servers"`):
 }
 ```
 
+The wider adapter registry and the rest of the client snippets live in
+[docs/agent-integrations.md](docs/agent-integrations.md).
+
 ### ChatGPT — the manual bridge (sovereignty first)
 
 Hosted ChatGPT can only connect to **remote** MCP servers on the public internet; exposing a local server means tunnelling (Secure Tunnel / ngrok / Cloudflare), which routes your queries **and** the returned knowledge through OpenAI's infrastructure. That breaks the whole point of a sovereign vault, so KennisBank does not do it by default. Instead, **you** stay the gate:

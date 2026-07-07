@@ -62,6 +62,25 @@ def importance_factor(importance) -> float:
     return 1.0 + 0.05 * (imp - 3)
 
 
+TRUST_RANK = {
+    "getypt": 2,
+    "cc-sessie": 1,
+    "import": 1,
+    "autoresearch": 1,
+    "audio": 1,
+    "agent": 0,
+}
+
+
+def trust_factor(evidence_basis) -> float:
+    """Kleine trust-bonus over de bestaande evidence_basis-orden.
+
+    getypt > mens-in-lus > agent, neutraal op onbekende waarden.
+    """
+    tier = TRUST_RANK.get(str(evidence_basis or ""), 1)
+    return 1.0 + 0.05 * (tier - 1)
+
+
 #: Gebruiks-boost: een document dat recent daadwerkelijk gebruikt is
 #: (usage-telemetrie, kb-usage.db) is bewezen nuttig voor deze gebruiker.
 USAGE_BOOST_RECENT = 1.10   # laatst gebruikt <= 30 dagen geleden
@@ -104,7 +123,8 @@ def rerank(hits: list, meta_fn, today: date | None = None,
             score = (score
                      * recency_factor(_age_days(ref, today),
                                       fm.get("memory_type", "feit"))
-                     * importance_factor(fm.get("importance", 3)))
+                     * importance_factor(fm.get("importance", 3))
+                     * trust_factor(fm.get("evidence_basis")))
         if last_used_fn is not None:
             try:
                 score *= usage_factor(last_used_fn(Path(h.get("path", "")).stem), today)

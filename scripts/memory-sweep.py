@@ -22,6 +22,7 @@ import json
 import os
 import re
 import sys
+import time
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -39,6 +40,8 @@ from _frontmatter import parse_frontmatter  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402
 
 HEARTBEAT = "memory-sweep-status.json"
+EMBED_RETRY_ATTEMPTS = 3
+EMBED_RETRY_BACKOFF_SECONDS = 0.25
 
 # Sessiedatum uit de transcriptnaam, bv. "2026-06-25-llmwiki-....jsonl".
 SESSION_DATE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})")
@@ -62,6 +65,18 @@ def _model_reachable() -> bool:
     return bool(_llm.generate("ping")) and bool(emb.embed("ping"))
 
 
+def _embed_with_retry(text: str) -> list | None:
+    """Embed candidate text with a short retry loop for transient backend None."""
+    attempts = max(1, int(EMBED_RETRY_ATTEMPTS))
+    for attempt in range(attempts):
+        vec = emb.embed(text)
+        if vec is not None:
+            return vec
+        if attempt < attempts - 1 and EMBED_RETRY_BACKOFF_SECONDS > 0:
+            time.sleep(EMBED_RETRY_BACKOFF_SECONDS)
+    return None
+
+
 OPEN_STATUSES = ("current", "unverified")
 
 
@@ -79,13 +94,15 @@ def _dedup_items() -> list:
         if not v:
             continue
         try:
-            fm, _ = parse_frontmatter(f.read_text(encoding="utf-8"))
+            fm, body = parse_frontmatter(f.read_text(encoding="utf-8"))
         except Exception:
             fm = {}
+            body = ""
         out.append({
             "vec": v,
             "status": fm.get("status", ""),
             "valid_until": fm.get("valid_until", ""),
+            "body_key": su.body_key(body),
         })
     return out
 
@@ -151,11 +168,14 @@ def _write_heartbeat(summary: dict) -> None:
 
 
 def run_sweep(max_transcripts: int = 10, max_chunks: int = 6,
+              max_memories_per_transcript: int = 20,
               ignore_watermark: bool = False) -> dict:
     """Verwerk pending (of alle) transcripts naar memory-files.
 
     Bij ignore_watermark=True worden ALLE *.jsonl in 01-raw/transcripts/ verwerkt,
     ongeacht de .swept-watermark. Dedup voorkomt dubbele memory-files (idempotent).
+    max_memories_per_transcript begrenst het aantal geschreven memories per
+    source_session, zodat een mega-transcript niet onbeperkt facetten dumpt.
 
     Returns een samenvatting-dict met sleutels:
         enabled, processed, written, current, unverified, duplicates, expired, errors
@@ -202,6 +222,7 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = 6,
         return s
 
     existing = _dedup_items()
+    existing_body_keys = {it.get("body_key") for it in existing if it.get("body_key")}
     today = date.today().isoformat()
 
     # Reconcile-pool: bestaande memories met body/status/valid_from/vec,
@@ -228,11 +249,20 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = 6,
             chunks = su.chunk(transcript)
             # Bij --all geen chunk-cap: de rebuild-belofte geldt voor het hele transcript.
             chunk_iter = chunks if ignore_watermark else chunks[:max_chunks]
+            written_for_tp = 0
             for ch in chunk_iter:
+                if max_memories_per_transcript and written_for_tp >= max_memories_per_transcript:
+                    break
                 for cand in _extract.extract_candidates(ch):
+                    if max_memories_per_transcript and written_for_tp >= max_memories_per_transcript:
+                        break
                     title = cand.get("title", "memory")
                     body = cand.get("body", "")
-                    vec = emb.embed(body)
+                    body_key = su.body_key(body)
+                    if body_key in existing_body_keys:
+                        s["duplicates"] += 1
+                        continue
+                    vec = _embed_with_retry(body)
                     # BUG 4: als embed None teruggeeft (backend down), sla kandidaat over;
                     # een geheugenbestand zonder vector is niet te dedupliceren.
                     if vec is None:
@@ -277,6 +307,7 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = 6,
                                 s["reconciled_superseded"] += 1
                                 pool = [it for it in pool if it["path"] != old["path"]]
                     existing.append({"vec": vec, "status": status, "valid_until": ""})
+                    existing_body_keys.add(body_key)
                     pool.append({
                         "path": str(path), "title": title, "status": status,
                         "created": today, "valid_from": valid_from,
@@ -284,6 +315,7 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = 6,
                     })
                     s["written"] += 1
                     s[status] += 1
+                    written_for_tp += 1
             ss.mark([tp.stem])
             s["processed"] += 1
         except Exception:
@@ -332,13 +364,20 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = 6,
 def main(argv=None) -> int:
     argv = argv if argv is not None else sys.argv[1:]
     mx = 10
+    mm = 20
     if "--max" in argv:
         try:
             mx = int(argv[argv.index("--max") + 1])
         except Exception:
             mx = 10
+    if "--max-per-transcript" in argv:
+        try:
+            mm = int(argv[argv.index("--max-per-transcript") + 1])
+        except Exception:
+            mm = 20
     ignore = "--all" in argv
-    s = run_sweep(max_transcripts=mx, ignore_watermark=ignore)
+    s = run_sweep(max_transcripts=mx, max_memories_per_transcript=mm,
+                  ignore_watermark=ignore)
     if s.get("enabled"):
         print(
             f"memory-sweep: {s['processed']} transcripts, {s['written']} geschreven "

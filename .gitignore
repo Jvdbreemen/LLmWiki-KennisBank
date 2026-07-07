@@ -1,9 +1,12 @@
 *.pyc
 __pycache__/
+.pytest_cache/
 .DS_Store
 embeddings-cache.json
 graphify-out/
 .venv/
 .idea/
 .vscode/
+.claude/
+pip/cache/
 *.egg-info/

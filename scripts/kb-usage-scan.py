@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 
 def assistant_text(transcript_path: Path, cap_bytes: int = 20_000_000) -> str:
-    """Alle assistant-tekst + tool-call-inputs uit een JSONL-transcript.
+    """Alle assistant-tekst uit een JSONL-transcript.
 
     Fail-soft: onleesbare regels worden overgeslagen; een te groot bestand
     wordt afgekapt (telemetrie hoeft niet perfect te zijn).
@@ -56,12 +56,41 @@ def assistant_text(transcript_path: Path, cap_bytes: int = 20_000_000) -> str:
                         continue
                     if block.get("type") == "text":
                         chunks.append(str(block.get("text", "")))
-                    elif block.get("type") == "tool_use":
-                        try:
-                            chunks.append(json.dumps(block.get("input", {}),
-                                                     ensure_ascii=False))
-                        except Exception:
-                            continue
+    except OSError:
+        return ""
+    return "\n".join(chunks)
+
+
+def tool_use_input_text(transcript_path: Path, cap_bytes: int = 20_000_000) -> str:
+    """Alle tool-call-inputs uit een JSONL-transcript."""
+    chunks = []
+    read = 0
+    try:
+        with transcript_path.open(encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                read += len(line)
+                if read > cap_bytes:
+                    break
+                try:
+                    obj = json.loads(line)
+                except Exception:
+                    continue
+                if obj.get("type") != "assistant":
+                    continue
+                msg = obj.get("message") or {}
+                content = msg.get("content")
+                if isinstance(content, str):
+                    continue
+                for block in content or []:
+                    if not isinstance(block, dict):
+                        continue
+                    if block.get("type") != "tool_use":
+                        continue
+                    try:
+                        chunks.append(json.dumps(block.get("input", {}),
+                                                 ensure_ascii=False))
+                    except Exception:
+                        continue
     except OSError:
         return ""
     return "\n".join(chunks)
@@ -78,7 +107,7 @@ def scan(session_id: str, transcript_path: Path) -> int:
     pending = _usage.pending_for(session_id)
     if not pending:
         return 0
-    text = assistant_text(transcript_path) if transcript_path.exists() else ""
+    text = tool_use_input_text(transcript_path) if transcript_path.exists() else ""
     used = [stem for stem in pending if stem and stem in text]
     n = _usage.mark_used(used) if used else 0
     _usage.clear_pending(session_id)

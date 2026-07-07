@@ -196,6 +196,7 @@ override the config file; both override the built-in defaults.
 ### Autonome capture-sweep (`scripts/sweep-launch.py`, SessionStart)
 
 - **Effect**: dun launcher voor de autonome memory-sweep; gegate op `memory_capture`. Neemt een single-flight lockfile (`<vault>/.claude/.sweep.lock`, PID + mtime, stale-reclaim na 1u) zodat nooit twee sweeps gelijktijdig draaien. Spawnt `memory-sweep.py` DETACHED (niet-blokkerend: Windows DETACHED_PROCESS|CREATE_NO_WINDOW, POSIX start_new_session) en daarna `build-kb-index.py` (sweep-voor-index-ordening zodat verse memories meteen in de index landen). Eindigt met exit 0 fail-open. De zware LLM-sweep draait los van SessionStart en houdt de sessiestart onzichtbaar/snel. Draait naast de directe `build-kb-index.py`-hook (die de wiki-laag via `embed_index` bedient onafhankelijk van `memory_capture`; de dubbele run is benign want incrementeel en idempotent).
+- **Backfill-cap**: `scripts/memory-sweep.py` ondersteunt `--max-per-transcript N` (default 20) zodat `/kennisbank:rebuild-memory` of een directe `--all`-run een mega-transcript niet onbeperkt facetten laat schrijven. De normale per-sessie sweep blijft op `max_chunks=6`; de cap raakt alleen het aantal geschreven memories per source_session.
 
 ### Transcript-archief (`scripts/archive-transcript.py`, SessionEnd)
 

@@ -57,6 +57,17 @@ class TestImportanceFactor(unittest.TestCase):
         self.assertEqual(_rank.importance_factor("hoog"), 1.0)
 
 
+class TestTrustFactor(unittest.TestCase):
+    def test_tiers(self):
+        self.assertEqual(_rank.trust_factor("getypt"), 1.05)
+        self.assertEqual(_rank.trust_factor("agent"), 0.95)
+        self.assertEqual(_rank.trust_factor("cc-sessie"), 1.0)
+
+    def test_unknown_is_neutral(self):
+        self.assertEqual(_rank.trust_factor("onbekend"), 1.0)
+        self.assertEqual(_rank.trust_factor(None), 1.0)
+
+
 class TestRerank(unittest.TestCase):
     def test_wiki_untouched_memory_decayed(self):
         today = date(2026, 7, 1)
@@ -89,6 +100,21 @@ class TestRerank(unittest.TestCase):
         hits = [{"path": "m.md", "layer": "memory", "score": 0.8}]
         out = _rank.rerank(hits, lambda p: {})
         self.assertEqual(out[0]["score"], 0.8)
+
+    def test_trust_boosts_human_sources_over_agent_sources(self):
+        today = date(2026, 7, 1)
+        hits = [
+            {"path": "human.md", "layer": "memory", "score": 1.0},
+            {"path": "agent.md", "layer": "memory", "score": 1.0},
+        ]
+        meta = {
+            "human.md": {"importance": 3, "updated": "2026-07-01", "evidence_basis": "getypt"},
+            "agent.md": {"importance": 3, "updated": "2026-07-01", "evidence_basis": "agent"},
+        }
+        out = _rank.rerank(hits, lambda p: meta.get(p, {}), today=today)
+        self.assertEqual(out[0]["path"], "human.md")
+        self.assertAlmostEqual(out[0]["score"], 1.05)
+        self.assertAlmostEqual(out[1]["score"], 0.95)
 
     def test_meta_reader_exception_failsoft(self):
         def boom(p):

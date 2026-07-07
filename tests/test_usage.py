@@ -89,18 +89,28 @@ class TestUsageScan(UsageCase):
         p.write_text("\n".join(json.dumps(x) for x in lines), encoding="utf-8")
         return p
 
-    def test_used_stem_in_assistant_text_marked(self):
+    def test_used_stem_in_tool_use_input_marked(self):
         self.u.log_injected(["artikel-a", "artikel-b"], session_id="s1")
         t = self._transcript([
             {"type": "user", "message": {"content": "vraag over artikel-b (injectie zelf)"}},
             {"type": "assistant", "message": {"content": [
-                {"type": "text", "text": "Zie [[artikel-a]] voor het antwoord."}]}},
+                {"type": "tool_use", "input": {"file_path": "02-wiki/artikel-a.md"}}]}},
         ])
         n = self.scan_mod.scan("s1", t)
         self.assertEqual(n, 1)
         self.assertTrue(self.u.last_used_of("artikel-a"))
         # artikel-b stond alleen in het user-bericht (de injectie) -> niet gebruikt
         self.assertEqual(self.u.last_used_of("artikel-b"), "")
+
+    def test_prose_only_mention_does_not_count_as_use(self):
+        self.u.log_injected(["artikel-a"], session_id="s1")
+        t = self._transcript([
+            {"type": "assistant", "message": {"content": [
+                {"type": "text", "text": "Ik noem artikel-a maar raadpleeg het niet."}]}},
+        ])
+        n = self.scan_mod.scan("s1", t)
+        self.assertEqual(n, 0)
+        self.assertEqual(self.u.last_used_of("artikel-a"), "")
 
     def test_tool_use_input_counts(self):
         self.u.log_injected(["artikel-a"], session_id="s1")

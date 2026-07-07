@@ -2,6 +2,7 @@
 """_sweeputil.py - chunking + dedup voor de capture-sweep. Stdlib + _embeddings."""
 from __future__ import annotations
 
+import hashlib
 import os
 import sys
 from pathlib import Path
@@ -44,3 +45,8 @@ def is_duplicate(vec, existing_vecs, threshold: float = 0.92) -> bool:
         if ev and cosine(vec, ev) > threshold:
             return True
     return False
+
+
+def body_key(body: str) -> str:
+    """Deterministische sleutel voor exacte-body-dedup."""
+    return hashlib.md5((body or "").strip().encode("utf-8")).hexdigest()

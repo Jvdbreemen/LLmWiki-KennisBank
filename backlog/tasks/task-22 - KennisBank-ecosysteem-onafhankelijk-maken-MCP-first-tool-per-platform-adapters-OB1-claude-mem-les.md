@@ -3,11 +3,11 @@ id: TASK-22
 title: >-
   KennisBank ecosysteem-onafhankelijk maken: MCP-first tool + per-platform
   adapters (OB1/claude-mem-les)
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-07-04 05:06'
-updated_date: '2026-07-04 15:10'
+updated_date: '2026-07-06 20:47'
 labels: []
 dependencies: []
 ordinal: 24000
@@ -50,11 +50,11 @@ Raakt: scripts/kb-mcp.py (uitbreiden: capture + instructions + transports), scri
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [x] #1 FASE 1: kb-mcp.py exposeert naast recall ook een capture/remember-tool (expliciete write) + een instructions-resource (pull-nudge); stdio + optioneel localhost-http transport; unit-getest zonder mcp/model
-- [ ] #2 FASE 1: per-client mcp.json-config-snippets gedocumenteerd voor minstens Cursor, Codex CLI, Cline, Windsurf, Gemini CLI, Claude Code; een gebruiker kan recall in een niet-Claude-Code-client aanzetten met alleen de doc
+- [x] #2 FASE 1: per-client mcp.json-config-snippets gedocumenteerd voor minstens Cursor, Codex CLI, Cline, Windsurf, Gemini CLI, Claude Code; een gebruiker kan recall in een niet-Claude-Code-client aanzetten met alleen de doc
 - [x] #3 Sovereiniteitsgrens expliciet gedocumenteerd: local-only (stdio/localhost); remote/cloud-agents out-of-scope of expliciete LAN-opt-in; nooit vault-cloud-exposure
-- [ ] #4 FASE 2: minstens EEN per-platform PUSH-injectie-adapter (native config) geleverd voor de omgeving die de gebruiker naast Claude Code gebruikt, zelf-beschrijvend (metadata) in een adapters/-registry
-- [ ] #5 Optionele installer 'kennisbank install --client X' schrijft de adapter + registreert de MCP-server; of gedocumenteerd-uitgesteld met reden
-- [ ] #6 Geen wijziging aan de retrieval-kern of de KISS/sovereign-local-filosofie; capture is pull-write, geen per-platform transcript-scraping in de MVP
+- [x] #4 FASE 2: minstens EEN per-platform PUSH-injectie-adapter (native config) geleverd voor de omgeving die de gebruiker naast Claude Code gebruikt, zelf-beschrijvend (metadata) in een adapters/-registry
+- [x] #5 Optionele installer 'kennisbank install --client X' schrijft de adapter + registreert de MCP-server; of gedocumenteerd-uitgesteld met reden
+- [x] #6 Geen wijziging aan de retrieval-kern of de KISS/sovereign-local-filosofie; capture is pull-write, geen per-platform transcript-scraping in de MVP
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -85,3 +85,9 @@ Geleverd:
 AC1 (capture+instructions+transport) DONE. AC2 (per-client config-docs) DONE via README. AC3 (soevereiniteitsgrens gedocumenteerd) DONE.
 FASE 2 nog open: native PUSH-adapters per platform (Codex plugin.json / Copilot instructions) als aparte stap; ChatGPT-ingest is nu de eerste concrete ingest-route.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+FASE 1 en de beoogde fase-2 deliverables zijn nu in de repo vastgelegd: `scripts/kb-mcp.py` levert recall/capture/instructions, `.github/copilot-instructions.md` is de eerste native push-adapter, `adapters/registry.json` beschrijft de adapter-inventory, en `docs/agent-integrations.md` documenteert de client-snippets voor Codex, Cursor, Cline, Windsurf, Gemini CLI en Claude Code. De installer is bewust gedocumenteerd uitgesteld met reden; de local-only soevereiniteitsgrens blijft ongewijzigd.
+<!-- SECTION:FINAL_SUMMARY:END -->

@@ -1,9 +1,10 @@
 ---
 id: TASK-21
 title: 'Testsuite-hardening: hermeticiteit, coverage-meting en luide mock-asserties'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-07-03 23:27'
+updated_date: '2026-07-06 20:56'
 labels: []
 dependencies: []
 ordinal: 23000
@@ -35,9 +36,15 @@ Raakt: tests/ (base/conftest, mock-asserties), .github/workflows/ci.yml (coverag
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Gedeelde test-base/conftest pint embed+LLM-endpoint dood (of mockt embed) zodat de volledige suite hermetisch is: draait lokaal EN op CI identiek, geen hang, geen echte netwerk-call
-- [ ] #2 Fail-soft-gevoelige mocks asserteren dat ze zijn aangeroepen (call-count), zodat signatuur-drift luid faalt op de bron i.p.v. stil naar fallback te vallen
-- [ ] #3 CI meet coverage (coverage run + report) met een --fail-under net onder de gemeten baseline; getal zichtbaar in de job-summary
-- [ ] #4 CI-testjob heeft timeout-minutes als hang-vangnet
-- [ ] #5 Optionele integratie-tier gated op KB_INTEGRATION=1 (default geskipt) draait de echte embed->index->retrieval-pijplijn tegen een mini-fixture; documenteer wel/niet-doen
+- [x] #1 Gedeelde test-base/conftest pint embed+LLM-endpoint dood (of mockt embed) zodat de volledige suite hermetisch is: draait lokaal EN op CI identiek, geen hang, geen echte netwerk-call
+- [x] #2 Fail-soft-gevoelige mocks asserteren dat ze zijn aangeroepen (call-count), zodat signatuur-drift luid faalt op de bron i.p.v. stil naar fallback te vallen
+- [x] #3 CI meet coverage (coverage run + report) met een --fail-under net onder de gemeten baseline; getal zichtbaar in de job-summary
+- [x] #4 CI-testjob heeft timeout-minutes als hang-vangnet
+- [x] #5 Optionele integratie-tier gated op KB_INTEGRATION=1 (default geskipt) draait de echte embed->index->retrieval-pijplijn tegen een mini-fixture; documenteer wel/niet-doen
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Testsuite-hardening is in de repo geland: `tests/__init__.py` pinnt de suite naar een hermetische, Ollama-blinde default; de retrieval-tests gebruiken luide mock-asserties; `.github/workflows/ci.yml` draait coverage met een fail-under en timeout. De opt-in integratietier blijft gated op `KB_INTEGRATION=1`, zodat de unit-CI snel en reproduceerbaar blijft.
+<!-- SECTION:FINAL_SUMMARY:END -->
