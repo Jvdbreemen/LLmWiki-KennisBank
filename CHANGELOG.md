@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-07-07
+
+### Added
+- **Multi-agent setup and validation (`setup.sh`, `scripts/install-agent-envs.py`).** Setup now installs and validates selected agent environments with `--agents claude,codex,opencode,all`. Claude Code keeps native commands/skills/hooks, Codex receives shared skills, `/prompts:*` aliases, lifecycle hooks, MCP config and global `AGENTS.md`, and OpenCode receives commands, shared skills, MCP config, global rules and a local plugin.
+- **OpenRouter as explicit opt-in LLM backend.** Interactive setup keeps `ollama` as the default and offers `openrouter` as a deliberate cloud option for judge/extraction. The live config stores only provider, model, endpoint and `api_key_env`; optional entered keys are stored user-local in `~/.config/kennisbank/secrets.json`, never in the repo or vault.
+- **Post-install model smoke tests.** Setup validates the configured embedding and LLM backends before completing. Ollama uses local model/API smoke checks; OpenRouter uses a minimal authenticated chat-completions smoke check when selected.
+
+### Changed
+- **README rewritten as a stronger English product introduction.** The top-level story now presents KennisBank as a sovereign memory layer for Claude Code, Codex, OpenCode and other local agents, with a dedicated `v0.12.0` section for the new setup, validation and OpenRouter behavior.
+- **Agent operating contract refreshed (`AGENTS.md`, `CONFIGURATION.md`, `docs/agent-integrations.md`).** The docs now emphasize active vault-path resolution, setup as the single install/upgrade/repair path, Codex/OpenCode behavior, MCP wiring, hooks, model validation and privacy boundaries.
+- **Hook registration self-heals the active vault path.** Re-running setup updates stale `KENNISBANK_VAULT` values in Claude Code hook environment blocks instead of leaving hooks pointed at an old vault.
+
+### Fixed
+- **Non-default vault handoff no longer points back to `~/KennisBank`.** Setup's final message now reports the active vault path and selected agent targets, preventing confusing follow-up instructions after installs such as `D:/Users/Robert/Documents/Claude/Projects/Kluis`.
+- **Release metadata now includes the tracked MIT license in the release narrative.** The repo already ships `LICENSE`; this release keeps README and changelog aligned around that MIT licensing contract.
+
 ## [0.11.0] - 2026-07-07
 
 ### Added
@@ -356,7 +372,11 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.8.2...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.11.0...v0.12.0
+[0.11.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.10.0...v0.11.0
+[0.10.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.9.0...v0.10.0
+[0.9.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.8.2...v0.9.0
 [0.8.2]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.7.0...v0.8.0

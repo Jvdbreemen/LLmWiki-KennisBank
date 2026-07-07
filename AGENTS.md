@@ -1,265 +1,176 @@
 # AGENTS.md
 
-Instructions for an AI coding agent (Claude Code, Cursor, Aider, etc.) installing this repo on behalf of a user.
+Operational instructions for AI coding agents installing or upgrading this repo.
+The human-facing guide is `README.md`; this file is the deployment contract.
 
-The human-facing guide is `README.md`. This file is operational. Read it end-to-end before touching anything.
+## Purpose
 
-## 1. Purpose
+LLmWiki-KennisBank deploys a local personal knowledge vault plus agent
+integrations. It is not Claude-Code-only. Supported install targets are:
 
-This repo deploys a personal LLM-wiki layer on top of Claude Code, based on Karpathy's LLM Wiki concept. It installs a vault at `$HOME/KennisBank/`, a research output directory at `$HOME/Claude/research/`, six global slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`, `/sessiestart`, `/import`), and one skill (`/autoresearch`).
+- `claude` - Claude Code commands, skills, and hooks.
+- `codex` - Codex skills, prompt aliases, hooks, MCP config, and `AGENTS.md`.
+- `opencode` - OpenCode commands, skills, MCP config, `AGENTS.md`, and plugin.
 
-Your job: install this system on the user's machine without breaking their existing Claude Code configuration. You are not refactoring the repo. You are deploying it.
+`setup.sh` is the single supported entrypoint for both initial install and
+upgrade. Do not hand-copy files unless `setup.sh` itself is broken and you are
+repairing it.
 
-## 2. Pre-flight checks
+## Vault Path Rule
 
-Run these before installing. Each line is the check, followed by how to interpret the result.
+Never assume the active vault is `~/KennisBank` or
+`C:\Users\rvdbr\KennisBank`.
+
+Resolve the active vault in this order:
+
+1. `KENNISBANK_VAULT`, if set.
+2. A user-provided path.
+3. Only then the product default `~/KennisBank`.
+
+When the user names a non-default vault, run setup with that exact path:
 
 ```bash
-# Working directory: confirm you are inside the repo clone
-test -f ./setup.sh && test -d ./commands && echo OK || echo "WRONG DIR"
+KENNISBANK_VAULT="/absolute/path/to/vault" bash setup.sh --yes --agents claude,codex
 ```
-If "WRONG DIR": stop. Ask the user where the repo was cloned.
 
-```bash
-# Vault: does it already exist?
-test -d "$HOME/KennisBank" && echo EXISTS || echo NEW
+On Windows PowerShell with Git Bash:
+
+```powershell
+$env:KENNISBANK_VAULT = "D:/Users/Robert/Documents/Claude/Projects/Kluis"
+& "C:\Program Files\Git\bin\bash.exe" setup.sh --yes --agents claude,codex,opencode
 ```
-If EXISTS: do not assume the structure matches. Inspect with `ls $HOME/KennisBank` and confirm with the user before running setup. `setup.sh` is idempotent for `mkdir -p` but will not overwrite an existing `CLAUDE.md`.
+
+All generated hooks and MCP configs must contain this explicit vault path.
+
+## Pre-Flight
+
+Run these before installation or upgrade:
 
 ```bash
-# Claude Code commands directory
-test -d "$HOME/.claude/commands" && echo EXISTS || echo NEW
-```
-If NEW: `setup.sh` will create it. If EXISTS: check for filename collisions before copying.
-
-```bash
-# Filename collisions in commands
-for f in commands/*.md; do
-  base=$(basename "$f")
-  test -f "$HOME/.claude/commands/$base" && echo "COLLISION: $base"
-done
-```
-Any COLLISION line: stop and ask the user whether to overwrite.
-
-```bash
-# Skill collision
-test -f "$HOME/.claude/skills/autoresearch/SKILL.md" && echo "SKILL EXISTS" || echo "SKILL NEW"
-```
-If SKILL EXISTS: ask before overwriting.
-
-```bash
-# Python version (3.10+ required)
+test -f ./setup.sh && test -d ./commands && test -d ./scripts && echo OK || echo "WRONG DIR"
+git status --short --branch
 python3 --version
 ```
-If lower than 3.10: scripts using modern syntax may fail. Warn the user.
+
+On Windows, prefer Git Bash from `C:\Program Files\Git\bin\bash.exe`; the
+System32 `bash.exe` is WSL and may write Linux-shaped paths into Windows agent
+configs.
+
+Check local model availability when model validation is expected:
 
 ```bash
-# Ollama presence (optional, for semantic tiling)
-command -v ollama >/dev/null && echo PRESENT || echo MISSING
+ollama list
 ```
-If MISSING: not a blocker. Note it in the hand-off so the user knows semantic tiling will be skipped.
+
+The default embedding model is `qwen3-embedding:8b`. The local judge/extraction
+model should match `<vault>/.claude/kennisbank-llm.json`; on Robert's machine it
+is normally pinned to `gemma4:12b`.
+
+If the user chooses OpenRouter for judge/extraction, keep it explicit:
+
+- The default setup answer is still `ollama`.
+- OpenRouter is a cloud API; warn that memory-sweep content leaves the machine.
+- Store only `providers`, `model`, `endpoint`, and `api_key_env` in
+  `<vault>/.claude/kennisbank-llm.json`.
+- Never write API keys into the repo or vault. Use the named env var or the
+  user-local `~/.config/kennisbank/secrets.json` written by setup.
+
+## Install Or Upgrade
+
+Use `setup.sh` for both first install and upgrades:
 
 ```bash
-# Memory directory exists
-ls "$HOME/.claude/projects/"*/memory/MEMORY.md 2>/dev/null | head -1
+KENNISBANK_VAULT="/absolute/path/to/vault" bash setup.sh --yes --agents claude,codex
 ```
-Empty output: the lazy-hierarchy memory check in commands will silently skip Layer 1. Not a blocker.
+
+Agent target options:
+
+- `--agents claude`
+- `--agents codex`
+- `--agents opencode`
+- `--agents claude,codex`
+- `--agents all`
+
+Interactive setup asks which agent environments to install unless `--yes` or
+`--agents` is supplied.
+
+`setup.sh` must complete only after:
+
+- vault files and scripts are deployed,
+- selected agent configs are installed or repaired,
+- migrations have run,
+- `doctor.sh` has passed,
+- selected agent hooks/skills/MCP config validate,
+- local Ollama and/or OpenRouter backend smoke checks pass, unless
+  `--skip-model-check` is explicit.
+
+Use `--skip-model-check` only for CI/offline tests or when the user explicitly
+accepts that model validation is skipped.
+
+## Client Expectations
+
+Claude Code:
+
+- Commands go to `~/.claude/commands/`.
+- Skills go to `~/.claude/skills/`.
+- Hooks go to `~/.claude/settings.json`.
+
+Codex:
+
+- Skills go to `~/.agents/skills/`.
+- Prompt aliases go to `~/.codex/prompts/` and are invoked as
+  `/prompts:<name>`.
+- MCP server `kennisbank` goes in `~/.codex/config.toml`.
+- Hooks go in `~/.codex/hooks.json`.
+- Global KennisBank instructions go in `~/.codex/AGENTS.md`.
+
+OpenCode:
+
+- Commands go to `~/.config/opencode/commands/` and are invoked directly as
+  `/sessielog`, `/sessiestart`, `/kennisbank-upgrade`, etc.
+- Skills go to `~/.agents/skills/`.
+- MCP server `kennisbank` goes in `~/.config/opencode/opencode.json`.
+- The local plugin goes to `~/.config/opencode/plugins/kennisbank.js`.
+- Global rules go in `~/.config/opencode/AGENTS.md`.
+
+## Validation
+
+After setup, verify:
 
 ```bash
-# Global Claude config present
-test -f "$HOME/.claude/CLAUDE.md" && echo EXISTS || echo NEW
+KENNISBANK_VAULT="/absolute/path/to/vault" bash "<vault>/.claude/scripts/doctor.sh"
+python3 scripts/install-agent-envs.py --vault "/absolute/path/to/vault" --agents claude,codex --validate
 ```
-Record this. You will append to it later. Never overwrite.
 
-## 3. Non-interactive install path
+Expected: no `[FAIL]` from doctor and `validation: PASS` from the agent
+validator. WARN messages are not always blockers, but report them accurately.
 
-Recommended path: use the `--yes` flag (available since 0.2.0) to skip the two interactive prompts in `setup.sh`:
+For Codex specifically:
 
 ```bash
-bash setup.sh --yes
+codex mcp list
 ```
 
-This installs everything: vault structure, scripts, templates, commands, and the autoresearch skill.
+Expected: a `kennisbank` server pointing to
+`<vault>/.claude/scripts/kb-mcp.py`.
 
-If you are on a pre-0.2.0 clone where `--yes` is missing, fall back to the manual path.
-
-### Manual path (always works)
+For OpenCode, inspect:
 
 ```bash
-VAULT="$HOME/KennisBank"
-RESEARCH="$HOME/Claude/research"
-CLAUDE_COMMANDS="$HOME/.claude/commands"
-CLAUDE_SKILLS="$HOME/.claude/skills"
-
-mkdir -p "$VAULT"/{00-inbox,01-raw/sessies,02-wiki,03-projecten,04-templates,05-bronnen,06-claude,07-media,08-archive}
-mkdir -p "$VAULT/.claude/scripts" "$VAULT/graphify-out" "$RESEARCH"
-
-cp scripts/*.py "$VAULT/.claude/scripts/"
-chmod +x "$VAULT/.claude/scripts/"*.py
-cp templates/*.md "$VAULT/04-templates/"
-
-# Only if not present
-test -f "$VAULT/CLAUDE.md" || cp CLAUDE.md.template "$VAULT/CLAUDE.md"
-
-mkdir -p "$CLAUDE_COMMANDS"
-cp commands/*.md "$CLAUDE_COMMANDS/"
-
-mkdir -p "$CLAUDE_SKILLS/autoresearch"
-cp skills/autoresearch/SKILL.md "$CLAUDE_SKILLS/autoresearch/"
+ls ~/.config/opencode/commands
+cat ~/.config/opencode/opencode.json
 ```
 
-Use the manual path when:
-- `setup.sh` lacks `--yes` and you cannot block on `read REPLY` prompts
-- The user wants to skip the commands or skill copy
-- A pre-flight check found a collision and you need fine-grained control
+Expected: KennisBank commands present and an MCP server named `kennisbank`.
 
-## 4. What to ask the user before installing
+## Safety Rules
 
-Ask these as a single grouped message. Defaults are in brackets.
-
-1. Vault path. Default: `$HOME/KennisBank`. If they pick a different path, note that paths are hard-coded in several places and you will need to patch them (see Section 9).
-2. Research output path. Default: `$HOME/Claude/research`. Same caveat.
-3. Install global commands to `$HOME/.claude/commands/`? Default: yes.
-4. Install autoresearch skill to `$HOME/.claude/skills/`? Default: yes.
-5. Append the autoresearch trigger snippet to `$HOME/.claude/CLAUDE.md`? Default: yes if the file exists, otherwise create it from the snippet only.
-
-If the user says "just install it" without specifying: take the defaults and report what you did.
-
-## 5. Post-install verification
-
-Run the doctor script:
-
-```bash
-bash scripts/doctor.sh
-```
-
-Expected output: every check line ends in `[PASS]`. Any `[FAIL]` is a blocker. Any `WARN` is non-fatal but should be reported in the hand-off.
-
-If `scripts/doctor.sh` is missing in the version you cloned, run these manual checks:
-
-```bash
-# Vault structure
-ls "$HOME/KennisBank/" | sort
-# Expected: 00-inbox 01-raw 02-wiki 03-projecten 04-templates 05-bronnen 06-claude 07-media 08-archive CLAUDE.md
-
-# Scripts copied and executable
-ls -l "$HOME/KennisBank/.claude/scripts/"*.py
-
-# Templates present
-ls "$HOME/KennisBank/04-templates/"
-
-# Commands installed
-ls "$HOME/.claude/commands/" | grep -E '^(sessielog|wiki|intake|stale|sessiestart|import)\.md$'
-
-# Skill installed
-test -f "$HOME/.claude/skills/autoresearch/SKILL.md" && echo OK
-
-# CLAUDE.md present (not overwritten if it already had user content)
-head -3 "$HOME/KennisBank/CLAUDE.md"
-
-# Python scripts at least parse
-python3 -c "import ast; ast.parse(open('$HOME/KennisBank/.claude/scripts/stale-check.py').read())"
-```
-
-## 6. Patching `$HOME/.claude/CLAUDE.md`
-
-The autoresearch skill needs a trigger registered in the global `CLAUDE.md`. Append, do not overwrite.
-
-Snippet to append:
-
-```
-# autoresearch
-- **autoresearch** (`~/.claude/skills/autoresearch/SKILL.md`) - multi-round research with lazy hierarchy check. Output to `~/Claude/research/`. Trigger: `/autoresearch`
-When the user types `/autoresearch`, invoke the Skill tool with `skill: "autoresearch"` before doing anything else.
-```
-
-Safe append:
-
-```bash
-GLOBAL="$HOME/.claude/CLAUDE.md"
-if ! grep -q "^# autoresearch" "$GLOBAL" 2>/dev/null; then
-  printf '\n# autoresearch\n- **autoresearch** (`~/.claude/skills/autoresearch/SKILL.md`) - multi-round research with lazy hierarchy check. Output to `~/Claude/research/`. Trigger: `/autoresearch`\nWhen the user types `/autoresearch`, invoke the Skill tool with `skill: "autoresearch"` before doing anything else.\n' >> "$GLOBAL"
-fi
-```
-
-Rules:
-- Always check for an existing `# autoresearch` heading first. If present, skip.
-- Never use `>` redirection. Only `>>`.
-- If the file does not exist, create it with the snippet alone. Do not invent surrounding content.
-
-## 7. Common mistakes
-
-Things agents typically get wrong here:
-
-1. **Overwriting an existing `CLAUDE.md`.** Both the global `$HOME/.claude/CLAUDE.md` and the vault `$HOME/KennisBank/CLAUDE.md` can have user customizations. Append. Never `cp` over them.
-2. **Hardcoding `/Users/X/` paths from training data.** Always use `$HOME` or `~`. The user's username is not in your training set.
-3. **Assuming Ollama is installed.** It is optional. If absent, semantic tiling is skipped silently. Do not install Ollama for the user without asking.
-4. **Running `setup.sh` from the wrong directory.** The script uses relative paths (`scripts/*.py`, `commands/*.md`). Run it from the repo root. Verify with the working-directory check in Section 2.
-5. **Blocking on `read REPLY` prompts.** Default `setup.sh` is interactive. Use `--yes` once available, or use the manual path. Do not pipe `yes` into setup.sh blindly; that answers prompts you may not want to accept.
-6. **Treating the vault as read-only.** `$HOME/KennisBank/CLAUDE.md` is meant to be edited. After install, point the user to `[YOUR NAME]` and `[YOUR PROJECTS]` placeholders.
-7. **Copying scripts to the wrong location.** They go to `$HOME/KennisBank/.claude/scripts/`, not `$HOME/.claude/scripts/`. The commands reference the vault path.
-8. **Forgetting `chmod +x` on the Python scripts** when using the manual path.
-9. **Skipping the collision check.** A user with existing slash commands of the same name will lose them silently if you `cp` without checking.
-
-## 8. Hand-off to user
-
-After install completes, tell the user:
-
-1. The vault is at `$HOME/KennisBank/`. Edit `CLAUDE.md` there to fill in `[YOUR NAME]` and `[YOUR PROJECTS]`.
-2. Six new slash commands are available: `/sessielog`, `/wiki`, `/intake`, `/stale`, `/sessiestart`, `/import`.
-3. The `/autoresearch` skill is available; trigger it with `/autoresearch [topic]`.
-4. Research output lands in `$HOME/Claude/research/`.
-5. If Ollama is not installed, semantic tiling is skipped. To enable: `ollama pull qwen3-embedding:8b` (multilingual default; English-only vaults can use the lighter `ollama pull nomic-embed-text`).
-6. To verify any time: `bash scripts/doctor.sh` from the repo clone.
-7. Restart Claude Code (or reload commands) so the new slash commands are picked up.
-
-Report any pre-flight WARN or skipped optional step. Do not report items as done that you did not do.
-
-## 9. Customization pointers
-
-If the user wants non-default paths or thresholds, use these levers.
-
-| Setting | How to change |
-|---|---|
-| Vault path (scripts + `doctor.sh`) | Set the `KENNISBANK_VAULT` env var. The Python scripts (`stale-check.py`, `semantic-tiling.py`, `auto-crosslink.py`, `intake-scan.py`) and `doctor.sh` resolve `$KENNISBANK_VAULT` and fall back to `$HOME/KennisBank` (shared helper `scripts/_vaultpath.py`). The importers also accept `--vault`; `build-karpathy-index.py` accepts `--vault-root`. |
-| Vault path (install scaffold) | `setup.sh`: `VAULT="$HOME/KennisBank"` |
-| Vault path (runtime prompt files) | `commands/*.md`, `skills/autoresearch/SKILL.md`: literal `~/KennisBank/...` references (not env-var aware; patch or symlink) |
-| Wiki categories / taxonomy | Ship a `categories.json` next to the script (`scripts/categories.json`) or in the vault root; see `categories.example.json`. Absent it, built-in defaults apply. |
-| Research output | `setup.sh`: `RESEARCH="$HOME/Claude/research"`; runtime paths in `skills/autoresearch/SKILL.md` |
-| Stale threshold | `scripts/stale-check.py`: pass `--days N` (default 60) |
-| Memory file lookup | `CLAUDE.md.template`, `skills/autoresearch/SKILL.md`: the `ls ~/.claude/projects/*/memory/MEMORY.md` glob |
-| Vault `CLAUDE.md` content | `CLAUDE.md.template`: template copied to vault on install |
-
-If the user picks a non-default vault path:
-
-1. Set `KENNISBANK_VAULT` so the scripts and `doctor.sh` follow it.
-2. For the prompt files, do a sweep and patch (or symlink `$HOME/KennisBank`):
-
-```bash
-grep -rn "KennisBank" commands/ skills/
-```
-
-Patch every match to the new path, or warn the user that the default path remains baked into command bodies.
-
-## 10. Optional: backfill the vault
-
-If the user has existing Claude history on disk, offer to run `/import` after the install completes and they have read `POST-INSTALL.md`. Do not run it yourself unattended; it writes many files into `$HOME/KennisBank/01-raw/sessies/` and the user should choose the source.
-
-Four sources are supported:
-
-1. `cc`: Claude Code session history under `$HOME/.claude/projects/*.jsonl`. Lowest-risk, already on disk.
-2. `claudeai <path>`: a claude.ai export bundle (`conversations.json` or `.zip`).
-3. `folder <path> [prefix]`: generic recursive markdown/text import from any path.
-4. `cowork`: alias for `folder` with auto-detected Mac desktop Claude (Cowork) data.
-
-Rules:
-
-- Always run with `--dry-run --verbose` first. Show the user the count of new files that would be written, and ask for confirmation before the real run.
-- Never pass `--force` without explicit user instruction. The importers are idempotent and skip existing files; `--force` is for reimport only.
-- Errors in the JSON output should be reported, not aborted on. The importer continues past unreadable files.
-
-Suggest `/import cc` as the first source to try, then `/wiki` once the raw logs are in place.
-
-## 11. Notes on this file
-
-This file lives at the repo root. Its peer for humans is `README.md`. If you change behavior in `setup.sh` or the install paths, update both. Keep this file terse, declarative, and operational.
+- Never overwrite vault `CLAUDE.md` or global agent instruction files wholesale.
+  Use append/managed blocks.
+- Never overwrite user agent settings with a full template. Merge only the
+  KennisBank entries.
+- Keep hook scripts fail-open.
+- Do not force-close setup as complete when model validation failed, unless
+  the user explicitly requested `--skip-model-check`.
+- Do not tunnel the local vault to hosted/cloud agents unless the user
+  explicitly accepts that data boundary.

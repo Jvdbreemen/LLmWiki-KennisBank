@@ -91,7 +91,7 @@ class SetupDeployTest(unittest.TestCase):
         env["KENNISBANK_VAULT"] = _bash_path(vault)
         bash = _find_bash()
         subprocess.run(
-            [bash, "setup.sh", "--yes"],
+            [bash, "setup.sh", "--yes", "--skip-model-check"],
             cwd=REPO_ROOT, env=env, check=True,
             capture_output=True, text=True,
         )
@@ -216,7 +216,7 @@ class SetupDeployTest(unittest.TestCase):
         env["KENNISBANK_VAULT"] = _bash_path(vault)
         bash = _find_bash()
         subprocess.run(
-            [bash, "setup.sh", "--yes"],
+            [bash, "setup.sh", "--yes", "--skip-model-check"],
             cwd=REPO_ROOT, env=env, check=True,
             capture_output=True, text=True,
         )
@@ -377,12 +377,13 @@ class SetupDeployTest(unittest.TestCase):
         env["KENNISBANK_VAULT"] = _bash_path(vault)
         bash = _find_bash()
         try:
-            # Geen --yes; stdin: n=commands, n=skills, n=hooks
+            # Geen --yes; stdin: default LLM backend, default model,
+            # n=commands, n=skills, n=hooks
             result = subprocess.run(
-                [bash, "setup.sh"],
+                [bash, "setup.sh", "--agents", "claude", "--skip-model-check"],
                 cwd=REPO_ROOT, env=env, check=False,
                 capture_output=True, text=True,
-                input="n\nn\nn\n",
+                input="\n\nn\nn\nn\n",
             )
             # Setup mag slagen (exitcode 0); als python3 mist kan het anders zijn
             # maar dan zijn de asserts ook niet zinvol — we controleren op output.

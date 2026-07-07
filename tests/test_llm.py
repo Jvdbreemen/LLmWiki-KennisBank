@@ -24,8 +24,11 @@ class LlmRouterTest(unittest.TestCase):
         self.vault = self.tmp / "vault"
         (self.vault / ".claude").mkdir(parents=True)
         self._saved_env = {k: os.environ.get(k) for k in
-                           ("KENNISBANK_VAULT", "KB_LLM_PROVIDERS", "KB_LLM_MODEL", "KB_LLM_ENDPOINT")}
-        for k in ("KB_LLM_PROVIDERS", "KB_LLM_MODEL", "KB_LLM_ENDPOINT"):
+                           ("KENNISBANK_VAULT", "KB_LLM_PROVIDERS", "KB_LLM_MODEL",
+                            "KB_LLM_ENDPOINT", "KB_LLM_API_KEY_ENV",
+                            "KENNISBANK_SECRETS_FILE")}
+        for k in ("KB_LLM_PROVIDERS", "KB_LLM_MODEL", "KB_LLM_ENDPOINT",
+                  "KB_LLM_API_KEY_ENV", "KENNISBANK_SECRETS_FILE"):
             os.environ.pop(k, None)
         os.environ["KENNISBANK_VAULT"] = str(self.vault)
         self._orig_call = _llm._call
@@ -85,6 +88,16 @@ class LlmRouterTest(unittest.TestCase):
     def test_env_overrides_providers(self):
         os.environ["KB_LLM_PROVIDERS"] = "ollama, claude-cli"
         self.assertEqual(_llm.providers(), ["ollama", "claude-cli"])
+
+    def test_openrouter_api_key_env_from_config(self):
+        self._cfg({"providers": ["openrouter"], "api_key_env": "MY_OR_KEY"})
+        self.assertEqual(_llm.api_key_env_for("openrouter"), "MY_OR_KEY")
+
+    def test_openrouter_secret_file_fallback(self):
+        secrets = self.tmp / "secrets.json"
+        secrets.write_text('{"MY_OR_KEY":"sk-test"}', encoding="utf-8")
+        os.environ["KENNISBANK_SECRETS_FILE"] = str(secrets)
+        self.assertEqual(_llm._secret("MY_OR_KEY"), "sk-test")
 
 
 if __name__ == "__main__":

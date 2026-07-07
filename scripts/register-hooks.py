@@ -136,6 +136,12 @@ def register_manifest(settings: dict, vault_root: str) -> bool:
     man = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(man)
     changed = False
+    env = settings.setdefault("env", {})
+    if not isinstance(env, dict):
+        raise ValueError("settings['env'] is not an object")
+    if env.get("KENNISBANK_VAULT") != vault_root:
+        env["KENNISBANK_VAULT"] = vault_root
+        changed = True
     for event, script, matcher in man.hooks():
         path = f"{vault_root}/.claude/scripts/{script}"
         if ensure_hook(settings, event, path, matcher=matcher):

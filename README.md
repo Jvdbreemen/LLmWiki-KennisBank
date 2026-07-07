@@ -1,10 +1,22 @@
 # LLmWiki-KennisBank
 
-**A memory that learns, for people who work with AI.**
+**A sovereign memory layer for serious AI work.**
 
-Every Claude session ends the same way: the model forgets everything, and the knowledge you built together evaporates. KennisBank fixes that. It is a local-first knowledge and memory layer for [Claude Code](https://claude.ai/code) that captures what you learn, compiles it into a durable wiki, remembers facts with a validity window, retrieves the right knowledge automatically into every new session, and then measures whether that knowledge actually helped.
+Every agent session creates valuable context: decisions, fixes, preferences,
+architecture trade-offs, dead ends, and lessons you do not want to rediscover
+next week. Then the model forgets. KennisBank turns that temporary context into
+a durable local knowledge system for Claude Code, Codex, OpenCode, and other
+developer agents.
 
-Plain markdown. Local models. Your own machine. You stay the editor-in-chief: the system proposes, quarantines, and flags, but a human merges, supersedes, and decides. No cloud dependency, no vendor lock-in, no data leaving your house. Open the vault in Obsidian and it is just... notes. Very well-organized notes that happen to power an AI memory.
+It captures what happened, distils it into a sourced wiki, extracts time-aware
+memories, retrieves the right knowledge before the next answer, and measures
+whether that knowledge actually helped. The result is an AI workspace that gets
+sharper over time without handing your private work to a hosted memory vendor.
+
+Plain markdown. Local SQLite. Local Ollama by default. Your own machine. You
+stay the editor-in-chief: the system proposes, quarantines, and flags, but a
+human merges, supersedes, and decides. Open the vault in Obsidian and it is
+just notes. Very well-organized notes that happen to power an AI memory.
 
 Based on [Andrej Karpathy's LLM Wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f): raw sessions go in, structured knowledge comes out. KennisBank extends the pattern into a closed loop:
 
@@ -26,7 +38,26 @@ Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: 
 
 The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
 
-## Feature highlights (v0.11.0)
+## Feature highlights (v0.12.0)
+
+### New in v0.12.0
+- **One setup for install and upgrade.** `setup.sh` is now the authoritative
+  path for first install, repair, and upgrade: it refreshes tooling, preserves
+  user data, runs migrations, installs selected agent integrations, and blocks
+  completion when validation fails.
+- **Multi-agent by design.** Choose `claude`, `codex`, `opencode`, or `all`.
+  Claude Code gets native commands and hooks; Codex gets shared skills,
+  `/prompts:*` aliases, hooks, MCP, and `AGENTS.md`; OpenCode gets commands,
+  shared skills, MCP, global rules, and a local plugin.
+- **Verified local-first models.** Setup validates the selected backend before
+  it returns. Ollama remains the default for local memory extraction and judging,
+  including smoke tests for the configured embedding and chat models.
+- **OpenRouter as explicit cloud opt-in.** If you want an external LLM for the
+  judge/extraction step, setup can configure OpenRouter with a model slug and
+  API-key environment variable. Secrets are never written to the repo or vault.
+- **Agent-friendly operating contract.** `AGENTS.md`, `CONFIGURATION.md`, and
+  the agent integration docs now spell out the active vault path, setup
+  validation, Codex/OpenCode behavior, hooks, MCP, and privacy boundaries.
 
 ### Knowledge (the wiki layer)
 - `/wiki` compiles raw session logs into interlinked wiki articles, updating existing ones via a guarded rewrite engine (`safe-edit.py`) instead of clobbering them.
@@ -58,19 +89,19 @@ The design bias throughout: **deterministic where possible, LLM only where it ad
 
 ## Prerequisites
 
-- [Claude Code](https://claude.ai/code) (CLI)
+- At least one local agent client: [Claude Code](https://claude.ai/code), Codex, or OpenCode
 - Python 3.10+
 - [Ollama](https://ollama.com) with:
   - `qwen3-embedding:8b` (embeddings; multilingual default. English-only vaults can use the lighter `nomic-embed-text`)
   - a chat model for the memory judge/extraction (default `gemma4:latest`; pin another via `<vault>/.claude/kennisbank-llm.json`)
 
-Ollama is optional in the sense that everything fails open without it, but the memory sweep, semantic retrieval, and deduplication are the heart of the system: install it.
+Ollama is optional in the sense that everything fails open without it, but the memory sweep, semantic retrieval, and deduplication are the heart of the system: install it. For the **LLM judge/extraction only**, setup can also configure OpenRouter as an explicit cloud opt-in. Embeddings remain local by default.
 
-The setup creates two root directories:
+The setup creates two root directories by default:
 - `~/KennisBank/` — the vault (wiki, logs, memory, templates, scripts)
 - `~/Claude/research/` — output directory for `/autoresearch`
 
-Both paths are configurable — see [Customization](#customization).
+Both paths are configurable. For a non-default vault, set `KENNISBANK_VAULT` when running setup; that same value is written into agent hooks and MCP config so clients do not fall back to `~/KennisBank`.
 
 ## Installation
 
@@ -79,21 +110,42 @@ git clone https://github.com/Jvdbreemen/LLmWiki-KennisBank.git
 cd LLmWiki-KennisBank
 bash setup.sh           # interactive
 bash setup.sh --yes     # non-interactive (recommended for AI agents)
-bash scripts/doctor.sh  # verify install
+KENNISBANK_VAULT="/absolute/path/to/vault" bash setup.sh --yes --agents claude,codex,opencode
 ```
 
 In one idempotent run, the setup script:
-- creates the vault directory structure under `~/KennisBank/`
+- creates the vault directory structure under `$KENNISBANK_VAULT` or `~/KennisBank/`
 - copies scripts and templates into place
 - bootstraps the settings toggles and runs version-gated migrations
-- asks whether to install commands and skills into `~/.claude/` (auto-yes with `--yes`)
-- registers the full hookset in `~/.claude/settings.json` (skip with `--no-hooks`)
+- asks which agent environments to install (`claude`, `codex`, `opencode`, or `all`; default `claude,codex`)
+- installs Claude Code commands/skills/hooks when `claude` is selected
+- installs Codex shared skills, `/prompts:*` aliases, hooks, MCP config, and global `AGENTS.md` when `codex` is selected
+- installs OpenCode commands, shared skills, MCP config, global `AGENTS.md`, and a local plugin hook when `opencode` is selected
+- asks for the LLM backend in interactive mode: default `ollama`, optional `openrouter` with model slug and API key env-var
+- validates the install before returning: `doctor.sh`, agent config checks, local Ollama smoke tests, and OpenRouter smoke tests when OpenRouter is selected
 
-**Re-running `setup.sh` is safe and is the upgrade mechanism**: it refreshes tooling without clobbering user data, customizations, or vault contents. The `/kennisbank-upgrade` skill wraps it with release-tag checkout, drift detection, and backups.
+**Re-running `setup.sh` is safe and is the upgrade mechanism**: it refreshes tooling and repairs agent config without clobbering user data, customizations, or vault contents. The `/kennisbank-upgrade` skill wraps it with release-tag checkout, drift detection, backups, version stamping, and the same post-install validation.
+
+Useful flags:
+
+```bash
+bash setup.sh --yes --agents claude,codex      # default non-interactive target set
+bash setup.sh --yes --agents all               # Claude Code + Codex + OpenCode
+bash setup.sh --yes --agents codex             # Codex only
+bash setup.sh --yes --skip-model-check         # CI/offline validation without Ollama smoke tests
+```
+
+For OpenRouter, setup writes only non-secret config to
+`<vault>/.claude/kennisbank-llm.json`: provider, model, endpoint, and
+`api_key_env`. The API key itself must be in the named environment variable
+or, if you enter it during setup, in the user-local secrets file
+`~/.config/kennisbank/secrets.json`. It is never written to the repo or vault.
 
 After install, read [POST-INSTALL.md](POST-INSTALL.md) for the first-session walkthrough.
 
 ### The hookset
+
+Claude Code receives the full hookset below in `~/.claude/settings.json`. Codex receives equivalent lifecycle hooks in `~/.codex/hooks.json` where Codex supports them, plus MCP and skill guidance. OpenCode receives MCP plus a global plugin under `~/.config/opencode/plugins/`; OpenCode's plugin events are not a byte-for-byte Claude hook clone, so retrieval should be treated as MCP/skill-guided there.
 
 | Hook | Script | What it does |
 |------|--------|--------------|
@@ -132,7 +184,7 @@ The hooks are fail-open by design: an error means no injected context or a skipp
 
 ## Skills
 
-Three skills ship with the system and are installed into `~/.claude/skills/` by `setup.sh`. Commands are single prompts; skills are multi-step procedures with their own guardrails.
+Three skills ship with the system. Claude Code gets them under `~/.claude/skills/`; Codex and OpenCode get them under the shared user skill location `~/.agents/skills/`, which both clients discover. Commands are single prompts; skills are multi-step procedures with their own guardrails.
 
 | Skill | Invoked via | What it does |
 |-------|-------------|--------------|
@@ -197,29 +249,50 @@ Maintain the eval set as your vault grows (questions you know the answer to, wit
 
 The `/import` command backfills the vault from existing Claude history. It handles Claude Code session JSONL files under `~/.claude/projects/`, claude.ai export bundles, Mac desktop Claude (Cowork) conversation data, and any generic markdown or text folder. Each importer writes raw session files that `/wiki` can compile afterwards. For the memory layer, `/kennisbank:rebuild-memory` re-extracts all archived transcripts through the full sweep (semantic dedup makes re-runs near-idempotent).
 
-## Using KennisBank from other agents (Codex, Copilot, ChatGPT)
+## Using KennisBank from other agents (Codex, OpenCode, Copilot, ChatGPT)
 
 The vault is not Claude-Code-only. `scripts/kb-mcp.py` is a local **MCP server** exposing three primitives — `recall` (search memory + wiki), `capture` (save a new memory), and an `instructions` resource (a nudge to pull before searching externally). MCP is the one protocol every modern agent already speaks, so any client running **on this machine** can use the vault.
 
 **The hard boundary: local only.** The MCP server binds nothing to the network (stdio transport); the vault never leaves your machine. Agents that run *on your machine* (Codex CLI, GitHub Copilot in VS Code, Claude Code, Cursor, Cline, Windsurf) reach it directly. Agents that run *in the cloud* (hosted ChatGPT) cannot reach a local stdio server, and the answer is **not** to tunnel your sovereign vault to the internet — it is the manual bridge below.
 
-### Codex CLI — clean fit
+### Codex CLI
 
-Codex supports MCP over stdio. Register the server once:
+`setup.sh --agents codex` installs:
 
-```bash
-codex mcp add kennisbank -- python3 /absolute/path/to/vault/.claude/scripts/kb-mcp.py
-```
+- `~/.agents/skills/{autoresearch,kennisbank-upgrade,kennisbank-contribute}/`
+- `~/.codex/prompts/*.md` aliases, invoked as `/prompts:sessielog`, `/prompts:sessiestart`, `/prompts:kennisbank-upgrade`, etc.
+- `~/.codex/AGENTS.md` with the active vault path
+- `~/.codex/hooks.json` with KennisBank lifecycle hooks
+- `~/.codex/config.toml` MCP server `kennisbank`
 
-Or add it by hand to `~/.codex/config.toml` (or project-scoped `.codex/config.toml`):
+Codex does not expose arbitrary bare slash commands like `/sessielog`; its reusable prompt files are invoked as `/prompts:<name>`, and reusable workflows should prefer skills. MCP tools `recall` and `capture` are available through the configured `kennisbank` server.
+
+Manual MCP equivalent:
+
 
 ```toml
 [mcp_servers.kennisbank]
-command = "python3"
-args = ["/absolute/path/to/vault/.claude/scripts/kb-mcp.py"]
+command = "py"
+args = ["-3", "/absolute/path/to/vault/.claude/scripts/kb-mcp.py"]
+
+[mcp_servers.kennisbank.env]
+KENNISBANK_VAULT = "/absolute/path/to/vault"
+KB_LLM_PROVIDERS = "ollama"
+KB_LLM_MODEL = "gemma4:12b"
+KB_LLM_ENDPOINT = "http://localhost:11434"
 ```
 
-`recall` and `capture` are now available in Codex.
+### OpenCode
+
+`setup.sh --agents opencode` installs:
+
+- `~/.config/opencode/commands/*.md`, invoked as `/sessielog`, `/sessiestart`, `/kennisbank-upgrade`, etc.
+- `~/.agents/skills/{autoresearch,kennisbank-upgrade,kennisbank-contribute}/`
+- `~/.config/opencode/AGENTS.md` with the active vault path
+- `~/.config/opencode/opencode.json` MCP server `kennisbank`
+- `~/.config/opencode/plugins/kennisbank.js`, a fail-open local plugin for session maintenance events
+
+OpenCode reads global commands directly from `~/.config/opencode/commands/`, so the command names match the Claude Code names. Retrieval should use the MCP `recall` tool and the installed skills; the plugin handles background maintenance where OpenCode exposes matching events.
 
 ### GitHub Copilot (VS Code agent mode) — works, with one caveat
 
@@ -287,10 +360,10 @@ The importer walks ChatGPT's message *tree* (`mapping`), orders turns by timesta
 
 ## Customization
 
-1. Edit `~/KennisBank/CLAUDE.md` after setup. Replace `[YOUR NAME]` and `[YOUR PROJECTS]` with your own.
-2. **Vault path.** All Python scripts and `doctor.sh` honor the `KENNISBANK_VAULT` environment variable (default `~/KennisBank`). See [CONFIGURATION.md](CONFIGURATION.md) section 9 for what the slash-command prompt files still hardcode.
+1. Edit `<vault>/CLAUDE.md` after setup. Replace `[YOUR NAME]` and `[YOUR PROJECTS]` with your own. For a non-default install, `<vault>` is the exact `KENNISBANK_VAULT` path you used.
+2. **Vault path.** All Python scripts, `doctor.sh`, and generated agent integrations honor the `KENNISBANK_VAULT` environment variable (default `~/KennisBank`). See [CONFIGURATION.md](CONFIGURATION.md) section 9 for the non-default vault contract.
 3. **Embedding backend.** Swappable via `<vault>/.claude/kennisbank-embed.json` or `KB_EMBED_*` env vars: local Ollama by default, OpenAI-compatible endpoints when configured. Switching models invalidates the cache by design; run `kb-calibrate.py` afterwards to check the thresholds against the new model (it proposes values, you set them).
-4. **LLM backend** (judge/extraction): `<vault>/.claude/kennisbank-llm.json` or `KB_LLM_*` env vars. Default Ollama `gemma4:latest`.
+4. **LLM backend** (judge/extraction): `<vault>/.claude/kennisbank-llm.json` or `KB_LLM_*` env vars. Default Ollama `gemma4:latest`; optional OpenRouter uses `https://openrouter.ai/api/v1/chat/completions` through the OpenAI-compatible chat schema.
 5. **Wiki categories.** `build-karpathy-index.py` groups articles using a built-in taxonomy; override with a `categories.json` (copy [`categories.example.json`](categories.example.json)).
 6. The commands are in Dutch by default (they follow prompt language). Change section headings if you prefer English.
 7. Stale threshold (default 60 days): pass `--days N` or edit `stale-check.py`.
@@ -305,11 +378,11 @@ The importer walks ChatGPT's message *tree* (`mapping`), orders turns by timesta
 
 ## Optional: graphify integration
 
-`auto-crosslink.py` reads from `~/KennisBank/graphify-out/graph.json`, produced by the graphify skill when run on the vault. Without it, the crosslink step is silently skipped. Retrieval benefits indirectly: the graph-neighbour expansion follows the wikilinks that crosslinking maintains.
+`auto-crosslink.py` reads from `<vault>/graphify-out/graph.json`, produced by the graphify skill when run on the vault. Without it, the crosslink step is silently skipped. Retrieval benefits indirectly: the graph-neighbour expansion follows the wikilinks that crosslinking maintains.
 
 ## Optional: knowledge graph dashboard
 
-[Understand-Anything](https://github.com/Lum1104/Understand-Anything) is a separate Claude Code plugin (MIT) that turns a Karpathy-pattern wiki into an interactive knowledge graph dashboard. Build the required index with `python3 scripts/build-karpathy-index.py`, then run `/understand-knowledge` inside `~/KennisBank/02-wiki`. See `--help` for flags; categories are customizable via `categories.json`.
+[Understand-Anything](https://github.com/Lum1104/Understand-Anything) is a separate Claude Code plugin (MIT) that turns a Karpathy-pattern wiki into an interactive knowledge graph dashboard. Build the required index with `python3 scripts/build-karpathy-index.py`, then run `/understand-knowledge` inside `<vault>/02-wiki`. See `--help` for flags; categories are customizable via `categories.json`.
 
 ## Credits
 

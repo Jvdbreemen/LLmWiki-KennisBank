@@ -46,6 +46,43 @@ def _config() -> dict:
     return {}
 
 
+def api_key_env_for(provider: str) -> str:
+    env = os.environ.get("KB_LLM_API_KEY_ENV")
+    if env and env.strip():
+        return env.strip()
+    cfg = _config()
+    models = cfg.get("api_key_envs")
+    if isinstance(models, dict) and models.get(provider):
+        return str(models[provider])
+    if cfg.get("api_key_env"):
+        return str(cfg["api_key_env"])
+    if provider == "openrouter":
+        return "OPENROUTER_API_KEY"
+    return ""
+
+
+def _secrets_path() -> Path:
+    raw = os.environ.get("KENNISBANK_SECRETS_FILE", "").strip()
+    if raw:
+        return Path(os.path.expanduser(os.path.expandvars(raw)))
+    return Path.home() / ".config" / "kennisbank" / "secrets.json"
+
+
+def _secret(name: str) -> str:
+    if not name:
+        return ""
+    val = os.environ.get(name, "").strip()
+    if val:
+        return val
+    try:
+        data = json.loads(_secrets_path().read_text(encoding="utf-8"))
+    except Exception:
+        return ""
+    if not isinstance(data, dict):
+        return ""
+    return str(data.get(name, "")).strip()
+
+
 def providers() -> list:
     env = os.environ.get("KB_LLM_PROVIDERS")
     if env and env.strip():
@@ -104,7 +141,7 @@ def _call(provider, model, endpoint, api_key_env, prompt, system, timeout):
                            {"Content-Type": "application/json"}, timeout)
             return (r.get("response") or "").strip() or None
         if provider == "openrouter":
-            key = os.environ.get(api_key_env or "OPENROUTER_API_KEY", "").strip()
+            key = _secret(api_key_env or "OPENROUTER_API_KEY")
             if not key:
                 return None
             msgs = ([{"role": "system", "content": system}] if system else []) + \
@@ -127,13 +164,12 @@ def _call(provider, model, endpoint, api_key_env, prompt, system, timeout):
 def generate(prompt: str, system: str = "", timeout: float = 120.0):
     """Probeer de provider-keten op volgorde. Eerste niet-lege string wint.
     Cloud-stap logt LUID naar stderr. None als de hele keten faalt."""
-    api_key_env = os.environ.get("KB_LLM_API_KEY_ENV", "")
     for prov in providers():
         if prov in CLOUD_PROVIDERS:
             sys.stderr.write(
                 f"⚠ LLM-router: provider '{prov}' is CLOUD — content verlaat je machine.\n")
             sys.stderr.flush()  # nooit gebufferd achter de _call-output (privacy #4)
-        out = _call(prov, model_for(prov), _endpoint(prov), api_key_env,
+        out = _call(prov, model_for(prov), _endpoint(prov), api_key_env_for(prov),
                     prompt, system, timeout)
         if out:
             return out

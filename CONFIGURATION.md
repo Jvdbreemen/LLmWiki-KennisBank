@@ -2,31 +2,30 @@
 
 Reference of every configurable knob in LLmWiki-KennisBank. For each entry: name, default, where to change it, what it affects.
 
-All paths use `$HOME`. Defaults reflect what the source files actually contain. Discrepancies with `README.md` are flagged inline.
+Defaults use `$HOME`, but production installs should set `KENNISBANK_VAULT`
+when the vault is not at `~/KennisBank`. `setup.sh` writes that explicit path
+into selected agent configs so hooks and MCP servers do not drift back to the
+default.
 
 ---
 
 ## 1. Path configuration
 
-The four root paths are declared at the top of `setup.sh`. Scripts and commands hardcode these paths separately, so changing `setup.sh` alone is not enough.
+`setup.sh` is the single supported install and upgrade entrypoint. It reads
+`KENNISBANK_VAULT` for the vault root and installs selected agent integrations
+via `--agents`.
 
 ### VAULT
 
 - **Default**: `$HOME/KennisBank`
-- **Where set**: `setup.sh`, the `VAULT` variable
+- **Where set**: `KENNISBANK_VAULT`; fallback is `setup.sh` `VAULT="${KENNISBANK_VAULT:-$HOME/KennisBank}"`
 - **Read by**:
-  - `scripts/auto-crosslink.py` (line 19, `VAULT_ROOT = Path.home() / "KennisBank"`)
-  - `scripts/intake-scan.py` (line 12, `INBOX = Path.home() / "KennisBank" / "00-inbox"`)
-  - `scripts/semantic-tiling.py` (lines 20-21, `WIKI_DIR` and `CACHE_FILE`)
-  - `scripts/stale-check.py` (lines 14-15, `WIKI_DIR` and `SESSIES_DIR`)
-  - `commands/intake.md` (every path reference)
-  - `commands/sessielog.md` (every path reference)
-  - `commands/stale.md`
-  - `commands/wiki.md`
-  - `skills/autoresearch/SKILL.md` (lazy hierarchy reads `$HOME/KennisBank/02-wiki/`)
-  - `CLAUDE.md.template` (lazy hierarchy and graphify sections)
+  - all Python scripts through `scripts/_vaultpath.py` or a self-locating `<vault>/.claude/scripts/` fallback
+  - Claude hooks through `~/.claude/settings.json`
+  - Codex hooks/MCP through `~/.codex/hooks.json` and `~/.codex/config.toml`
+  - OpenCode MCP/plugin through `~/.config/opencode/opencode.json` and `~/.config/opencode/plugins/kennisbank.js`
 - **Effect**: root of the knowledge vault. Everything below this path.
-- **To change**: edit the `VAULT` variable in `setup.sh` AND every reference listed above. There is no central env var; each file hardcodes the path.
+- **To change**: rerun setup with `KENNISBANK_VAULT=/new/path bash setup.sh --yes --agents ...`. Do not hand-edit generated agent configs unless you are repairing setup itself.
 
 ### RESEARCH
 
@@ -55,16 +54,34 @@ The four root paths are declared at the top of `setup.sh`. Scripts and commands 
 - **Effect**: where the autoresearch skill is installed.
 - **To change**: same caveat as `CLAUDE_COMMANDS`. Not a real knob.
 
+### Agent targets (`--agents`)
+
+- **Default**: `claude,codex`
+- **Where set**: `setup.sh` `AGENTS` variable or `--agents`
+- **Values**: `claude`, `codex`, `opencode`, comma-separated combinations, or `all`
+- **Effect**:
+  - `claude`: installs `~/.claude/commands`, `~/.claude/skills`, and `~/.claude/settings.json` hooks.
+  - `codex`: installs `~/.agents/skills`, `~/.codex/prompts`, `~/.codex/AGENTS.md`, `~/.codex/hooks.json`, and `~/.codex/config.toml` MCP.
+  - `opencode`: installs `~/.config/opencode/commands`, `~/.agents/skills`, `~/.config/opencode/AGENTS.md`, `~/.config/opencode/opencode.json` MCP, and `~/.config/opencode/plugins/kennisbank.js`.
+- **Validation**: `setup.sh` calls `scripts/install-agent-envs.py --validate` and fails when selected agent config is incomplete.
+
+### Post-install model validation
+
+- **Default**: enabled.
+- **Where set**: `setup.sh`; skip explicitly with `--skip-model-check`.
+- **Effect**: verifies the embedding model from `<vault>/.claude/kennisbank-embed.json` and the LLM backend from `<vault>/.claude/kennisbank-llm.json`. Ollama backends use local `ollama` smoke calls; OpenRouter backends use a minimal authenticated `chat/completions` smoke call.
+- **Failure semantics**: setup exits non-zero. This is intentional: an install is not complete when selected local model backends are unreachable.
+
 ---
 
 ## 2. CLAUDE.md vault context variables
 
-`$HOME/KennisBank/CLAUDE.md` is generated from `CLAUDE.md.template` and read by the model at session start. Variables are textual conventions, not parsed config. The model reads them and acts accordingly.
+`<vault>/CLAUDE.md` is generated from `CLAUDE.md.template` and read by the model at session start. Variables are textual conventions, not parsed config. The model reads them and acts accordingly.
 
 ### LEARNINGS_FILE
 
 - **Default**: not set. Template suggests `$HOME/Claude/learnings.md` as an example.
-- **Where set**: `$HOME/KennisBank/CLAUDE.md`, "Key learnings file" section.
+- **Where set**: `<vault>/CLAUDE.md`, "Key learnings file" section.
 - **Read by**: `commands/sessielog.md` Step 5 (the model checks the file for this variable and uses it if present).
 - **Effect**: when set, `/sessielog` appends Do-Not-Repeat entries and technical patterns to that file.
 - **To change**: edit the line `LEARNINGS_FILE=...` in your local `CLAUDE.md`. If unset, Step 5 of `/sessielog` is skipped.
@@ -72,7 +89,7 @@ The four root paths are declared at the top of `setup.sh`. Scripts and commands 
 ### `[YOUR NAME]` placeholder
 
 - **Default**: literal `[YOUR NAME]` (must be replaced after setup).
-- **Where set**: `CLAUDE.md.template` line 4, copied to `$HOME/KennisBank/CLAUDE.md`.
+- **Where set**: `CLAUDE.md.template` line 4, copied to `<vault>/CLAUDE.md`.
 - **Read by**: model at session start.
 - **Effect**: identifies the vault owner in session context.
 
@@ -308,11 +325,13 @@ pluggable, fail-soft.
 
 ### Provider chain / model / endpoint (`KB_LLM_*`)
 
-- **Default**: providers `["ollama"]`, model `gemma4:latest`, endpoint `http://localhost:11434`. No file required.
-- **Where set** (first match wins): env `KB_LLM_PROVIDERS` (comma list), `KB_LLM_MODEL`, `KB_LLM_ENDPOINT`, `KB_LLM_API_KEY_ENV`; then `<vault>/.claude/kennisbank-llm.json` (`{"providers":[...], "model":"...", "models":{prov:model}, "endpoint":"..."}`); then the code default above. Example: `kennisbank-llm.example.json`.
+- **Default**: providers `["ollama"]`, model `gemma4:latest`, endpoint `http://localhost:11434`. `setup.sh` bootstraps this into `<vault>/.claude/kennisbank-llm.json` when absent.
+- **Where set** (first match wins): env `KB_LLM_PROVIDERS` (comma list), `KB_LLM_MODEL`, `KB_LLM_ENDPOINT`, `KB_LLM_API_KEY_ENV`; then `<vault>/.claude/kennisbank-llm.json` (`{"providers":[...], "model":"...", "models":{prov:model}, "endpoint":"..."}`), bootstrapped from `kennisbank-llm.example.json`; then the code default above.
 - **Provider chain**: `providers` is ORDERED; `generate()` tries each until one returns a non-empty string. `ollama` is local (default). `openrouter` and `claude-cli` are **opt-in** cloud providers: putting them in the chain is explicit consent, and each cloud step logs LOUDLY to stderr, never silently. `claude-cli` shells the existing `claude` binary (uses your Claude Code auth, no key).
+- **OpenRouter**: uses OpenRouter's OpenAI-compatible `POST /api/v1/chat/completions` endpoint with `Authorization: Bearer <key>`. Set `"providers": ["openrouter"]`, `"endpoint": "https://openrouter.ai/api/v1"`, `"model": "<provider/model>"`, and `"api_key_env": "OPENROUTER_API_KEY"`. The key is read from that environment variable first, then from user-local `~/.config/kennisbank/secrets.json`. The key is never written to the vault.
 - **PIN YOUR MODEL (common gotcha)**: the code default is the tag `gemma4:latest`. If your local Ollama has a differently-tagged model (e.g. `gemma4:12b`), the sweep probe fails and the heartbeat (`<vault>/.claude/memory-sweep-status.json`) reports `model_unreachable: true` even though Ollama is running — capture then silently produces nothing. Check `ollama list` and pin the tag you actually have in `kennisbank-llm.json`.
-- **To change**: set the env vars, or create `kennisbank-llm.json` from the example. This file is NOT auto-deployed by `setup.sh` (unlike the embedding config) because the code default already works; create it only to override.
+- **To change**: set the env vars, or edit `<vault>/.claude/kennisbank-llm.json`. `setup.sh` creates the file when missing and preserves existing values unless `--force` is used.
+- **Interactive setup**: asks for `ollama` (default) or `openrouter`. For OpenRouter, setup asks for model slug, API-key env-var name, and optionally stores the entered key in `~/.config/kennisbank/secrets.json`.
 
 ## 4b. Vault-onderhoud layer env vars
 
@@ -566,31 +585,25 @@ This is honored by `scripts/stale-check.py`, `scripts/semantic-tiling.py`,
 (shared helper: `scripts/_vaultpath.py`). The importers keep their own
 `--vault` flag. `build-karpathy-index.py` keeps its `--vault-root` flag.
 
-`setup.sh` still has a `VAULT="$HOME/KennisBank"` variable that controls where
-the install scaffolds the vault; set `KENNISBANK_VAULT` in your shell so the
-scripts target the same place after install.
+`setup.sh` scaffolds the vault at `KENNISBANK_VAULT` when that variable is set.
+It also writes the chosen path into Claude, Codex, and OpenCode integration
+files. For non-default paths, rerun setup instead of hand-editing prompt files:
 
-### Runtime paths still baked into the prompt files
+```bash
+KENNISBANK_VAULT=/path/to/your/Kluis bash setup.sh --yes --agents all
+```
 
-The slash commands and the autoresearch skill are prompt files executed by the
-model, not by Python; they still contain literal `~/KennisBank/...` and
-`~/Claude/research/...` references. If you use a non-default path, either set
-`KENNISBANK_VAULT` and symlink (below), or patch these:
+### Runtime prompt files
 
-| File | What to edit |
-|------|-----|
-| `commands/intake.md`, `commands/sessielog.md`, `commands/stale.md`, `commands/wiki.md` | every `~/KennisBank/...` reference |
-| `skills/autoresearch/SKILL.md` | Step 0 lazy hierarchy bash blocks (Layer 2); research output paths |
-| `CLAUDE.md.template` | Layer 2/3 bash blocks; graphify section |
-| `commands/sessielog.md` | Step 2 `find ~/Claude/research/...` |
-| `README.md` | documentation references |
+Commands and skills are prompt files executed by the agent. They should resolve
+the vault from `KENNISBANK_VAULT` or from the installed agent instructions. A
+literal `~/KennisBank/.claude/scripts/...` call in a command is a regression.
+The test suite includes a guard for hardcoded script paths in `commands/*.md`.
 
 ### Recommended approach
 
-1. Set `KENNISBANK_VAULT` (covers all Python scripts and `doctor.sh`), and
-2. for the prompt files either patch the literal paths or symlink:
-   `ln -s /your/real/path $HOME/KennisBank` and leave the defaults in place.
-   The symlink is simplest and keeps upgrades clean.
+Set `KENNISBANK_VAULT` and rerun `setup.sh`. Avoid symlink-based installs unless
+you are repairing a legacy deployment.
 
 ---
 
@@ -598,12 +611,12 @@ model, not by Python; they still contain literal `~/KennisBank/...` and
 
 ### What works
 
-- One vault per user account works. Scripts honor `$KENNISBANK_VAULT` (default `$HOME/KennisBank`); the slash commands target `~/KennisBank` literally.
+- One vault per user account works. Scripts and generated agent configs honor `$KENNISBANK_VAULT` (default `$HOME/KennisBank`).
 - Per-project subdivision inside the vault works via `03-projecten/` subdirectories. Wiki articles can tag a project in frontmatter; `commands/wiki.md` accepts an `$ARGUMENTS` topic filter, but it filters by content match, not by project boundary.
 
 ### What does not work
 
-- **Multiple parallel vaults are not supported.** The Python scripts and `doctor.sh` resolve one vault root via `$KENNISBANK_VAULT` (default `$HOME/KennisBank`); switching active vaults means changing that variable (or moving a symlink). The slash commands still bake `~/KennisBank` into their prompt bodies (see section 9).
+- **Multiple parallel active vaults are not supported.** The Python scripts, generated hooks, and MCP configs resolve one active vault root via `$KENNISBANK_VAULT` or the path stamped by setup. Switching active vaults means rerunning setup for the new path.
 - **Per-project vault overrides** are not auto-detected. `$KENNISBANK_VAULT` is a single global value; the importers also take `--vault` and `build-karpathy-index.py` takes `--vault-root`, but there is no per-project auto-detection from session context.
 - **Concurrent vaults** would collide on the embeddings cache (`<vault>/.claude/embeddings-cache.json`) and on `MEMORY.md` glob ambiguity (section 7).
 

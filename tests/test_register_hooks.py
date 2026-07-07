@@ -66,6 +66,12 @@ class RegisterHooksTest(unittest.TestCase):
             self.assertIn(need, joined)
         pre = s["hooks"]["PreToolUse"][0]
         self.assertEqual(pre.get("matcher"), "WebSearch|WebFetch")
+        self.assertEqual(s["env"]["KENNISBANK_VAULT"], "/v")
+
+    def test_register_manifest_selfheals_vault_env(self):
+        s = {"env": {"KENNISBANK_VAULT": "/old"}}
+        self.assertTrue(self.m.register_manifest(s, "/new"))
+        self.assertEqual(s["env"]["KENNISBANK_VAULT"], "/new")
 
     def test_corrupt_json_refused(self):
         self.settings.write_text("{not json", encoding="utf-8")

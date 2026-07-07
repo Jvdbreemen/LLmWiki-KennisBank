@@ -15,6 +15,9 @@
 #   --no-commands      sla het kopiëren van commands over (heeft voorrang op --yes)
 #   --no-skill         sla het kopiëren van de autoresearch skill over (heeft voorrang op --yes)
 #   --no-hooks         sla het registreren van de retrieval-hooks over (heeft voorrang op --yes)
+#   --agents LIST      agentdoelen: claude,codex,opencode,all (default: claude,codex)
+#   --no-codex         alias voor --agents claude
+#   --skip-model-check sla Ollama model-smoke-tests over in de post-install validatie
 #   -f, --force        overschrijf bestaande bestanden
 #   -h, --help         toon usage en stop
 
@@ -33,6 +36,9 @@ NO_COMMANDS=0
 NO_SKILL=0
 NO_HOOKS=0
 FORCE=0
+AGENTS="claude,codex"
+AGENTS_SET=0
+SKIP_MODEL_CHECK=0
 
 usage() {
   cat <<'USAGE'
@@ -43,6 +49,9 @@ Opties:
   --no-commands      sla het kopiëren van commands over
   --no-skill         sla het kopiëren van de skills (autoresearch, kennisbank-upgrade, kennisbank-contribute) over
   --no-hooks         sla het registreren van de retrieval-hooks in ~/.claude/settings.json over
+  --agents LIST      installeer agent-integraties voor LIST: claude,codex,opencode,all
+  --no-codex         installeer alleen Claude Code-integratie (compatibiliteitsalias)
+  --skip-model-check sla lokale Ollama model-smoke-tests over tijdens post-install validatie
   -f, --force        overschrijf bestaande bestanden (scripts, templates, commands, skill, CLAUDE.md)
   -h, --help         toon deze hulp en stop
 
@@ -68,6 +77,22 @@ while [ $# -gt 0 ]; do
     --no-hooks)
       NO_HOOKS=1
       ;;
+    --agents)
+      shift
+      if [ $# -eq 0 ]; then
+        echo "--agents verwacht een waarde (claude,codex,opencode,all)" >&2
+        exit 1
+      fi
+      AGENTS="$1"
+      AGENTS_SET=1
+      ;;
+    --no-codex)
+      AGENTS="claude"
+      AGENTS_SET=1
+      ;;
+    --skip-model-check)
+      SKIP_MODEL_CHECK=1
+      ;;
     -f|--force)
       FORCE=1
       ;;
@@ -83,6 +108,23 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+
+AGENTS="$(printf "%s" "$AGENTS" | tr '[:upper:]' '[:lower:]' | tr -d ' ')"
+if [ "$ASSUME_YES" != "1" ] && [ "$AGENTS_SET" != "1" ]; then
+  printf "Agent-integraties installeren voor welke omgevingen? [claude,codex] (opties: claude,codex,opencode,all) "
+  read REPLY
+  if [ -n "$REPLY" ]; then
+    AGENTS="$(printf "%s" "$REPLY" | tr '[:upper:]' '[:lower:]' | tr -d ' ')"
+  fi
+fi
+
+has_agent() {
+  case ",$AGENTS," in
+    *",all,"*) return 0 ;;
+    *",$1,"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
 
 # copy_file SRC DST
 # Kopieert SRC naar DST. Als FORCE=1, overschrijft. Anders, slaat over als DST bestaat.
@@ -130,6 +172,74 @@ chmod +x "$VAULT/.claude/scripts/"*.py "$VAULT/.claude/scripts/"*.sh
 # Embedding backend config (example -> live). copy_file skips if it already
 # exists (unless --force), so a user's edited backend config is never clobbered.
 copy_file kennisbank-embed.example.json "$VAULT/.claude/kennisbank-embed.json"
+copy_file kennisbank-llm.example.json "$VAULT/.claude/kennisbank-llm.json"
+
+configure_llm_backend() {
+  if [ "$ASSUME_YES" = "1" ] || [ ! -t 0 ]; then
+    return 0
+  fi
+  local backend model key_env key_value store_reply
+  printf "LLM-backend voor memory judge/extractie? [ollama] (opties: ollama, openrouter) "
+  read backend
+  backend="$(printf "%s" "${backend:-ollama}" | tr '[:upper:]' '[:lower:]' | tr -d ' ')"
+  case "$backend" in
+    ""|ollama)
+      printf "Ollama model tag? [gemma4:latest] "
+      read model
+      if [ -n "$model" ]; then
+        python3 "$SCRIPT_DIR/scripts/install-agent-envs.py" \
+          --vault "$VAULT" --agents "$AGENTS" --configure-llm \
+          --llm-provider ollama --llm-model "$model"
+      else
+        python3 "$SCRIPT_DIR/scripts/install-agent-envs.py" \
+          --vault "$VAULT" --agents "$AGENTS" --configure-llm \
+          --llm-provider ollama
+      fi
+      ;;
+    openrouter)
+      echo "  LET OP: OpenRouter is een externe cloud-API; memory-sweep content verlaat je machine."
+      printf "OpenRouter model slug? [openai/gpt-5.2] "
+      read model
+      model="${model:-openai/gpt-5.2}"
+      printf "API-key env var naam? [OPENROUTER_API_KEY] "
+      read key_env
+      key_env="${key_env:-OPENROUTER_API_KEY}"
+      case "$key_env" in
+        ""|[0-9]*|*[!A-Za-z0-9_]*)
+          echo "Ongeldige env-varnaam voor API key: $key_env" >&2
+          return 1
+          ;;
+      esac
+      if [ -z "${!key_env:-}" ]; then
+        printf "Geen %s in deze shell. API key nu invoeren en user-local opslaan in ~/.config/kennisbank/secrets.json? [y/N] " "$key_env"
+        read store_reply
+        if [ "$store_reply" = "y" ] || [ "$store_reply" = "Y" ]; then
+          printf "OpenRouter API key: "
+          read -r -s key_value
+          printf "\n"
+        fi
+      fi
+      if [ -n "${key_value:-}" ]; then
+        KENNISBANK_OPENROUTER_API_KEY_TO_STORE="$key_value" \
+          python3 "$SCRIPT_DIR/scripts/install-agent-envs.py" \
+            --vault "$VAULT" --agents "$AGENTS" --configure-llm \
+            --llm-provider openrouter --llm-model "$model" \
+            --llm-api-key-env "$key_env"
+      else
+        python3 "$SCRIPT_DIR/scripts/install-agent-envs.py" \
+          --vault "$VAULT" --agents "$AGENTS" --configure-llm \
+          --llm-provider openrouter --llm-model "$model" \
+          --llm-api-key-env "$key_env"
+      fi
+      ;;
+    *)
+      echo "Onbekende LLM-backend: $backend (gebruik ollama of openrouter)" >&2
+      return 1
+      ;;
+  esac
+}
+
+configure_llm_backend
 
 # Python-afhankelijkheden (sqlite-vec voor kb-index)
 # F3: op Windows draait py -3 (de hooks-interpreter); gebruik diezelfde interpreter
@@ -190,7 +300,9 @@ elif [ "$claude_md_was_present" = "1" ] && [ "$FORCE" = "1" ]; then
 fi
 
 # Commands and skill (with confirmation, of via flags)
-if [ "$NO_COMMANDS" = "1" ]; then
+if ! has_agent claude; then
+  echo "Claude Code commands overgeslagen (--agents bevat geen claude)."
+elif [ "$NO_COMMANDS" = "1" ]; then
   echo "Commands overgeslagen (--no-commands)."
 elif [ "$ASSUME_YES" = "1" ]; then
   mkdir -p "$CLAUDE_COMMANDS"
@@ -219,7 +331,9 @@ else
   fi
 fi
 
-if [ "$NO_SKILL" = "1" ]; then
+if ! has_agent claude; then
+  echo "Claude Code skills overgeslagen (--agents bevat geen claude)."
+elif [ "$NO_SKILL" = "1" ]; then
   echo "Skills overgeslagen (--no-skill)."
 elif [ "$ASSUME_YES" = "1" ]; then
   for sdir in skills/*/; do
@@ -255,7 +369,10 @@ register_hooks() {
     || echo "  hooks niet geregistreerd (zie melding hierboven); registreer handmatig (CONFIGURATION.md)." >&2
 }
 
-if [ "$NO_HOOKS" = "1" ]; then
+if ! has_agent claude; then
+  echo "Claude Code hooks overgeslagen (--agents bevat geen claude)."
+  NO_HOOKS=1
+elif [ "$NO_HOOKS" = "1" ]; then
   echo "Hooks overgeslagen (--no-hooks)."
 elif [ "$ASSUME_YES" = "1" ]; then
   register_hooks
@@ -279,10 +396,45 @@ if command -v python3 >/dev/null 2>&1; then
     || echo "  migraties niet (volledig) uitgevoerd; her-run 'bash setup.sh'." >&2
 fi
 
+# Agent-integraties (Codex/OpenCode) en harde post-install validatie. Dit is
+# idempotent en bedoeld voor zowel initiële installatie als upgrades.
+if command -v python3 >/dev/null 2>&1; then
+  MODEL_ARG=""
+  [ "$SKIP_MODEL_CHECK" = "1" ] && MODEL_ARG="--skip-models"
+  python3 "$SCRIPT_DIR/scripts/install-agent-envs.py" \
+    --repo "$SCRIPT_DIR" \
+    --vault "$VAULT" \
+    --agents "$AGENTS" \
+    --install \
+    --validate \
+    $MODEL_ARG
+  AGENT_VALIDATE_RC=$?
+else
+  echo "  WAARSCHUWING: python3 niet gevonden; agent-integraties en validatie overgeslagen." >&2
+  AGENT_VALIDATE_RC=1
+fi
+
+# doctor.sh blijft read-only, maar setup gebruikt hem als afsluitende gate:
+# eerst repareren/configureren, dan diagnosticeren.
+if [ -f "$VAULT/.claude/scripts/doctor.sh" ]; then
+  KENNISBANK_VAULT="$VAULT" bash "$VAULT/.claude/scripts/doctor.sh"
+  DOCTOR_RC=$?
+else
+  echo "  WAARSCHUWING: doctor.sh ontbreekt na setup." >&2
+  DOCTOR_RC=1
+fi
+
+if [ "$AGENT_VALIDATE_RC" != "0" ] || [ "$DOCTOR_RC" != "0" ]; then
+  echo "" >&2
+  echo "Post-install validatie faalde. Corrigeer de meldingen hierboven en draai setup.sh opnieuw." >&2
+  exit 1
+fi
+
 echo ""
 echo "Klaar. Volgende stappen:"
-echo "0. Verifieer de installatie: bash scripts/doctor.sh"
-echo "1. Bewerk ~/KennisBank/CLAUDE.md  -  vul je naam en projecten in"
-echo "2. Voeg /autoresearch toe aan je globale ~/.claude/CLAUDE.md (zie README.md)"
-echo "3. Optioneel: ollama pull qwen3-embedding:8b (meertalig, voor semantic tiling; Engels-only? ollama pull nomic-embed-text)"
-echo "4. De retrieval-hooks zijn geregistreerd in ~/.claude/settings.json; ze warmen de embed-cache bij elke nieuwe sessie. Sla over met --no-hooks."
+echo "0. Installatie en upgrade-validatie zijn uitgevoerd door setup.sh (doctor + agent/model checks)."
+echo "1. Vault: $VAULT"
+echo "2. Bewerk $VAULT/CLAUDE.md wanneer je naam/projecten wilt bijwerken."
+echo "3. Agentdoelen geconfigureerd: $AGENTS"
+echo "4. LLM-backend: Ollama is de default; OpenRouter is alleen actief als je dat expliciet koos in kennisbank-llm.json."
+echo "5. De retrieval-hooks zijn geregistreerd in ~/.claude/settings.json wanneer Claude Code in --agents staat; sla registratie over met --no-hooks."
