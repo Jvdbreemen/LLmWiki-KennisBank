@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Backfill-cap voor mega-transcripts (`scripts/memory-sweep.py`, `--max-per-transcript`).** De `--all` her-extractie kreeg een per-transcript write-cap zodat een grote source_session niet onbeperkt facetten dumpt. De normale per-sessie sweep blijft ongewijzigd; dit raakt alleen het aantal geschreven memories per transcript in de backfill-route.
+- **Embed-retry bij tijdelijke embedding-hikjes (`scripts/memory-sweep.py`).** Kandidaten waarvan `emb.embed(body)` tijdelijk `None` teruggeeft worden nu kort opnieuw geprobeerd voordat `embed_failed` telt. De route blijft fail-soft na de maximale retries en introduceert geen per-kandidaat herverwerking of extra watermark-risico.
+
 ## [0.10.0] - 2026-07-03
 
 ### Added

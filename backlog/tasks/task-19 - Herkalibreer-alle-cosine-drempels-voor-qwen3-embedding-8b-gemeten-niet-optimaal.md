@@ -3,11 +3,11 @@ id: TASK-19
 title: >-
   Herkalibreer alle cosine-drempels voor qwen3-embedding:8b (gemeten: niet
   optimaal)
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-07-03 21:56'
-updated_date: '2026-07-04 04:20'
+updated_date: '2026-07-06 20:45'
 labels: []
 dependencies: []
 ordinal: 21000
@@ -83,3 +83,9 @@ HERIJK-BESLISSINGEN (data-onderbouwd, GEEN blinde tweak):
 
 MODEL-KEUZE-IMPLICATIE: voor threshold-gebaseerde parafrase-dedup is qwen3 ongeschikt; cosine != parafrase-detectie hier. Retrieval-rol mag qwen3 blijven (relevance-ranking werkt). Overweeg een paraphrase/STS-model (of cross-encoder rerank) uitsluitend voor de dedup/supersede-beslissing. Zie [[embedding-model-keuze]]. Model-specifiek: herhaal deze meting bij elke modelwissel.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Geklopt als meet- en documentatietaak: de kalibratieset is uitgebreid, de qwen3-embedding:8b-metingen zijn vastgelegd en de conclusie is dat er geen schone cosine-scheidingen zijn voor alle knoppen tegelijk. De bestaande thresholds blijven daarom bewust staan; CONFIGURATION.md, CHANGELOG.md en de task-notes dragen de herhaalbare procedure en de model-specifieke conclusie. Geen runtime-code aangepast.
+<!-- SECTION:FINAL_SUMMARY:END -->

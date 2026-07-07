@@ -1,10 +1,10 @@
 ---
 id: TASK-16
 title: 'embed_failed tijdens sweep: kandidaten verloren bij tijdelijke Ollama-hikjes'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-07-03 18:39'
-updated_date: '2026-07-03 19:35'
+updated_date: '2026-07-07 09:26'
 labels: []
 dependencies: []
 ordinal: 18000
@@ -31,9 +31,9 @@ AANBEVELING: begin met optie 1 (retry) als de goedkoopste risico-arme verbeterin
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [ ] #1 Gemeten of embed_failed bij NORMALE per-sessie sweeps >0 is, of dat het een --all/backfill-fenomeen was
-- [ ] #2 Als ingegrepen (optie 1): embed-retry met backoff in de chunk-loop, met een test die de retry-op-None-tak dekt; fail-soft blijft (na max retries nog steeds skip, geen crash)
-- [ ] #3 Geen per-kandidaat herverwerking die dubbele memories introduceert zonder dedup-garantie (optie 2 alleen met per-kandidaat watermarking)
-- [ ] #4 Beslissing gedocumenteerd, inclusief WONTFIX-optie als de impact verwaarloosbaar blijkt
+- [x] #2 Als ingegrepen (optie 1): embed-retry met backoff in de chunk-loop, met een test die de retry-op-None-tak dekt; fail-soft blijft (na max retries nog steeds skip, geen crash)
+- [x] #3 Geen per-kandidaat herverwerking die dubbele memories introduceert zonder dedup-garantie (optie 2 alleen met per-kandidaat watermarking)
+- [x] #4 Beslissing gedocumenteerd, inclusief WONTFIX-optie als de impact verwaarloosbaar blijkt
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -50,4 +50,30 @@ STRUCTURELE FIX (hoger geprioriteerd dan de embed-retry alleen): voeg een DETERM
 REVISIE PRIORITEIT: van 'laag/eenmalig' naar 'medium' — de dedup-escape is een doorlopend risico bij elke --all/rebuild-memory reprocessing, niet alleen een eenmalig backfill-verlies. De embed-retry (oorspronkelijke optie 1) blijft nuttig maar lost de dedup-escape NIET volledig op (een retry kan alsnog falen); de body-hash pre-dedup wel.
 
 BESTAANDE CRUFT: 25 exacte duplicaten staan nu in de vault (deterministisch identificeerbaar via body-hash). Aparte opruim-actie mogelijk (behoud 1 per paar, superseded of verwijder de andere) -> 588 zou naar 563 zakken. Raakt retrieval: twee identieke hits verspillen top-k slots. Vault-content-mutatie, dus met mens-akkoord.
+
+2026-07-06: exact-body pre-dedup toegevoegd in `memory-sweep.py` via een deterministische body-hash (`_sweeputil.body_key`) tegen zowel de bestaande pool als de binnen-run geschreven set. Dit voorkomt dat een identieke body alsnog door een tijdelijke embed-hik heen glipt. Nieuwe tests dekken het skip-before-embed pad. De bredere meting of normale per-sessie sweeps een structureel embed_failed-probleem hebben blijft nog open.
+
+2026-07-07: embed-retry met korte backoff toegevoegd in scripts/memory-sweep.py via _embed_with_retry. De kandidaat-embed in de chunk-loop probeert nu maximaal 3 keer voordat embed_failed wordt geteld; fail-soft blijft intact. Regressietests toegevoegd: transient None herstelt en schrijft alsnog, blijvende None telt exact 1 embed_failed en crasht niet. Gerichte validatie: python -m unittest tests.test_memory_sweep -v (27 tests OK) en python -m unittest tests.test_sweeputil tests.test_usage tests.test_rank -v (41 tests OK). Geen per-kandidaat watermark/herverwerking toegevoegd; dedup/body-hash pad blijft leidend.
 <!-- SECTION:NOTES:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: @claude
+created: 2026-07-06 21:05
+---
+2026-07-06: exact-body pre-dedup is toegevoegd en getest; acceptatie #1 en de bredere impactmeting zijn nog open.
+---
+
+author: codex
+created: 2026-07-07 09:25
+---
+TASK-16 codepad afgerond: retry-op-None + fail-soft tests groen. AC#1 blijft open zolang er geen echte normale-sweep telemetry/heartbeat is om te bewijzen of embed_failed buiten --all/backfill voorkomt.
+---
+
+author: codex
+created: 2026-07-07 09:26
+---
+Decision documented: gekozen voor de laag-risico optie 1 (embed retry) plus de eerder toegevoegde deterministische body-hash pre-dedup. Optie 2/3 en WONTFIX blijven expliciet niet gekozen zolang normale-sweep telemetry ontbreekt; AC#1 blijft daarom open.
+---
+<!-- COMMENTS:END -->

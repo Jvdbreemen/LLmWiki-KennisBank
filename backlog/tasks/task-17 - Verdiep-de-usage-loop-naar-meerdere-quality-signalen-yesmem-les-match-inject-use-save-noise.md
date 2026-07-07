@@ -3,10 +3,10 @@ id: TASK-17
 title: >-
   Verdiep de usage-loop naar meerdere quality-signalen (yesmem-les:
   match/inject/use/save/noise)
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-07-03 21:48'
-updated_date: '2026-07-03 22:55'
+updated_date: '2026-07-07 09:26'
 labels: []
 dependencies: []
 ordinal: 19000
@@ -98,4 +98,22 @@ Bronbestanden yesmem (Go, Apache-2.0, github.com/carsteneu/yesmem):
 Bron: OB1 (github.com/NateBJones-Projects/OB1), geverifieerd via 35-agent adversariele pass (~/Claude/research/2026-07-04-ob1-openbrain-vs-kennisbank.md). OB1 heeft recall_traces + recall_items (ranking_score, used-bool) + een /recall/{id}/usage endpoint + audit_events -> maar dat is TELEMETRIE/observability voor een dashboard; het voedt de ranking-score NIET terug (geverifieerd: rankMemory gebruikt provenance/policy/review/confidence, GEEN usage-signaal).
 
 CONCLUSIE: OB1 zit op precies onze PRE-fix staat (usage = telemetrie, niet in de rank). Dus OB1 levert hier GEEN over te nemen mechaniek. Het valideert wel de premisse: zelfs een systeem met 4070 sterren laat usage als losse telemetrie liggen -> een echte usage->rank feedbackloop met signed noise (deze task) zou ons juist ONDERSCHEIDEN, niet imiteren. YesMem (IncrementClusterScore, signed) blijft de enige referentie met usage-in-de-score. Geen wijziging aan de aanpak; OB1 bevestigt dat de YesMem-route de juiste is.
+
+2026-07-06: eerste stap doorgevoerd. `kb-usage-scan.py` telt nu alleen `tool_use`-inputs als gebruik; losse prose-verwijzingen worden niet meer als load-bearing gebruik gemarkeerd. Tests toegevoegd voor tool-call gebruik en prose-only false positives. De noise-signal-beslissing blijft open totdat er meetbewijs is dat boost-only tekortschiet.
 <!-- SECTION:NOTES:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: @claude
+created: 2026-07-06 21:03
+---
+2026-07-06: start van de task. False-positive gebruiksmeting is aangescherpt; noise-signaal nog niet toegevoegd.
+---
+
+author: codex
+created: 2026-07-07 09:26
+---
+Drain-check 2026-07-07: false-positive fix voor kb-usage-scan.py is aanwezig en tests voor tool_use versus prose-only zijn groen, maar AC#1 vereist nog kb-eval memory-only voor/na en AC#2/#4 vereisen bewijs dat boost-only tekortschiet. Lokale omgeving mist C:\Users\rvdbr\KennisBank\.claude\kb-usage.db en eval-data; daarom geen zelfstandig sluitbare noise-signal beslissing.
+---
+<!-- COMMENTS:END -->

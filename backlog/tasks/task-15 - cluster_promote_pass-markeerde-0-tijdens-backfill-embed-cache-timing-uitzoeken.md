@@ -3,10 +3,10 @@ id: TASK-15
 title: >-
   cluster_promote_pass markeerde 0 tijdens backfill: embed-cache timing
   uitzoeken
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-07-03 18:39'
-updated_date: '2026-07-04 04:20'
+updated_date: '2026-07-06 21:06'
 labels: []
 dependencies: []
 ordinal: 17000
@@ -32,10 +32,10 @@ RISICO/NUANCE: dit is diagnose, geen bevestigde bug. Mogelijk is 0 correct (de f
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Gereproduceerd: cluster_promote_pass los gedraaid op de huidige 588 memories (warme cache) — vindt het nu wel/niet kandidaten? Uitkomst vastgelegd
-- [ ] #2 Root-cause bevestigd of weerlegd: koude embed-cache tijdens de sweep-onderhoudspas vs een legitieme 0 (clusters onder drempel/min_neighbors)
-- [ ] #3 Als het een cache-timing-bug is: fix zodat de cluster-stap op betrouwbare vectoren draait (recompute-on-miss of pas op warme index), met een test die de cache-miss-tak dekt
-- [ ] #4 Geen wijziging als 0 correct blijkt; dan documenteren waarom (drempel/min_neighbors-gedrag) zodat het niet opnieuw als bug wordt opgepakt
+- [x] #1 Gereproduceerd: cluster_promote_pass los gedraaid op de huidige 588 memories (warme cache) — vindt het nu wel/niet kandidaten? Uitkomst vastgelegd
+- [x] #2 Root-cause bevestigd of weerlegd: koude embed-cache tijdens de sweep-onderhoudspas vs een legitieme 0 (clusters onder drempel/min_neighbors)
+- [x] #3 Als het een cache-timing-bug is: fix zodat de cluster-stap op betrouwbare vectoren draait (recompute-on-miss of pas op warme index), met een test die de cache-miss-tak dekt
+- [x] #4 Geen wijziging als 0 correct blijkt; dan documenteren waarom (drempel/min_neighbors-gedrag) zodat het niet opnieuw als bug wordt opgepakt
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -60,3 +60,9 @@ GEVOLG - dit is een KALIBRATIE-vraag, geen bug: cluster_promote_pass vuurt bij d
 --- BEVESTIGD via kb-calibrate per-paar diagnose (2026-07-04, zie TASK-19) ---
 cluster-drempel 0.80 ligt BOVEN elk gemeten related-paar (related max cosine = 0.773 op qwen3-embedding:8b, 42-paren kalibratieset). cluster_promote_pass(threshold=0.80, min_neighbors=2) kan daardoor vrijwel nooit vuren: geen enkel legitiem-gerelateerd paar haalt 0.80. Dit is GEEN cache-timing-bug (die hypothese was al gefalsifieerd) maar een drempel-boven-bereik. Beslissing: (a) verlaag threshold naar ~0.75 om top-related clusters te vangen, OF (b) verlaag min_neighbors naar 1, OF (c) accepteer near-dead en documenteer als bewuste keuze. Meet met kb-eval memory-only voor je (a)/(b) houdt.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+De oorspronkelijke cache-timing-hypothese is gefalsifieerd en vervangen door een gekalibreerde conclusie: `cluster_promote_pass` markeerde 0 niet door een koude cache maar omdat de drempel/min-neighbors-combinatie boven het gemeten related-bereik van qwen3-embedding:8b ligt. Dat is in de task-notes en de latere kalibratie-uitkomst vastgelegd; de juiste uitkomst is dus documentatie en drempelbeslissing, geen codefix voor cache-timing.
+<!-- SECTION:FINAL_SUMMARY:END -->

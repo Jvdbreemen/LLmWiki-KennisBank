@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "adapters": [
+    {
+      "id": "copilot-instructions",
+      "platform": "github-copilot",
+      "kind": "push-inject",
+      "path": ".github/copilot-instructions.md",
+      "purpose": "Native prompt nudge for Copilot agent mode"
+    },
+    {
+      "id": "codex-cli-mcp",
+      "platform": "codex-cli",
+      "kind": "mcp-registration",
+      "path": "docs/agent-integrations.md#codex-cli",
+      "purpose": "Register the local MCP server in ~/.codex/config.toml"
+    }
+  ]
+}

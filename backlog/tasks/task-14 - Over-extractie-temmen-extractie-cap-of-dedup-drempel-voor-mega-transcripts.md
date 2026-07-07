@@ -1,10 +1,10 @@
 ---
 id: TASK-14
 title: 'Over-extractie temmen: extractie-cap of dedup-drempel voor mega-transcripts'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-07-03 18:38'
-updated_date: '2026-07-03 19:13'
+updated_date: '2026-07-07 09:26'
 labels: []
 dependencies: []
 ordinal: 16000
@@ -61,4 +61,30 @@ GEVOLG voor de ingrepen: optie 1 (extractie-cap per transcript) moet specifiek d
 MEET-VERFIJNING VAN DE LEVER (2026-07-03, uit de TASK-15 buren-analyse). De over-extractie is GEEN duplicatie: op de 505 current-memories heeft 445 nul buren boven cosine 0.80 en niemand >=2 buren. De 148 facetten uit één mega-sessie zijn dus semantisch DIVERS (atomaire, zelfstandige uitspraken), niet near-duplicaat.
 
 GEVOLG voor de ingreep-opties: optie 3 (dedup-drempel verlagen) en een facet-merge-pass RAKEN DEZE FACETTEN NAUWELIJKS — ze liggen te ver uit elkaar in de embedding-ruimte om gemerged te worden zonder legitiem-verschillende feiten samen te klappen. De effectieve lever is dus optie 1 (EXTRACTIE-CAP per source_session in run_sweep, raakt zowel --all als de reguliere sweep) of importance-gebaseerd snoeien (alleen judge-importance >= drempel bewaren), NIET similarity-merging. Prioriteer optie 1.
+
+2026-07-06: toegevoegd `max_memories_per_transcript` (default 20) aan `scripts/memory-sweep.py`; de cap stopt de kandidaat-loop na N geschreven memories per source_session, ook in `--all`/rebuild-pad. CLI uitgebreid met `--max-per-transcript N`. Regresstest toegevoegd die een backfill met meerdere kandidaten op 2 geschreven memories begrenst. Gerichte `tests.test_memory_sweep` draait groen; volledige suite time-outte na 124s.
+
+2026-07-07: documented `--max-per-transcript` in CONFIGURATION.md and CHANGELOG.md. Local environment still lacks an installed `~/KennisBank` vault / `kb-usage.db` / memory eval-set files, so the acceptance-criteria piece that depends on real week usage-data + memory-only kb-eval cannot be re-run on this machine.
 <!-- SECTION:NOTES:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: codex
+created: 2026-07-06 21:49
+---
+Cap per transcript geïmplementeerd in `memory-sweep.py` en gedekt met een regressietest op de `--all`-route. Ik heb nog geen week-usage / kb-eval-meting herhaald in deze turn, dus ik laat de task status voorlopig op In Progress.
+---
+
+author: codex
+created: 2026-07-07 08:07
+---
+Cap en docs zijn bijgewerkt, maar de gevraagde live usage-baseline ontbreekt lokaal: geen geïnstalleerde vault, geen kb-usage.db en geen memory-eval-set in de omgeving. Daardoor kan ik de task hier niet eerlijk als volledig bewezen sluiten.
+---
+
+author: codex
+created: 2026-07-07 09:26
+---
+Drain-check 2026-07-07: code/doc-pad voor max_memories_per_transcript is aanwezig en gericht getest, maar AC#1/#2/#4 blijven meet-afhankelijk. Lokale omgeving mist C:\Users\rvdbr\KennisBank\09-memory, 01-raw\transcripts, .claude\kb-usage.db en memory-eval-set data; daarom kan ik hier geen week-usage + kb-eval memory-only bewijs leveren en de taak niet eerlijk sluiten.
+---
+<!-- COMMENTS:END -->

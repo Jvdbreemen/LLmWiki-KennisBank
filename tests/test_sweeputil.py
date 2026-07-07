@@ -51,6 +51,9 @@ class SweepUtilTest(unittest.TestCase):
         self.assertFalse(su.is_duplicate(v, [w]),
                          "cosine 0.91 should NOT be a duplicate at default threshold 0.92")
 
+    def test_body_key_is_stable_for_trimmed_exact_matches(self):
+        self.assertEqual(su.body_key("  hallo  "), su.body_key("hallo"))
+
 
 if __name__ == "__main__":
     unittest.main()

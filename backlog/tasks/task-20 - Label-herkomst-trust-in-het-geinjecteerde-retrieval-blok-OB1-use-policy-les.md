@@ -1,9 +1,10 @@
 ---
 id: TASK-20
 title: Label herkomst/trust in het geinjecteerde retrieval-blok (OB1 use-policy-les)
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-07-03 22:58'
+updated_date: '2026-07-06 20:56'
 labels: []
 dependencies: []
 ordinal: 22000
@@ -30,8 +31,14 @@ Raakt: kb-retrieve (injectie-formattering), _memory.py (evidence_basis + status 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 kb-retrieve toont per geinjecteerde MEMORY een compacte deterministische herkomst/status-tag (evidence_basis + current/unverified); wiki-hits blijven ongetagd
-- [ ] #2 Tag-formulering laat mens-herkomst (getypt/mens-in-lus) als autoritatief lezen en agent/onbevestigd als hint; geverifieerd op een handvol echte injectie-blokken
-- [ ] #3 Puur presentatie: geen filter/suppressie, geen nieuw veld, geen LLM in het injectie-pad
-- [ ] #4 Bewust-niet-gemeten-met-kb-eval gedocumenteerd (recall-set verandert niet); i.p.v. handmatige inspectie dat de tags kloppen en leesbaar zijn
+- [x] #1 kb-retrieve toont per geinjecteerde MEMORY een compacte deterministische herkomst/status-tag (evidence_basis + current/unverified); wiki-hits blijven ongetagd
+- [x] #2 Tag-formulering laat mens-herkomst (getypt/mens-in-lus) als autoritatief lezen en agent/onbevestigd als hint; geverifieerd op een handvol echte injectie-blokken
+- [x] #3 Puur presentatie: geen filter/suppressie, geen nieuw veld, geen LLM in het injectie-pad
+- [x] #4 Bewust-niet-gemeten-met-kb-eval gedocumenteerd (recall-set verandert niet); i.p.v. handmatige inspectie dat de tags kloppen en leesbaar zijn
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Herkomst-labeling is in de repo geïmplementeerd en getest: `scripts/kb-retrieve.py` tagt memory-hits deterministisch met `evidence_basis + status`, wiki-hits blijven ongetagd, en `tests/test_injection_provenance.py` dekt zowel de pure mapping als de injectie-output. Dit maakt het ingevoegde retrieval-blok zichtbaar onderscheidbaar voor mens- en agent-herkomst zonder filtering of LLM-pad.
+<!-- SECTION:FINAL_SUMMARY:END -->

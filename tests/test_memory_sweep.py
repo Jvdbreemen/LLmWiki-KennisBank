@@ -94,6 +94,54 @@ class MemorySweepTest(unittest.TestCase):
         self.assertEqual(summary.get("written", 0), 0)
         self.assertGreaterEqual(summary.get("duplicates", 0), 1)
 
+    def test_exact_body_duplicate_skips_before_embed(self):
+        import _memory
+        import _extract
+        _memory.write("Bestaand", "exact dezelfde body", created="2026-06-27")
+        _extract.extract_candidates = lambda text, max_n=8: [
+            {"title": "Nieuw", "body": "exact dezelfde body"}
+        ]
+        self.emb.embed = lambda text, timeout=30.0: [0.1, 0.2, 0.3] if text == "ping" else None
+        summary = self.m.run_sweep()
+        self.assertEqual(summary.get("embed_failed", 0), 0)
+        self.assertGreaterEqual(summary.get("duplicates", 0), 1)
+        self.assertEqual(summary.get("written", 0), 0)
+
+    def test_embed_retry_recovers_transient_none(self):
+        calls = {"body": 0}
+        self.m.EMBED_RETRY_BACKOFF_SECONDS = 0
+
+        def _flaky_embed(text, timeout=30.0):
+            if text == "ping":
+                return [0.1, 0.2, 0.3]
+            calls["body"] += 1
+            if calls["body"] == 1:
+                return None
+            return [0.1, 0.2, 0.3]
+
+        self.emb.embed = _flaky_embed
+        summary = self.m.run_sweep()
+        self.assertEqual(calls["body"], 2)
+        self.assertEqual(summary.get("embed_failed", 0), 0)
+        self.assertEqual(summary.get("written", 0), 1)
+
+    def test_embed_retry_failsoft_after_max_retries(self):
+        calls = {"body": 0}
+        self.m.EMBED_RETRY_ATTEMPTS = 2
+        self.m.EMBED_RETRY_BACKOFF_SECONDS = 0
+
+        def _down_after_probe(text, timeout=30.0):
+            if text == "ping":
+                return [0.1, 0.2, 0.3]
+            calls["body"] += 1
+            return None
+
+        self.emb.embed = _down_after_probe
+        summary = self.m.run_sweep()
+        self.assertEqual(calls["body"], 2)
+        self.assertEqual(summary.get("embed_failed", 0), 1)
+        self.assertEqual(summary.get("written", 0), 0)
+
     def test_gated_off_does_nothing(self):
         (self.vault / "kennisbank-settings.json").write_text(
             json.dumps({"memory_capture": False}), encoding="utf-8")
@@ -356,6 +404,26 @@ class MemorySweepTest(unittest.TestCase):
         s_all = self.m.run_sweep(max_transcripts=10, ignore_watermark=True)
         self.assertEqual(s_all["processed"], 12,
                          f"ignore_watermark=True moet alle 12 verwerken, got {s_all['processed']}")
+
+    def test_rebuild_all_caps_written_memories_per_transcript(self):
+        """--all mag een mega-transcript verwerken, maar niet onbeperkt facetten schrijven."""
+        import _extract
+        _extract.extract_candidates = lambda text, max_n=8: [
+            {"title": f"m{i}", "body": f"body {i}"}
+            for i in range(1, 6)
+        ]
+        self.emb.embed = lambda text, timeout=30.0: {
+            "body 1": [1.0, 0.0, 0.0],
+            "body 2": [0.0, 1.0, 0.0],
+            "body 3": [0.0, 0.0, 1.0],
+            "body 4": [0.7, 0.7, 0.0],
+            "body 5": [0.7, 0.0, 0.7],
+        }.get(text, [0.1, 0.2, 0.3])
+        summary = self.m.run_sweep(ignore_watermark=True, max_memories_per_transcript=2)
+        mems = list((self.vault / "09-memory").glob("*.md"))
+        self.assertEqual(summary["processed"], 1)
+        self.assertEqual(summary["written"], 2)
+        self.assertEqual(len(mems), 2)
 
     def test_sweep_runs_maintenance(self):
         # na een normale sweep moet de summary de onderhouds-tellers bevatten
