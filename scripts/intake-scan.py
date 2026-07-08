@@ -12,12 +12,11 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _vaultpath import vault_root  # noqa: E402
+from _liteparse import IMAGE_EXTENSIONS, OFFICE_EXTENSIONS, PDF_EXTENSIONS  # noqa: E402
 
 INBOX = vault_root() / "00-inbox"
 
 FRONTMATTER_MARKER = "---"
-
-IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 
 
 def detect_type(path: Path) -> str:
@@ -43,8 +42,10 @@ def detect_type(path: Path) -> str:
         return "markdown"
     if ext == ".txt":
         return "text"
-    if ext == ".pdf":
+    if ext in PDF_EXTENSIONS:
         return "pdf"
+    if ext in OFFICE_EXTENSIONS:
+        return "document"
     if ext in IMAGE_EXTENSIONS:
         return "image"
     return "other"
@@ -68,10 +69,10 @@ def suggested_action(file_type: str, path: Path) -> str:
         return "move_to_raw" if has_frontmatter(path) else "add_frontmatter"
     if file_type == "text":
         return "convert_to_markdown"
-    if file_type == "pdf":
-        return "extract_text"
+    if file_type in ("pdf", "document"):
+        return "parse_with_liteparse"
     if file_type == "image":
-        return "describe_and_tag"
+        return "parse_with_liteparse_or_describe"
     return "review_manually"
 
 

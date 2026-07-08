@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-07-08
+
+### Added
+- **Local LiteParse document intake.** New `scripts/parse-document.py` and `scripts/_liteparse.py` parse PDFs, Office files, spreadsheets, presentations, and document-like images into citeable markdown under `<vault>/05-bronnen/liteparse/`.
+- **Document import command route.** `/import documents <path> [prefix]` batches LiteParse-backed source conversion while keeping imported source material separate from raw session logs.
+- **LiteParse intake tests.** `tests/test_liteparse_integration.py` covers supported extensions, frontmatter rendering, lazy dependency loading, intake action routing, and dry-run directory handling.
+
+### Changed
+- **Inbox routing now uses LiteParse for source documents.** `/intake` routes PDFs and Office-like documents to `parse_with_liteparse`, while document-like images can use LiteParse OCR or fall back to the existing media description flow.
+- **Setup and doctor validate document parsing.** `setup.sh` installs `liteparse>=2.0,<3`, and `doctor.sh` checks the same interpreter used by setup on Windows (`py -3`) so document parsing is validated where it will actually run.
+- **OCR is opt-in.** `parse-document.py` defaults OCR off to avoid polluting native-text PDF output with missing Tesseract/tessdata diagnostics; `--ocr` enables OCR explicitly for scans.
+
 ## [0.13.0] - 2026-07-08
 
 ### Added
@@ -398,7 +410,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.12.2...v0.13.0
 [0.12.2]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.12.1...v0.12.2
 [0.12.1]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.12.0...v0.12.1

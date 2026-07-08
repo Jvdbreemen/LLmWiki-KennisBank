@@ -38,7 +38,18 @@ Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: 
 
 The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
 
-## Feature highlights (v0.13.0)
+## Feature highlights (v0.14.0)
+
+### New in v0.14
+- **Local LiteParse document intake.** `/intake` and `/import documents <path>`
+  parse PDFs, Office files, spreadsheets, presentations, and document-like
+  images into citeable markdown under `<vault>/05-bronnen/liteparse/`.
+- **Source material stays separate.** Parsed binary documents become `type: bron`
+  markdown with frontmatter pointing back to the original local file, so wiki
+  articles can cite them with explicit `[[05-bronnen/...]]` links instead of
+  pretending they were session logs.
+- **OCR is explicit.** Native-text documents parse without OCR by default; use
+  `--ocr` only for scans and only when local Tesseract/tessdata is available.
 
 ### New in v0.13
 - **Temporal Activity Recall.** Ask what happened on a date, during a week, or
@@ -112,6 +123,7 @@ The design bias throughout: **deterministic where possible, LLM only where it ad
 
 ### Sovereignty (the whole point)
 - Local Ollama models for both embeddings and judgment, swappable via config (`kennisbank-embed.json`, `kennisbank-llm.json`); OpenAI-compatible endpoints supported when you choose to.
+- LiteParse 2.x for local PDF/Office/image document parsing during intake.
 - Everything is markdown + SQLite in a folder you own. Obsidian-compatible. MIT-licensed.
 - Human update authority: agents never silently delete; superseded knowledge is closed and linked, quarantined knowledge cannot displace verified knowledge, and large rewrites require your confirmation.
 
@@ -197,9 +209,9 @@ The hooks are fail-open by design: an error means no injected context or a skipp
 | `/sessielog` | none | Writes session log, compiles wiki candidates, runs semantic tiling |
 | `/sessiestart` | none | Read vault context, memory, wiki status, suggest next actions |
 | `/wiki` | optional topic | Compiles raw logs (last 7 days) into wiki articles with per-key-point provenance, validated by kb-lint |
-| `/intake` | none | Processes files in `~/KennisBank/00-inbox/` |
+| `/intake` | none | Processes files in `~/KennisBank/00-inbox/`, including local LiteParse conversion of PDF/Office/image documents to source markdown |
 | `/stale` | none | Detects articles older than 60 days, skipping recently-used ones |
-| `/import` | `cc` \| `claudeai <path>` \| `folder <path> [prefix]` \| `cowork` \| `all` | Bulk-import old sessions from Claude Code history, a claude.ai export bundle, any markdown folder, or Mac desktop Claude data; `all` runs every detected source, no argument asks interactively |
+| `/import` | `cc` \| `claudeai <path>` \| `folder <path> [prefix]` \| `documents <path> [prefix]` \| `cowork` \| `all` | Bulk-import old sessions from Claude Code history, a claude.ai export bundle, any markdown folder, document sources via LiteParse, or Mac desktop Claude data; `all` runs every detected source, no argument asks interactively |
 | `/destilleer` | none | Imports archived CC transcripts and compiles them into the wiki |
 | `/autoresearch` | topic | Multi-round web research via the autoresearch skill (not a command file), saves to `~/Claude/research/` |
 | `/reconcile` | optional topic | Surface contradictions across wiki articles and produce a reconciliation log |
@@ -280,6 +292,14 @@ Maintain the eval set as your vault grows (questions you know the answer to, wit
 ## Migrating from older Claude tooling
 
 The `/import` command backfills the vault from existing Claude history. It handles Claude Code session JSONL files under `~/.claude/projects/`, claude.ai export bundles, Mac desktop Claude (Cowork) conversation data, and any generic markdown or text folder. Each importer writes raw session files that `/wiki` can compile afterwards. For the memory layer, `/kennisbank:rebuild-memory` re-extracts all archived transcripts through the full sweep (semantic dedup makes re-runs near-idempotent).
+
+For binary/source documents, `/intake` and `/import documents <path>` use
+LiteParse 2.x locally to turn PDFs, Office files, spreadsheets, presentations,
+and document-like images into markdown under `05-bronnen/liteparse/`. This does
+not call a cloud parser or an LLM. OCR is opt-in (`--ocr`) so native-text PDFs
+do not get polluted by missing Tesseract/tessdata diagnostics; Office/image
+formats may still require local LibreOffice/ImageMagick tooling as LiteParse
+reports.
 
 ## Using KennisBank from other agents (Codex, OpenCode, Copilot, ChatGPT)
 

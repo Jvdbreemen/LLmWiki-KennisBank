@@ -260,6 +260,7 @@ install_python_dep() {
     || echo "  (let op: '$PIP_PYTHON -m pip install $spec' handmatig nodig voor $purpose)"
 }
 install_python_dep "sqlite-vec==0.1.9" "sqlite_vec" "kb-index"
+install_python_dep "liteparse>=2.0,<3" "liteparse" "document parsing (PDF/Office/images)"
 if has_agent codex || has_agent opencode; then
   install_python_dep "mcp==1.28.1" "mcp" "KennisBank MCP"
 fi

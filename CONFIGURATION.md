@@ -723,6 +723,29 @@ onvolledig geinstalleerd.
 
 ---
 
+## 13. Lokale document parsing (LiteParse)
+
+`parse-document.py` gebruikt LiteParse 2.x om lokale bronbestanden naar markdown
+te converteren zonder cloudparser of LLM. De output komt onder
+`<vault>/05-bronnen/liteparse/` met `type: bron` en frontmatter die naar het
+originele lokale bestand wijst.
+
+Setup installeert `liteparse>=2.0,<3` in dezelfde interpreter die op Windows ook
+voor de agent-runtime wordt gebruikt (`py -3`). `doctor.sh` rapporteert de
+LiteParse-versie of geeft een WARN met het exacte pip-commando.
+
+Handmatig:
+
+```bash
+python3 <vault>/.claude/scripts/parse-document.py /pad/naar/document.pdf --vault <vault>
+python3 <vault>/.claude/scripts/parse-document.py /pad/naar/map --vault <vault> --recursive --json
+```
+
+OCR staat standaard uit om native-text PDFs schoon te houden. Gebruik `--ocr`
+alleen voor scans en alleen wanneer lokale Tesseract/tessdata beschikbaar is.
+
+---
+
 ## Discrepancies found
 
 1. **`THRESHOLD_DAYS` constant does not exist.** `README.md` (line 126) and the original task description reference editing `THRESHOLD_DAYS` in `stale-check.py`. The actual code uses `argparse` with `default=60`. The `--days N` CLI flag is correct.
