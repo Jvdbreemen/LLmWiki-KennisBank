@@ -212,6 +212,21 @@ else
   fi
 fi
 
+# 11a. LiteParse is optional but powers document intake. Match setup.sh's
+# interpreter choice so Windows installs via py -3 are checked correctly.
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) LITEPARSE_PY=(py -3) ;;
+  *) LITEPARSE_PY=(python3) ;;
+esac
+if command -v "${LITEPARSE_PY[0]}" >/dev/null 2>&1; then
+  if "${LITEPARSE_PY[@]}" -c 'import liteparse' >/dev/null 2>&1; then
+    LP_VER="$("${LITEPARSE_PY[@]}" -c 'import importlib.metadata; print(importlib.metadata.version("liteparse"))' 2>/dev/null)"
+    report_pass "liteparse" "${LITEPARSE_PY[*]} version ${LP_VER:-unknown}"
+  else
+    report_warn "liteparse" "niet gevonden; document-intake mist PDF/Office/image parsing. Fix: ${LITEPARSE_PY[*]} -m pip install \"liteparse>=2.0,<3\""
+  fi
+fi
+
 # 11b. MCP runtime, required when Codex/OpenCode KennisBank MCP is configured.
 MCP_CONFIGURED=0
 CODEX_CONFIG="$HOME/.codex/config.toml"

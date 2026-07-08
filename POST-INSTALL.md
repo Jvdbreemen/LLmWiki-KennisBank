@@ -179,6 +179,12 @@ Or a URL file (plain text file containing a single URL):
 echo "https://en.wikipedia.org/wiki/Andrej_Karpathy" > $HOME/KennisBank/00-inbox/karpathy.url
 ```
 
+Or a local PDF/Office/image document:
+
+```bash
+cp ~/Downloads/example.pdf $HOME/KennisBank/00-inbox/
+```
+
 Then run:
 
 ```
@@ -189,6 +195,7 @@ Expected behaviour:
 
 - The markdown file gets YAML frontmatter added and is moved to `$HOME/KennisBank/01-raw/`.
 - The URL file is fetched, converted to markdown, and saved as `$HOME/KennisBank/01-raw/raw-YYYY-MM-DD-[slug].md`.
+- The PDF/Office/image document is parsed locally with LiteParse and saved as citeable source markdown under `$HOME/KennisBank/05-bronnen/liteparse/`.
 - The original files are removed from `00-inbox/` once processed.
 - Claude reports per file: path, action, result.
 
@@ -197,9 +204,11 @@ Verify:
 ```bash
 ls $HOME/KennisBank/00-inbox/
 ls -lt $HOME/KennisBank/01-raw/ | head
+ls -lt $HOME/KennisBank/05-bronnen/liteparse/ | head
 ```
 
-The inbox should be empty and the new files should be in `01-raw/`.
+The inbox should be empty and the new files should be in `01-raw/` or
+`05-bronnen/liteparse/`, depending on source type.
 
 ---
 

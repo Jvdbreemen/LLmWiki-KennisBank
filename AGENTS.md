@@ -16,10 +16,11 @@ integrations. It is not Claude-Code-only. Supported install targets are:
 upgrade. Do not hand-copy files unless `setup.sh` itself is broken and you are
 repairing it.
 
-The current feature set includes Temporal Activity Recall. Setup must deploy
-`build-activity-index.py`, `kb-activity.py`, `kb-activity-eval.py`, the commands
-`/weeklog`, `/timeline`, `/watdeedik`, and MCP tools `what_did_i_do`,
-`timeline`, `weeklog`, and `topic_timeline`.
+The current feature set includes Temporal Activity Recall and local LiteParse
+document intake. Setup must deploy `build-activity-index.py`, `kb-activity.py`,
+`kb-activity-eval.py`, `parse-document.py`, `_liteparse.py`, the commands
+`/weeklog`, `/timeline`, `/watdeedik`, `/intake`, `/import`, and MCP tools
+`what_did_i_do`, `timeline`, `weeklog`, and `topic_timeline`.
 
 ## Vault Path Rule
 
@@ -109,6 +110,7 @@ Interactive setup asks which agent environments to install unless `--yes` or
 - selected agent hooks/skills/MCP config validate,
 - local Ollama and/or OpenRouter backend smoke checks pass, unless
   `--skip-model-check` is explicit.
+- LiteParse document parsing is installed or reported accurately by doctor.
 
 Use `--skip-model-check` only for CI/offline tests or when the user explicitly
 accepts that model validation is skipped.

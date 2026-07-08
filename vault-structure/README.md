@@ -28,15 +28,17 @@ This documents the directory layout of `~/KennisBank/` after running `setup.sh`.
 ### `00-inbox/`
 Drop zone for unprocessed files. Run `/intake` to process them.
 
-Accepted: `.md`, `.txt`, `.pdf`, images (jpg/png/webp/gif), URL files (plain text file containing a single URL).
+Accepted: `.md`, `.txt`, `.pdf`, Office files, spreadsheets, presentations,
+document-like images (jpg/png/webp/gif/etc.), URL files (plain text file
+containing a single URL).
 
 Processing routes:
 - Markdown without frontmatter → `add_frontmatter` → `01-raw/`
 - Markdown with frontmatter → `move_to_raw` → `01-raw/`
 - Plain text → `convert_to_markdown` → `01-raw/`
 - URL file → `fetch_and_convert` → `01-raw/raw-YYYY-MM-DD-slug.md`
-- PDF → manual extraction required
-- Image → description written to `07-media/`
+- PDF/Office/spreadsheet/presentation → LiteParse markdown source in `05-bronnen/liteparse/`
+- Image → LiteParse OCR for document-like images, otherwise description written to `07-media/`
 
 ### `01-raw/`
 Raw, unprocessed notes and session logs. No editing for quality; just capture.
@@ -70,6 +72,10 @@ Templates used by commands and scripts. Do not delete:
 
 ### `05-bronnen/`
 Source materials: articles, papers, clippings. These are reference documents, not wiki articles.
+
+Parsed binary/source documents land under `05-bronnen/liteparse/` as markdown
+with `type: bron` and frontmatter pointing back to the original local file.
+Wiki articles can cite them with explicit `[[05-bronnen/...]]` links.
 
 ### `06-claude/`
 Claude-internal context files. `CLAUDE.md` can live here or in the vault root. If both exist, the root takes precedence.

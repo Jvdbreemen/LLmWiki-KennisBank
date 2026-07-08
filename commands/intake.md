@@ -19,8 +19,10 @@ Voor elk bestand, voer de suggested_action uit:
 **move_to_raw**: Verplaats naar $VAULT/01-raw/
 **convert_to_markdown**: Schrijf als .md met frontmatter naar $VAULT/01-raw/
 **fetch_and_convert**: Haal URL op via WebFetch, sla op als $VAULT/01-raw/raw-[datum]-[slug].md
-**extract_text**: Rapporteer dat PDF-verwerking handmatig moet
-**describe_and_tag**: Beschrijf afbeelding, sla beschrijving op als .md in $VAULT/07-media/
+**parse_with_liteparse**: Parse PDF/Office/spreadsheet/presentation naar markdown met:
+`python3 "$VAULT/.claude/scripts/parse-document.py" "<pad>" --vault "$VAULT" --json`
+Dit schrijft citeerbare bron-markdown naar `$VAULT/05-bronnen/liteparse/`. OCR staat standaard uit; gebruik alleen `--ocr` als lokale Tesseract/tessdata beschikbaar is of als het om een scan gaat. Als LiteParse ontbreekt: installeer lokaal met `python3 -m pip install "liteparse>=2.0,<3"` of rapporteer de dependency-fout; gebruik geen cloudparser.
+**parse_with_liteparse_or_describe**: Voor documentachtige/scanned afbeeldingen dezelfde LiteParse-route proberen met `--ocr` wanneer lokale OCR beschikbaar is. Als er geen nuttige tekst uitkomt, beschrijf de afbeelding en sla de beschrijving op als .md in `$VAULT/07-media/`.
 
 ## Stap 3: Verwijder verwerkte bestanden uit 00-inbox
 

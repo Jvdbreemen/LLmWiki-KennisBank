@@ -16,6 +16,7 @@ Backfill van bestaande Claude-historie in `$VAULT/01-raw/sessies/` zodat `/wiki`
 - `cc`: Claude Code session history (`$HOME/.claude/projects/*.jsonl`)
 - `claudeai <pad>`: claude.ai export bundle (`conversations.json` of `.zip`)
 - `folder <pad> [prefix]`: generieke recursieve markdown/txt-import
+- `documents <pad> [prefix]`: parse PDF/Office/image-documenten naar `05-bronnen/liteparse/` met LiteParse
 - `cowork`: alias voor `folder` met auto-detect van Mac desktop Claude (Cowork) data
 - `all`: draait `cc` plus `cowork` plus, als er een claude.ai export aanwezig is, `claudeai`
 - geen argument: vraag interactief welke source de gebruiker wil importeren
@@ -77,6 +78,20 @@ ls -1 $VAULT/01-raw/sessies/ 2>/dev/null | wc -l
    python3 $VAULT/.claude/scripts/import-folder.py "<pad>" [--prefix <prefix>] --dry-run --verbose | head -50
    ```
 4. Bevestig en draai zonder `--dry-run`, met `--json`. Vat de output samen.
+
+### documents: PDF/Office/image-documenten
+
+1. Als pad ontbreekt: vraag de gebruiker om een absoluut bestandspad of map.
+2. Optioneel tweede argument: prefix voor de gegenereerde bronnamen.
+3. Dry-run:
+   ```bash
+   python3 $VAULT/.claude/scripts/parse-document.py "<pad>" [--prefix <prefix>] --recursive --dry-run --verbose
+   ```
+4. Bevestig en draai zonder `--dry-run`, met `--json`:
+   ```bash
+   python3 $VAULT/.claude/scripts/parse-document.py "<pad>" [--prefix <prefix>] --recursive --json
+   ```
+5. Vat de JSON-output samen. OCR staat standaard uit; voeg alleen `--ocr` toe bij scans en wanneer lokale Tesseract/tessdata beschikbaar is. Als LiteParse ontbreekt: installeer lokaal met `python3 -m pip install "liteparse>=2.0,<3"` of rapporteer de dependency-fout. Gebruik geen cloudparser.
 
 ### cowork: auto-detected desktop Claude
 
