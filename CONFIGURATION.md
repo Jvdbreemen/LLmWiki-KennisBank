@@ -224,10 +224,22 @@ override the config file; both override the built-in defaults.
   `source_watermarks`, `rollup_cache`, and FTS5 table `activity_fts`.
 - **Time model**: `event_time` is when the work happened; `captured_at` is when
   the source was captured/modified. Local vault dates use `Europe/Amsterdam`.
-- **Parser**: deterministic Dutch/English date and period parsing for
-  `vandaag`, `gisteren`, `vorige week`, `afgelopen 7 dagen`, `2026-07-03`,
-  `3 juli 2026`, `July 3 2026`, and explicit ranges. `vorige week` is the local
-  ISO week: Monday inclusive to Monday exclusive.
+- **Parser (3 layers)**: date and period parsing is resolved in three layers,
+  first match wins.
+  - *Layer 1 (deterministic locale tables)*: built-in support for **nl, en, de,
+    fr, es, it** from `scripts/activity-locales.json`, with exact calendar ranges
+    (`vorige week`, `letzte Woche`, `la semaine dernière`, `begin april`,
+    `vor zwei Wochen`, `2026-07-03`, `3 juli 2026`, explicit ranges). `vorige week`
+    is the local ISO week: Monday inclusive to Monday exclusive.
+  - *Layer 2 (optional `dateparser`)*: extends coverage to 200+ languages when the
+    package is installed (`setup.sh` installs it; `doctor.sh` reports it). Absent
+    is fine: recall degrades to the six built-in locales.
+  - *Layer 3 (optional local LLM, off by default)*: a final fallback for
+    compositional phrasing, gated behind the `activity_llm_fallback` setting in
+    `<vault>/kennisbank-settings.json`. Uses a local Ollama model, caches each
+    resolution per (phrase, reference-date), and logs to
+    `<vault>/.claude/activity-llm-audit.jsonl`. Enable with
+    `python3 <vault>/.claude/scripts/_settings.py set activity_llm_fallback true`.
 - **Manual rebuild**:
   `python3 <vault>/.claude/scripts/build-activity-index.py --vault <vault> --full`
 - **Query CLI**:

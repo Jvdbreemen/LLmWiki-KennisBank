@@ -2,3 +2,5 @@ sqlite-vec==0.1.9
 mcp==1.28.1
 coverage==7.6.1
 liteparse>=2.0,<3
+dateparser>=1.2,<2
+babel>=2.12
