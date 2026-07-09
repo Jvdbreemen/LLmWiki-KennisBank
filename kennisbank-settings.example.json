@@ -5,5 +5,6 @@
   "daily_graphify": true,
   "memory_capture": true,
   "memory_recall": true,
-  "usage_telemetry": true
+  "usage_telemetry": true,
+  "activity_llm_fallback": false
 }
