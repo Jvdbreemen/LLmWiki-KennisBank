@@ -44,6 +44,11 @@ DEFAULTS = {
     "memory_recall": True,
     # Retrieval-feedbackloop: passief en lokaal, dus default aan.
     "usage_telemetry": True,
+    # Optionele LLM-laatste-redmiddel voor temporele recall (Laag 3): normaliseert
+    # exotisch/compositioneel taalgebruik via een lokaal Ollama-model wanneer de
+    # deterministische tabellen (Laag 1) en dateparser (Laag 2) falen. Niet-
+    # deterministisch pad → bewust default UIT (opt-in). Resultaten worden gecachet.
+    "activity_llm_fallback": False,
 }
 
 _TRUTHY = ("1", "true", "yes", "y", "on")
