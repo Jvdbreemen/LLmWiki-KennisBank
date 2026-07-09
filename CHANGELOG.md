@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-07-09
+
+### Added
+- **Multilingual temporal recall (deterministic locale layer).** The temporal parser now resolves dates and periods in **Dutch, English, German, French, Spanish, and Italian** from a data-only locale table (`scripts/activity-locales.json`), with exact calendar ranges. New phrase categories across all six languages: relative weekdays (`afgelopen zaterdag`, `komende maandag`), weekday-within-a-relative-week (`vorige week maandag`), week parts (`begin/midden/eind vorige week`), weekends (`afgelopen weekend`), "N units ago" in both word orders (`twee weken geleden`, `vor zwei Wochen`, `il y a deux semaines`, `hace dos semanas`), and month-by-name with year inference (`begin april`, `mei 2026`). Matching uses `casefold()` for correct handling of non-ASCII scripts.
+- **Optional `dateparser` fallback (200+ languages).** When the deterministic layer does not match, an optional `dateparser`-backed fallback resolves the phrase and snaps its granularity (`week`/`month`/`year`) to a proper calendar range instead of a single day. Gated exactly like the other optional dependencies: it degrades to a clean parse error when the package is absent.
+- **Optional local-LLM last resort (off by default).** For exotic or compositional phrasing (for example "het weekend voor afgelopen maandag") a local Ollama model can be used as a final fallback via stdlib `urllib`. Controlled by the new `activity_llm_fallback` setting (default `false`), cached per (phrase, reference-date) so repeats are deterministic and free, and appended to `<vault>/.claude/activity-llm-audit.jsonl`.
+- **Temporal parser test set.** `scripts/test_activity_temporal.py` ships 138 deterministic cases pinned to a fixed reference date, runnable standalone and via pytest, including per-language cases, `dateparser`-gated fallback cases (skip-if-absent), and a hermetic stubbed check of the LLM layer.
+
+### Changed
+- **Temporal parser refactored to data-driven locale tables.** `scripts/_activity.py` builds language-agnostic regex templates from `activity-locales.json` and merges locales in a fixed order (nl, en first), so all prior Dutch/English behaviour resolves identically.
+- **`setup.sh` and `doctor.sh` cover the multilingual fallback.** `setup.sh` installs `dateparser>=1.2,<2`; `doctor.sh` reports whether `dateparser` is present and notes that without it recall covers only the six built-in locales.
+
 ## [0.14.0] - 2026-07-08
 
 ### Added

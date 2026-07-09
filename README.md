@@ -38,7 +38,20 @@ Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: 
 
 The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
 
-## Feature highlights (v0.14.0)
+## Feature highlights (v0.15.0)
+
+### New in v0.15
+- **Multilingual temporal recall.** `/watdeedik`, `/timeline`, and `/weeklog`
+  now understand dates and periods in **Dutch, English, German, French, Spanish,
+  and Italian** out of the box (`vorige week`, `letzte Woche`,
+  `la semaine dernière`, `la semana pasada`, `begin april`, `vor zwei Wochen`),
+  with exact calendar ranges. An optional `dateparser` fallback extends coverage
+  to 200+ languages, and an off-by-default local-LLM last resort handles
+  compositional phrasing like "het weekend voor afgelopen maandag".
+- **Richer relative phrasing.** Relative weekdays, week parts
+  (`begin/midden/eind vorige week`), weekends, "N units ago" in both word orders,
+  and month names with year inference are all resolved deterministically. 138
+  pinned test cases guard the behaviour.
 
 ### New in v0.14
 - **Local LiteParse document intake.** `/intake` and `/import documents <path>`

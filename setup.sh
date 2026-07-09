@@ -261,6 +261,7 @@ install_python_dep() {
 }
 install_python_dep "sqlite-vec==0.1.9" "sqlite_vec" "kb-index"
 install_python_dep "liteparse>=2.0,<3" "liteparse" "document parsing (PDF/Office/images)"
+install_python_dep "dateparser>=1.2,<2" "dateparser" "multilingual temporal recall (200+ language fallback)"
 if has_agent codex || has_agent opencode; then
   install_python_dep "mcp==1.28.1" "mcp" "KennisBank MCP"
 fi
