@@ -227,6 +227,22 @@ if command -v "${LITEPARSE_PY[0]}" >/dev/null 2>&1; then
   fi
 fi
 
+# 11a-bis. dateparser powers the optional global-language temporal fallback
+# (Layer 2 of activity recall). Without it, /watdeedik still supports the
+# deterministic locale layer (nl/en/de/fr/es/it); other languages fall through.
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) DATEPARSER_PY=(py -3) ;;
+  *) DATEPARSER_PY=(python3) ;;
+esac
+if command -v "${DATEPARSER_PY[0]}" >/dev/null 2>&1; then
+  if "${DATEPARSER_PY[@]}" -c 'import dateparser' >/dev/null 2>&1; then
+    DP_VER="$("${DATEPARSER_PY[@]}" -c 'import dateparser; print(dateparser.__version__)' 2>/dev/null)"
+    report_pass "dateparser" "${DATEPARSER_PY[*]} version ${DP_VER:-unknown}"
+  else
+    report_warn "dateparser" "niet gevonden; temporele recall dekt alleen nl/en/de/fr/es/it. Fix: ${DATEPARSER_PY[*]} -m pip install \"dateparser>=1.2,<2\" \"babel>=2.12\""
+  fi
+fi
+
 # 11b. MCP runtime, required when Codex/OpenCode KennisBank MCP is configured.
 MCP_CONFIGURED=0
 CODEX_CONFIG="$HOME/.codex/config.toml"

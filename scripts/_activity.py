@@ -1065,57 +1065,117 @@ def build_activity_index(
     return stats
 
 
-MONTHS = {
-    "januari": 1,
-    "jan": 1,
-    "februari": 2,
-    "feb": 2,
-    "maart": 3,
-    "mar": 3,
-    "april": 4,
-    "apr": 4,
-    "mei": 5,
-    "may": 5,
-    "juni": 6,
-    "jun": 6,
-    "juli": 7,
-    "jul": 7,
-    "augustus": 8,
-    "aug": 8,
-    "september": 9,
-    "sep": 9,
-    "oktober": 10,
-    "october": 10,
-    "okt": 10,
-    "oct": 10,
-    "november": 11,
-    "nov": 11,
-    "december": 12,
-    "dec": 12,
-    "january": 1,
-    "february": 2,
-    "march": 3,
-    "april": 4,
-    "june": 6,
-    "july": 7,
-    "august": 8,
-}
-WEEKDAYS = {
-    "maandag": 0,
-    "monday": 0,
-    "dinsdag": 1,
-    "tuesday": 1,
-    "woensdag": 2,
-    "wednesday": 2,
-    "donderdag": 3,
-    "thursday": 3,
-    "vrijdag": 4,
-    "friday": 4,
-    "zaterdag": 5,
-    "saturday": 5,
-    "zondag": 6,
-    "sunday": 6,
-}
+# ---------------------------------------------------------------------------
+# Temporal vocabulary — loaded from the data-only locale table
+# (activity-locales.json, co-located with this module). The code below is language-agnostic: it
+# merges every locale in a FIXED order (nl, en first) so the pinned test set
+# resolves identically, then derives the lookup maps and regex alternations the
+# parser consumes. Adding a language is a JSON edit, not a code edit.
+# ---------------------------------------------------------------------------
+
+LOCALE_ORDER = ("nl", "en", "de", "fr", "es", "it")
+_LOCALES_PATH = Path(__file__).resolve().parent / "activity-locales.json"
+
+
+def _load_locales() -> dict:
+    try:
+        data = json.loads(_LOCALES_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        data = {}
+    return {loc: data.get(loc, {}) for loc in LOCALE_ORDER if isinstance(data.get(loc), dict)}
+
+
+_LOCALES = _load_locales()
+
+
+def _merge_int_map(key: str) -> dict[str, int]:
+    """Merge a word->int table across locales (casefolded keys). First locale in
+    LOCALE_ORDER wins on collision; encoded values are consistent across langs."""
+    out: dict[str, int] = {}
+    for loc in LOCALE_ORDER:
+        for word, value in _LOCALES.get(loc, {}).get(key, {}).items():
+            out.setdefault(str(word).casefold(), int(value))
+    return out
+
+
+def _merge_words(*keys: str) -> list[str]:
+    """Union of one or more list-valued locale keys, casefolded, order-preserving
+    (LOCALE_ORDER, then key order, then declared order)."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for loc in LOCALE_ORDER:
+        loc_data = _LOCALES.get(loc, {})
+        for key in keys:
+            for word in loc_data.get(key, []):
+                wc = str(word).casefold()
+                if wc and wc not in seen:
+                    seen.add(wc)
+                    out.append(wc)
+    return out
+
+
+def _alt(words: Iterable[str]) -> str:
+    """Build a regex alternation, longest first so full forms beat their own
+    abbreviations/prefixes; ties broken alphabetically for determinism."""
+    uniq = sorted({w for w in words if w}, key=lambda w: (-len(w), w))
+    return "|".join(re.escape(w) for w in uniq)
+
+
+MONTHS = _merge_int_map("months")
+WEEKDAYS = _merge_int_map("weekdays")
+_RELDAY = _merge_int_map("relative_day")
+_NUMBERS = _merge_int_map("numbers")
+
+_DIR_PREV = set(_merge_words("dir_prev"))
+_DIR_THIS = set(_merge_words("dir_this"))
+_DIR_NEXT = set(_merge_words("dir_next"))
+
+_WEEK_WORD = _merge_words("week_word")
+_MONTH_WORD = _merge_words("month_word")
+_YEAR_WORD = _merge_words("year_word")
+_DAY_WORD = _merge_words("day_word")
+
+_ROLLING = _merge_words("rolling_words")
+_AGO_SUFFIX = _merge_words("ago_words_suffix")
+_AGO_PREFIX = _merge_words("ago_words_prefix")
+
+_PARTS_BEGIN = set(_merge_words("parts_begin"))
+_PARTS_MID = set(_merge_words("parts_mid"))
+_PARTS_END = set(_merge_words("parts_end"))
+
+_WEEKEND_WORD = _merge_words("weekend_word")
+_WEEKEND_FUTURE = set(_merge_words("weekend_future"))
+_WEEKEND_DET = _merge_words("weekend_future", "weekend_past")
+
+_RANGE_BETWEEN = _merge_words("range_between")
+_RANGE_AND = _merge_words("range_and")
+_RANGE_FROM = _merge_words("range_from")
+_RANGE_TO = _merge_words("range_to")
+
+_WEEK_PREV = _merge_words("week_prev")
+_WEEK_THIS = _merge_words("week_this")
+_WEEK_NEXT = _merge_words("week_next")
+_MONTH_PREV = _merge_words("month_prev")
+_MONTH_THIS = _merge_words("month_this")
+_DAY_TODAY = [w for w, o in _RELDAY.items() if o == 0]
+_DAY_YESTERDAY = [w for w, o in _RELDAY.items() if o == 1]
+_DAY_BEFORE = [w for w, o in _RELDAY.items() if o == 2]
+
+# Unit -> day-factor maps for the "N unit ago" and rolling-window branches.
+_AGO_UNITS: dict[str, int] = {}
+for _w in _DAY_WORD:
+    _AGO_UNITS.setdefault(_w, 1)
+for _w in _WEEK_WORD:
+    _AGO_UNITS.setdefault(_w, 7)
+for _w in _MONTH_WORD:
+    _AGO_UNITS.setdefault(_w, 30)
+_ROLL_UNITS: dict[str, int] = {}
+for _w in _WEEK_WORD:
+    _ROLL_UNITS.setdefault(_w, 7)
+for _w in _MONTH_WORD:
+    _ROLL_UNITS.setdefault(_w, 30)
+for _w in _YEAR_WORD:
+    _ROLL_UNITS.setdefault(_w, 365)
 
 
 def _now_dt(now: datetime | None = None, tz: ZoneInfo = LOCAL_TZ) -> datetime:
@@ -1200,18 +1260,239 @@ def _period_error(original: str, topic: str = "") -> TemporalRange:
     )
 
 
+# Optional global-language fallback via `dateparser` (Layer 2). Lazy-imported so
+# the deterministic locale layer (Layer 1) pays zero startup cost; only queries
+# that Layer 1 cannot resolve reach it. Degrades to None when the package is
+# absent, exactly like the vault's other optional deps (mcp/sqlite-vec/liteparse).
+_DATEPARSER_CLS = None  # None=unchecked, False=unavailable, else DateDataParser class
+
+
+def _get_dateparser():
+    global _DATEPARSER_CLS
+    if _DATEPARSER_CLS is None:
+        try:
+            from dateparser.date import DateDataParser
+            _DATEPARSER_CLS = DateDataParser
+        except Exception:
+            _DATEPARSER_CLS = False
+    return _DATEPARSER_CLS
+
+
+def _dateparser_fallback(
+    query: str, current: datetime, tz: ZoneInfo, original: str, topic: str
+) -> TemporalRange | None:
+    """Resolve an arbitrary-language temporal phrase via dateparser and snap the
+    result to a calendar range using dateparser's own `period` granularity
+    ('day'/'week'/'month'/'year'). Deterministic given a fixed RELATIVE_BASE.
+    Returns None when dateparser is unavailable or cannot parse the phrase."""
+    cls = _get_dateparser()
+    if not cls:
+        return None
+    text = (query or "").strip()
+    if not text:
+        return None
+    try:
+        parser = cls(settings={
+            "RELATIVE_BASE": current.replace(tzinfo=None),
+            "PREFER_DATES_FROM": "past",
+            "RETURN_AS_TIMEZONE_AWARE": False,
+        })
+        dd = parser.get_date_data(text)
+    except Exception:
+        return None
+    d = getattr(dd, "date_obj", None)
+    if not d:
+        return None
+    day = d.date()
+    period = getattr(dd, "period", "day") or "day"
+    if period == "week":
+        ws = day - timedelta(days=day.weekday())
+        start, end = _date_start(ws, tz), _date_start(ws + timedelta(days=7), tz)
+        label, gran = f"week {ws.isoformat()}", "week"
+    elif period == "month":
+        start, end = _month_range(day.year, day.month, tz)
+        label, gran = f"{day.year}-{day.month:02d}", "month"
+    elif period == "year":
+        start = _date_start(date(day.year, 1, 1), tz)
+        end = _date_start(date(day.year + 1, 1, 1), tz)
+        label, gran = str(day.year), "year"
+    else:
+        start, end = _date_start(day, tz), _date_start(day + timedelta(days=1), tz)
+        label, gran = day.isoformat(), "day"
+    # Lower confidence marks this as a library fallback, not a first-class match.
+    return _mk_range(start, end, label, gran, original, topic, 0.6)
+
+
+# --- Layer 3: optional local-LLM last resort (off by default) --------------
+# Normalises exotic/compositional phrasing that neither the deterministic locale
+# layer nor dateparser resolves (e.g. "het weekend voor afgelopen maandag").
+# Gated behind the `activity_llm_fallback` setting (default False). Every
+# resolution is cached per (phrase, reference-date) so repeat queries are
+# deterministic and free, and appended to an audit log. Uses a local Ollama
+# model via stdlib urllib (no third-party client), matching the vault pattern.
+_LLM_MODEL = "gemma4:12b"
+_LLM_URL = "http://localhost:11434/api/generate"
+_LLM_TIMEOUT = 20
+_SETTINGS_MOD = None  # None=unchecked, False=unavailable, else the _settings module
+
+_LLM_PROMPT = (
+    "You are a strict date-range resolver. Today (the reference date) is {ref} "
+    "({weekday}). Interpret the time expression below, which may be in ANY "
+    "language, relative to today. Respond with ONLY a JSON object and nothing "
+    'else: {{"start":"YYYY-MM-DD","end":"YYYY-MM-DD","granularity":'
+    '"day|week|month|year|range"}} where `end` is EXCLUSIVE (the day AFTER the '
+    'last included day). If the text does not denote a time period, respond '
+    '{{"error":"not a date"}}.\nExpression: "{phrase}"'
+)
+
+
+def _get_settings():
+    global _SETTINGS_MOD
+    if _SETTINGS_MOD is None:
+        try:
+            import _settings
+            _SETTINGS_MOD = _settings
+        except Exception:
+            _SETTINGS_MOD = False
+    return _SETTINGS_MOD
+
+
+def _llm_enabled() -> bool:
+    s = _get_settings()
+    if not s:
+        return False
+    try:
+        return bool(s.get("activity_llm_fallback", False))
+    except Exception:
+        return False
+
+
+def _llm_call(prompt: str, *, model: str = _LLM_MODEL, timeout: int = _LLM_TIMEOUT) -> str | None:
+    """POST to the local Ollama generate endpoint and return the model's raw
+    text (expected JSON). Deterministic options (temperature/seed 0). Returns
+    None on any failure so the caller degrades to a parse error."""
+    import urllib.request
+    body = json.dumps({
+        "model": model,
+        "prompt": prompt,
+        "stream": False,
+        "format": "json",
+        "options": {"temperature": 0, "seed": 0, "num_predict": 128},
+    }).encode("utf-8")
+    req = urllib.request.Request(_LLM_URL, data=body, headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+        return payload.get("response")
+    except Exception:
+        return None
+
+
+def _llm_cache_get(vault: Path, key: str):
+    try:
+        conn = connect_activity_db(vault, readonly=True)
+        row = conn.execute(
+            "SELECT start, end_exclusive, granularity FROM temporal_llm_cache WHERE cache_key=?",
+            (key,),
+        ).fetchone()
+        conn.close()
+        return row
+    except Exception:
+        return None
+
+
+def _llm_cache_put(vault: Path, key: str, phrase: str, ref: str, start: str, end: str, gran: str) -> None:
+    try:
+        conn = connect_activity_db(vault)
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS temporal_llm_cache ("
+            "cache_key TEXT PRIMARY KEY, phrase TEXT, ref_date TEXT, "
+            "start TEXT, end_exclusive TEXT, granularity TEXT, created_at TEXT)"
+        )
+        conn.execute(
+            "INSERT OR REPLACE INTO temporal_llm_cache VALUES (?,?,?,?,?,?,?)",
+            (key, phrase, ref, start, end, gran, _dt_iso(datetime.now(LOCAL_TZ))),
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+
+def _llm_audit(vault: Path, entry: dict) -> None:
+    try:
+        path = vault / ".claude" / "activity-llm-audit.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
+def _range_from_iso(start_s: str, end_s: str, gran: str, original: str, topic: str,
+                    tz: ZoneInfo, ref: date) -> TemporalRange | None:
+    try:
+        sd = date.fromisoformat(start_s)
+        ed = date.fromisoformat(end_s) if end_s else sd + timedelta(days=1)
+    except Exception:
+        return None
+    if ed <= sd:
+        ed = sd + timedelta(days=1)
+    if abs((sd - ref).days) > 366 * 6:  # sanity: refuse wildly out-of-range answers
+        return None
+    g = gran if gran in ("day", "week", "month", "year", "range") else "range"
+    # Lowest confidence: an LLM guess, below both deterministic and dateparser.
+    return _mk_range(_date_start(sd, tz), _date_start(ed, tz), f"llm {start_s}", g, original, topic, 0.4)
+
+
+def _llm_fallback(query: str, current: datetime, tz: ZoneInfo, original: str, topic: str) -> TemporalRange | None:
+    if not _llm_enabled():
+        return None
+    text = (query or "").strip()
+    if not text:
+        return None
+    vault = vault_root()
+    ref = current.date()
+    ref_s = ref.isoformat()
+    key = hashlib.sha256(f"{text.casefold()}\x1f{ref_s}".encode("utf-8")).hexdigest()[:24]
+    cached = _llm_cache_get(vault, key)
+    if cached:
+        return _range_from_iso(cached[0], cached[1], cached[2], original, topic, tz, ref)
+    prompt = _LLM_PROMPT.format(ref=ref_s, weekday=current.strftime("%A"), phrase=text)
+    raw = _llm_call(prompt)
+    if not raw:
+        return None
+    try:
+        obj = json.loads(raw)
+    except Exception:
+        return None
+    if not isinstance(obj, dict) or obj.get("error") or "start" not in obj:
+        return None
+    start_s = str(obj.get("start", ""))[:10]
+    end_s = str(obj.get("end", ""))[:10]
+    gran = str(obj.get("granularity", "day"))
+    rng = _range_from_iso(start_s, end_s, gran, original, topic, tz, ref)
+    if rng is None:
+        return None
+    _llm_cache_put(vault, key, text, ref_s, start_s, end_s, gran)
+    _llm_audit(vault, {"ts": _dt_iso(datetime.now(LOCAL_TZ)), "phrase": text,
+                       "ref": ref_s, "start": start_s, "end": end_s, "gran": gran})
+    return rng
+
+
 def parse_period(text: str = "", *, now: datetime | None = None, tz: ZoneInfo = LOCAL_TZ, default: str = "today") -> TemporalRange:
     original = (text or "").strip()
     topic, cleaned = _extract_topic_and_clean(original)
     query = cleaned.strip() or default
-    lower = query.lower()
+    # casefold() over lower() for Turkish-i safety; ASCII behaviour is identical.
+    lower = query.casefold()
     current = _now_dt(now, tz)
     today = current.date()
     today_start = _date_start(today, tz)
 
     range_patterns = (
-        r"\b(?:tussen|between)\s+(.+?)\s+(?:en|and)\s+(.+)$",
-        r"\b(?:van|from)\s+(.+?)\s+(?:tot|to)\s+(.+)$",
+        r"\b(?:" + _alt(_RANGE_BETWEEN) + r")\s+(.+?)\s+(?:" + _alt(_RANGE_AND) + r")\s+(.+)$",
+        r"\b(?:" + _alt(_RANGE_FROM) + r")\s+(.+?)\s+(?:" + _alt(_RANGE_TO) + r")\s+(.+)$",
     )
     for pat in range_patterns:
         m = re.search(pat, query, re.I)
@@ -1227,10 +1508,10 @@ def parse_period(text: str = "", *, now: datetime | None = None, tz: ZoneInfo = 
                 return _mk_range(start, end, f"{d1.isoformat()}..{d2.isoformat()}", "range", original, topic)
 
     m = re.search(
-        r"\b(?:van|from)\s+("
-        + "|".join(WEEKDAYS)
-        + r")\s+(?:tot|to)\s+("
-        + "|".join(WEEKDAYS)
+        r"\b(?:" + _alt(_RANGE_FROM) + r")\s+("
+        + _alt(WEEKDAYS)
+        + r")\s+(?:" + _alt(_RANGE_TO) + r")\s+("
+        + _alt(WEEKDAYS)
         + r")\b",
         lower,
     )
@@ -1245,17 +1526,142 @@ def parse_period(text: str = "", *, now: datetime | None = None, tz: ZoneInfo = 
         topic = topic or rest
         return _mk_range(start, end, f"{a}..{b}", "range", original, topic)
 
+    # A specific weekday within a relative week, e.g. "vorige week maandag" or
+    # "deze week vrijdag" -> a single day. Must run before the generic
+    # "vorige week"/"deze week" patterns, which would otherwise swallow it and
+    # leave the weekday dangling as a bogus topic.
+    m = re.search(
+        r"\b(" + _alt(_DIR_PREV | _DIR_THIS | _DIR_NEXT) + r")\s+(?:"
+        + _alt(_WEEK_WORD) + r")\s+(" + _alt(WEEKDAYS) + r")\b",
+        lower,
+    )
+    if m:
+        which, wd = m.group(1), m.group(2)
+        week_start = today_start - timedelta(days=today.weekday())
+        if which in _DIR_PREV:
+            week_start -= timedelta(days=7)
+        elif which in _DIR_NEXT:
+            week_start += timedelta(days=7)
+        d = (week_start + timedelta(days=WEEKDAYS[wd])).date()
+        rest = (query[: m.start()] + " " + query[m.end() :]).strip()
+        topic = topic or rest
+        return _mk_range(_date_start(d, tz), _date_start(d + timedelta(days=1), tz), d.isoformat(), "day", original, topic)
+
+    # Part of a relative week: "begin/midden/eind (van) vorige|deze|komende week".
+    # begin = Mon-Wed, midden = Wed-Thu, eind = Fri-Sun (end-exclusive bounds).
+    m = re.search(
+        r"\b(" + _alt(_PARTS_BEGIN | _PARTS_MID | _PARTS_END) + r")\s+(?:van\s+)?(?:de\s+)?"
+        r"(" + _alt(_DIR_PREV | _DIR_THIS | _DIR_NEXT) + r")\s+(?:" + _alt(_WEEK_WORD) + r")\b",
+        lower,
+    )
+    if m:
+        part, which = m.group(1), m.group(2)
+        week_start = today_start - timedelta(days=today.weekday())
+        if which in _DIR_PREV:
+            week_start -= timedelta(days=7)
+        elif which in _DIR_NEXT:
+            week_start += timedelta(days=7)
+        if part in _PARTS_BEGIN:
+            off0, off1 = 0, 3
+        elif part in _PARTS_MID:
+            off0, off1 = 2, 4
+        else:
+            off0, off1 = 4, 7
+        start = week_start + timedelta(days=off0)
+        end = week_start + timedelta(days=off1)
+        rest = (query[: m.start()] + " " + query[m.end() :]).strip()
+        topic = topic or rest
+        return _mk_range(start, end, f"{part} {which} week", "range", original, topic)
+
+    # Weekend (Sat-Sun) of a relative week. Past-facing/bare words resolve to the
+    # most recent weekend; future-facing to the upcoming one.
+    m = re.search(
+        r"\b(" + _alt(_WEEKEND_DET) + r")?\s*(?:" + _alt(_WEEKEND_WORD) + r")\b",
+        lower,
+    )
+    if m:
+        which = (m.group(1) or "").strip()
+        this_monday = today_start - timedelta(days=today.weekday())
+        if which in _WEEKEND_FUTURE:
+            sat = this_monday + timedelta(days=5)
+        else:
+            # afgelopen / vorig / vorige / laatste / het / bare -> most recent
+            sat = this_monday - timedelta(days=2)
+        rest = (query[: m.start()] + " " + query[m.end() :]).strip()
+        topic = topic or rest
+        return _mk_range(sat, sat + timedelta(days=2), f"weekend {sat.date().isoformat()}", "range", original, topic)
+
+    # A relative weekday without an explicit week, e.g. "afgelopen zaterdag",
+    # "komende vrijdag", or a bare "zaterdag". Past-facing words resolve to the
+    # most recent past occurrence; future-facing words to the next one. A bare
+    # weekday defaults to the most recent past occurrence.
+    m = re.search(
+        r"\b(" + _alt(_DIR_PREV | _DIR_THIS | _DIR_NEXT) + r")?\s*(" + _alt(WEEKDAYS) + r")\b",
+        lower,
+    )
+    if m:
+        direction = (m.group(1) or "").strip()
+        wd = WEEKDAYS[m.group(2)]
+        if direction in _DIR_NEXT:
+            delta = (wd - today.weekday()) % 7 or 7
+            d = today + timedelta(days=delta)
+        elif direction in _DIR_THIS:
+            # "this/deze <weekday>" = this week's occurrence, which may be past
+            # or future within the current week (Mon-Sun of this Monday's week).
+            week_start = today - timedelta(days=today.weekday())
+            d = week_start + timedelta(days=wd)
+        else:
+            # prev/bare = most recent past occurrence (last <weekday>).
+            delta = (today.weekday() - wd) % 7 or 7
+            d = today - timedelta(days=delta)
+        rest = (query[: m.start()] + " " + query[m.end() :]).strip()
+        topic = topic or rest
+        return _mk_range(_date_start(d, tz), _date_start(d + timedelta(days=1), tz), d.isoformat(), "day", original, topic)
+
+    # "N <unit> ago" -> a single day that many units back. Two word orders are
+    # supported: suffix ("twee weken geleden", "one week ago", "due settimane fa")
+    # and prefix ("vor zwei wochen", "il y a deux semaines", "hace dos semanas").
+    _num_alt = _alt(_NUMBERS)
+    _unit_alt = _alt(_AGO_UNITS)
+    m = None
+    if _AGO_SUFFIX:
+        m = re.search(
+            r"\b(?:precies\s+)?(\d{1,3}|" + _num_alt + r")\s+(" + _unit_alt
+            + r")\s+(?:" + _alt(_AGO_SUFFIX) + r")\b",
+            lower,
+        )
+    if m is None and _AGO_PREFIX:
+        m = re.search(
+            r"\b(?:" + _alt(_AGO_PREFIX) + r")\s+(\d{1,3}|" + _num_alt + r")\s+("
+            + _unit_alt + r")\b",
+            lower,
+        )
+    if m:
+        num_tok, unit = m.group(1), m.group(2)
+        n = int(num_tok) if num_tok.isdigit() else _NUMBERS[num_tok]
+        factor = _AGO_UNITS[unit]
+        d = today - timedelta(days=max(0, min(3660, n * factor)))
+        rest = (query[: m.start()] + " " + query[m.end() :]).strip()
+        topic = topic or rest
+        return _mk_range(_date_start(d, tz), _date_start(d + timedelta(days=1), tz), d.isoformat(), "day", original, topic)
+
     patterns = [
-        (r"\b(?:vorige week|last week)\b", "previous_week"),
-        (r"\b(?:deze week|this week)\b", "this_week"),
-        (r"\b(?:vorige maand|last month)\b", "previous_month"),
-        (r"\b(?:deze maand|this month)\b", "this_month"),
-        (r"\b(?:vandaag|today)\b", "today"),
-        (r"\b(?:gisteren|yesterday)\b", "yesterday"),
-        (r"\b(?:eergisteren|day before yesterday)\b", "day_before_yesterday"),
+        (_WEEK_PREV, "previous_week"),
+        (_WEEK_THIS, "this_week"),
+        (_WEEK_NEXT, "next_week"),
+        (_MONTH_PREV, "previous_month"),
+        (_MONTH_THIS, "this_month"),
+        (_DAY_TODAY, "today"),
+        # day_before_yesterday MUST precede yesterday: the multi-word English
+        # form "day before yesterday" contains "yesterday" as a whole word, so
+        # checking yesterday first would match the substring and lose offset 2.
+        (_DAY_BEFORE, "day_before_yesterday"),
+        (_DAY_YESTERDAY, "yesterday"),
     ]
-    for pat, kind in patterns:
-        m = re.search(pat, lower)
+    for words, kind in patterns:
+        if not words:
+            continue
+        m = re.search(r"\b(?:" + _alt(words) + r")\b", lower)
         if not m:
             continue
         rest = (query[: m.start()] + " " + query[m.end() :]).strip()
@@ -1265,6 +1671,8 @@ def parse_period(text: str = "", *, now: datetime | None = None, tz: ZoneInfo = 
             return _mk_range(week_start - timedelta(days=7), week_start, "vorige week", "week", original, topic)
         if kind == "this_week":
             return _mk_range(week_start, week_start + timedelta(days=7), "deze week", "week", original, topic)
+        if kind == "next_week":
+            return _mk_range(week_start + timedelta(days=7), week_start + timedelta(days=14), "komende week", "week", original, topic)
         if kind == "previous_month":
             y = today.year
             mo = today.month - 1
@@ -1280,7 +1688,7 @@ def parse_period(text: str = "", *, now: datetime | None = None, tz: ZoneInfo = 
         d = today - timedelta(days=offset)
         return _mk_range(_date_start(d, tz), _date_start(d + timedelta(days=1), tz), d.isoformat(), "day", original, topic)
 
-    m = re.search(r"\b(?:afgelopen|laatste|last)\s+(\d{1,3})\s+(?:dagen|days)\b", lower)
+    m = re.search(r"\b(?:" + _alt(_ROLLING) + r")\s+(\d{1,3})\s+(?:" + _alt(_DAY_WORD) + r")\b", lower)
     if m:
         days = max(1, min(366, int(m.group(1))))
         start = today_start - timedelta(days=days - 1)
@@ -1288,6 +1696,18 @@ def parse_period(text: str = "", *, now: datetime | None = None, tz: ZoneInfo = 
         rest = (query[: m.start()] + " " + query[m.end() :]).strip()
         topic = topic or rest
         return _mk_range(start, end, f"afgelopen {days} dagen", "range", original, topic, 0.9)
+
+    # Rolling "afgelopen/laatste week|maand|jaar" without an explicit number.
+    # Maps to a trailing window ending today (week=7d, maand=30d, jaar=365d).
+    m = re.search(r"\b(?:" + _alt(_ROLLING) + r")\s+(" + _alt(_ROLL_UNITS) + r")\b", lower)
+    if m:
+        unit = m.group(1)
+        days = _ROLL_UNITS[unit]
+        start = today_start - timedelta(days=days - 1)
+        end = today_start + timedelta(days=1)
+        rest = (query[: m.start()] + " " + query[m.end() :]).strip()
+        topic = topic or rest
+        return _mk_range(start, end, f"afgelopen {unit}", "range", original, topic, 0.9)
 
     m = re.search(r"\b(\d{4})-(\d{2})\b(?!-\d{2})", query)
     if m:
@@ -1313,6 +1733,43 @@ def parse_period(text: str = "", *, now: datetime | None = None, tz: ZoneInfo = 
             topic = topic or rest
             return _mk_range(_date_start(d, tz), _date_start(d + timedelta(days=1), tz), d.isoformat(), "day", original, topic)
 
+    # A month by name, optionally scoped to begin/midden/eind and/or a year,
+    # e.g. "begin april", "mei 2026", "eind december". Runs AFTER the explicit
+    # day-month-year parsers so "3 juli 2026" resolves to a single day, not the
+    # whole month. Without a year the most recent past occurrence is assumed (a
+    # future month rolls back a year).
+    m = re.search(
+        r"\b(" + _alt(_PARTS_BEGIN | _PARTS_MID | _PARTS_END) + r")?\s*(?:van\s+)?("
+        + _alt(MONTHS) + r")\b(?:\s+(\d{4}))?",
+        lower,
+    )
+    if m:
+        part = (m.group(1) or "").strip()
+        mo = MONTHS[m.group(2)]
+        if m.group(3):
+            y = int(m.group(3))
+        else:
+            y = today.year - (1 if mo > today.month else 0)
+        month_start, month_end = _month_range(y, mo, tz)
+        if part in _PARTS_BEGIN:
+            start = _date_start(date(y, mo, 1), tz)
+            end = _date_start(date(y, mo, 11), tz)
+            label = f"begin {y}-{mo:02d}"
+        elif part in _PARTS_MID:
+            start = _date_start(date(y, mo, 11), tz)
+            end = _date_start(date(y, mo, 21), tz)
+            label = f"midden {y}-{mo:02d}"
+        elif part in _PARTS_END:
+            start = _date_start(date(y, mo, 21), tz)
+            end = month_end
+            label = f"eind {y}-{mo:02d}"
+        else:
+            start, end = month_start, month_end
+            label = f"{y}-{mo:02d}"
+        rest = (query[: m.start()] + " " + query[m.end() :]).strip()
+        topic = topic or rest
+        return _mk_range(start, end, label, "range" if part else "month", original, topic)
+
     if re.search(r"\b\d{1,2}[-/]\d{1,2}[-/]\d{2,4}\b", query):
         return TemporalRange(
             start="",
@@ -1326,6 +1783,19 @@ def parse_period(text: str = "", *, now: datetime | None = None, tz: ZoneInfo = 
             error="Ambigue datum. Gebruik ISO-formaat YYYY-MM-DD of schrijf de maand uit.",
             suggestions=("2026-07-03", "3 juli 2026", "July 3 2026"),
         )
+
+    # Layer 2: nothing in the deterministic locale layer matched. Try the
+    # optional dateparser fallback (200+ languages) before giving up.
+    fb = _dateparser_fallback(query, current, tz, original, topic)
+    if fb is not None:
+        return fb
+
+    # Layer 3: optional local-LLM last resort for exotic/compositional phrasing
+    # (off by default, cached). Only reached when Layers 1 and 2 both fail.
+    llm = _llm_fallback(query, current, tz, original, topic)
+    if llm is not None:
+        return llm
+
     return _period_error(original, topic)
 
 
@@ -1344,6 +1814,28 @@ def _topic_aliases(vault: Path) -> dict[str, list[str]]:
         if isinstance(data, dict):
             return {str(k).lower(): [str(x) for x in v] for k, v in data.items() if isinstance(v, list)}
     return {}
+
+
+_TOPIC_STOPWORDS = {
+    "aan", "over", "rond", "voor", "betreffende", "inzake", "mbt", "m.b.t.",
+    "de", "het", "een", "van", "op", "in", "bij", "met",
+}
+
+
+def _clean_topic(topic: str) -> str:
+    """Strip leading Dutch prepositions/articles from a free-text topic so a
+    natural phrasing like 'aan otgw 2.0.0' yields the topic 'otgw 2.0.0'."""
+    words = [w for w in re.split(r"\s+", (topic or "").strip()) if w and re.search(r"\w", w)]
+    while words and words[0].lower().strip(".") in _TOPIC_STOPWORDS:
+        words.pop(0)
+    return " ".join(words)
+
+
+def _topic_tokens(topic: str) -> list[str]:
+    """Split a topic into matchable tokens, keeping version literals like
+    '2.0.0' intact (dots are not treated as separators)."""
+    toks = [t for t in re.split(r"[^\w.]+", (topic or "").lower()) if t]
+    return [t for t in toks if len(t.strip(".")) >= 2 or "." in t]
 
 
 def _topic_terms(topic: str, vault: Path) -> list[str]:
@@ -1399,16 +1891,33 @@ def query_events(
         conn = connect_activity_db(root, readonly=True)
     except sqlite3.Error as e:
         return [], [f"activity index niet leesbaar: {e}"]
-    terms = _topic_terms(topic or period.topic, root)
+    terms = _topic_terms(_clean_topic(topic or period.topic), root)
     pool_limit = max(int(limit) * 5, int(limit))
     if terms:
         pool_limit = min(max(int(limit) * 50, 1000), 10000)
+
+    # Topic matching runs at the SQL level against search_blob so a free-text
+    # topic like "otgw 2.0.0" matches any event whose blob contains BOTH tokens,
+    # instead of requiring the literal phrase. Each term becomes an AND-group of
+    # its tokens; terms (topic + aliases) are OR-ed together.
+    sql = "SELECT * FROM activity_events WHERE event_time >= ? AND event_time < ?"
+    params: list[object] = [period.start, period.end_exclusive]
+    term_groups: list[list[str]] = []
+    if terms:
+        or_clauses: list[str] = []
+        for term in terms:
+            toks = _topic_tokens(term)
+            if not toks:
+                continue
+            term_groups.append(toks)
+            or_clauses.append("(" + " AND ".join(["lower(search_blob) LIKE ?"] * len(toks)) + ")")
+            params.extend(f"%{t}%" for t in toks)
+        if or_clauses:
+            sql += " AND (" + " OR ".join(or_clauses) + ")"
+    sql += " ORDER BY event_time ASC, id ASC LIMIT ?"
+    params.append(pool_limit)
     try:
-        rows = conn.execute(
-            "SELECT * FROM activity_events WHERE event_time >= ? AND event_time < ? "
-            "ORDER BY event_time ASC, id ASC LIMIT ?",
-            (period.start, period.end_exclusive, pool_limit),
-        ).fetchall()
+        rows = conn.execute(sql, tuple(params)).fetchall()
     except sqlite3.Error as e:
         conn.close()
         return [], [f"activity query faalde: {e}"]
@@ -1423,11 +1932,11 @@ def query_events(
         events = [e for e in events if p in f"{e.project} {e.repo} {e.source_path} {' '.join(e.entities)}".lower()]
     out: list[dict] = []
     for event in events:
-        route = _event_match_route(event, terms)
-        if terms and not route:
-            continue
+        route = _event_match_route(event, terms) if terms else "range"
+        # SQL already enforced the topic filter; label anything it kept but the
+        # route heuristic could not localise as a blob match rather than dropping.
         item = event.as_public_dict()
-        item["match_route"] = route or "range"
+        item["match_route"] = route or "blob"
         item["state"] = state_for_event(event)
         out.append(item)
         if len(out) >= limit:
@@ -1494,12 +2003,17 @@ def deterministic_rollup(vault: Path, period: TemporalRange, events: list[dict],
         e for e in events
         if re.search(r"\b(todo|follow[- ]?up|blocked|open|wacht|later|next)\b", f"{e.get('title','')} {e.get('summary','')}", re.I)
     ]
+    # Key events favour curated kinds (sessions, wiki, memory, releases,
+    # decisions) over raw transcript_message rows so the digest reads cleanly;
+    # transcript rows only fill remaining slots when nothing better exists.
+    _high_value = [e for e in events if e.get("activity_kind") != "transcript_message"]
+    _key_pool = _high_value if _high_value else events
     body = {
         "period": period.to_dict(),
         "topic": topic,
         "event_count": len(events),
         "counts": _summary_counts(events),
-        "key_events": events[:12],
+        "key_events": _key_pool[:12],
         "decisions": decisions[:12],
         "releases_tasks": releases[:12],
         "open_loops": open_loops[:12],
@@ -1511,18 +2025,28 @@ def deterministic_rollup(vault: Path, period: TemporalRange, events: list[dict],
     return body
 
 
+def _period_span_days(period: TemporalRange) -> int:
+    try:
+        start = _parse_iso_dt(period.start)
+        end = _parse_iso_dt(period.end_exclusive)
+        return max(1, (end - start).days)
+    except Exception:
+        return 1
+
+
 def what_did_i_do(
     date_or_period: str = "today",
     *,
     topic: str = "",
     project: str = "",
-    max_events: int = 25,
+    max_events: int = 0,
+    rollup: bool | None = None,
     vault: Path | None = None,
     now: datetime | None = None,
 ) -> dict:
     root = Path(vault) if vault is not None else vault_root()
     period = parse_period(date_or_period, now=now, default="today")
-    result_topic = topic or period.topic
+    result_topic = _clean_topic(topic or period.topic)
     result: dict = {
         "ok": period.ok,
         "mode": "what_did_i_do",
@@ -1537,7 +2061,14 @@ def what_did_i_do(
     if not period.ok:
         result["warnings"].append(period.error)
         return result
-    events, warnings = query_events(root, period, topic=result_topic, project=project, limit=max_events)
+    span_days = _period_span_days(period)
+    # Adaptive cap: a single day stays terse, a week or month lifts the ceiling
+    # so a busy period is not truncated to one cluster. Explicit max_events wins.
+    if max_events and max_events > 0:
+        effective_limit = max_events
+    else:
+        effective_limit = min(max(60, span_days * 40), 600)
+    events, warnings = query_events(root, period, topic=result_topic, project=project, limit=effective_limit)
     result["events"] = events
     result["warnings"].extend(warnings)
     result["summary"] = {
@@ -1546,6 +2077,11 @@ def what_did_i_do(
         "top_titles": [e["title"] for e in events[:5]],
     }
     result["evidence"] = _dedupe(e.get("source_ref", "") for e in events)
+    # Attach a deterministic rollup for multi-day periods (or on explicit
+    # request) so the output reads as a digest instead of a raw event dump.
+    want_rollup = (span_days >= 2) if rollup is None else rollup
+    if want_rollup and events:
+        result["rollup"] = deterministic_rollup(root, period, events, result_topic)
     result["ok"] = not bool(warnings and not events)
     return result
 
@@ -1622,7 +2158,7 @@ def format_markdown(result: dict) -> str:
     if not events:
         lines.append("Geen activity events gevonden voor deze periode.")
         return "\n".join(lines)
-    if mode == "weeklog" and result.get("rollup"):
+    if result.get("rollup"):
         rollup = result["rollup"]
         lines.append(f"Events: {rollup.get('event_count', 0)}")
         if rollup.get("counts"):
