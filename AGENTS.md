@@ -11,6 +11,9 @@ integrations. It is not Claude-Code-only. Supported install targets are:
 - `claude` - Claude Code commands, skills, and hooks.
 - `codex` - Codex skills, prompt aliases, hooks, MCP config, and `AGENTS.md`.
 - `opencode` - OpenCode commands, skills, MCP config, `AGENTS.md`, and plugin.
+- `copilot` - standalone GitHub Copilot CLI: MCP config, hooks, personal
+  instructions, and a custom agent profile under `~/.copilot/`. Opt-in and
+  cloud-backed; not in the default target set.
 
 `setup.sh` is the single supported entrypoint for both initial install and
 upgrade. Do not hand-copy files unless `setup.sh` itself is broken and you are
@@ -94,6 +97,7 @@ Agent target options:
 - `--agents claude`
 - `--agents codex`
 - `--agents opencode`
+- `--agents copilot`
 - `--agents claude,codex`
 - `--agents all`
 
@@ -114,6 +118,29 @@ Interactive setup asks which agent environments to install unless `--yes` or
 
 Use `--skip-model-check` only for CI/offline tests or when the user explicitly
 accepts that model validation is skipped.
+
+### Copilot integration (opt-in, safe by construction)
+
+`--agents copilot` targets the standalone `@github/copilot` CLI (invoked
+`copilot`, v1.0.70+), not the `gh copilot` extension or VS Code agent mode. It is
+idempotent for both install and upgrade and never overwrites unmanaged Copilot
+config:
+
+- Structured files (`~/.copilot/mcp-config.json`, `~/.copilot/hooks/kennisbank.json`)
+  get a key-scoped read-modify-write of a single namespaced key — never a
+  whole-file overwrite.
+- Freeform files (`~/.copilot/copilot-instructions.md`, the agent profile) get a
+  marker-delimited managed block, with a backup before any edit.
+- Hooks are fail-open: every command ends `; exit 0`, and no `preToolUse` hook
+  ever returns a deny — a non-zero `preToolUse` exit would block a Copilot tool
+  call, which KennisBank must never do.
+- Registration and validation are login-free; only a live model turn needs
+  `copilot` `/login`. On Windows/nvm4w, if `copilot --version` reports "no
+  platform package found", also install `@github/copilot-<platform>-<arch>` at
+  the same version.
+- All user-level paths honor `COPILOT_HOME`. Repair is a re-run of the same
+  command; `doctor.sh` is read-only. Never store or log the user's auth tokens
+  (`COPILOT_GITHUB_TOKEN` / `GH_TOKEN` / `GITHUB_TOKEN`).
 
 ## Client Expectations
 
@@ -145,6 +172,21 @@ OpenCode:
 - The local plugin goes to `~/.config/opencode/plugins/kennisbank.js`.
 - Global rules go in `~/.config/opencode/AGENTS.md`.
 - Temporal commands go to `~/.config/opencode/commands/`.
+
+Copilot (standalone GitHub Copilot CLI, opt-in):
+
+- MCP server `kennisbank` goes in `~/.copilot/mcp-config.json` (key
+  `mcpServers.kennisbank`, key-scoped JSON merge, login-free).
+- Hooks go in `~/.copilot/hooks/kennisbank.json` (fail-open; each entry has both
+  a `bash` and a `powershell` command).
+- Personal instructions go in `~/.copilot/copilot-instructions.md` (managed
+  marker block).
+- Custom agent profile goes in `~/.copilot/agents/kennisbank.agent.md` (the
+  `.agent.md` extension is required), selected with `copilot --agent kennisbank`.
+- Skills are the shared `~/.agents/skills/` set — no separate install.
+- Capture/import: `kb-copilot-capture.py` writes redacted events to
+  `<vault>/.claude/copilot-events/`; `import-copilot.py` normalizes them into
+  `01-raw/transcripts/` with `agent=github-copilot-cli` provenance.
 
 ## Validation
 
@@ -178,6 +220,20 @@ cat ~/.config/opencode/opencode.json
 ```
 
 Expected: KennisBank commands present and an MCP server named `kennisbank`.
+
+For Copilot specifically:
+
+```bash
+copilot mcp list
+python3 "<vault>/.claude/scripts/_copilot.py" validate --vault "<vault>" --json
+python3 "<vault>/.claude/scripts/agent-status.py" --vault "<vault>"
+```
+
+Expected: a `kennisbank` server visible to Copilot (login-free), and
+`_copilot.py validate` reporting `OK`. `agent-status.py` is the multi-agent
+rollup. When Copilot is not selected, `doctor.sh` reports
+`copilot integration: not configured` as INFO (0 FAIL) — that is expected, not a
+blocker.
 
 ## Safety Rules
 

@@ -243,14 +243,19 @@ if command -v "${DATEPARSER_PY[0]}" >/dev/null 2>&1; then
   fi
 fi
 
-# 11b. MCP runtime, required when Codex/OpenCode KennisBank MCP is configured.
+# 11b. MCP runtime, required when Codex/OpenCode/Copilot KennisBank MCP is configured.
 MCP_CONFIGURED=0
 CODEX_CONFIG="$HOME/.codex/config.toml"
 OPENCODE_CONFIG="$HOME/.config/opencode/opencode.json"
+COPILOT_HOME_DIR="${COPILOT_HOME:-$HOME/.copilot}"
+COPILOT_MCP_CONFIG="$COPILOT_HOME_DIR/mcp-config.json"
 if [ -f "$CODEX_CONFIG" ] && grep -q "\[mcp_servers\.kennisbank\]" "$CODEX_CONFIG" 2>/dev/null; then
   MCP_CONFIGURED=1
 fi
 if [ -f "$OPENCODE_CONFIG" ] && grep -q '"kennisbank"' "$OPENCODE_CONFIG" 2>/dev/null && grep -q '"mcp"' "$OPENCODE_CONFIG" 2>/dev/null; then
+  MCP_CONFIGURED=1
+fi
+if [ -f "$COPILOT_MCP_CONFIG" ] && grep -q '"kennisbank"' "$COPILOT_MCP_CONFIG" 2>/dev/null; then
   MCP_CONFIGURED=1
 fi
 if [ "$MCP_CONFIGURED" = "0" ]; then
@@ -284,6 +289,65 @@ print("OK" if not missing else "MISSING " + ",".join(missing))
     else
       report_fail "kennisbank MCP temporal tools" "$MCP_TEMPORAL_OUT"
     fi
+  fi
+fi
+
+# 11b-copilot. GitHub Copilot CLI integration (optional; TASK-26.9).
+# Read-only diagnosis. Repair path is a setup re-run (install_copilot is
+# idempotent and only touches KennisBank-managed keys/files, with backups).
+COPILOT_CONFIGURED=0
+if [ -f "$COPILOT_MCP_CONFIG" ] && grep -q '"kennisbank"' "$COPILOT_MCP_CONFIG" 2>/dev/null; then
+  COPILOT_CONFIGURED=1
+fi
+if [ "$COPILOT_CONFIGURED" = "0" ]; then
+  report_info "copilot integration" "not configured (optional; run setup.sh --agents copilot)"
+elif command -v python3 >/dev/null 2>&1 && [ -f "$SCRIPTS_DIR/_copilot.py" ]; then
+  # Managed config validation (hard errors -> FAIL): mcp/hooks/instructions/agent
+  # profile present and the MCP server pinned to the active vault.
+  CP_VALIDATE="$(python3 "$SCRIPTS_DIR/_copilot.py" validate --vault "$VAULT" 2>/dev/null | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+    print("OK" if d.get("ok") else "FAIL " + "; ".join(d.get("errors", [])))
+except Exception:
+    print("ERR")
+' 2>/dev/null | tr -d '\r')"
+  case "$CP_VALIDATE" in
+    OK) report_pass "copilot config" "mcp, hooks, instructions and agent profile present; vault pinned" ;;
+    ERR|"") report_warn "copilot config" "kon _copilot.py validate niet lezen (setup opnieuw draaien?)" ;;
+    *) report_fail "copilot config" "${CP_VALIDATE#FAIL }; fix: setup.sh --agents copilot" ;;
+  esac
+  # Login-free CLI probe: binary/version + whether Copilot sees the MCP server.
+  CP_PROBE="$(python3 "$SCRIPTS_DIR/_copilot.py" probe --vault "$VAULT" 2>/dev/null | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+    print("%s|%s|%s" % (d.get("status"), d.get("version"), d.get("detail", "")))
+except Exception:
+    print("ERR||")
+' 2>/dev/null | tr -d '\r')"
+  CP_STATUS="$(printf '%s' "$CP_PROBE" | cut -d'|' -f1)"
+  CP_VER="$(printf '%s' "$CP_PROBE" | cut -d'|' -f2)"
+  CP_DETAIL="$(printf '%s' "$CP_PROBE" | cut -d'|' -f3)"
+  case "$CP_STATUS" in
+    ok) report_pass "copilot cli" "v$CP_VER; kennisbank MCP visible to copilot" ;;
+    version_old|not_logged_in|mcp_not_listed) report_warn "copilot cli" "${CP_DETAIL:-$CP_STATUS}" ;;
+    copilot_missing) report_warn "copilot cli" "configured but copilot not installed: ${CP_DETAIL}" ;;
+    platform_binary_missing) report_warn "copilot cli" "${CP_DETAIL}" ;;
+    *) report_warn "copilot cli" "kon probe-status niet lezen" ;;
+  esac
+  # Capture hook script deployed + last observed hook event (TASK-26.6 DoD#2).
+  if [ -f "$SCRIPTS_DIR/kb-copilot-capture.py" ]; then
+    report_pass "copilot capture hook" "kb-copilot-capture.py deployed"
+  else
+    report_warn "copilot capture hook" "kb-copilot-capture.py ontbreekt in $SCRIPTS_DIR"
+  fi
+  CP_EVENTS_DIR="$VAULT/.claude/copilot-events"
+  LAST_EV="$(ls -t "$CP_EVENTS_DIR"/*.jsonl 2>/dev/null | head -1)"
+  if [ -n "$LAST_EV" ]; then
+    report_info "copilot hook events" "last: $(basename "$LAST_EV")"
+  else
+    report_info "copilot hook events" "none captured yet (populated on first Copilot session)"
   fi
 fi
 
