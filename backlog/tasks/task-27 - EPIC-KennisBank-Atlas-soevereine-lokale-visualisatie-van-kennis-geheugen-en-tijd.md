@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-07-11 16:43'
-updated_date: '2026-07-11 21:57'
+updated_date: '2026-07-11 23:18'
 labels:
   - epic
   - visualization
@@ -23,6 +23,7 @@ references:
   - 'https://github.com/rohitg00/agentmemory'
   - 'https://github.com/sachitrafa/YourMemory'
   - 'https://mem0.ai/blog/graph-memory-solutions-ai-agents'
+  - docs/adr/0004-atlas-tauri-architecture.md
 priority: high
 ordinal: 31000
 ---
