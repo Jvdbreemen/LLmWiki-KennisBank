@@ -24,6 +24,7 @@ via `--agents`.
   - Claude hooks through `~/.claude/settings.json`
   - Codex hooks/MCP through `~/.codex/hooks.json` and `~/.codex/config.toml`
   - OpenCode MCP/plugin through `~/.config/opencode/opencode.json` and `~/.config/opencode/plugins/kennisbank.js`
+  - Copilot MCP/hooks through `~/.copilot/mcp-config.json` and `~/.copilot/hooks/kennisbank.json` (honors `COPILOT_HOME`)
 - **Effect**: root of the knowledge vault. Everything below this path.
 - **To change**: rerun setup with `KENNISBANK_VAULT=/new/path bash setup.sh --yes --agents ...`. Do not hand-edit generated agent configs unless you are repairing setup itself.
 
@@ -58,11 +59,12 @@ via `--agents`.
 
 - **Default**: `claude,codex`
 - **Where set**: `setup.sh` `AGENTS` variable or `--agents`
-- **Values**: `claude`, `codex`, `opencode`, comma-separated combinations, or `all`
+- **Values**: `claude`, `codex`, `opencode`, `copilot`, comma-separated combinations, or `all`
 - **Effect**:
   - `claude`: installs `~/.claude/commands`, `~/.claude/skills`, and `~/.claude/settings.json` hooks.
   - `codex`: installs `~/.agents/skills`, `~/.codex/prompts`, `~/.codex/AGENTS.md`, `~/.codex/hooks.json`, and `~/.codex/config.toml` MCP.
   - `opencode`: installs `~/.config/opencode/commands`, `~/.agents/skills`, `~/.config/opencode/AGENTS.md`, `~/.config/opencode/opencode.json` MCP, and `~/.config/opencode/plugins/kennisbank.js`.
+  - `copilot`: installs the KennisBank MCP server, hooks, personal instructions, and a custom agent profile under `~/.copilot/` (see section 14). Opt-in; cloud-backed; not in the default target set.
 - **Validation**: `setup.sh` calls `scripts/install-agent-envs.py --validate` and fails when selected agent config is incomplete.
 
 ### Post-install model validation
@@ -755,6 +757,172 @@ python3 <vault>/.claude/scripts/parse-document.py /pad/naar/map --vault <vault> 
 
 OCR staat standaard uit om native-text PDFs schoon te houden. Gebruik `--ocr`
 alleen voor scans en alleen wanneer lokale Tesseract/tessdata beschikbaar is.
+
+---
+
+## 14. GitHub Copilot CLI integration
+
+`setup.sh --agents copilot` adds the **standalone** GitHub Copilot CLI
+(`npm install -g @github/copilot`, invoked as `copilot`, v1.0.70+) as a fourth
+local agent, mirroring the Codex/OpenCode integration. It is **not** the older
+`gh copilot` gh-extension and **not** Copilot's VS Code agent mode. The
+authoritative design is [`docs/adr/0003-copilot-cli-integration.md`](docs/adr/0003-copilot-cli-integration.md);
+the wrapper's "trivial exec, not a proxy" decision is derived in
+[`docs/copilot-headroom-evaluation.md`](docs/copilot-headroom-evaluation.md).
+
+Copilot is **cloud-backed and opt-in**: a live model turn sends requests to
+GitHub and needs a GitHub Copilot subscription (`copilot` `/login`). KennisBank's
+vault and recall stay 100% local; MCP registration, hook install, instruction
+install, and `copilot mcp list` all work **without** a GitHub login. This
+integration does not change KennisBank's "nothing to the cloud without consent"
+default for the vault. Auth tokens (`COPILOT_GITHUB_TOKEN` / `GH_TOKEN` /
+`GITHUB_TOKEN`) are the user's and are never stored, logged, or committed.
+
+### Config home and `COPILOT_HOME`
+
+- **Default**: `~/.copilot` (Windows `%USERPROFILE%\.copilot`).
+- **Override**: `COPILOT_HOME` relocates the whole Copilot config tree.
+  KennisBank honors it everywhere, and it is the key used by the hermetic test
+  suite so tests never touch a real `~/.copilot`.
+
+### Managed config locations
+
+KennisBank writes **only** these, idempotently, and never rewrites unmanaged
+content. Structured files get a key-scoped read-modify-write of one namespaced
+key; freeform files get a marker-delimited managed block with a backup before the
+edit.
+
+| Surface | File | KennisBank writes |
+|---|---|---|
+| MCP server | `~/.copilot/mcp-config.json` | key `mcpServers.kennisbank` |
+| Hooks | `~/.copilot/hooks/kennisbank.json` | the `hooks` object (`version: 1`) |
+| Personal instructions | `~/.copilot/copilot-instructions.md` | a managed marker block |
+| Custom agent profile | `~/.copilot/agents/kennisbank.agent.md` | the whole KennisBank-owned file |
+| Skills | `~/.agents/skills/<name>/` | already installed for Codex/OpenCode; free for Copilot |
+
+The custom agent profile requires the `.agent.md` extension (a plain `.md` is
+silently ignored) and is selected with `copilot --agent kennisbank`. Installed
+skills are listed with `copilot skill list`. The repo-local
+`.github/copilot-instructions.md` is left to the user; KennisBank does not
+overwrite it.
+
+### MCP config shape (`~/.copilot/mcp-config.json`)
+
+Top-level `mcpServers` (Claude-Desktop style), `type: "local"` for the stdio
+server, literal env values (no `${VAR}` interpolation). `command`/`args` follow
+the interpreter convention: `py -3` on Windows, `python3` on POSIX.
+
+```json
+{
+  "mcpServers": {
+    "kennisbank": {
+      "type": "local",
+      "command": "py",
+      "args": ["-3", "<vault>/.claude/scripts/kb-mcp.py"],
+      "env": {
+        "KENNISBANK_VAULT": "<vault>",
+        "KB_LLM_PROVIDERS": "ollama",
+        "KB_LLM_MODEL": "gemma4:12b",
+        "KB_LLM_ENDPOINT": "http://localhost:11434"
+      },
+      "tools": ["*"]
+    }
+  }
+}
+```
+
+Registration is a login-free key-scoped JSON merge (not `copilot mcp add`),
+validated with the same real initialize/list-tools handshake used for
+Codex/OpenCode. `copilot mcp list` then shows the server.
+
+### Hooks file (`~/.copilot/hooks/kennisbank.json`)
+
+Shape is `{ "version": 1, "hooks": { <event>: [ ... ] } }`. Each entry carries
+**both** a `bash` and a `powershell` command; Copilot picks by OS (matching the
+`python3` / `py -3` interpreter convention). Events wired:
+
+- **`sessionStart`**: `import-copilot.py`, `build-embed-index.py`,
+  `build-kb-index.py`, `build-activity-index.py`, `sweep-launch.py`,
+  `memory-notify.py`, `distill-notify.py`, and the capture hook.
+- **`userPromptSubmitted`, `preToolUse`, `postToolUse`, `sessionEnd`**: the
+  capture hook (`kb-copilot-capture.py`).
+
+**Fail-open is mandatory.** Every command ends with `; exit 0`. A `preToolUse`
+hook that exits non-zero would **deny** the tool call (exit code 2 denies,
+hardened in v1.0.70); KennisBank never emits a deny — a missing Ollama, a script
+error, or a malformed payload skips the KennisBank side effect but never blocks
+Copilot.
+
+### Wrapper / launcher (`<vault>/.claude/scripts/kennisbank-copilot.py`)
+
+Run it instead of `copilot`. It pins `KENNISBANK_VAULT` and the local-LLM env,
+runs a fast fail-open validation, then execs the real `copilot` preserving argv
+and exit code. It is a trivial exec, not a proxy (contrast with Headroom in the
+evaluation doc). Diagnostic modes work **without** a GitHub login:
+
+| Flag | Effect |
+|---|---|
+| `--kb-doctor` | JSON probe + config report; exit 0 iff the probe status is healthy |
+| `--kb-dry-run` | JSON of what it would do (vault, binary, env, argv); no launch |
+| `--kb-print-env` | the `KEY=VALUE` lines it would inject (secret-masked); no launch |
+| `--no-capture` | inject `KENNISBANK_COPILOT_NO_CAPTURE=1` into the child, then launch |
+
+Related env vars:
+
+- **`KENNISBANK_COPILOT_BIN`**: absolute path to the `copilot` binary when it is
+  not on `PATH`.
+- **`KENNISBANK_COPILOT_NO_CAPTURE=1`**: disable event capture for a session
+  (what `--no-capture` sets in the child).
+
+### Capture and import flow
+
+Two local sources, both tagged `agent=github-copilot-cli`:
+
+- **Live events**: the capture hook writes redacted JSONL to
+  `<vault>/.claude/copilot-events/*.jsonl`. Secret-bearing keys and inline
+  secrets (`Bearer`, `ghp_`, `sk-`, `KEY=VALUE`) are masked before disk; the hook
+  is fail-open.
+- **Import**: `import-copilot.py --vault <vault>` normalizes events into
+  `01-raw/transcripts/copilot-<sid>.jsonl` (idempotent dedupe, active-session
+  skip). `--include-history` adds an opt-in best-effort import of Copilot's own
+  session-state.
+
+`build-activity-index.py` indexes them (counted as `copilot_events`), so
+`/watdeedik`, `/timeline`, and the MCP tools `what_did_i_do`, `timeline`,
+`weeklog`, `topic_timeline` surface Copilot activity.
+
+### Doctor / diagnostics
+
+`doctor.sh` has a read-only Copilot section. When Copilot is not selected it
+reports `copilot integration: not configured` as **INFO** (0 FAIL). When
+configured it reports:
+
+```
+[PASS] copilot config: mcp, hooks, instructions and agent profile present; vault pinned
+[PASS] copilot cli: v1.0.70; kennisbank MCP visible to copilot
+[PASS] copilot capture hook: kb-copilot-capture.py deployed
+[INFO] copilot hook events: ...
+```
+
+It distinguishes optional-missing (`copilot_missing` / `platform_binary_missing`
+→ WARN) from broken config (validate → FAIL). doctor is read-only; the repair
+path is a re-run of `setup.sh --agents copilot` (idempotent, backups).
+Machine-readable JSON:
+
+```bash
+python3 <vault>/.claude/scripts/_copilot.py detect   --vault <vault> --json
+python3 <vault>/.claude/scripts/_copilot.py probe     --vault <vault> --json
+python3 <vault>/.claude/scripts/_copilot.py validate  --vault <vault> --json
+python3 <vault>/.claude/scripts/agent-status.py       --vault <vault>   # multi-agent rollup
+```
+
+### Install caveat (Windows / nvm4w)
+
+`npm install -g @github/copilot` may place the JS loader without the platform
+binary, so `copilot --version` prints "no platform package found". Remedy: also
+install the platform package at the same version, e.g.
+`npm install -g @github/copilot-win32-x64`. Setup detects this and advises;
+doctor reports it as `platform_binary_missing` (WARN, not FAIL).
 
 ---
 

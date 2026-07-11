@@ -1059,6 +1059,9 @@ def build_activity_index(
         conn.commit()
         stats["elapsed_seconds"] = round(time.monotonic() - start, 3)
         stats["total_events"] = conn.execute("SELECT count(*) FROM activity_events").fetchone()[0]
+        stats["copilot_events"] = conn.execute(
+            "SELECT count(*) FROM activity_events WHERE agent=?", ("github-copilot-cli",)
+        ).fetchone()[0]
         stats["source_signature"] = _source_signature(conn)
     finally:
         conn.close()

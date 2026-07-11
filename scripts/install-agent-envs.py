@@ -30,8 +30,11 @@ try:
 except ModuleNotFoundError:  # Python 3.10 support.
     tomllib = None
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _copilot  # noqa: E402  (Copilot config layer, ADR-0003)
 
-AGENTS = ("claude", "codex", "opencode")
+
+AGENTS = ("claude", "codex", "opencode", "copilot")
 KB_START = "<!-- BEGIN LLmWiki-KennisBank -->"
 KB_END = "<!-- END LLmWiki-KennisBank -->"
 
@@ -437,6 +440,26 @@ def _ensure_opencode_config(path: Path, vault: Path, plugin: Path) -> Path:
     return path
 
 
+def install_copilot(repo: Path, vault: Path) -> dict:
+    """Install the KennisBank integration for the standalone GitHub Copilot CLI.
+
+    Delegates config mutation to the idempotent _copilot layer (ADR-0003 D1-D6):
+    MCP registration, hooks, global instructions and the custom agent profile.
+    Shared skills are already discoverable by Copilot from ~/.agents/skills.
+    """
+    skills = _install_shared_skills(repo, _home() / ".agents" / "skills")
+    report = _copilot.install(vault)
+    res = report["results"]
+    return {
+        "skills": [str(p) for p in skills],
+        "mcp": res["mcp"]["path"],
+        "hooks": res["hooks"]["path"],
+        "instructions": res["instructions"]["path"],
+        "agent_profile": res["agent_profile"]["path"],
+        "home": report["home"],
+    }
+
+
 def validate_files(repo: Path, vault: Path, agents: list[str]) -> list[str]:
     errors: list[str] = []
     for p in (
@@ -509,6 +532,14 @@ def validate_files(repo: Path, vault: Path, agents: list[str]) -> list[str]:
             combined = _read_text(cfg / "opencode.json") + "\n" + _read_text(cfg / "plugins" / "kennisbank.js")
             if need not in combined:
                 errors.append(f"OpenCode config lacks {need}")
+
+    if "copilot" in agents:
+        for skill in ("autoresearch", "kennisbank-upgrade", "kennisbank-contribute"):
+            if not (_home() / ".agents" / "skills" / skill / "SKILL.md").is_file():
+                errors.append(f"missing Copilot shared skill: {skill}")
+        if not (vault / ".claude" / "scripts" / "kb-copilot-capture.py").is_file():
+            errors.append(f"missing Copilot capture hook script: {vault / '.claude' / 'scripts' / 'kb-copilot-capture.py'}")
+        errors.extend(_copilot.validate_config(vault))
     return errors
 
 
@@ -857,9 +888,11 @@ def main(argv: list[str] | None = None) -> int:
                 result["install"]["codex"] = install_codex(repo, vault)
             if "opencode" in agents:
                 result["install"]["opencode"] = install_opencode(repo, vault)
+            if "copilot" in agents:
+                result["install"]["copilot"] = install_copilot(repo, vault)
         if args.validate:
             result["validation_errors"].extend(validate_files(repo, vault, agents))
-            if "codex" in agents or "opencode" in agents:
+            if any(a in agents for a in ("codex", "opencode", "copilot")):
                 result["validation_errors"].extend(validate_mcp_runtime(vault))
             if not args.skip_models:
                 result["validation_errors"].extend(validate_models(vault))

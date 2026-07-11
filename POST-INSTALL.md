@@ -293,6 +293,57 @@ If something goes wrong (no sessions found, errors on individual files, claude.a
 
 ---
 
+## Step 11: Optional: validate the GitHub Copilot CLI integration
+
+Only relevant if you installed the standalone GitHub Copilot CLI target
+(`bash setup.sh --agents copilot`). If you did not, `doctor.sh` prints
+`copilot integration: not configured (optional; run setup.sh --agents copilot)`
+as an INFO line and counts zero failures — Copilot is never required.
+
+`doctor.sh` is the source of truth. When Copilot is configured, look for:
+
+```
+[PASS] copilot config: mcp, hooks, instructions and agent profile present; vault pinned
+[PASS] copilot cli: v1.0.70; kennisbank MCP visible to copilot
+[PASS] copilot capture hook: kb-copilot-capture.py deployed
+[INFO] copilot hook events: none captured yet (populated on first Copilot session)
+```
+
+Reading the results:
+
+- **`copilot integration: not configured`** (INFO) — Copilot was not selected;
+  nothing to do. Add it later with `bash setup.sh --agents copilot`.
+- **`[WARN] copilot cli: configured but copilot not installed`** — the config is
+  in place but the `copilot` binary is missing. Install it with
+  `npm install -g @github/copilot`. On Windows/nvm4w, if `copilot --version`
+  prints "no platform package found", also run
+  `npm install -g @github/copilot-win32-x64` at the same version.
+- **`[WARN] copilot cli: ...`** (`not logged in` / `mcp not listed` /
+  `version old`) — a non-fatal hint. MCP registration itself is fine; only a live
+  model turn needs `copilot` `/login`, and the integration targets v1.0.70+.
+- **`[FAIL] copilot config`** — the config is broken. Re-run
+  `bash setup.sh --agents copilot` (idempotent; it backs up before editing).
+
+Quick wrapper check, no GitHub login needed:
+
+```bash
+python3 $HOME/KennisBank/.claude/scripts/kennisbank-copilot.py --kb-doctor
+python3 $HOME/KennisBank/.claude/scripts/kennisbank-copilot.py --kb-dry-run
+```
+
+`--kb-doctor` prints a JSON probe + config report (exit 0 when healthy);
+`--kb-dry-run` shows what the wrapper would launch (vault, binary, env, argv)
+without starting Copilot. Both work offline.
+
+Then start a Copilot session through the wrapper so activity is captured into the
+vault, and confirm it surfaces in recall:
+
+```
+/watdeedik vandaag
+```
+
+---
+
 ## Maintenance rhythm
 
 Three cadences keep the system healthy:
