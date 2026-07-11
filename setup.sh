@@ -15,7 +15,7 @@
 #   --no-commands      sla het kopiëren van commands over (heeft voorrang op --yes)
 #   --no-skill         sla het kopiëren van de autoresearch skill over (heeft voorrang op --yes)
 #   --no-hooks         sla het registreren van de retrieval-hooks over (heeft voorrang op --yes)
-#   --agents LIST      agentdoelen: claude,codex,opencode,all (default: claude,codex)
+#   --agents LIST      agentdoelen: claude,codex,opencode,copilot,all (default: claude,codex)
 #   --no-codex         alias voor --agents claude
 #   --skip-model-check sla Ollama model-smoke-tests over in de post-install validatie
 #   -f, --force        overschrijf bestaande bestanden
@@ -49,7 +49,7 @@ Opties:
   --no-commands      sla het kopiëren van commands over
   --no-skill         sla het kopiëren van de skills (autoresearch, kennisbank-upgrade, kennisbank-contribute) over
   --no-hooks         sla het registreren van de retrieval-hooks in ~/.claude/settings.json over
-  --agents LIST      installeer agent-integraties voor LIST: claude,codex,opencode,all
+  --agents LIST      installeer agent-integraties voor LIST: claude,codex,opencode,copilot,all
   --no-codex         installeer alleen Claude Code-integratie (compatibiliteitsalias)
   --skip-model-check sla lokale Ollama model-smoke-tests over tijdens post-install validatie
   -f, --force        overschrijf bestaande bestanden (scripts, templates, commands, skill, CLAUDE.md)
@@ -111,7 +111,24 @@ done
 
 AGENTS="$(printf "%s" "$AGENTS" | tr '[:upper:]' '[:lower:]' | tr -d ' ')"
 if [ "$ASSUME_YES" != "1" ] && [ "$AGENTS_SET" != "1" ]; then
-  printf "Agent-integraties installeren voor welke omgevingen? [claude,codex] (opties: claude,codex,opencode,all) "
+  # Toon per agent een detectiestatus zodat de gebruiker bewust kiest (het
+  # "install-scherm"-dashboard, TASK-26.13).
+  if command -v python3 >/dev/null 2>&1; then
+    COPILOT_DETECT="$(python3 "$SCRIPT_DIR/scripts/_copilot.py" detect --json 2>/dev/null \
+      | python3 -c 'import json,sys;
+try:
+    d=json.load(sys.stdin); print("gevonden %s" % d["version"] if d["installed"] and d["version"] else ("binary onvolledig" if d["installed"] else "niet gevonden"))
+except Exception:
+    print("onbekend")' 2>/dev/null | tr -d '\r')"
+  else
+    COPILOT_DETECT="onbekend"
+  fi
+  echo "Beschikbare agent-omgevingen:"
+  echo "  claude    Claude Code"
+  echo "  codex     Codex CLI"
+  echo "  opencode  OpenCode"
+  echo "  copilot   GitHub Copilot CLI  (${COPILOT_DETECT:-onbekend})"
+  printf "Agent-integraties installeren voor welke omgevingen? [claude,codex] (opties: claude,codex,opencode,copilot,all) "
   read REPLY
   if [ -n "$REPLY" ]; then
     AGENTS="$(printf "%s" "$REPLY" | tr '[:upper:]' '[:lower:]' | tr -d ' ')"
@@ -262,7 +279,7 @@ install_python_dep() {
 install_python_dep "sqlite-vec==0.1.9" "sqlite_vec" "kb-index"
 install_python_dep "liteparse>=2.0,<3" "liteparse" "document parsing (PDF/Office/images)"
 install_python_dep "dateparser>=1.2,<2" "dateparser" "multilingual temporal recall (200+ language fallback)"
-if has_agent codex || has_agent opencode; then
+if has_agent codex || has_agent opencode || has_agent copilot; then
   install_python_dep "mcp==1.28.1" "mcp" "KennisBank MCP"
 fi
 
@@ -445,6 +462,14 @@ if [ -f "$VAULT/.claude/scripts/doctor.sh" ]; then
 else
   echo "  WAARSCHUWING: doctor.sh ontbreekt na setup." >&2
   DOCTOR_RC=1
+fi
+
+# Post-install multi-agent statussamenvatting (het "dashboard", TASK-26.13):
+# compacte per-agent rollup bovenop de doctor-output. Reuse van bestaande
+# config; fail-soft (breekt setup niet).
+if command -v python3 >/dev/null 2>&1 && [ -f "$VAULT/.claude/scripts/agent-status.py" ]; then
+  echo ""
+  KENNISBANK_VAULT="$VAULT" python3 "$VAULT/.claude/scripts/agent-status.py" --agents "$AGENTS" --vault "$VAULT" 2>/dev/null || true
 fi
 
 if [ "$AGENT_VALIDATE_RC" != "0" ] || [ "$DOCTOR_RC" != "0" ]; then

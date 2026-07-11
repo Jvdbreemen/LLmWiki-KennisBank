@@ -127,6 +127,96 @@ OpenCode local plugins are loaded automatically from
 `~/.config/opencode/plugins/`. The generated plugin is fail-open and only runs
 local KennisBank maintenance scripts.
 
+## GitHub Copilot CLI
+
+Installed by `--agents copilot`. Targets the **standalone** GitHub Copilot CLI
+(`npm install -g @github/copilot`, invoked as `copilot`, v1.0.70+), not the older
+`gh copilot` gh-extension and not Copilot's VS Code agent mode. The authoritative
+design is [ADR-0003](adr/0003-copilot-cli-integration.md); the wrapper's "trivial
+exec, not a proxy" stance is derived in
+[docs/copilot-headroom-evaluation.md](copilot-headroom-evaluation.md).
+
+- Skills: `~/.agents/skills/<name>/SKILL.md` (shared with Codex/OpenCode; no
+  separate install — list with `copilot skill list`)
+- MCP: `~/.copilot/mcp-config.json`, server name `kennisbank`
+- Hooks: `~/.copilot/hooks/kennisbank.json`
+- Personal instructions: `~/.copilot/copilot-instructions.md` (KennisBank managed block)
+- Custom agent profile: `~/.copilot/agents/kennisbank.agent.md`, selected with
+  `copilot --agent kennisbank` (the `.agent.md` extension is required)
+- Wrapper/launcher: `<vault>/.claude/scripts/kennisbank-copilot.py`
+- Config home: `~/.copilot` (Windows `%USERPROFILE%\.copilot`); `COPILOT_HOME` overrides it
+
+All user-level paths honor `COPILOT_HOME`. KennisBank writes **only** its own
+namespaced keys and marker-delimited blocks: `mcpServers.kennisbank` in the MCP
+file, the `hooks` object in `kennisbank.json`, a managed block in the freeform
+instruction files. It never rewrites unmanaged Copilot config, and it backs up
+any freeform file before editing.
+
+`setup.sh --agents copilot` registers the MCP server by a key-scoped JSON merge
+(login-free and idempotent, not `copilot mcp add`) and validates it with the same
+real initialize/list-tools handshake used for Codex/OpenCode. `copilot mcp list`
+(login-free) then shows the server. MCP registration, hook install, and
+instruction install all work **without** a GitHub login; only a live model turn
+needs `copilot` `/login`.
+
+Manual MCP shape (`~/.copilot/mcp-config.json`, top-level `mcpServers`,
+Claude-Desktop style; `type: "local"` for the stdio server; literal env values,
+no `${VAR}` interpolation):
+
+```json
+{
+  "mcpServers": {
+    "kennisbank": {
+      "type": "local",
+      "command": "py",
+      "args": ["-3", "/absolute/path/to/vault/.claude/scripts/kb-mcp.py"],
+      "env": {
+        "KENNISBANK_VAULT": "/absolute/path/to/vault",
+        "KB_LLM_PROVIDERS": "ollama",
+        "KB_LLM_MODEL": "gemma4:12b",
+        "KB_LLM_ENDPOINT": "http://localhost:11434"
+      },
+      "tools": ["*"]
+    }
+  }
+}
+```
+
+On macOS/Linux the command is `python3` with `args`
+`["/absolute/path/to/vault/.claude/scripts/kb-mcp.py"]` (no `-3`).
+
+Run Copilot through the wrapper to pin the vault and local-LLM env:
+
+```bash
+python3 <vault>/.claude/scripts/kennisbank-copilot.py            # execs the real copilot
+python3 <vault>/.claude/scripts/kennisbank-copilot.py --kb-doctor   # JSON probe, works offline
+python3 <vault>/.claude/scripts/kennisbank-copilot.py --no-capture  # do not record this session
+```
+
+The wrapper is a trivial exec: it sets `KENNISBANK_VAULT` + the local-LLM env,
+runs a fast fail-open validation, then hands off to the real `copilot` preserving
+argv and exit code. `--kb-doctor`, `--kb-dry-run`, and `--kb-print-env` work
+without a GitHub login. Point `KENNISBANK_COPILOT_BIN` at the binary when it is
+not on `PATH`.
+
+### How Copilot activity becomes recall
+
+Two local, complementary sources, both tagged `agent=github-copilot-cli`:
+
+- **Live events.** A capture hook (`kb-copilot-capture.py`) writes redacted JSONL
+  to `<vault>/.claude/copilot-events/*.jsonl` on `sessionStart`,
+  `userPromptSubmitted`, `preToolUse`, `postToolUse`, and `sessionEnd`. Payloads
+  are secret-masked before disk; the hook is fail-open and always exits 0.
+- **Session import.** `import-copilot.py` normalizes those events into
+  `01-raw/transcripts/copilot-<sid>.jsonl` (idempotent dedupe, active-session
+  skip). `import-copilot.py --include-history` additionally does a best-effort
+  import of Copilot's own session-state.
+
+`build-activity-index.py` then indexes them (reported as `copilot_events`), so
+`/watdeedik`, `/timeline`, and the MCP temporal tools `what_did_i_do`,
+`timeline`, `weeklog`, and `topic_timeline` surface Copilot activity alongside the
+other agents'.
+
 ## Other MCP Clients
 
 Cursor, Cline, Windsurf, Gemini CLI, and similar local MCP clients can point to
