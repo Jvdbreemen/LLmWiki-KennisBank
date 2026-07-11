@@ -5,8 +5,8 @@
 Every agent session creates valuable context: decisions, fixes, preferences,
 architecture trade-offs, dead ends, and lessons you do not want to rediscover
 next week. Then the model forgets. KennisBank turns that temporary context into
-a durable local knowledge system for Claude Code, Codex, OpenCode, and other
-developer agents.
+a durable local knowledge system for Claude Code, Codex, OpenCode, the GitHub
+Copilot CLI, and other developer agents.
 
 It captures what happened, distils it into a sourced wiki, extracts time-aware
 memories, retrieves the right knowledge before the next answer, and measures
@@ -142,7 +142,7 @@ The design bias throughout: **deterministic where possible, LLM only where it ad
 
 ## Prerequisites
 
-- At least one local agent client: [Claude Code](https://claude.ai/code), Codex, or OpenCode
+- At least one local agent client: [Claude Code](https://claude.ai/code), Codex, OpenCode, or the [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli)
 - Python 3.10+
 - [Ollama](https://ollama.com) with:
   - `qwen3-embedding:8b` (embeddings; multilingual default. English-only vaults can use the lighter `nomic-embed-text`)
@@ -363,9 +363,29 @@ KB_LLM_ENDPOINT = "http://localhost:11434"
 
 OpenCode reads global commands directly from `~/.config/opencode/commands/`, so the command names match the Claude Code names. Retrieval should use the MCP `recall` tool and the installed skills; the plugin handles background maintenance where OpenCode exposes matching events.
 
+### GitHub Copilot CLI — a first-class local agent
+
+The **standalone** GitHub Copilot CLI (`npm install -g @github/copilot`, invoked as `copilot`) is a managed KennisBank target, exactly like Codex and OpenCode — not a hand-written snippet. One local vault, one stdio MCP server, one local recall layer, now shared across all four agents. Whatever you do in a Copilot session becomes searchable KennisBank history next to your Claude Code, Codex, and OpenCode work; ask `/watdeedik` or `/timeline` and Copilot's sessions show up alongside the rest.
+
+```bash
+KENNISBANK_VAULT="/absolute/path/to/vault" bash setup.sh --yes --agents copilot
+```
+
+`setup.sh --agents copilot` installs, idempotently and login-free:
+
+- `~/.copilot/mcp-config.json` — MCP server `kennisbank` (`recall`, `capture`, and the temporal tools), registered by a key-scoped JSON merge and validated with a real initialize/list-tools handshake
+- `~/.copilot/hooks/kennisbank.json` — fail-open lifecycle hooks (cross-platform: each carries a `bash` and a `powershell` command) that refresh the indexes at session start and capture session/tool activity
+- `~/.copilot/copilot-instructions.md` — a KennisBank managed instruction block
+- `~/.copilot/agents/kennisbank.agent.md` — a custom agent profile, selected with `copilot --agent kennisbank`
+- the shared skills at `~/.agents/skills/` are picked up automatically (`copilot skill list`)
+
+Run Copilot through the wrapper to pin the vault and local-LLM env: `python3 <vault>/.claude/scripts/kennisbank-copilot.py` (a trivial exec that hands off to the real `copilot`; `--kb-doctor`, `--kb-dry-run`, and `--kb-print-env` work without a GitHub login).
+
+**The cloud boundary is precise.** Copilot is cloud-backed — a live model turn needs a GitHub Copilot subscription and sends requests to GitHub. But that is the *only* thing that leaves your machine: your vault, your recall, the MCP server, and every hook stay 100% local, and MCP/hook/instruction install plus `copilot mcp list` all work **without** logging in. The integration is opt-in and never in the default target set. Full reference in [docs/agent-integrations.md](docs/agent-integrations.md), design rationale in [docs/adr/0003-copilot-cli-integration.md](docs/adr/0003-copilot-cli-integration.md), and why the wrapper is not a Headroom-style proxy in [docs/copilot-headroom-evaluation.md](docs/copilot-headroom-evaluation.md).
+
 ### GitHub Copilot (VS Code agent mode) — works, with one caveat
 
-Copilot's agent mode supports MCP **tools** over stdio, but **not** MCP resources or prompts. So `recall` and `capture` work, but the `instructions` nudge (a resource) will not surface. Put the nudge in `.github/copilot-instructions.md` instead:
+This is Copilot's **VS Code agent mode** (MCP tools inside the editor) — a different, manual integration from the standalone GitHub Copilot CLI covered above. Copilot's agent mode supports MCP **tools** over stdio, but **not** MCP resources or prompts. So `recall` and `capture` work, but the `instructions` nudge (a resource) will not surface. Put the nudge in `.github/copilot-instructions.md` instead:
 
 ```markdown
 You have a local KennisBank via MCP tools `recall` and `capture`.

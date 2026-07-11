@@ -37,11 +37,12 @@ class AgentEnvInstallTest(unittest.TestCase):
         for script in ("kb-mcp.py", "kb-retrieve.py", "kb-presearch.py", "build-kb-index.py"):
             (self.vault / ".claude" / "scripts" / script).write_text("# test\n", encoding="utf-8")
         self.saved = {k: os.environ.get(k) for k in (
-            "HOME", "USERPROFILE", "CODEX_HOME", "OPENCODE_CONFIG_DIR")}
+            "HOME", "USERPROFILE", "CODEX_HOME", "OPENCODE_CONFIG_DIR", "COPILOT_HOME")}
         os.environ["HOME"] = str(self.tmp)
         os.environ["USERPROFILE"] = str(self.tmp)
         os.environ["CODEX_HOME"] = str(self.tmp / ".codex")
         os.environ["OPENCODE_CONFIG_DIR"] = str(self.tmp / ".config" / "opencode")
+        os.environ["COPILOT_HOME"] = str(self.tmp / ".copilot")
 
     def tearDown(self):
         for k, v in self.saved.items():
@@ -113,6 +114,39 @@ command = "other"
         self.assertNotIn("plugin", data, "local OpenCode plugins load from plugins/ automatically")
         self.assertEqual(data["mcp"]["kennisbank"]["environment"]["KENNISBANK_VAULT"],
                          str(self.vault).replace("\\", "/"))
+
+    def test_copilot_install_creates_surfaces_and_validates(self):
+        info = self.m.install_copilot(REPO_ROOT, self.vault)
+        home = self.tmp / ".copilot"
+        self.assertTrue((home / "mcp-config.json").is_file())
+        self.assertTrue((home / "hooks" / "kennisbank.json").is_file())
+        self.assertTrue((home / "copilot-instructions.md").is_file())
+        self.assertTrue((home / "agents" / "kennisbank.agent.md").is_file())
+        self.assertTrue((self.tmp / ".agents" / "skills" / "autoresearch" / "SKILL.md").is_file())
+        mcp = json.loads((home / "mcp-config.json").read_text(encoding="utf-8"))
+        self.assertEqual(mcp["mcpServers"]["kennisbank"]["env"]["KENNISBANK_VAULT"],
+                         str(self.vault).replace("\\", "/"))
+        # capture hook script present in repo so the deployed hook is safe.
+        self.assertTrue((REPO_ROOT / "scripts" / "kb-copilot-capture.py").is_file())
+
+    def test_copilot_install_is_idempotent(self):
+        self.m.install_copilot(REPO_ROOT, self.vault)
+        self.m.install_copilot(REPO_ROOT, self.vault)
+        home = self.tmp / ".copilot"
+        mcp = json.loads((home / "mcp-config.json").read_text(encoding="utf-8"))
+        self.assertEqual(list(mcp["mcpServers"].keys()).count("kennisbank"), 1)
+
+    def test_validate_files_copilot_branch(self):
+        # deployed vault files the shared validator checks.
+        for f in ("build-activity-index.py", "kb-activity.py", "kb-activity-eval.py",
+                  "kb-copilot-capture.py"):
+            (self.vault / ".claude" / "scripts" / f).write_text("# test\n", encoding="utf-8")
+        for f in ("kennisbank-embed.json", "kennisbank-llm.json"):
+            pass  # already written in setUp
+        self.m.install_copilot(REPO_ROOT, self.vault)
+        errors = [e for e in self.m.validate_files(REPO_ROOT, self.vault, ["copilot"])
+                  if "Copilot" in e or "copilot" in e]
+        self.assertEqual(errors, [], errors)
 
     def test_configure_openrouter_writes_config_and_user_secret(self):
         self.m.configure_llm(

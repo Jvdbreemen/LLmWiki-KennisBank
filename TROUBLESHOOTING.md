@@ -432,3 +432,106 @@ If the model is present but still fails, confirm it returns `{"embedding": [...]
 rm "$HOME/KennisBank/.claude/embeddings-cache.json"
 ```
 The script rebuilds the cache on next run.
+
+---
+
+## 9. GitHub Copilot CLI integration
+
+Applies only when you installed the standalone GitHub Copilot CLI target
+(`bash setup.sh --agents copilot`). If you never selected it, `doctor.sh` prints
+`copilot integration: not configured` as INFO and counts zero failures — that is
+expected, not a problem. This targets the `@github/copilot` CLI (invoked
+`copilot`), not the `gh copilot` extension or VS Code agent mode.
+
+### 9.1 copilot --version prints "no platform package found"
+
+**Symptom**: `copilot --version` errors with *"no platform package found"*;
+doctor shows `[WARN] copilot cli: ... platform_binary_missing`.
+
+**Cause**: On Windows (notably under nvm4w), `npm install -g @github/copilot`
+places the JS loader but not the optional platform binary.
+
+**Fix**: install the matching platform package at the same version:
+```bash
+npm install -g @github/copilot-win32-x64      # match your platform/arch
+copilot --version
+```
+
+### 9.2 doctor: "configured but copilot not installed"
+
+**Symptom**: `[WARN] copilot cli: configured but copilot not installed`.
+
+**Cause**: KennisBank config is present but the `copilot` binary is not on `PATH`.
+
+**Fix**: install it, or point KennisBank at an off-PATH binary:
+```bash
+npm install -g @github/copilot
+# or, if copilot lives somewhere not on PATH:
+export KENNISBANK_COPILOT_BIN=/absolute/path/to/copilot
+```
+This is a WARN, not a FAIL: Copilot is optional and never blocks the install.
+
+### 9.3 kennisbank server not in `copilot mcp list`
+
+**Symptom**: `copilot mcp list` does not show `kennisbank`; doctor shows
+`[WARN] copilot cli: ... mcp_not_listed`.
+
+**Cause**: `~/.copilot/mcp-config.json` is missing the `mcpServers.kennisbank`
+key, or `COPILOT_HOME` points somewhere other than where you are looking.
+
+**Fix**: re-run setup (idempotent key-scoped merge, backs up first) and validate:
+```bash
+bash setup.sh --agents copilot
+python3 "$HOME/KennisBank/.claude/scripts/_copilot.py" validate --vault "$HOME/KennisBank" --json
+```
+`copilot mcp list` works without a GitHub login, so a failure here is config, not
+auth.
+
+### 9.4 Config passes but a model turn fails with a login error
+
+**Symptom**: `copilot mcp list` and doctor pass, but an actual Copilot prompt
+fails asking you to log in.
+
+**Cause**: Copilot is cloud-backed. MCP registration, hooks, and instructions are
+login-free, but a live model turn needs a GitHub Copilot subscription.
+
+**Fix**: run `copilot` and complete `/login`. KennisBank never forces or stores a
+login; auth tokens (`COPILOT_GITHUB_TOKEN` / `GH_TOKEN` / `GITHUB_TOKEN`) are
+yours and are never written to the repo or vault.
+
+### 9.5 Copilot activity is not showing up in recall
+
+**Symptom**: `/watdeedik` or `/timeline` do not surface a Copilot session.
+
+**Cause**: the capture hook is fail-open by design — a missing Ollama, a script
+error, or a malformed payload silently skips capture rather than blocking
+Copilot. Every hook command ends `; exit 0`, and no `preToolUse` hook ever
+returns a non-zero (deny) exit, so a skipped event never errors loudly.
+
+**Fix**: confirm the hook is deployed and events are landing, then rebuild the
+index:
+```bash
+ls "$HOME/KennisBank/.claude/scripts/kb-copilot-capture.py"
+ls "$HOME/KennisBank/.claude/copilot-events/"
+python3 "$HOME/KennisBank/.claude/scripts/import-copilot.py" --vault "$HOME/KennisBank"
+python3 "$HOME/KennisBank/.claude/scripts/build-activity-index.py" --vault "$HOME/KennisBank" --full
+```
+`doctor.sh` also reports `[PASS] copilot capture hook` and a `copilot hook events`
+INFO line with the last captured event.
+
+### 9.6 Keeping a Copilot session out of the vault (privacy)
+
+**Symptom**: you want a Copilot session that is not recorded into KennisBank.
+
+**Cause**: capture is on by default (fail-open, but on).
+
+**Fix**: launch through the wrapper with `--no-capture`, or set the env var
+directly:
+```bash
+python3 "$HOME/KennisBank/.claude/scripts/kennisbank-copilot.py" --no-capture
+# or for a whole shell:
+export KENNISBANK_COPILOT_NO_CAPTURE=1
+```
+Captured payloads are already redacted before disk — secret-bearing keys and
+inline secrets (`Bearer`, `ghp_`, `sk-`, `KEY=VALUE`) are masked — but
+`--no-capture` disables writing events at all.
