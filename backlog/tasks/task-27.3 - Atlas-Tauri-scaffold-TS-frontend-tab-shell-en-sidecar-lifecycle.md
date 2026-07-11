@@ -8,8 +8,8 @@ updated_date: '2026-07-11 22:05'
 labels:
   - visualization
   - atlas
-  - generator
-  - html
+  - tauri
+  - frontend
 dependencies:
   - TASK-27.2
 parent_task_id: TASK-27
