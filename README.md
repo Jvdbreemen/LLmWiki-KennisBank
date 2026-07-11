@@ -1,5 +1,7 @@
 # LLmWiki-KennisBank
 
+**English** · [Nederlands](README.nl.md)
+
 **A sovereign memory layer for serious AI work.**
 
 Every agent session creates valuable context: decisions, fixes, preferences,
@@ -151,8 +153,8 @@ The design bias throughout: **deterministic where possible, LLM only where it ad
 Ollama is optional in the sense that everything fails open without it, but the memory sweep, semantic retrieval, and deduplication are the heart of the system: install it. For the **LLM judge/extraction only**, setup can also configure OpenRouter as an explicit cloud opt-in. Embeddings remain local by default.
 
 The setup creates two root directories by default:
-- `~/KennisBank/` — the vault (wiki, logs, memory, templates, scripts)
-- `~/Claude/research/` — output directory for `/autoresearch`
+- `~/KennisBank/` - the vault (wiki, logs, memory, templates, scripts)
+- `~/Claude/research/` - output directory for `/autoresearch`
 
 Both paths are configurable. For a non-default vault, set `KENNISBANK_VAULT` when running setup; that same value is written into agent hooks and MCP config so clients do not fall back to `~/KennisBank`.
 
@@ -316,9 +318,9 @@ reports.
 
 ## Using KennisBank from other agents (Codex, OpenCode, Copilot, ChatGPT)
 
-The vault is not Claude-Code-only. `scripts/kb-mcp.py` is a local **MCP server** exposing three primitives — `recall` (search memory + wiki), `capture` (save a new memory), and an `instructions` resource (a nudge to pull before searching externally). MCP is the one protocol every modern agent already speaks, so any client running **on this machine** can use the vault.
+The vault is not Claude-Code-only. `scripts/kb-mcp.py` is a local **MCP server** exposing three primitives - `recall` (search memory + wiki), `capture` (save a new memory), and an `instructions` resource (a nudge to pull before searching externally). MCP is the one protocol every modern agent already speaks, so any client running **on this machine** can use the vault.
 
-**The hard boundary: local only.** The MCP server binds nothing to the network (stdio transport); the vault never leaves your machine. Agents that run *on your machine* (Codex CLI, GitHub Copilot in VS Code, Claude Code, Cursor, Cline, Windsurf) reach it directly. Agents that run *in the cloud* (hosted ChatGPT) cannot reach a local stdio server, and the answer is **not** to tunnel your sovereign vault to the internet — it is the manual bridge below.
+**The hard boundary: local only.** The MCP server binds nothing to the network (stdio transport); the vault never leaves your machine. Agents that run *on your machine* (Codex CLI, GitHub Copilot in VS Code, Claude Code, Cursor, Cline, Windsurf) reach it directly. Agents that run *in the cloud* (hosted ChatGPT) cannot reach a local stdio server, and the answer is **not** to tunnel your sovereign vault to the internet - it is the manual bridge below.
 
 ### Codex CLI
 
@@ -363,9 +365,9 @@ KB_LLM_ENDPOINT = "http://localhost:11434"
 
 OpenCode reads global commands directly from `~/.config/opencode/commands/`, so the command names match the Claude Code names. Retrieval should use the MCP `recall` tool and the installed skills; the plugin handles background maintenance where OpenCode exposes matching events.
 
-### GitHub Copilot CLI — a first-class local agent
+### GitHub Copilot CLI - a first-class local agent
 
-The **standalone** GitHub Copilot CLI (`npm install -g @github/copilot`, invoked as `copilot`) is a managed KennisBank target, exactly like Codex and OpenCode — not a hand-written snippet. One local vault, one stdio MCP server, one local recall layer, now shared across all four agents. Whatever you do in a Copilot session becomes searchable KennisBank history next to your Claude Code, Codex, and OpenCode work; ask `/watdeedik` or `/timeline` and Copilot's sessions show up alongside the rest.
+The **standalone** GitHub Copilot CLI (`npm install -g @github/copilot`, invoked as `copilot`) is a managed KennisBank target, exactly like Codex and OpenCode - not a hand-written snippet. One local vault, one stdio MCP server, one local recall layer, now shared across all four agents. Whatever you do in a Copilot session becomes searchable KennisBank history next to your Claude Code, Codex, and OpenCode work; ask `/watdeedik` or `/timeline` and Copilot's sessions show up alongside the rest.
 
 ```bash
 KENNISBANK_VAULT="/absolute/path/to/vault" bash setup.sh --yes --agents copilot
@@ -373,19 +375,19 @@ KENNISBANK_VAULT="/absolute/path/to/vault" bash setup.sh --yes --agents copilot
 
 `setup.sh --agents copilot` installs, idempotently and login-free:
 
-- `~/.copilot/mcp-config.json` — MCP server `kennisbank` (`recall`, `capture`, and the temporal tools), registered by a key-scoped JSON merge and validated with a real initialize/list-tools handshake
-- `~/.copilot/hooks/kennisbank.json` — fail-open lifecycle hooks (cross-platform: each carries a `bash` and a `powershell` command) that refresh the indexes at session start and capture session/tool activity
-- `~/.copilot/copilot-instructions.md` — a KennisBank managed instruction block
-- `~/.copilot/agents/kennisbank.agent.md` — a custom agent profile, selected with `copilot --agent kennisbank`
+- `~/.copilot/mcp-config.json` - MCP server `kennisbank` (`recall`, `capture`, and the temporal tools), registered by a key-scoped JSON merge and validated with a real initialize/list-tools handshake
+- `~/.copilot/hooks/kennisbank.json` - fail-open lifecycle hooks (cross-platform: each carries a `bash` and a `powershell` command) that refresh the indexes at session start and capture session/tool activity
+- `~/.copilot/copilot-instructions.md` - a KennisBank managed instruction block
+- `~/.copilot/agents/kennisbank.agent.md` - a custom agent profile, selected with `copilot --agent kennisbank`
 - the shared skills at `~/.agents/skills/` are picked up automatically (`copilot skill list`)
 
 Run Copilot through the wrapper to pin the vault and local-LLM env: `python3 <vault>/.claude/scripts/kennisbank-copilot.py` (a trivial exec that hands off to the real `copilot`; `--kb-doctor`, `--kb-dry-run`, and `--kb-print-env` work without a GitHub login).
 
-**The cloud boundary is precise.** Copilot is cloud-backed — a live model turn needs a GitHub Copilot subscription and sends requests to GitHub. But that is the *only* thing that leaves your machine: your vault, your recall, the MCP server, and every hook stay 100% local, and MCP/hook/instruction install plus `copilot mcp list` all work **without** logging in. The integration is opt-in and never in the default target set. Full reference in [docs/agent-integrations.md](docs/agent-integrations.md), design rationale in [docs/adr/0003-copilot-cli-integration.md](docs/adr/0003-copilot-cli-integration.md), and why the wrapper is not a Headroom-style proxy in [docs/copilot-headroom-evaluation.md](docs/copilot-headroom-evaluation.md).
+**The cloud boundary is precise.** Copilot is cloud-backed - a live model turn needs a GitHub Copilot subscription and sends requests to GitHub. But that is the *only* thing that leaves your machine: your vault, your recall, the MCP server, and every hook stay 100% local, and MCP/hook/instruction install plus `copilot mcp list` all work **without** logging in. The integration is opt-in and never in the default target set. Full reference in [docs/agent-integrations.md](docs/agent-integrations.md), design rationale in [docs/adr/0003-copilot-cli-integration.md](docs/adr/0003-copilot-cli-integration.md), and why the wrapper is not a Headroom-style proxy in [docs/copilot-headroom-evaluation.md](docs/copilot-headroom-evaluation.md).
 
-### GitHub Copilot (VS Code agent mode) — works, with one caveat
+### GitHub Copilot (VS Code agent mode) - works, with one caveat
 
-This is Copilot's **VS Code agent mode** (MCP tools inside the editor) — a different, manual integration from the standalone GitHub Copilot CLI covered above. Copilot's agent mode supports MCP **tools** over stdio, but **not** MCP resources or prompts. So `recall` and `capture` work, but the `instructions` nudge (a resource) will not surface. Put the nudge in `.github/copilot-instructions.md` instead:
+This is Copilot's **VS Code agent mode** (MCP tools inside the editor) - a different, manual integration from the standalone GitHub Copilot CLI covered above. Copilot's agent mode supports MCP **tools** over stdio, but **not** MCP resources or prompts. So `recall` and `capture` work, but the `instructions` nudge (a resource) will not surface. Put the nudge in `.github/copilot-instructions.md` instead:
 
 ```markdown
 You have a local KennisBank via MCP tools `recall` and `capture`.
@@ -408,7 +410,7 @@ Register the server in VS Code settings (`mcp.json` / `"servers"`):
 The wider adapter registry and the rest of the client snippets live in
 [docs/agent-integrations.md](docs/agent-integrations.md).
 
-### ChatGPT — the manual bridge (sovereignty first)
+### ChatGPT - the manual bridge (sovereignty first)
 
 Hosted ChatGPT can only connect to **remote** MCP servers on the public internet; exposing a local server means tunnelling (Secure Tunnel / ngrok / Cloudflare), which routes your queries **and** the returned knowledge through OpenAI's infrastructure. That breaks the whole point of a sovereign vault, so KennisBank does not do it by default. Instead, **you** stay the gate:
 
@@ -417,14 +419,14 @@ python3 .claude/scripts/kb-ask.py "how did I fix the ESP32 BLE crash"
 python3 .claude/scripts/kb-ask.py "my topic" --k 8 --clip   # also copy to clipboard
 ```
 
-`kb-ask` retrieves locally and prints a ready-to-paste context block (a short instruction for the model, then the hits, then your question). Paste it at the top of your ChatGPT message. Nothing leaves the machine automatically — you choose what to share.
+`kb-ask` retrieves locally and prints a ready-to-paste context block (a short instruction for the model, then the hits, then your question). Paste it at the top of your ChatGPT message. Nothing leaves the machine automatically - you choose what to share.
 
-### ChatGPT data export — get control of your own chats back
+### ChatGPT data export - get control of your own chats back
 
 You can pull your ChatGPT history *into* the sovereign vault, so lessons from those conversations become your own retrievable knowledge instead of living only in OpenAI's cloud:
 
 1. In ChatGPT, open **Settings → Data controls → Export data** and confirm. (Requires being signed in on the web app.)
-2. OpenAI emails you a download link within minutes to a day; the link is time-limited. Download the ZIP — it contains `conversations.json` (plus `chat.html`, media).
+2. OpenAI emails you a download link within minutes to a day; the link is time-limited. Download the ZIP - it contains `conversations.json` (plus `chat.html`, media).
 3. Import it into the vault:
    ```bash
    python3 .claude/scripts/import-chatgpt-export.py --input ~/Downloads/chatgpt-export.zip
@@ -433,12 +435,15 @@ You can pull your ChatGPT history *into* the sovereign vault, so lessons from th
    ```
    Each conversation becomes a raw session log under `01-raw/sessies/`. Then run `/wiki` to compile them into articles and `/kennisbank:rebuild-memory` to extract the memory layer. Re-imports are skip-by-default (idempotent); pass `--force` to overwrite.
 
-The importer walks ChatGPT's message *tree* (`mapping`), orders turns by timestamp, and keeps only your and the assistant's turns — system and tool nodes are dropped. It runs fully locally; nothing is sent anywhere.
+The importer walks ChatGPT's message *tree* (`mapping`), orders turns by timestamp, and keeps only your and the assistant's turns - system and tool nodes are dropped. It runs fully locally; nothing is sent anywhere.
 
 ## Documentation
 
 | File | For |
 |------|-----|
+| [docs/guiding-principles-and-values.md](docs/guiding-principles-and-values.md) | The guiding principles and values, worked out as one document |
+| [PRINCIPLES.md](PRINCIPLES.md) | The design laws that govern every decision (concise reference) |
+| [VALUES.md](VALUES.md) | What the project cares about - its character (concise reference) |
 | [AGENTS.md](AGENTS.md) | AI coding agents (Claude Code, Cursor, Aider) installing this on a user's behalf |
 | [POST-INSTALL.md](POST-INSTALL.md) | First-session walkthrough after `setup.sh` finishes |
 | [CONFIGURATION.md](CONFIGURATION.md) | Every configurable knob: paths, thresholds, models, toggles |
@@ -457,7 +462,7 @@ The importer walks ChatGPT's message *tree* (`mapping`), orders turns by timesta
 6. The commands are in Dutch by default (they follow prompt language). Change section headings if you prefer English.
 7. Stale threshold (default 60 days): pass `--days N` or edit `stale-check.py`.
 8. `auto-crosslink.py` tunables: `MIN_CONFIDENCE` (default `0.75`) and `MAX_NEW_LINKS` (default `5`).
-9. Research output path: changing it touches several places (`setup.sh`, the autoresearch skill, and the command prose) — see [CONFIGURATION.md](CONFIGURATION.md) section 5.
+9. Research output path: changing it touches several places (`setup.sh`, the autoresearch skill, and the command prose) - see [CONFIGURATION.md](CONFIGURATION.md) section 5.
 10. To enable the `/autoresearch` trigger, add this snippet to your global `~/.claude/CLAUDE.md`:
     ```
     # autoresearch
