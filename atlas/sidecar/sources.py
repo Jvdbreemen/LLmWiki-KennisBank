@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import date, timedelta
 from pathlib import Path
 
 
@@ -138,3 +139,83 @@ def build_graph(vault: Path) -> dict:
     link_list = sorted(edges.values(), key=lambda e: (e["source"], e["target"]))
     status = "ok" if node_list else "empty"
     return {"status": status, "nodes": node_list, "links": link_list}
+
+
+def _parse_date(iso: str | None) -> date | None:
+    if not iso:
+        return None
+    try:
+        return date.fromisoformat(iso[:10])
+    except ValueError:
+        return None
+
+
+def _bucket_start(d: date, bucket: str) -> date:
+    if bucket == "week":
+        return d - timedelta(days=d.weekday())  # Monday of the ISO week
+    return d
+
+
+def _bucket_end(start: date, bucket: str) -> date:
+    return start + timedelta(days=7 if bucket == "week" else 1)
+
+
+def build_timeline(vault: Path, *, bucket: str = "day",
+                   frm: str | None = None, to: str | None = None,
+                   dimension: str = "event") -> dict:
+    """Aggregate activity_events into day/week buckets, bi-temporally.
+
+    Each bucket carries event_count (rows whose event_time falls in it),
+    capture_count (rows whose captured_at falls in it), and by_kind for the
+    event-time grouping. ``dimension`` selects the field the [frm, to] range
+    filters on. See ADR-0004 /timeline contract."""
+    conn = _connect_ro(vault / ".claude" / "kb-activity.db")
+    if conn is None:
+        return {"status": "empty", "buckets": []}
+    try:
+        rows = conn.execute(
+            "SELECT event_time, captured_at, activity_kind FROM activity_events"
+        ).fetchall()
+    except Exception:
+        return {"status": "empty", "buckets": []}
+    finally:
+        conn.close()
+
+    frm_d, to_d = _parse_date(frm), _parse_date(to)
+    buckets: dict[date, dict] = {}
+
+    def _slot(d: date) -> dict:
+        start = _bucket_start(d, bucket)
+        b = buckets.get(start)
+        if b is None:
+            b = {"start": start.isoformat() + "T00:00:00",
+                 "end": _bucket_end(start, bucket).isoformat() + "T00:00:00",
+                 "event_count": 0, "capture_count": 0, "by_kind": {}}
+            buckets[start] = b
+        return b
+
+    def _in_range(d: date | None) -> bool:
+        if d is None:
+            return False
+        if frm_d and d < frm_d:
+            return False
+        if to_d and d > to_d:
+            return False
+        return True
+
+    for r in rows:
+        ev = _parse_date(r["event_time"])
+        cap = _parse_date(r["captured_at"])
+        dim_d = ev if dimension == "event" else cap
+        if (frm_d or to_d) and not _in_range(dim_d):
+            continue
+        if ev is not None:
+            b = _slot(ev)
+            b["event_count"] += 1
+            kind = r["activity_kind"] or "activity"
+            b["by_kind"][kind] = b["by_kind"].get(kind, 0) + 1
+        if cap is not None:
+            _slot(cap)["capture_count"] += 1
+
+    ordered = [buckets[k] for k in sorted(buckets)]
+    return {"status": "ok" if ordered else "empty", "buckets": ordered}

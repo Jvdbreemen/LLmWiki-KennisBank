@@ -13,7 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 
 from atlas.sidecar import sources
 
@@ -73,5 +73,13 @@ def create_app(
     @app.get("/graph")
     def graph() -> dict:
         return sources.build_graph(vault)
+
+    @app.get("/timeline")
+    def timeline(bucket: str = "day",
+                 frm: str | None = Query(default=None, alias="from"),
+                 to: str | None = None, dimension: str = "event") -> dict:
+        return sources.build_timeline(
+            vault, bucket=bucket, frm=frm, to=to, dimension=dimension
+        )
 
     return app
