@@ -56,9 +56,21 @@ def create_app(
     vault: Path,
     *,
     ollama_probe: Callable[[], bool] = _default_ollama_probe,
+    recall_fn: Callable[[str, int], dict] | None = None,
 ) -> FastAPI:
     vault = Path(vault)
     app = FastAPI(title="KennisBank Atlas sidecar", version=VERSION)
+
+    def _recall(q: str, k: int) -> dict:
+        fn = recall_fn or (lambda query, top_k: sources.live_recall(vault, query, top_k))
+        try:
+            return fn(q, k)
+        except Exception:
+            # Fail-open: a recall failure (Ollama down, index missing) degrades
+            # the lens rather than erroring the whole app.
+            return {"status": "degraded", "query": q,
+                    "stages": {"vector": [], "fts": [], "rrf": [], "rerank": []},
+                    "final": []}
 
     @app.get("/health")
     def health() -> dict:
@@ -89,5 +101,9 @@ def create_app(
     @app.get("/provenance")
     def provenance() -> dict:
         return sources.build_provenance(vault)
+
+    @app.get("/recall")
+    def recall(q: str = "", k: int = 3) -> dict:
+        return _recall(q, k)
 
     return app
