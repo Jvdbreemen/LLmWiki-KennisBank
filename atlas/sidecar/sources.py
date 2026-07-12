@@ -509,3 +509,139 @@ def resolve_asset(vault: Path, rel_path: str) -> tuple[Path, str]:
     if not target.is_file():
         raise DocError(404, "afbeelding niet gevonden")
     return target, _ASSET_TYPES[ext]
+
+
+def recall_waterfall(vault: Path, query: str, k: int = 8) -> dict:
+    """The live retrieval waterfall for the Recall Inspector (TASK-27.8).
+
+    Reuses the exact building blocks of the production pipeline and surfaces the
+    intermediate stages: vector-KNN and FTS candidates, RRF fusion, and the
+    per-hit rerank factors (relevance x recency x importance x trust x usage).
+    Data-parity holds by construction: the same _kbindex._rrf, the same SQL, and
+    the same _rank factor functions are used. Fail-open on any error."""
+    empty = {"status": "empty", "query": query,
+             "stages": {"vector": [], "fts": [], "rrf": [], "rerank": []},
+             "final": []}
+    if not query.strip():
+        return empty
+    try:
+        import sqlite3
+        from datetime import date as _date
+
+        emb = _load_vault_module(vault, "_embeddings", "_embeddings.py")
+        kbindex = _load_vault_module(vault, "_kbindex", "_kbindex.py")
+        rank = _load_vault_module(vault, "_rank", "_rank.py")
+        kbrecall = _load_vault_module(vault, "kb_recall", "kb-recall.py")
+        try:
+            usage = _load_vault_module(vault, "_usage", "_usage.py")
+            last_used_of = usage.last_used_of
+        except Exception:
+            last_used_of = None
+
+        vector = emb.embed(query)
+        if not vector:
+            return {**empty, "status": "degraded"}
+
+        ipath = kbindex.index_path()
+        conn = kbrecall._open_ro(ipath)  # opens RO + loads sqlite_vec
+        if conn is None or not kbindex.is_valid_for(conn, emb.embed_id()):
+            return {**empty, "status": "degraded"}
+        try:
+            total = conn.execute("SELECT count(*) FROM docs").fetchone()[0]
+            pool = min(max(k * 4, 20, total), 5000)
+            vec_ids = [r[0] for r in conn.execute(
+                "SELECT doc_id FROM vec_docs WHERE embedding MATCH ? ORDER BY distance LIMIT ?",
+                (kbindex._serialize(vector), pool)).fetchall()]
+            fts_ids: list = []
+            try:
+                fts_ids = [r[0] for r in conn.execute(
+                    "SELECT rowid FROM fts_docs WHERE fts_docs MATCH ? ORDER BY rank LIMIT ?",
+                    (query, pool)).fetchall()]
+            except sqlite3.OperationalError:
+                pass
+            fused = kbindex._rrf([lst for lst in (vec_ids, fts_ids) if lst])
+            ids = set(vec_ids) | set(fts_ids)
+            meta = {}
+            if ids:
+                ph = ",".join("?" for _ in ids)
+                meta = {r[0]: r for r in conn.execute(
+                    f"SELECT doc_id, path, layer, status, title, created FROM docs "
+                    f"WHERE doc_id IN ({ph})", tuple(ids)).fetchall()}
+        finally:
+            conn.close()
+
+        def _path(doc_id):
+            r = meta.get(doc_id)
+            return r[1] if r else str(doc_id)
+
+        vector_stage = [{"path": _path(d), "score": round(1.0 / (i + 1), 4)}
+                        for i, d in enumerate(vec_ids[:k])]
+        fts_stage = [{"path": _path(d), "score": round(1.0 / (i + 1), 4)}
+                     for i, d in enumerate(fts_ids[:k])]
+
+        # top fused hits (wiki+memory, current), relevance = fused RRF score
+        ranked = sorted(fused.items(), key=lambda kv: kv[1], reverse=True)
+        hits = []
+        for doc_id, fscore in ranked:
+            r = meta.get(doc_id)
+            if not r:
+                continue
+            _, path, layer, status, title, created = r
+            if status not in ("current",):
+                continue
+            hits.append({"path": path, "layer": layer, "title": title,
+                         "created": created, "relevance": fscore})
+            if len(hits) >= k:
+                break
+        rrf_stage = [{"path": h["path"], "score": round(h["relevance"], 5)} for h in hits]
+
+        # rerank: reuse _rank factor functions; expose factors + final product
+        today = _date.today()
+        rerank_stage, final = [], []
+        for h in hits:
+            factors = {"relevance": round(h["relevance"], 5)}
+            score = h["relevance"]
+            if h["layer"] == "memory":
+                fm = kbrecall._frontmatter_of(h["path"]) or {}
+                ref = fm.get("updated") or fm.get("valid_from") or fm.get("created") or ""
+                rec = rank.recency_factor(rank._age_days(ref, today), fm.get("memory_type", "feit"))
+                imp = rank.importance_factor(fm.get("importance", 3))
+                tru = rank.trust_factor(fm.get("evidence_basis"))
+                factors |= {"recency": round(rec, 4), "importance": round(imp, 4), "trust": round(tru, 4)}
+                score *= rec * imp * tru
+            if last_used_of is not None:
+                try:
+                    use = rank.usage_factor(last_used_of(Path(h["path"]).stem), today)
+                except Exception:
+                    use = 1.0
+                factors["usage"] = round(use, 4)
+                score *= use
+            factors["final"] = round(score, 6)
+            rerank_stage.append({"path": h["path"], "score": round(score, 6), "factors": factors})
+            snippet = emb.doc_text(Path(h["path"]), cap=200).replace("\n", " ").strip()
+            final.append({"path": h["path"], "score": round(score, 6), "snippet": snippet})
+
+        rerank_stage.sort(key=lambda x: x["score"], reverse=True)
+        final.sort(key=lambda x: x["score"], reverse=True)
+
+        # graph-neighbour expansion: the most-referenced wiki neighbour of the
+        # top hits, appended as an extra entry (reuses _rank.one_hop_neighbor).
+        try:
+            stem = rank.one_hop_neighbor(hits, vault.resolve())
+            if stem and not any(Path(h["path"]).stem == stem for h in final):
+                npath = (vault / "02-wiki" / f"{stem}.md")
+                snippet = emb.doc_text(npath, cap=200).replace("\n", " ").strip()
+                final.append({"path": str(npath), "score": 0.0, "snippet": snippet,
+                              "neighbor": True})
+                rerank_stage.append({"path": f"02-wiki/{stem}.md", "score": 0.0,
+                                     "factors": {"final": 0.0}, "neighbor": True})
+        except Exception:
+            pass
+
+        status = "ok" if final else "empty"
+        return {"status": status, "query": query,
+                "stages": {"vector": vector_stage, "fts": fts_stage,
+                           "rrf": rrf_stage, "rerank": rerank_stage},
+                "final": final}
+    except Exception:
+        return {**empty, "status": "degraded"}

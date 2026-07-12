@@ -161,3 +161,10 @@ body {
 .graph-controls label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
 .graph-controls .legend-box { margin-left: auto; }
 .graph-wrap .graph-canvas { position: relative; inset: auto; flex: 1; min-height: 0; }
+
+/* recall waterfall */
+.factors { font-size: 11px; color: var(--muted); margin: 3px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 2px; }
+.factor { background: #1b1f29; border-radius: 4px; padding: 1px 6px; }
+.factor.final { background: #2a3550; color: #cfe0ff; }
+.stages-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.stage-col h3 { margin: 4px 0; }

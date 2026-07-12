@@ -79,7 +79,7 @@ def create_app(
     )
 
     def _recall(q: str, k: int) -> dict:
-        fn = recall_fn or (lambda query, top_k: sources.live_recall(vault, query, top_k))
+        fn = recall_fn or (lambda query, top_k: sources.recall_waterfall(vault, query, top_k))
         try:
             return fn(q, k)
         except Exception:

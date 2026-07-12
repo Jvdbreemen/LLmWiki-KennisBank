@@ -44,10 +44,15 @@ export interface Provenance {
 
 export interface Doc { status: string; path: string; title: string; content: string; }
 
-export interface RecallHit { path: string; score: number; snippet: string; }
+export interface RecallHit { path: string; score: number; snippet: string; neighbor?: boolean; }
+export interface StageEntry { path: string; score: number; }
+export interface RerankEntry extends StageEntry { factors?: Record<string, number>; }
+export interface RecallStages {
+  vector: StageEntry[]; fts: StageEntry[]; rrf: StageEntry[]; rerank: RerankEntry[];
+}
 export interface Recall {
   status: string; query: string;
-  stages: Record<string, { path: string; score: number }[]>;
+  stages: RecallStages;
   final: RecallHit[];
 }
 

@@ -35,6 +35,33 @@ def test_recall_passes_query_and_preserves_final_order(tmp_path: Path):
     assert set(body["stages"]) == {"vector", "fts", "rrf", "rerank"}
 
 
+def test_recall_waterfall_shape_and_factor_product(tmp_path: Path):
+    # Contract the Recall Inspector relies on (AC#4): each rerank hit's factors
+    # multiply to its final score, and all four stages are present.
+    def wf(q: str, k: int) -> dict:
+        return {
+            "status": "ok", "query": q,
+            "stages": {
+                "vector": [{"path": "09-memory/a.md", "score": 1.0}],
+                "fts": [{"path": "09-memory/a.md", "score": 0.5}],
+                "rrf": [{"path": "09-memory/a.md", "score": 0.032}],
+                "rerank": [{"path": "09-memory/a.md", "score": round(0.032 * 0.9 * 1.1 * 1.05 * 1.10, 6),
+                            "factors": {"relevance": 0.032, "recency": 0.9,
+                                        "importance": 1.1, "trust": 1.05,
+                                        "usage": 1.10, "final": round(0.032 * 0.9 * 1.1 * 1.05 * 1.10, 6)}}],
+            },
+            "final": [{"path": "09-memory/a.md", "score": 0.036, "snippet": "a"}],
+        }
+
+    body = TestClient(create_app(tmp_path, recall_fn=wf)).get("/recall", params={"q": "x"}).json()
+    assert set(body["stages"]) == {"vector", "fts", "rrf", "rerank"}
+    hit = body["stages"]["rerank"][0]
+    f = hit["factors"]
+    product = f["relevance"] * f["recency"] * f["importance"] * f["trust"] * f["usage"]
+    assert abs(product - f["final"]) < 1e-6
+    assert abs(f["final"] - hit["score"]) < 1e-6
+
+
 def test_recall_fail_open_on_recall_error(tmp_path: Path):
     def boom(q: str, k: int) -> dict:
         raise RuntimeError("ollama down")
