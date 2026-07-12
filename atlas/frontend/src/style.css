@@ -168,3 +168,13 @@ body {
 .factor.final { background: #2a3550; color: #cfe0ff; }
 .stages-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .stage-col h3 { margin: 4px 0; }
+
+/* memory-health heatmap + temperature */
+.heatmap { display: grid; grid-template-columns: 90px repeat(4, 1fr); gap: 3px; max-width: 520px; margin: 6px 0; }
+.hm-corner, .hm-head, .hm-row { font-size: 11px; color: var(--muted); padding: 4px; }
+.hm-head { text-align: center; }
+.hm-cell { min-height: 26px; display: flex; align-items: center; justify-content: center; font-size: 12px; border-radius: 3px; color: #fff; }
+.temp { font-size: 10px; padding: 1px 6px; border-radius: 4px; text-transform: uppercase; }
+.temp.t-warm { background: #58d68d33; color: #58d68d; }
+.temp.t-tepid { background: #f5b04133; color: #f5b041; }
+.temp.t-stale { background: #8a90a033; color: #8a90a0; }

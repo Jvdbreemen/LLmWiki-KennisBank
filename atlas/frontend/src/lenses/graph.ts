@@ -18,7 +18,7 @@ import {
   warmthHalo,
 } from "../encoding";
 import { openInspect } from "../inspect";
-import { onLensLeave } from "../lifecycle";
+import { currentGeneration, isCurrent, onLensLeave } from "../lifecycle";
 
 function legend(colorMode: ColorMode | "provenance"): HTMLElement {
   const items: [string, string][] =
@@ -41,6 +41,7 @@ function legend(colorMode: ColorMode | "provenance"): HTMLElement {
 }
 
 export async function renderGraphLens(host: HTMLElement, client: DataClient): Promise<void> {
+  const gen = currentGeneration();
   clear(host);
   host.appendChild(el("div", { class: "loading" }, ["graaf laden…"]));
   let data: Graph;
@@ -56,6 +57,7 @@ export async function renderGraphLens(host: HTMLElement, client: DataClient): Pr
   try {
     for (const u of (await client.provenance()).unsourced) atRisk.add(u.path);
   } catch { /* overlay simply shows nothing at-risk */ }
+  if (!isCurrent(gen)) return; // user switched lenses during the awaits
   if (data.status === "empty" || data.nodes.length === 0) {
     clear(host);
     host.appendChild(el("div", { class: "empty" }, ["geen graaf-data (bron niet beschikbaar)"]));

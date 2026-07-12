@@ -25,6 +25,15 @@ export function provenanceColor(atRisk: boolean): string {
   return atRisk ? "#ec7063" : "#58d68d";
 }
 
+// Recency buckets for the Memory Health heatmap (age in days -> column).
+export const AGE_BUCKETS = ["0-7d", "8-30d", "31-90d", "90d+"] as const;
+export function ageBucket(ageDays: number): number {
+  if (ageDays <= 7) return 0;
+  if (ageDays <= 30) return 1;
+  if (ageDays <= 90) return 2;
+  return 3;
+}
+
 // Node colour by the selected channel. Community is the default (clusters read
 // at a glance); status/kind are alternates surfaced via the legend toggle.
 export function nodeColor(node: GraphNode, mode: ColorMode): string {

@@ -1,5 +1,7 @@
 // Tiny DOM builder. Everything goes through textContent — no innerHTML anywhere
 // in the app, so no lens payload can inject markup.
+import { currentGeneration, isCurrent } from "./lifecycle";
+
 type Attrs = { class?: string; title?: string; type?: string; placeholder?: string };
 
 export function el(
@@ -27,18 +29,23 @@ export function message(host: HTMLElement, cls: string, text: string): void {
   host.appendChild(el("div", { class: cls }, [text]));
 }
 
-// Run an async loader with uniform loading/error framing.
+// Run an async loader with uniform loading/error framing. Guards against a
+// stale render: if the user switched lenses while `load()` was in flight, the
+// captured generation is no longer current and the result is discarded.
 export async function withLoader<T>(
   host: HTMLElement,
   loading: string,
   load: () => Promise<T>,
   render: (data: T) => void,
 ): Promise<void> {
+  const gen = currentGeneration();
   message(host, "loading", loading);
   try {
     const data = await load();
+    if (!isCurrent(gen)) return;
     render(data);
   } catch (e) {
+    if (!isCurrent(gen)) return;
     message(host, "error", `onbeschikbaar: ${(e as Error).message}`);
   }
 }

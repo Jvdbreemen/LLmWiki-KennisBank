@@ -2,7 +2,7 @@
 // (ADR-0004 frontend module boundaries). All DOM is built with textContent /
 // createElement — never innerHTML — so no lens payload can inject markup.
 import { DataClient } from "./data-client";
-import { runLensLeave } from "./lifecycle";
+import { newGeneration, runLensLeave } from "./lifecycle";
 import { renderGraphLens } from "./lenses/graph";
 import { renderTimeSliderLens } from "./lenses/time-slider";
 import { renderMemoryHealthLens } from "./lenses/memory-health";
@@ -63,6 +63,7 @@ function main(): void {
 
   let active = LENSES[0].key;
   const select = (key: string) => {
+    newGeneration(); // invalidate any in-flight render from the previous lens
     runLensLeave(); // stop the previous lens's animation loop, if any
     active = key;
     for (const btn of tabs.children) {

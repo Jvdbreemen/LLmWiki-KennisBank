@@ -31,8 +31,10 @@ export interface Timeline { status: string; buckets: TimelineBucket[]; }
 export interface MemoryHealth {
   status: string;
   counts: { active: number; quarantined: number; superseded: number; unverified: number };
-  supersede_chains: { head: string; chain: string[] }[];
-  warmth: { path: string; warmth: number; last_used: string | null }[];
+  queue: { id: string; importance: number; created: string }[];
+  supersede_chains: { head: string; chain: string[]; valid_until: string | null }[];
+  heatmap: { id: string; importance: number; age_days: number }[];
+  warmth: { path: string; warmth: number; last_used: string | null; temperature: string }[];
   quarantine: { id: string; reason: string }[];
 }
 

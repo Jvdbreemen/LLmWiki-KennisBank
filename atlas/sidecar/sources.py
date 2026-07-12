@@ -269,44 +269,81 @@ def _parse_frontmatter(text: str) -> dict:
 _ACTIVE_STATUSES = {"current", "active"}
 
 
-def build_memory_health(vault: Path) -> dict:
-    """Lifecycle counts, supersede chains, warmth, and quarantine list for the
-    memory layer. See ADR-0004 /memory-health contract."""
+def _coerce_importance(value) -> int:
+    try:
+        return min(5, max(1, int(value)))
+    except (TypeError, ValueError):
+        return 3
+
+
+def _age_of(iso: str, today: date) -> int:
+    d = _parse_date(iso)
+    return max(0, (today - d).days) if d else 0
+
+
+# Warm/stale thresholds mirror _rank.usage_factor (recent <= 30d, warm <= 90d).
+def _temperature(last_used: str | None, today: date) -> str:
+    if not last_used:
+        return "stale"
+    age = _age_of(last_used, today)
+    return "warm" if age <= 30 else "tepid" if age <= 90 else "stale"
+
+
+def build_memory_health(vault: Path, *, today: date | None = None) -> dict:
+    """The Memory Health cockpit (TASK-27.6): lifecycle counts, the unverified
+    quarantine queue, supersede chains (with valid_until), an importance x
+    recency heatmap of active memories, and warmth/temperature from kb-usage.
+    ``today`` is injectable for deterministic tests."""
+    today = today or date.today()
     mem_dir = vault / "09-memory"
     empty = {
         "status": "empty",
         "counts": {"active": 0, "quarantined": 0, "superseded": 0, "unverified": 0},
-        "supersede_chains": [],
-        "warmth": [],
-        "quarantine": [],
+        "queue": [], "supersede_chains": [], "heatmap": [], "warmth": [], "quarantine": [],
     }
     if not mem_dir.is_dir():
         return empty
 
-    counts = {"active": 0, "quarantined": 0, "superseded": 0, "unverified": 0}
-    supersede_edges: list[tuple[str, str]] = []
-    quarantine: list[dict] = []
-    seen = False
-
+    records: dict[str, dict] = {}
     for path in sorted(mem_dir.glob("*.md")):
-        seen = True
         fm = _parse_frontmatter(path.read_text(encoding="utf-8"))
-        stem = path.stem
-        status = fm.get("status", "current")
-        if status in _ACTIVE_STATUSES:
-            counts["active"] += 1
-        elif status == "quarantined":
-            counts["quarantined"] += 1
-            quarantine.append({"id": stem, "reason": fm.get("quarantine_reason", "")})
-        elif status == "superseded":
-            counts["superseded"] += 1
-        elif status == "unverified":
-            counts["unverified"] += 1
-        for target in fm.get("superseded_by", []) or []:
-            supersede_edges.append((stem, target))
+        ref = fm.get("updated") or fm.get("valid_from") or fm.get("created") or ""
+        records[path.stem] = {
+            "id": path.stem,
+            "status": fm.get("status", "current"),
+            "memory_type": fm.get("memory_type", "feit"),
+            "importance": _coerce_importance(fm.get("importance", 3)),
+            "created": ref,
+            "valid_until": fm.get("valid_until"),
+            "quarantine_reason": fm.get("quarantine_reason", ""),
+            "superseded_by": fm.get("superseded_by", []) or [],
+        }
+    if not records:
+        return empty
 
-    # assemble chains by walking each supersede edge forward
-    parent = {src: tgt for src, tgt in supersede_edges}
+    counts = {"active": 0, "quarantined": 0, "superseded": 0, "unverified": 0}
+    queue, quarantine, heatmap = [], [], []
+    edges: list[tuple[str, str]] = []
+    for r in records.values():
+        st = r["status"]
+        if st in _ACTIVE_STATUSES:
+            counts["active"] += 1
+            heatmap.append({"id": r["id"], "importance": r["importance"],
+                            "age_days": _age_of(r["created"], today)})
+        elif st == "quarantined":
+            counts["quarantined"] += 1
+            quarantine.append({"id": r["id"], "reason": r["quarantine_reason"]})
+        elif st == "superseded":
+            counts["superseded"] += 1
+        elif st == "unverified":
+            counts["unverified"] += 1
+            queue.append({"id": r["id"], "importance": r["importance"], "created": r["created"]})
+        for tgt in r["superseded_by"]:
+            edges.append((r["id"], tgt))
+
+    queue.sort(key=lambda q: (-q["importance"], q["created"], q["id"]))
+
+    parent = dict(edges)
     heads = [s for s in parent if s not in parent.values()]
     chains = []
     for head in sorted(heads):
@@ -315,22 +352,24 @@ def build_memory_health(vault: Path) -> dict:
             cur = parent[cur]
             chain.append(cur)
             guard += 1
-        chains.append({"head": head, "chain": chain})
+        chains.append({"head": head, "chain": chain,
+                       "valid_until": records.get(head, {}).get("valid_until")})
 
-    warmth = _memory_warmth(vault)
+    warmth = _memory_warmth(vault, today)
 
-    if not seen:
-        return empty
     return {
         "status": "ok",
         "counts": counts,
+        "queue": queue,
         "supersede_chains": chains,
+        "heatmap": heatmap,
         "warmth": warmth,
         "quarantine": quarantine,
     }
 
 
-def _memory_warmth(vault: Path) -> list[dict]:
+def _memory_warmth(vault: Path, today: date | None = None) -> list[dict]:
+    today = today or date.today()
     conn = _connect_ro(vault / ".claude" / "kb-usage.db")
     if conn is None:
         return []
@@ -343,7 +382,8 @@ def _memory_warmth(vault: Path) -> list[dict]:
     finally:
         conn.close()
     warm = [
-        {"path": r["stem"], "warmth": float(r["used"] or 0), "last_used": r["last_used"]}
+        {"path": r["stem"], "warmth": float(r["used"] or 0), "last_used": r["last_used"],
+         "temperature": _temperature(r["last_used"], today)}
         for r in rows
     ]
     warm.sort(key=lambda w: (-w["warmth"], w["path"]))

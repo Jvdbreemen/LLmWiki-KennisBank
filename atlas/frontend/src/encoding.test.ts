@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { GraphNode } from "./data-client";
 import {
+  ageBucket,
   type GraphFilter,
   nodeColor,
   nodeVal,
@@ -62,6 +63,17 @@ describe("provenanceColor", () => {
   it("at-risk is red, sourced is green", () => {
     expect(provenanceColor(true)).toBe("#ec7063");
     expect(provenanceColor(false)).toBe("#58d68d");
+  });
+});
+
+describe("ageBucket", () => {
+  it("maps age in days to recency columns", () => {
+    expect(ageBucket(0)).toBe(0);
+    expect(ageBucket(7)).toBe(0);
+    expect(ageBucket(8)).toBe(1);
+    expect(ageBucket(30)).toBe(1);
+    expect(ageBucket(90)).toBe(2);
+    expect(ageBucket(200)).toBe(3);
   });
 });
 
