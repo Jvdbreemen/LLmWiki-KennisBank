@@ -219,3 +219,111 @@ def build_timeline(vault: Path, *, bucket: str = "day",
 
     ordered = [buckets[k] for k in sorted(buckets)]
     return {"status": "ok" if ordered else "empty", "buckets": ordered}
+
+
+def _parse_frontmatter(text: str) -> dict:
+    """Minimal YAML front-matter reader (key: value, simple [a, b] lists).
+
+    Deliberately local and dependency-free so /memory-health stays hermetic;
+    the vault's _memory module is not importable in a fixture vault."""
+    if not text.startswith("---"):
+        return {}
+    end = text.find("\n---", 3)
+    if end == -1:
+        return {}
+    fm: dict = {}
+    for line in text[3:end].splitlines():
+        if not line.strip() or ":" not in line:
+            continue
+        key, _, val = line.partition(":")
+        key, val = key.strip(), val.strip()
+        if val.startswith("[") and val.endswith("]"):
+            inner = val[1:-1].strip()
+            fm[key] = [x.strip().strip("'\"") for x in inner.split(",") if x.strip()]
+        else:
+            fm[key] = val.strip("'\"")
+    return fm
+
+
+_ACTIVE_STATUSES = {"current", "active"}
+
+
+def build_memory_health(vault: Path) -> dict:
+    """Lifecycle counts, supersede chains, warmth, and quarantine list for the
+    memory layer. See ADR-0004 /memory-health contract."""
+    mem_dir = vault / "09-memory"
+    empty = {
+        "status": "empty",
+        "counts": {"active": 0, "quarantined": 0, "superseded": 0, "unverified": 0},
+        "supersede_chains": [],
+        "warmth": [],
+        "quarantine": [],
+    }
+    if not mem_dir.is_dir():
+        return empty
+
+    counts = {"active": 0, "quarantined": 0, "superseded": 0, "unverified": 0}
+    supersede_edges: list[tuple[str, str]] = []
+    quarantine: list[dict] = []
+    seen = False
+
+    for path in sorted(mem_dir.glob("*.md")):
+        seen = True
+        fm = _parse_frontmatter(path.read_text(encoding="utf-8"))
+        stem = path.stem
+        status = fm.get("status", "current")
+        if status in _ACTIVE_STATUSES:
+            counts["active"] += 1
+        elif status == "quarantined":
+            counts["quarantined"] += 1
+            quarantine.append({"id": stem, "reason": fm.get("quarantine_reason", "")})
+        elif status == "superseded":
+            counts["superseded"] += 1
+        elif status == "unverified":
+            counts["unverified"] += 1
+        for target in fm.get("superseded_by", []) or []:
+            supersede_edges.append((stem, target))
+
+    # assemble chains by walking each supersede edge forward
+    parent = {src: tgt for src, tgt in supersede_edges}
+    heads = [s for s in parent if s not in parent.values()]
+    chains = []
+    for head in sorted(heads):
+        chain, cur, guard = [head], head, 0
+        while cur in parent and guard < 100:
+            cur = parent[cur]
+            chain.append(cur)
+            guard += 1
+        chains.append({"head": head, "chain": chain})
+
+    warmth = _memory_warmth(vault)
+
+    if not seen:
+        return empty
+    return {
+        "status": "ok",
+        "counts": counts,
+        "supersede_chains": chains,
+        "warmth": warmth,
+        "quarantine": quarantine,
+    }
+
+
+def _memory_warmth(vault: Path) -> list[dict]:
+    conn = _connect_ro(vault / ".claude" / "kb-usage.db")
+    if conn is None:
+        return []
+    try:
+        rows = conn.execute(
+            "SELECT stem, used, last_used FROM usage"
+        ).fetchall()
+    except Exception:
+        return []
+    finally:
+        conn.close()
+    warm = [
+        {"path": r["stem"], "warmth": float(r["used"] or 0), "last_used": r["last_used"]}
+        for r in rows
+    ]
+    warm.sort(key=lambda w: (-w["warmth"], w["path"]))
+    return warm

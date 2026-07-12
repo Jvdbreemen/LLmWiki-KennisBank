@@ -59,11 +59,47 @@ def _write_activity(vault: Path, events: list[dict]) -> None:
     conn.close()
 
 
+def _write_memories(vault: Path, memories: list[dict]) -> None:
+    mem_dir = vault / "09-memory"
+    mem_dir.mkdir(parents=True, exist_ok=True)
+    for m in memories:
+        stem = m["stem"]
+        fm = {k: v for k, v in m.items() if k not in ("stem", "body")}
+        lines = ["---", "type: memory"]
+        for k, v in fm.items():
+            if isinstance(v, list):
+                lines.append(f"{k}: [{', '.join(str(x) for x in v)}]")
+            else:
+                lines.append(f"{k}: {v}")
+        lines += ["---", "", m.get("body", "body"), ""]
+        (mem_dir / f"{stem}.md").write_text("\n".join(lines), encoding="utf-8")
+
+
+def _write_usage(vault: Path, rows: list[dict]) -> None:
+    db = vault / ".claude"
+    db.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(db / "kb-usage.db")
+    conn.execute(
+        "CREATE TABLE usage (stem TEXT PRIMARY KEY, injected INTEGER NOT NULL "
+        "DEFAULT 0, used INTEGER NOT NULL DEFAULT 0, last_injected TEXT, "
+        "last_used TEXT)"
+    )
+    conn.executemany(
+        "INSERT INTO usage (stem, injected, used, last_injected, last_used) "
+        "VALUES (:stem, :injected, :used, :last_injected, :last_used)",
+        [{"injected": 0, "last_injected": None, "last_used": None, **r}
+         for r in rows],
+    )
+    conn.commit()
+    conn.close()
+
+
 @pytest.fixture
 def vault_factory(tmp_path: Path):
     """Return a builder that materialises a vault and yields its root path."""
 
-    def build(*, nodes=None, links=None, docs=None, events=None) -> Path:
+    def build(*, nodes=None, links=None, docs=None, events=None,
+              memories=None, usage=None) -> Path:
         vault = tmp_path
         if nodes is not None or links is not None:
             _write_graph(vault, nodes or [], links or [])
@@ -71,6 +107,10 @@ def vault_factory(tmp_path: Path):
             _write_kbindex(vault, docs)
         if events is not None:
             _write_activity(vault, events)
+        if memories is not None:
+            _write_memories(vault, memories)
+        if usage is not None:
+            _write_usage(vault, usage)
         return vault
 
     return build
