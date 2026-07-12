@@ -42,6 +42,8 @@ export interface Provenance {
   unsourced: { path: string; reason: string }[];
 }
 
+export interface Doc { status: string; path: string; title: string; content: string; }
+
 export interface RecallHit { path: string; score: number; snippet: string; }
 export interface Recall {
   status: string; query: string;
@@ -86,5 +88,8 @@ export class DataClient {
   provenance(): Promise<Provenance> { return this.get<Provenance>("/provenance"); }
   recall(q: string, k = 5): Promise<Recall> {
     return this.get<Recall>(`/recall?q=${encodeURIComponent(q)}&k=${k}`);
+  }
+  doc(path: string): Promise<Doc> {
+    return this.get<Doc>(`/doc?path=${encodeURIComponent(path)}`);
   }
 }

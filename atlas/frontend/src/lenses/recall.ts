@@ -2,6 +2,7 @@
 // Full per-stage waterfall follows when the sidecar surfaces stages.
 import type { DataClient, Recall } from "../data-client";
 import { clear, el, message } from "../dom";
+import { openInspect } from "../inspect";
 
 export function renderRecallLens(host: HTMLElement, client: DataClient): Promise<void> {
   clear(host);
@@ -22,10 +23,12 @@ export function renderRecallLens(host: HTMLElement, client: DataClient): Promise
       }
       const list = el("ol", { class: "list" });
       for (const h of d.final) {
-        list.appendChild(el("li", {}, [
+        const li = el("li", { class: "clickable" }, [
           el("div", { class: "hit-path" }, [`${h.score.toFixed(4)} · ${h.path}`]),
           el("div", { class: "hit-snippet" }, [h.snippet]),
-        ]));
+        ]);
+        li.addEventListener("click", () => void openInspect(client, h.path));
+        list.appendChild(li);
       }
       results.appendChild(list);
     } catch (e) {

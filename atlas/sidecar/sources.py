@@ -105,6 +105,9 @@ def build_graph(vault: Path) -> dict:
             "kind": kind,
             "layer": meta.get("layer") or kind,
             "node_status": meta.get("status") or "active",
+            # community-detection cluster from graphify; drives node colour.
+            "community": n.get("community"),
+            "community_name": n.get("community_name"),
             "memory_type": None,
             "importance": 0.0,
             "warmth": 0.0,
@@ -437,3 +440,36 @@ def live_recall(vault: Path, query: str, k: int = 3) -> dict:
         }
     except Exception:
         return {**empty, "status": "degraded"}
+
+
+class DocError(Exception):
+    """Raised by read_doc with an HTTP-ish status code for the route to map."""
+    def __init__(self, code: int, detail: str):
+        super().__init__(detail)
+        self.code = code
+        self.detail = detail
+
+
+def read_doc(vault: Path, rel_path: str) -> dict:
+    """Read a vault markdown file for the inspect panel. Fail-closed:
+    reject non-.md and any path that escapes the vault (traversal)."""
+    if not rel_path or not rel_path.endswith(".md"):
+        raise DocError(400, "alleen .md-bestanden")
+    vault_root = vault.resolve()
+    target = (vault_root / rel_path).resolve()
+    # Containment check: the resolved target must stay inside the vault.
+    if vault_root != target and vault_root not in target.parents:
+        raise DocError(400, "pad buiten de vault")
+    if not target.is_file():
+        raise DocError(404, "bestand niet gevonden")
+    try:
+        content = target.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        raise DocError(404, str(exc))
+    title = target.stem
+    for line in content.splitlines():
+        if line.startswith("# "):
+            title = line[2:].strip()
+            break
+    return {"status": "ok", "path": target.relative_to(vault_root).as_posix(),
+            "title": title, "content": content}

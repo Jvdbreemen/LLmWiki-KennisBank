@@ -3,10 +3,13 @@
 // and always shown. Filtering is client-side over the /graph payload.
 import ForceGraph from "force-graph";
 
+import { communityColor } from "../colors";
 import type { DataClient, Graph, GraphNode } from "../data-client";
 import { clear, el, withLoader } from "../dom";
+import { openInspect } from "../inspect";
 
-const KIND_COLOR: Record<string, string> = { wiki: "#4f9cf9", memory: "#f5a623" };
+const nodeColor = (n: GraphNode): string =>
+  n.kind === "memory" ? "#f5a623" : communityColor(n.community as number | null);
 
 export function renderTimeSliderLens(host: HTMLElement, client: DataClient): Promise<void> {
   return withLoader<Graph>(host, "graaf laden…", () => client.graph(), (data) => {
@@ -45,8 +48,9 @@ export function renderTimeSliderLens(host: HTMLElement, client: DataClient): Pro
     const graph = new ForceGraph(canvas)
       .nodeId("id")
       .nodeLabel((n: object) => (n as GraphNode).label)
-      .nodeColor((n: object) => KIND_COLOR[(n as GraphNode).kind] ?? "#888")
+      .nodeColor((n: object) => nodeColor(n as GraphNode))
       .nodeVal((n: object) => 1 + (n as GraphNode).degree)
+      .onNodeClick((n: object) => void openInspect(client, (n as GraphNode).id))
       .linkColor(() => "rgba(160,160,160,0.25)")
       .backgroundColor("#0f1117");
 
