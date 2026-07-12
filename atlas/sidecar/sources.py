@@ -91,9 +91,14 @@ def usage_warmth(vault: Path) -> dict[str, float]:
         conn.close()
 
 
-def build_graph(vault: Path) -> dict:
+def build_graph(vault: Path, *, include_memory: bool = False) -> dict:
     """Collapse the graphify graph to file-level wiki/memory nodes joined with
-    kb-index, with file-level links and degree. See ADR-0004 /graph contract."""
+    kb-index, with file-level links and degree. See ADR-0004 /graph contract.
+
+    include_memory (opt-in, TASK-27.16) adds 09-memory fragments as nodes with
+    their frontmatter (memory_type, importance, status, valid_from/until) and an
+    edge to the wiki article each points to (from build_memory_links). The
+    default stays wiki-only so the base map stays fast and clean."""
     raw = load_graph(vault)
     docs = kbindex_docs(vault)
     warmth = usage_warmth(vault)
@@ -152,14 +157,54 @@ def build_graph(vault: Path) -> dict:
                 "weight": float(l.get("weight", 1.0)),
             }
 
+    if include_memory:
+        _add_memory_nodes(vault, nodes, edges, warmth)
+
     for e in edges.values():
-        nodes[e["source"]]["degree"] += 1
-        nodes[e["target"]]["degree"] += 1
+        if e["source"] in nodes:
+            nodes[e["source"]]["degree"] += 1
+        if e["target"] in nodes:
+            nodes[e["target"]]["degree"] += 1
 
     node_list = sorted(nodes.values(), key=lambda n: n["id"])
     link_list = sorted(edges.values(), key=lambda e: (e["source"], e["target"]))
     status = "ok" if node_list else "empty"
     return {"status": status, "nodes": node_list, "links": link_list}
+
+
+def _add_memory_nodes(vault: Path, nodes: dict, edges: dict, warmth: dict) -> None:
+    """Add 09-memory fragments as nodes plus a fragment->article edge each."""
+    links = build_memory_links(vault)
+    mem_dir = vault / "09-memory"
+    if not mem_dir.is_dir():
+        return
+    for path in sorted(mem_dir.glob("*.md")):
+        stem = path.stem
+        mem_id = f"09-memory/{stem}.md"
+        if mem_id in nodes:
+            continue
+        fm = _parse_frontmatter(path.read_text(encoding="utf-8"))
+        nodes[mem_id] = {
+            "id": mem_id,
+            "label": path.name,
+            "kind": "memory",
+            "layer": "memory",
+            "node_status": fm.get("status", "current"),
+            "community": None,
+            "community_name": None,
+            "memory_type": fm.get("memory_type", "feit"),
+            "importance": _coerce_importance(fm.get("importance", 3)),
+            "warmth": warmth.get(stem, 0.0),
+            "created": fm.get("updated") or fm.get("valid_from") or fm.get("created") or None,
+            "valid_from": fm.get("valid_from") or fm.get("created") or None,
+            "valid_until": fm.get("valid_until"),
+            "degree": 0,
+        }
+        target = links.get("links", {}).get(stem)
+        if target and target in nodes:
+            key = (mem_id, target)
+            edges[key] = {"source": mem_id, "target": target,
+                          "rel": "entry-point", "weight": 1.0}
 
 
 def _parse_date(iso: str | None) -> date | None:

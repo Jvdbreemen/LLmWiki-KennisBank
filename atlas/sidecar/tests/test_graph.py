@@ -90,6 +90,31 @@ def test_graph_joins_usage_warmth(vault_factory):
     assert ids[WIKI_A]["warmth"] == 7.0
 
 
+def test_graph_include_memory_adds_typed_nodes(vault_factory, monkeypatch):
+    from atlas.sidecar import sources
+
+    nodes = [{"id": "wiki_alpha", "label": "alpha.md", "source_file": WIKI_A}]
+    docs = [{"path": WIKI_A, "layer": "wiki", "status": "current", "title": "Alpha"}]
+    memories = [{"stem": "m-1", "status": "current", "memory_type": "procedure",
+                 "importance": 4, "valid_until": "2026-08-01"}]
+    vault = vault_factory(nodes=nodes, links=[], docs=docs, memories=memories)
+
+    # default: wiki-only, no memory nodes
+    assert all(n["kind"] == "wiki" for n in sources.build_graph(vault)["nodes"])
+
+    # link m-1 -> the wiki article so an entry-point edge forms
+    monkeypatch.setattr(sources, "build_memory_links",
+                        lambda v: {"status": "ok", "links": {"m-1": WIKI_A},
+                                   "counts": {WIKI_A: 1}, "types": {"m-1": "procedure"}})
+    g = sources.build_graph(vault, include_memory=True)
+    mem = {n["id"]: n for n in g["nodes"]}.get("09-memory/m-1.md")
+    assert mem is not None
+    assert mem["kind"] == "memory" and mem["memory_type"] == "procedure"
+    assert mem["importance"] == 4 and mem["valid_until"] == "2026-08-01"
+    assert any(l["source"] == "09-memory/m-1.md" and l["target"] == WIKI_A
+               for l in g["links"])
+
+
 def test_graph_fail_open_without_stores(tmp_path: Path):
     body = _graph(tmp_path)
     assert body["status"] == "empty"

@@ -99,8 +99,11 @@ export async function renderGraphLens(host: HTMLElement, client: DataClient): Pr
   const riskCb = document.createElement("input");
   riskCb.type = "checkbox";
   const riskLabel = el("label", {}, [riskCb, "toon alleen at-risk (geen herkomst)"]);
+  const memCb = document.createElement("input");
+  memCb.type = "checkbox";
+  const memLabel = el("label", {}, [memCb, "toon memory-fragmenten (nodes)"]);
   const legendBox = el("div", { class: "legend-box" }, [legend(colorMode)]);
-  const controls = el("div", { class: "graph-controls" }, [modeSel, supLabel, riskLabel, legendBox]);
+  const controls = el("div", { class: "graph-controls" }, [modeSel, supLabel, riskLabel, memLabel, legendBox]);
   const canvas = el("div", { class: "graph-canvas" });
   host.appendChild(el("div", { class: "graph-wrap" }, [controls, canvas]));
 
@@ -171,6 +174,21 @@ export async function renderGraphLens(host: HTMLElement, client: DataClient): Pr
   riskCb.addEventListener("change", () => {
     atRiskOnly = riskCb.checked;
     apply();
+  });
+  memCb.addEventListener("change", async () => {
+    memCb.disabled = true;
+    clear(legendBox);
+    legendBox.appendChild(el("span", { class: "muted" }, [
+      memCb.checked ? "memory-fragmenten laden (kan even duren)…" : "graaf herladen…"]));
+    try {
+      const g = await client.graph(memCb.checked);
+      if (!isCurrent(gen)) return;
+      data = g;
+      apply();
+    } catch { /* keep current graph on failure */ }
+    memCb.disabled = false;
+    clear(legendBox);
+    legendBox.appendChild(legend(colorMode));
   });
 
   const resize = () => graph.width(canvas.clientWidth).height(canvas.clientHeight);

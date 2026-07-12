@@ -101,8 +101,8 @@ def create_app(
         }
 
     @app.get("/graph")
-    def graph() -> dict:
-        return sources.build_graph(vault)
+    def graph(include_memory: bool = False) -> dict:
+        return sources.build_graph(vault, include_memory=include_memory)
 
     @app.get("/timeline")
     def timeline(bucket: str = "day",
