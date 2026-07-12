@@ -21,6 +21,34 @@ export interface GraphNode {
 export interface GraphLink { source: string; target: string; rel: string; weight: number; }
 export interface Graph { status: string; nodes: GraphNode[]; links: GraphLink[]; }
 
+export interface TimelineBucket {
+  start: string; end: string;
+  event_count: number; capture_count: number;
+  by_kind: Record<string, number>;
+}
+export interface Timeline { status: string; buckets: TimelineBucket[]; }
+
+export interface MemoryHealth {
+  status: string;
+  counts: { active: number; quarantined: number; superseded: number; unverified: number };
+  supersede_chains: { head: string; chain: string[] }[];
+  warmth: { path: string; warmth: number; last_used: string | null }[];
+  quarantine: { id: string; reason: string }[];
+}
+
+export interface Provenance {
+  status: string;
+  coverage: { sourced: number; unsourced: number; total: number };
+  unsourced: { path: string; reason: string }[];
+}
+
+export interface RecallHit { path: string; score: number; snippet: string; }
+export interface Recall {
+  status: string; query: string;
+  stages: Record<string, { path: string; score: number }[]>;
+  final: RecallHit[];
+}
+
 function resolvePort(): number | null {
   // Tauri injects the sidecar port; in dev pass ?port=NNNN.
   const fromGlobal = (window as unknown as { __ATLAS_PORT__?: number }).__ATLAS_PORT__;
@@ -53,10 +81,10 @@ export class DataClient {
 
   health(): Promise<Health> { return this.get<Health>("/health"); }
   graph(): Promise<Graph> { return this.get<Graph>("/graph"); }
-  timeline(): Promise<unknown> { return this.get("/timeline?bucket=week"); }
-  memoryHealth(): Promise<unknown> { return this.get("/memory-health"); }
-  provenance(): Promise<unknown> { return this.get("/provenance"); }
-  recall(q: string, k = 5): Promise<unknown> {
-    return this.get(`/recall?q=${encodeURIComponent(q)}&k=${k}`);
+  timeline(): Promise<Timeline> { return this.get<Timeline>("/timeline?bucket=week"); }
+  memoryHealth(): Promise<MemoryHealth> { return this.get<MemoryHealth>("/memory-health"); }
+  provenance(): Promise<Provenance> { return this.get<Provenance>("/provenance"); }
+  recall(q: string, k = 5): Promise<Recall> {
+    return this.get<Recall>(`/recall?q=${encodeURIComponent(q)}&k=${k}`);
   }
 }

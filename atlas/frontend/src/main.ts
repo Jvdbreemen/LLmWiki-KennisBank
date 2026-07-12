@@ -3,6 +3,11 @@
 // createElement — never innerHTML — so no lens payload can inject markup.
 import { DataClient } from "./data-client";
 import { renderGraphLens } from "./lenses/graph";
+import { renderTimeSliderLens } from "./lenses/time-slider";
+import { renderMemoryHealthLens } from "./lenses/memory-health";
+import { renderTimelineLens } from "./lenses/timeline";
+import { renderRecallLens } from "./lenses/recall";
+import { renderProvenanceLens } from "./lenses/provenance";
 import "./style.css";
 
 interface Lens {
@@ -11,23 +16,13 @@ interface Lens {
   render: (el: HTMLElement, client: DataClient) => void | Promise<void>;
 }
 
-function placeholder(name: string): Lens["render"] {
-  return (el) => {
-    el.replaceChildren();
-    const div = document.createElement("div");
-    div.className = "placeholder";
-    div.textContent = `${name}: nog niet gebouwd (sidecar-endpoint is klaar)`;
-    el.appendChild(div);
-  };
-}
-
 const LENSES: Lens[] = [
   { key: "graph", label: "Graph", render: renderGraphLens },
-  { key: "timeslider", label: "Time-slider", render: placeholder("Time-slider (27.5)") },
-  { key: "memory", label: "Memory Health", render: placeholder("Memory Health (27.6)") },
-  { key: "timeline", label: "Timeline", render: placeholder("Timeline (27.7)") },
-  { key: "recall", label: "Recall", render: placeholder("Recall Inspector (27.8)") },
-  { key: "provenance", label: "Provenance", render: placeholder("Provenance (27.9)") },
+  { key: "timeslider", label: "Time-slider", render: renderTimeSliderLens },
+  { key: "memory", label: "Memory Health", render: renderMemoryHealthLens },
+  { key: "timeline", label: "Timeline", render: renderTimelineLens },
+  { key: "recall", label: "Recall", render: renderRecallLens },
+  { key: "provenance", label: "Provenance", render: renderProvenanceLens },
 ];
 
 const client = new DataClient();

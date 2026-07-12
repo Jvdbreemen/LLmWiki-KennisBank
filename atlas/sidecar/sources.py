@@ -108,6 +108,9 @@ def build_graph(vault: Path) -> dict:
             "memory_type": None,
             "importance": 0.0,
             "warmth": 0.0,
+            # created = capture-time axis for the Time-slider (wiki has no valid
+            # time; memory keeps valid_from/valid_until for true validity).
+            "created": meta.get("created") or None,
             "valid_from": None,
             "valid_until": None,
             "degree": 0,
