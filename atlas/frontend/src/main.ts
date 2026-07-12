@@ -9,6 +9,7 @@ import { renderMemoryHealthLens } from "./lenses/memory-health";
 import { renderTimelineLens } from "./lenses/timeline";
 import { renderRecallLens } from "./lenses/recall";
 import { renderProvenanceLens } from "./lenses/provenance";
+import { renderWordcloudLens } from "./lenses/wordcloud";
 import "./style.css";
 
 interface Lens {
@@ -19,6 +20,7 @@ interface Lens {
 
 const LENSES: Lens[] = [
   { key: "graph", label: "Graph", render: renderGraphLens },
+  { key: "wordcloud", label: "Wordcloud", render: renderWordcloudLens },
   { key: "timeslider", label: "Time-slider", render: renderTimeSliderLens },
   { key: "memory", label: "Memory Health", render: renderMemoryHealthLens },
   { key: "timeline", label: "Timeline", render: renderTimelineLens },
