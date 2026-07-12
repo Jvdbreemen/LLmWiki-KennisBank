@@ -718,13 +718,13 @@ def recall_waterfall(vault: Path, query: str, k: int = 8) -> dict:
 _MEMORY_LINKS_CACHE: dict[str, dict] = {}
 
 
-def _mem_query_text(vault: Path, rel_path: str) -> str:
-    """A short, FTS-safe OR-query from a memory fragment: title + opening terms.
-    Sanitised to bare alphanumeric tokens so it can never break FTS5 syntax."""
+def _mem_query_and_type(vault: Path, rel_path: str) -> tuple[str, str]:
+    """From a memory fragment: (FTS-safe OR-query of title+opening terms,
+    memory_type). One read serves both the linking query and the inspect type."""
     try:
         text = (vault / rel_path).read_text(encoding="utf-8", errors="replace")
     except OSError:
-        return ""
+        return "", "feit"
     fm = _parse_frontmatter(text)
     body = text
     if text.startswith("---"):
@@ -740,7 +740,7 @@ def _mem_query_text(vault: Path, rel_path: str) -> str:
             tokens.append(low)
         if len(tokens) >= 12:
             break
-    return " OR ".join(tokens)
+    return " OR ".join(tokens), fm.get("memory_type", "feit")
 
 
 def build_memory_links(vault: Path, *, use_cache: bool = True) -> dict:
@@ -756,7 +756,7 @@ def build_memory_links(vault: Path, *, use_cache: bool = True) -> dict:
     if use_cache and key in _MEMORY_LINKS_CACHE:
         return _MEMORY_LINKS_CACHE[key]
 
-    empty = {"status": "empty", "links": {}, "counts": {}}
+    empty = {"status": "empty", "links": {}, "counts": {}, "types": {}}
     try:
         kbindex = _load_vault_module(vault, "_kbindex", "_kbindex.py")
         kbrecall = _load_vault_module(vault, "kb_recall", "kb-recall.py")
@@ -770,6 +770,7 @@ def build_memory_links(vault: Path, *, use_cache: bool = True) -> dict:
             mem_ids = [d for d, (_, layer) in meta.items() if layer == "memory"]
             links: dict[str, str] = {}
             counts: dict[str, int] = {}
+            types: dict[str, str] = {}
             for did in mem_ids:
                 row = conn.execute(
                     "SELECT embedding FROM vec_docs WHERE doc_id = ?", (did,)).fetchone()
@@ -783,7 +784,7 @@ def build_memory_links(vault: Path, *, use_cache: bool = True) -> dict:
                     "SELECT doc_id FROM vec_docs WHERE embedding MATCH ? "
                     "ORDER BY distance LIMIT 20", (row[0],)).fetchall()]
                 rankings = [vec]
-                text = _mem_query_text(vault, meta[did][0])
+                text, mtype = _mem_query_and_type(vault, meta[did][0])
                 if text:
                     try:
                         fts = [r[0] for r in conn.execute(
@@ -802,14 +803,15 @@ def build_memory_links(vault: Path, *, use_cache: bool = True) -> dict:
                 if target:
                     stem = Path(meta[did][0]).stem
                     links[stem] = target
+                    types[stem] = mtype
                     counts[target] = counts.get(target, 0) + 1
         finally:
             conn.close()
     except Exception:
         return empty
 
-    result = {"status": "ok" if links else "empty", "links": links, "counts": counts} \
-        if (links or counts) else empty
+    result = {"status": "ok" if links else "empty", "links": links,
+              "counts": counts, "types": types} if (links or counts) else empty
     if use_cache:
         _MEMORY_LINKS_CACHE[key] = result
     return result

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { GraphNode } from "./data-client";
 import {
   ageBucket,
+  entryPointColor,
   type GraphFilter,
   nodeColor,
   nodeVal,
@@ -63,6 +64,18 @@ describe("provenanceColor", () => {
   it("at-risk is red, sourced is green", () => {
     expect(provenanceColor(true)).toBe("#ec7063");
     expect(provenanceColor(false)).toBe("#58d68d");
+  });
+});
+
+describe("entryPointColor", () => {
+  it("marks a blind spot (0 entry points) distinctly", () => {
+    expect(entryPointColor(0, 10)).toBe("#3a3f4a");
+  });
+  it("brightens with more entry points", () => {
+    const lo = entryPointColor(1, 10);
+    const hi = entryPointColor(10, 10);
+    expect(lo).not.toBe("#3a3f4a");
+    expect(hi).toContain("1.00"); // max intensity at count == max
   });
 });
 
