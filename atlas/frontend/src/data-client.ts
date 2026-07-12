@@ -96,7 +96,9 @@ export class DataClient {
   }
 
   health(): Promise<Health> { return this.get<Health>("/health"); }
-  graph(): Promise<Graph> { return this.get<Graph>("/graph"); }
+  graph(includeMemory = false): Promise<Graph> {
+    return this.get<Graph>(`/graph${includeMemory ? "?include_memory=1" : ""}`);
+  }
   timeline(): Promise<Timeline> { return this.get<Timeline>("/timeline?bucket=week"); }
   memoryHealth(): Promise<MemoryHealth> { return this.get<MemoryHealth>("/memory-health"); }
   provenance(): Promise<Provenance> { return this.get<Provenance>("/provenance"); }
