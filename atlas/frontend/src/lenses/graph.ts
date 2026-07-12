@@ -21,6 +21,10 @@ import {
 import { openInspect } from "../inspect";
 import { currentGeneration, isCurrent, onLensLeave } from "../lifecycle";
 
+// Above this node count the graph drops per-node halo/ring detail (LOD) to keep
+// pan/zoom smooth; the omission is surfaced in the controls, never silent.
+const LOD_NODES = 400;
+
 function legend(colorMode: ColorMode | "provenance" | "entry-points"): HTMLElement {
   const items: [string, string][] =
     colorMode === "status"
@@ -102,8 +106,9 @@ export async function renderGraphLens(host: HTMLElement, client: DataClient): Pr
   const memCb = document.createElement("input");
   memCb.type = "checkbox";
   const memLabel = el("label", {}, [memCb, "toon memory-fragmenten (nodes)"]);
+  const lodNote = el("span", { class: "muted" }, []);
   const legendBox = el("div", { class: "legend-box" }, [legend(colorMode)]);
-  const controls = el("div", { class: "graph-controls" }, [modeSel, supLabel, riskLabel, memLabel, legendBox]);
+  const controls = el("div", { class: "graph-controls" }, [modeSel, supLabel, riskLabel, memLabel, lodNote, legendBox]);
   const canvas = el("div", { class: "graph-canvas" });
   host.appendChild(el("div", { class: "graph-wrap" }, [controls, canvas]));
 
@@ -116,19 +121,24 @@ export async function renderGraphLens(host: HTMLElement, client: DataClient): Pr
     })
     .nodeCanvasObject((n: object, ctx: CanvasRenderingContext2D) => {
       const node = n as GraphNode & { x: number; y: number };
+      // Level-of-detail: above LOD_NODES, drop the per-node halo and status ring
+      // (the expensive per-frame extras) so pan/zoom stays smooth on large graphs.
+      const lite = data.nodes.length > LOD_NODES;
       const r = Math.sqrt(nodeVal(node)) * 1.8;
-      const halo = warmthHalo(node);
-      if (halo > 0) {
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, r + halo, 0, 2 * Math.PI);
-        ctx.fillStyle = "rgba(245,166,35,0.12)";
-        ctx.fill();
+      if (!lite) {
+        const halo = warmthHalo(node);
+        if (halo > 0) {
+          ctx.beginPath();
+          ctx.arc(node.x, node.y, r + halo, 0, 2 * Math.PI);
+          ctx.fillStyle = "rgba(245,166,35,0.12)";
+          ctx.fill();
+        }
       }
       ctx.beginPath();
       ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
       ctx.fillStyle = colorFor(node);
       ctx.fill();
-      if (node.node_status !== "current" && node.node_status !== "active") {
+      if (!lite && node.node_status !== "current" && node.node_status !== "active") {
         ctx.lineWidth = 1.5;
         ctx.strokeStyle = statusColor(node.node_status);
         ctx.stroke();
@@ -148,6 +158,8 @@ export async function renderGraphLens(host: HTMLElement, client: DataClient): Pr
     const links = data.links.filter((l) => ids.has(l.source) && ids.has(l.target));
     graph.graphData({ nodes: nodes.map((n) => ({ ...n })), links: links.map((l) => ({ ...l })) });
     graph.resumeAnimation();
+    lodNote.textContent = nodes.length > LOD_NODES
+      ? `LOD aan (${nodes.length} nodes; halo/ring uit voor snelheid)` : "";
   };
 
   modeSel.addEventListener("change", async () => {
