@@ -68,6 +68,7 @@ def create_app(
     *,
     ollama_probe: Callable[[], bool] = _default_ollama_probe,
     recall_fn: Callable[[str, int], dict] | None = None,
+    links_fn: Callable[[], dict] | None = None,
 ) -> FastAPI:
     vault = Path(vault)
     app = FastAPI(title="KennisBank Atlas sidecar", version=VERSION)
@@ -137,5 +138,22 @@ def create_app(
     @app.get("/recall")
     def recall(q: str = "", k: int = 3) -> dict:
         return _recall(q, k)
+
+    @app.get("/memory-links")
+    def memory_links() -> dict:
+        fn = links_fn or (lambda: sources.build_memory_links(vault))
+        try:
+            return fn()
+        except Exception:
+            return {"status": "degraded", "links": {}, "counts": {}}
+
+    # Warm the memory-links cache in the background (~47s) so the overlay is
+    # ready when the user opens it. Only when a real index exists (not in tests).
+    if links_fn is None and (vault / ".claude" / "kb-index.db").exists():
+        import threading
+
+        threading.Thread(
+            target=lambda: sources.build_memory_links(vault), daemon=True
+        ).start()
 
     return app

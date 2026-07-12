@@ -711,3 +711,111 @@ def recall_waterfall(vault: Path, query: str, k: int = 8) -> dict:
                 "final": final}
     except Exception:
         return {**empty, "status": "degraded"}
+
+
+# In-process cache: linking scans stored embeddings for all memories (~47s on
+# the real vault), so compute once per sidecar process, keyed by vault path.
+_MEMORY_LINKS_CACHE: dict[str, dict] = {}
+
+
+def _mem_query_text(vault: Path, rel_path: str) -> str:
+    """A short, FTS-safe OR-query from a memory fragment: title + opening terms.
+    Sanitised to bare alphanumeric tokens so it can never break FTS5 syntax."""
+    try:
+        text = (vault / rel_path).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    fm = _parse_frontmatter(text)
+    body = text
+    if text.startswith("---"):
+        end = text.find("\n---", 3)
+        if end != -1:
+            body = text[text.find("\n", end + 1) + 1:]
+    blob = f"{fm.get('title', '')} {body[:240]}"
+    seen, tokens = set(), []
+    for tok in _re.findall(r"[A-Za-z0-9]{4,}", blob):
+        low = tok.lower()
+        if low not in seen:
+            seen.add(low)
+            tokens.append(low)
+        if len(tokens) >= 12:
+            break
+    return " OR ".join(tokens)
+
+
+def build_memory_links(vault: Path, *, use_cache: bool = True) -> dict:
+    """Link each memory fragment to the wiki article it sits closest to, using
+    the fragment's stored embedding and a vector-KNN to the wiki layer (the
+    vector stage of recall — no Ollama re-embed, reuses the index). Returns
+    per-fragment target and per-article entry-point counts (TASK-27.14).
+
+    Design note: full-waterfall linking would re-embed 753 fragments (~12 min);
+    stored-embedding vector similarity answers the same "which article would
+    this fragment lead an agent to" far cheaper. Cached in-process."""
+    key = str(vault.resolve())
+    if use_cache and key in _MEMORY_LINKS_CACHE:
+        return _MEMORY_LINKS_CACHE[key]
+
+    empty = {"status": "empty", "links": {}, "counts": {}}
+    try:
+        kbindex = _load_vault_module(vault, "_kbindex", "_kbindex.py")
+        kbrecall = _load_vault_module(vault, "kb_recall", "kb-recall.py")
+        conn = kbrecall._open_ro(kbindex.index_path())
+        if conn is None:
+            return empty
+        try:
+            meta = {r[0]: (_rel_key(vault, r[1]), r[2])
+                    for r in conn.execute("SELECT doc_id, path, layer FROM docs")}
+            wiki_ids = {d for d, (_, layer) in meta.items() if layer == "wiki"}
+            mem_ids = [d for d, (_, layer) in meta.items() if layer == "memory"]
+            links: dict[str, str] = {}
+            counts: dict[str, int] = {}
+            for did in mem_ids:
+                row = conn.execute(
+                    "SELECT embedding FROM vec_docs WHERE doc_id = ?", (did,)).fetchone()
+                if not row or row[0] is None:
+                    continue
+                # Hybrid link (no rerank, no re-embed): vector similarity on the
+                # stored embedding fused (RRF) with an FTS match on the fragment
+                # text. FTS catches exact terms the embedding blurs; rerank is
+                # deliberately excluded — it would bias to popular, not closest.
+                vec = [r[0] for r in conn.execute(
+                    "SELECT doc_id FROM vec_docs WHERE embedding MATCH ? "
+                    "ORDER BY distance LIMIT 20", (row[0],)).fetchall()]
+                rankings = [vec]
+                text = _mem_query_text(vault, meta[did][0])
+                if text:
+                    try:
+                        fts = [r[0] for r in conn.execute(
+                            "SELECT rowid FROM fts_docs WHERE fts_docs MATCH ? "
+                            "ORDER BY rank LIMIT 20", (text,)).fetchall()]
+                        if fts:
+                            rankings.append(fts)
+                    except sqlite3.OperationalError:
+                        pass
+                fused = kbindex._rrf(rankings)
+                target = None
+                for cid, _score in sorted(fused.items(), key=lambda kv: kv[1], reverse=True):
+                    if cid in wiki_ids:
+                        target = meta[cid][0]
+                        break
+                if target:
+                    stem = Path(meta[did][0]).stem
+                    links[stem] = target
+                    counts[target] = counts.get(target, 0) + 1
+        finally:
+            conn.close()
+    except Exception:
+        return empty
+
+    result = {"status": "ok" if links else "empty", "links": links, "counts": counts} \
+        if (links or counts) else empty
+    if use_cache:
+        _MEMORY_LINKS_CACHE[key] = result
+    return result
+
+
+def memory_links_for(vault: Path, article_path: str) -> list[str]:
+    """The memory-fragment stems that point to a given wiki article path."""
+    data = build_memory_links(vault)
+    return sorted(s for s, a in data.get("links", {}).items() if a == article_path)
