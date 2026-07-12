@@ -99,7 +99,7 @@ def vault_factory(tmp_path: Path):
     """Return a builder that materialises a vault and yields its root path."""
 
     def build(*, nodes=None, links=None, docs=None, events=None,
-              memories=None, usage=None) -> Path:
+              memories=None, usage=None, wiki=None) -> Path:
         vault = tmp_path
         if nodes is not None or links is not None:
             _write_graph(vault, nodes or [], links or [])
@@ -111,6 +111,11 @@ def vault_factory(tmp_path: Path):
             _write_memories(vault, memories)
         if usage is not None:
             _write_usage(vault, usage)
+        if wiki is not None:
+            wdir = vault / "02-wiki"
+            wdir.mkdir(parents=True, exist_ok=True)
+            for w in wiki:
+                (wdir / f"{w['stem']}.md").write_text(w["body"], encoding="utf-8")
         return vault
 
     return build

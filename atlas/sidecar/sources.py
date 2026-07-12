@@ -327,3 +327,55 @@ def _memory_warmth(vault: Path) -> list[dict]:
     ]
     warm.sort(key=lambda w: (-w["warmth"], w["path"]))
     return warm
+
+
+import re as _re
+
+_WIKILINK_RE = _re.compile(r"\[\[([^\]]+)\]\]")
+_HERKOMST_PREFIXES = ("raw-sessie", "05-bronnen/")
+
+
+def _has_herkomst(text: str) -> bool:
+    for raw in _WIKILINK_RE.findall(text):
+        target = raw.split("|", 1)[0].strip().lstrip("/")
+        if target.startswith(_HERKOMST_PREFIXES):
+            return True
+    return False
+
+
+def build_provenance(vault: Path) -> dict:
+    """kb-lint-style provenance coverage over 02-wiki. A wiki article is
+    sourced when it carries a herkomst wikilink ([[raw-sessie-...]] or
+    [[05-bronnen/...]]). See ADR-0004 /provenance contract."""
+    wiki_dir = vault / "02-wiki"
+    if not wiki_dir.is_dir():
+        return {"status": "empty",
+                "coverage": {"sourced": 0, "unsourced": 0, "total": 0},
+                "unsourced": []}
+
+    sourced = 0
+    unsourced: list[dict] = []
+    total = 0
+    for path in sorted(wiki_dir.glob("*.md")):
+        total += 1
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            text = ""
+        if _has_herkomst(text):
+            sourced += 1
+        else:
+            unsourced.append({
+                "path": f"02-wiki/{path.name}",
+                "reason": "geen herkomst: geen [[raw-sessie-...]]- of [[05-bronnen/...]]-verwijzing",
+            })
+
+    if total == 0:
+        return {"status": "empty",
+                "coverage": {"sourced": 0, "unsourced": 0, "total": 0},
+                "unsourced": []}
+    return {
+        "status": "ok",
+        "coverage": {"sourced": sourced, "unsourced": len(unsourced), "total": total},
+        "unsourced": unsourced,
+    }
