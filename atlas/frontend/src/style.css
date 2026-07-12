@@ -153,3 +153,11 @@ body {
 .cloud { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; padding: 14px 0; line-height: 1.6; }
 .cloud-term { cursor: pointer; transition: opacity 0.1s; }
 .cloud-term:hover { opacity: 0.65; text-decoration: underline; }
+
+/* graph lens controls + layout */
+.graph-wrap { display: flex; flex-direction: column; height: 100%; }
+.graph-controls { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 8px 14px; background: var(--panel); border-bottom: 1px solid #23283440; font-size: 12px; }
+.graph-controls select { background: #12151d; color: var(--fg); border: 1px solid #2a2f3a; border-radius: 5px; padding: 4px 8px; font-size: 12px; }
+.graph-controls label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+.graph-controls .legend-box { margin-left: auto; }
+.graph-wrap .graph-canvas { position: relative; inset: auto; flex: 1; min-height: 0; }

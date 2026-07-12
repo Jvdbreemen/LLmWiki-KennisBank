@@ -1,62 +1,131 @@
-// Graph lens: the canvas force-graph over /graph. force-graph (MIT, vasturiano)
-// renders on canvas so it scales past the ~1000-node SVG ceiling the ADR names.
+// Graph lens (TASK-27.4): canvas force-graph with data-driven encoding, a
+// legend, colour-mode + status/kind filters, and click-to-inspect. Nodes are
+// coloured by community (default; user preference), sized by importance/degree,
+// ringed by lifecycle status, and haloed by usage warmth. Encoding lives in the
+// unit-tested encoding.ts so the field->channel mapping is verifiable.
 import ForceGraph from "force-graph";
 
-import { communityColor } from "../colors";
 import type { DataClient, Graph, GraphNode } from "../data-client";
+import { clear, el } from "../dom";
+import {
+  type ColorMode,
+  type GraphFilter,
+  nodeColor,
+  nodeVal,
+  passesFilter,
+  statusColor,
+  warmthHalo,
+} from "../encoding";
 import { openInspect } from "../inspect";
 import { onLensLeave } from "../lifecycle";
 
-function nodeColor(n: GraphNode): string {
-  // memory stands apart; wiki is coloured by its community cluster.
-  return n.kind === "memory" ? "#f5a623" : communityColor(n.community as number | null);
+function legend(colorMode: ColorMode): HTMLElement {
+  const items: [string, string][] =
+    colorMode === "status"
+      ? [["#58d68d", "current"], ["#f5b041", "unverified"], ["#8a90a0", "superseded"], ["#ec7063", "quarantined"]]
+      : colorMode === "kind"
+        ? [["#4f9cf9", "wiki"], ["#f5a623", "memory"]]
+        : [["#4f9cf9", "community-cluster (kleur = cluster)"], ["#f5a623", "memory"]];
+  const row = el("div", { class: "legend" }, [el("span", { class: "muted" }, ["kleur: "])]);
+  for (const [c, label] of items) {
+    const sw = el("span", { class: "swatch" }, []);
+    sw.style.background = c;
+    row.appendChild(sw);
+    row.appendChild(document.createTextNode(label + "  "));
+  }
+  row.appendChild(el("span", { class: "muted" }, ["· grootte = importance/degree · ring = status · halo = warmth"]));
+  return row;
 }
 
-function message(el: HTMLElement, cls: string, text: string): void {
-  el.replaceChildren();
-  const div = document.createElement("div");
-  div.className = cls;
-  div.textContent = text; // textContent, never innerHTML: no injection surface
-  el.appendChild(div);
-}
-
-export async function renderGraphLens(el: HTMLElement, client: DataClient): Promise<void> {
-  message(el, "loading", "graaf laden…");
+export async function renderGraphLens(host: HTMLElement, client: DataClient): Promise<void> {
+  clear(host);
+  host.appendChild(el("div", { class: "loading" }, ["graaf laden…"]));
   let data: Graph;
   try {
     data = await client.graph();
   } catch (e) {
-    message(el, "error", `graaf onbeschikbaar: ${(e as Error).message}`);
+    clear(host);
+    host.appendChild(el("div", { class: "error" }, [`graaf onbeschikbaar: ${(e as Error).message}`]));
     return;
   }
   if (data.status === "empty" || data.nodes.length === 0) {
-    message(el, "empty", "geen graaf-data (bron niet beschikbaar)");
+    clear(host);
+    host.appendChild(el("div", { class: "empty" }, ["geen graaf-data (bron niet beschikbaar)"]));
     return;
   }
 
-  el.replaceChildren();
-  const graph = new ForceGraph(el)
-    .graphData({
-      nodes: data.nodes.map((n) => ({ ...n })),
-      links: data.links.map((l) => ({ ...l })),
-    })
+  let colorMode: ColorMode = "community";
+  const filter: GraphFilter = { hideSuperseded: false, kinds: new Set(["wiki", "memory"]) };
+
+  clear(host);
+
+  // controls
+  const modeSel = document.createElement("select");
+  for (const m of ["community", "status", "kind"] as ColorMode[]) {
+    const o = document.createElement("option");
+    o.value = m; o.textContent = `kleur: ${m}`;
+    modeSel.appendChild(o);
+  }
+  const supCb = document.createElement("input");
+  supCb.type = "checkbox";
+  const supLabel = el("label", {}, [supCb, "verberg superseded"]);
+  const legendBox = el("div", { class: "legend-box" }, [legend(colorMode)]);
+  const controls = el("div", { class: "graph-controls" }, [modeSel, supLabel, legendBox]);
+  const canvas = el("div", { class: "graph-canvas" });
+  host.appendChild(el("div", { class: "graph-wrap" }, [controls, canvas]));
+
+  const graph = new ForceGraph(canvas)
     .nodeId("id")
     .nodeLabel((n: object) => {
       const node = n as GraphNode;
       const c = node.community_name ? ` · ${node.community_name}` : "";
-      return `${node.label} (${node.kind}, ${node.node_status}, degree ${node.degree}${c})`;
+      return `${node.label} — ${node.kind}, ${node.node_status}, links ${node.degree}, warmth ${node.warmth}${c}`;
     })
-    .nodeColor((n: object) => nodeColor(n as GraphNode))
-    .nodeVal((n: object) => 1 + (n as GraphNode).degree)
+    .nodeCanvasObject((n: object, ctx: CanvasRenderingContext2D) => {
+      const node = n as GraphNode & { x: number; y: number };
+      const r = Math.sqrt(nodeVal(node)) * 1.8;
+      const halo = warmthHalo(node);
+      if (halo > 0) {
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, r + halo, 0, 2 * Math.PI);
+        ctx.fillStyle = "rgba(245,166,35,0.12)";
+        ctx.fill();
+      }
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
+      ctx.fillStyle = nodeColor(node, colorMode);
+      ctx.fill();
+      if (node.node_status !== "current" && node.node_status !== "active") {
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = statusColor(node.node_status);
+        ctx.stroke();
+      }
+    })
     .onNodeClick((n: object) => void openInspect(client, (n as GraphNode).id))
-    .linkColor(() => "rgba(160,160,160,0.25)")
+    .linkColor(() => "rgba(160,160,160,0.22)")
     .backgroundColor("#0f1117")
-    // stop the rAF loop once the layout settles: saves CPU and lets the page
-    // reach idle (otherwise the animation loop runs forever).
     .cooldownTicks(120)
     .onEngineStop(() => graph.pauseAnimation());
 
-  const resize = () => graph.width(el.clientWidth).height(el.clientHeight);
+  const apply = () => {
+    const nodes = data.nodes.filter((n) => passesFilter(n, filter));
+    const ids = new Set(nodes.map((n) => n.id));
+    const links = data.links.filter((l) => ids.has(l.source) && ids.has(l.target));
+    graph.graphData({ nodes: nodes.map((n) => ({ ...n })), links: links.map((l) => ({ ...l })) });
+    graph.resumeAnimation();
+  };
+
+  modeSel.addEventListener("change", () => {
+    colorMode = modeSel.value as ColorMode;
+    clear(legendBox);
+    legendBox.appendChild(legend(colorMode));
+  });
+  supCb.addEventListener("change", () => {
+    filter.hideSuperseded = supCb.checked;
+    apply();
+  });
+
+  const resize = () => graph.width(canvas.clientWidth).height(canvas.clientHeight);
   resize();
   window.addEventListener("resize", resize);
   onLensLeave(() => {
@@ -64,4 +133,5 @@ export async function renderGraphLens(el: HTMLElement, client: DataClient): Prom
     graph.pauseAnimation();
     graph.graphData({ nodes: [], links: [] });
   });
+  apply();
 }
