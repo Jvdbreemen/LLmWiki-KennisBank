@@ -379,3 +379,58 @@ def build_provenance(vault: Path) -> dict:
         "coverage": {"sourced": sourced, "unsourced": len(unsourced), "total": total},
         "unsourced": unsourced,
     }
+
+
+import importlib.util as _ilu
+import os as _os
+import sys as _sys
+
+
+def _load_vault_module(vault: Path, name: str, filename: str):
+    """Import a vault script by file path (handles hyphenated module names).
+
+    The vault's .claude/scripts dir is added to sys.path so intra-module
+    imports (_kbindex, _embeddings, ...) resolve. Reused, not reimplemented,
+    so /recall ordering matches kb-recall exactly (TASK-27.2 AC#2)."""
+    scripts = (vault / ".claude" / "scripts").resolve()
+    _os.environ.setdefault("KENNISBANK_VAULT", str(vault))
+    if str(scripts) not in _sys.path:
+        _sys.path.insert(0, str(scripts))
+    spec = _ilu.spec_from_file_location(name, scripts / filename)
+    mod = _ilu.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def live_recall(vault: Path, query: str, k: int = 3) -> dict:
+    """Run the live recall waterfall by reusing the vault's kb-recall.
+
+    Embeds the query once via _embeddings, then calls kb-recall.recall_hits so
+    the `final` ordering is identical to the production hook. `stages` are
+    surfaced best-effort; the full per-stage waterfall is the Recall Inspector
+    (27.8). Fail-open on any error."""
+    empty = {"status": "empty", "query": query,
+             "stages": {"vector": [], "fts": [], "rrf": [], "rerank": []},
+             "final": []}
+    if not query.strip():
+        return empty
+    try:
+        emb = _load_vault_module(vault, "_embeddings", "_embeddings.py")
+        kbrecall = _load_vault_module(vault, "kb_recall", "kb-recall.py")
+        vector = emb.embed(query)
+        if not vector:
+            return {**empty, "status": "degraded"}
+        hits = kbrecall.recall_hits(vector, query_text=query, k=k)
+        final = [
+            {"path": h.get("path", ""), "score": float(h.get("score", 0.0)),
+             "snippet": h.get("snippet", "")}
+            for h in hits
+        ]
+        return {
+            "status": "ok" if final else "empty",
+            "query": query,
+            "stages": {"vector": [], "fts": [], "rrf": [], "rerank": []},
+            "final": final,
+        }
+    except Exception:
+        return {**empty, "status": "degraded"}
