@@ -2,12 +2,14 @@
 // renders on canvas so it scales past the ~1000-node SVG ceiling the ADR names.
 import ForceGraph from "force-graph";
 
+import { communityColor } from "../colors";
 import type { DataClient, Graph, GraphNode } from "../data-client";
+import { openInspect } from "../inspect";
 
-const KIND_COLOR: Record<string, string> = {
-  wiki: "#4f9cf9",
-  memory: "#f5a623",
-};
+function nodeColor(n: GraphNode): string {
+  // memory stands apart; wiki is coloured by its community cluster.
+  return n.kind === "memory" ? "#f5a623" : communityColor(n.community as number | null);
+}
 
 function message(el: HTMLElement, cls: string, text: string): void {
   el.replaceChildren();
@@ -40,10 +42,12 @@ export async function renderGraphLens(el: HTMLElement, client: DataClient): Prom
     .nodeId("id")
     .nodeLabel((n: object) => {
       const node = n as GraphNode;
-      return `${node.label} (${node.kind}, ${node.node_status}, degree ${node.degree})`;
+      const c = node.community_name ? ` · ${node.community_name}` : "";
+      return `${node.label} (${node.kind}, ${node.node_status}, degree ${node.degree}${c})`;
     })
-    .nodeColor((n: object) => KIND_COLOR[(n as GraphNode).kind] ?? "#888")
+    .nodeColor((n: object) => nodeColor(n as GraphNode))
     .nodeVal((n: object) => 1 + (n as GraphNode).degree)
+    .onNodeClick((n: object) => void openInspect(client, (n as GraphNode).id))
     .linkColor(() => "rgba(160,160,160,0.25)")
     .backgroundColor("#0f1117");
 

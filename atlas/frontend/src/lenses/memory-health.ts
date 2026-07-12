@@ -1,6 +1,7 @@
 // Memory Health lens (27.6): lifecycle counts, warmth, supersede chains, quarantine.
 import type { DataClient, MemoryHealth } from "../data-client";
 import { clear, el, withLoader } from "../dom";
+import { openInspect } from "../inspect";
 
 function tile(label: string, value: number, cls: string): HTMLElement {
   return el("div", { class: `tile ${cls}` }, [
@@ -25,7 +26,9 @@ export function renderMemoryHealthLens(host: HTMLElement, client: DataClient): P
 
     const warm = el("ul", { class: "list" });
     for (const w of d.warmth.slice(0, 15)) {
-      warm.appendChild(el("li", {}, [`${w.warmth.toFixed(0)}× · ${w.path}${w.last_used ? ` · ${w.last_used}` : ""}`]));
+      const li = el("li", { class: "clickable" }, [`${w.warmth.toFixed(0)}× · ${w.path}${w.last_used ? ` · ${w.last_used}` : ""}`]);
+      li.addEventListener("click", () => void openInspect(client, `09-memory/${w.path}.md`));
+      warm.appendChild(li);
     }
 
     const chains = el("ul", { class: "list" });

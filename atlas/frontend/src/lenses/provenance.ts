@@ -1,6 +1,7 @@
 // Provenance lens (27.9): kb-lint-style herkomst coverage over the wiki.
 import type { DataClient, Provenance } from "../data-client";
 import { clear, el, withLoader } from "../dom";
+import { openInspect } from "../inspect";
 
 export function renderProvenanceLens(host: HTMLElement, client: DataClient): Promise<void> {
   return withLoader<Provenance>(host, "provenance laden…", () => client.provenance(), (d) => {
@@ -17,7 +18,9 @@ export function renderProvenanceLens(host: HTMLElement, client: DataClient): Pro
 
     const list = el("ul", { class: "list" });
     for (const u of d.unsourced) {
-      list.appendChild(el("li", { title: u.reason }, [u.path]));
+      const li = el("li", { class: "clickable", title: u.reason }, [u.path]);
+      li.addEventListener("click", () => void openInspect(client, u.path));
+      list.appendChild(li);
     }
 
     clear(host);

@@ -13,7 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable
 
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from atlas.sidecar import sources
@@ -117,6 +117,13 @@ def create_app(
     @app.get("/provenance")
     def provenance() -> dict:
         return sources.build_provenance(vault)
+
+    @app.get("/doc")
+    def doc(path: str = "") -> dict:
+        try:
+            return sources.read_doc(vault, path)
+        except sources.DocError as exc:
+            raise HTTPException(status_code=exc.code, detail=exc.detail)
 
     @app.get("/recall")
     def recall(q: str = "", k: int = 3) -> dict:
