@@ -9,6 +9,7 @@ import type { DataClient, Graph, GraphNode } from "../data-client";
 import { clear, el } from "../dom";
 import {
   type ColorMode,
+  entryPointColor,
   type GraphFilter,
   nodeColor,
   nodeVal,
@@ -20,7 +21,7 @@ import {
 import { openInspect } from "../inspect";
 import { currentGeneration, isCurrent, onLensLeave } from "../lifecycle";
 
-function legend(colorMode: ColorMode | "provenance"): HTMLElement {
+function legend(colorMode: ColorMode | "provenance" | "entry-points"): HTMLElement {
   const items: [string, string][] =
     colorMode === "status"
       ? [["#58d68d", "current"], ["#f5b041", "unverified"], ["#8a90a0", "superseded"], ["#ec7063", "quarantined"]]
@@ -28,7 +29,9 @@ function legend(colorMode: ColorMode | "provenance"): HTMLElement {
         ? [["#4f9cf9", "wiki"], ["#f5a623", "memory"]]
         : colorMode === "provenance"
           ? [["#58d68d", "gesourcet (herkomst resolveert)"], ["#ec7063", "at-risk (geen/dode herkomst)"]]
-          : [["#4f9cf9", "community-cluster (kleur = cluster)"], ["#f5a623", "memory"]];
+          : colorMode === "entry-points"
+            ? [["#3a3f4a", "blinde vlek (0 memory-ingangen)"], ["#4f9cf9", "veel ingangen (agent vindt dit)"]]
+            : [["#4f9cf9", "community-cluster (kleur = cluster)"], ["#f5a623", "memory"]];
   const row = el("div", { class: "legend" }, [el("span", { class: "muted" }, ["kleur: "])]);
   for (const [c, label] of items) {
     const sw = el("span", { class: "swatch" }, []);
@@ -64,20 +67,28 @@ export async function renderGraphLens(host: HTMLElement, client: DataClient): Pr
     return;
   }
 
-  let colorMode: ColorMode | "provenance" = "community";
+  let colorMode: ColorMode | "provenance" | "entry-points" = "community";
   let atRiskOnly = false;
   const filter: GraphFilter = { hideSuperseded: false, kinds: new Set(["wiki", "memory"]) };
 
-  const colorFor = (node: GraphNode): string =>
-    colorMode === "provenance"
-      ? provenanceColor(atRisk.has(node.id))
-      : nodeColor(node, colorMode);
+  // entry-point counts (TASK-27.14) are loaded lazily on first "entry-points"
+  // select, because the first /memory-links call may take ~47s (then cached).
+  let entryCounts: Record<string, number> | null = null;
+  let maxEntry = 0;
+
+  const colorFor = (node: GraphNode): string => {
+    if (colorMode === "provenance") return provenanceColor(atRisk.has(node.id));
+    if (colorMode === "entry-points") {
+      return entryCounts ? entryPointColor(entryCounts[node.id] ?? 0, maxEntry) : "#3a3f4a";
+    }
+    return nodeColor(node, colorMode);
+  };
 
   clear(host);
 
   // controls
   const modeSel = document.createElement("select");
-  for (const m of ["community", "status", "kind", "provenance"]) {
+  for (const m of ["community", "status", "kind", "provenance", "entry-points"]) {
     const o = document.createElement("option");
     o.value = m; o.textContent = `kleur: ${m}`;
     modeSel.appendChild(o);
@@ -136,10 +147,22 @@ export async function renderGraphLens(host: HTMLElement, client: DataClient): Pr
     graph.resumeAnimation();
   };
 
-  modeSel.addEventListener("change", () => {
-    colorMode = modeSel.value as ColorMode | "provenance";
+  modeSel.addEventListener("change", async () => {
+    colorMode = modeSel.value as ColorMode | "provenance" | "entry-points";
     clear(legendBox);
     legendBox.appendChild(legend(colorMode));
+    if (colorMode === "entry-points" && entryCounts === null) {
+      legendBox.appendChild(el("span", { class: "muted" }, [" · ingangen laden (kan even duren)…"]));
+      try {
+        const ml = await client.memoryLinks();
+        entryCounts = ml.counts ?? {};
+        maxEntry = Math.max(0, ...Object.values(entryCounts));
+      } catch { entryCounts = {}; }
+      if (!isCurrent(gen)) return;
+      clear(legendBox);
+      legendBox.appendChild(legend(colorMode));
+      apply(); // repaint with entry-point colours
+    }
   });
   supCb.addEventListener("change", () => {
     filter.hideSuperseded = supCb.checked;

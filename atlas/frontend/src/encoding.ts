@@ -25,6 +25,14 @@ export function provenanceColor(atRisk: boolean): string {
   return atRisk ? "#ec7063" : "#58d68d";
 }
 
+// Memory entry-points overlay: colour an article by how many memory fragments
+// point to it. 0 = a blind spot (dim grey); more entry points = brighter blue.
+export function entryPointColor(count: number, max: number): string {
+  if (count <= 0) return "#3a3f4a"; // blind spot: no way in for an agent
+  const t = max > 0 ? count / max : 0;
+  return `rgba(79,156,249,${(0.35 + 0.65 * t).toFixed(2)})`;
+}
+
 // Recency buckets for the Memory Health heatmap (age in days -> column).
 export const AGE_BUCKETS = ["0-7d", "8-30d", "31-90d", "90d+"] as const;
 export function ageBucket(ageDays: number): number {

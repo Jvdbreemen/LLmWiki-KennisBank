@@ -46,6 +46,13 @@ export interface Provenance {
 
 export interface Doc { status: string; path: string; title: string; content: string; }
 
+export interface MemoryLinks {
+  status: string;
+  links: Record<string, string>;   // fragment stem -> wiki article path
+  counts: Record<string, number>;  // wiki article path -> #entry points
+  types: Record<string, string>;   // fragment stem -> memory_type
+}
+
 export interface RecallHit { path: string; score: number; snippet: string; neighbor?: boolean; }
 export interface StageEntry { path: string; score: number; }
 export interface RerankEntry extends StageEntry { factors?: Record<string, number>; }
@@ -99,6 +106,7 @@ export class DataClient {
   doc(path: string): Promise<Doc> {
     return this.get<Doc>(`/doc?path=${encodeURIComponent(path)}`);
   }
+  memoryLinks(): Promise<MemoryLinks> { return this.get<MemoryLinks>("/memory-links"); }
   // Loopback URL for a vault image; <img src> loads it directly (no CORS issue
   // for image display). Returns null when no sidecar port is configured.
   assetUrl(path: string): string | null {

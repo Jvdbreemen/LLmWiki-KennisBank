@@ -178,3 +178,4 @@ body {
 .temp.t-warm { background: #58d68d33; color: #58d68d; }
 .temp.t-tepid { background: #f5b04133; color: #f5b041; }
 .temp.t-stale { background: #8a90a033; color: #8a90a0; }
+.insp-body .entry-points { margin-top: 18px; border-top: 1px solid #2a2f3a; padding-top: 10px; }

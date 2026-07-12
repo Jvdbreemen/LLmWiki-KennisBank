@@ -145,7 +145,7 @@ def create_app(
         try:
             return fn()
         except Exception:
-            return {"status": "degraded", "links": {}, "counts": {}}
+            return {"status": "degraded", "links": {}, "counts": {}, "types": {}}
 
     # Warm the memory-links cache in the background (~47s) so the overlay is
     # ready when the user opens it. Only when a real index exists (not in tests).
