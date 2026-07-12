@@ -15,6 +15,8 @@ from typing import Callable
 
 from fastapi import FastAPI
 
+from atlas.sidecar import sources
+
 VERSION = "0.1.0"
 
 
@@ -67,5 +69,9 @@ def create_app(
             "vault": str(vault),
             "sources": sources,
         }
+
+    @app.get("/graph")
+    def graph() -> dict:
+        return sources.build_graph(vault)
 
     return app
