@@ -81,6 +81,15 @@ def test_graph_joins_absolute_docs_path_to_relative_node(vault_factory):
     assert ids[WIKI_A]["layer"] == "wiki"
 
 
+def test_graph_joins_usage_warmth(vault_factory):
+    nodes = [{"id": "wiki_alpha", "label": "alpha.md", "source_file": WIKI_A}]
+    docs = [{"path": WIKI_A, "layer": "wiki", "status": "current", "title": "Alpha"}]
+    vault = vault_factory(nodes=nodes, links=[], docs=docs,
+                          usage=[{"stem": "alpha", "used": 7, "last_used": "2026-07-10"}])
+    ids = {n["id"]: n for n in _graph(vault)["nodes"]}
+    assert ids[WIKI_A]["warmth"] == 7.0
+
+
 def test_graph_fail_open_without_stores(tmp_path: Path):
     body = _graph(tmp_path)
     assert body["status"] == "empty"

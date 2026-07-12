@@ -148,3 +148,8 @@ body {
 .insp-body .wikilink:hover { background: #4f9cf922; }
 .insp-body a.extlink { color: #58d68d; }
 .insp-body .insp-img { max-width: 100%; height: auto; border-radius: 6px; margin: 8px 0; display: block; }
+
+/* wordcloud */
+.cloud { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; padding: 14px 0; line-height: 1.6; }
+.cloud-term { cursor: pointer; transition: opacity 0.1s; }
+.cloud-term:hover { opacity: 0.65; text-decoration: underline; }

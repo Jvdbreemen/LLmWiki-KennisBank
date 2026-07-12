@@ -77,11 +77,26 @@ def _is_kept(source_file: str | None) -> bool:
         source_file.startswith(_KEPT_PREFIXES)
 
 
+def usage_warmth(vault: Path) -> dict[str, float]:
+    """Map file stem -> warmth (usage `used` count) from kb-usage."""
+    conn = _connect_ro(vault / ".claude" / "kb-usage.db")
+    if conn is None:
+        return {}
+    try:
+        return {r["stem"]: float(r["used"] or 0)
+                for r in conn.execute("SELECT stem, used FROM usage")}
+    except Exception:
+        return {}
+    finally:
+        conn.close()
+
+
 def build_graph(vault: Path) -> dict:
     """Collapse the graphify graph to file-level wiki/memory nodes joined with
     kb-index, with file-level links and degree. See ADR-0004 /graph contract."""
     raw = load_graph(vault)
     docs = kbindex_docs(vault)
+    warmth = usage_warmth(vault)
 
     # slug -> source_file for every node (fragments included), so links that
     # touch a fragment resolve to that fragment's owning file.
@@ -110,7 +125,7 @@ def build_graph(vault: Path) -> dict:
             "community_name": n.get("community_name"),
             "memory_type": None,
             "importance": 0.0,
-            "warmth": 0.0,
+            "warmth": warmth.get(Path(sf).stem, 0.0),
             # created = capture-time axis for the Time-slider (wiki has no valid
             # time; memory keeps valid_from/valid_until for true validity).
             "created": meta.get("created") or None,
