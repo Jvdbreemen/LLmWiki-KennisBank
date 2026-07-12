@@ -82,4 +82,8 @@ def create_app(
             vault, bucket=bucket, frm=frm, to=to, dimension=dimension
         )
 
+    @app.get("/memory-health")
+    def memory_health() -> dict:
+        return sources.build_memory_health(vault)
+
     return app
