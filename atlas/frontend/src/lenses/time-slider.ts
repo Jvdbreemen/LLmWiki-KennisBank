@@ -8,6 +8,7 @@ import type { DataClient, Graph, GraphNode } from "../data-client";
 import { clear, el, withLoader } from "../dom";
 import { openInspect } from "../inspect";
 import { onLensLeave } from "../lifecycle";
+import { type TemporalNode, type TimeAxis, visibleAsOf } from "../timefilter";
 
 const nodeColor = (n: GraphNode): string =>
   n.kind === "memory" ? "#f5a623" : communityColor(n.community as number | null);
@@ -20,30 +21,40 @@ export function renderTimeSliderLens(host: HTMLElement, client: DataClient): Pro
       return;
     }
 
-    // capture-time axis: wiki uses `created`, memory falls back to valid_from.
-    const timeOf = (n: GraphNode): string | null =>
-      (n.created as string | null) ?? (n.valid_from as string | null) ?? null;
-    const dated = data.nodes
-      .map((n) => { const t = timeOf(n); return t ? Date.parse(t) : NaN; })
-      .filter((t) => !Number.isNaN(t));
+    let axis: TimeAxis = "capture";
+
+    const anyDate = (n: GraphNode): number[] =>
+      [n.created, (n as { valid_from?: string }).valid_from]
+        .map((v) => (v ? Date.parse(String(v)) : NaN))
+        .filter((t) => !Number.isNaN(t));
+    const dated = data.nodes.flatMap(anyDate);
     const hasTemporal = dated.length > 0;
     const minT = hasTemporal ? Math.min(...dated) : Date.now();
     const maxT = hasTemporal ? Math.max(...dated) : Date.now();
 
     clear(host);
     const canvas = el("div", { class: "graph-canvas" });
-    const label = el("span", { class: "slider-label" }, ["valid-as-of: nu"]);
+    const label = el("span", { class: "slider-label" }, ["as-of: nu"]);
     const slider = el("input", { type: "range" }) as HTMLInputElement;
     slider.min = "0";
     slider.max = "1000";
     slider.value = "1000";
     slider.disabled = !hasTemporal;
 
+    // axis toggle: capture-time (when known) vs valid-time (when true).
+    const axisSel = document.createElement("select");
+    for (const [v, t] of [["capture", "as: capture-tijd (wanneer bekend)"],
+                          ["valid", "as: valid-tijd (wanneer waar)"]] as const) {
+      const o = document.createElement("option");
+      o.value = v; o.textContent = t;
+      axisSel.appendChild(o);
+    }
+
     const note = hasTemporal
-      ? `capture-tijd over ${dated.length} nodes (wiki=created, memory=valid_from)`
+      ? `${data.nodes.length} nodes · valid_until exclusief · sleep om te scrubben`
       : "geen tijd-metadata op nodes; slider inactief";
 
-    host.appendChild(el("div", { class: "slider-bar" }, [label, slider, el("span", { class: "muted" }, [note])]));
+    host.appendChild(el("div", { class: "slider-bar" }, [axisSel, label, slider, el("span", { class: "muted" }, [note])]));
     host.appendChild(canvas);
 
     const graph = new ForceGraph(canvas)
@@ -58,22 +69,20 @@ export function renderTimeSliderLens(host: HTMLElement, client: DataClient): Pro
       .onEngineStop(() => graph.pauseAnimation());
 
     const apply = (asOf: number) => {
-      const nodes = data.nodes.filter((n) => {
-        const t = timeOf(n);
-        if (!t) return true; // no capture time known: always visible
-        return Date.parse(t) <= asOf;
-      });
+      const nodes = data.nodes.filter((n) => visibleAsOf(n as unknown as TemporalNode, asOf, axis));
       const ids = new Set(nodes.map((n) => n.id));
       const links = data.links.filter((l) => ids.has(l.source) && ids.has(l.target));
       graph.graphData({ nodes: nodes.map((n) => ({ ...n })), links: links.map((l) => ({ ...l })) });
     };
 
-    slider.addEventListener("input", () => {
-      const frac = Number(slider.value) / 1000;
-      const asOf = minT + frac * (maxT - minT);
-      label.textContent = `valid-as-of: ${new Date(asOf).toISOString().slice(0, 10)}`;
+    const asOfNow = () => minT + (Number(slider.value) / 1000) * (maxT - minT);
+    const refresh = () => {
+      const asOf = asOfNow();
+      label.textContent = `as-of: ${new Date(asOf).toISOString().slice(0, 10)}`;
       apply(asOf);
-    });
+    };
+    slider.addEventListener("input", refresh);
+    axisSel.addEventListener("change", () => { axis = axisSel.value as TimeAxis; refresh(); });
 
     const resize = () => graph.width(canvas.clientWidth).height(canvas.clientHeight);
     resize();
