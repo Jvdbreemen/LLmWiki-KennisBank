@@ -1,10 +1,10 @@
 ---
 id: TASK-27.2
 title: Atlas - FastAPI sidecar en data-API (localhost)
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-07-11 16:43'
-updated_date: '2026-07-11 22:05'
+updated_date: '2026-07-12 11:23'
 labels:
   - visualization
   - atlas
@@ -33,6 +33,20 @@ Endpoints: /graph (nodes+edges uit graphify + wiki/memory, encoding-velden), /ti
 - [ ] #4 Fail-open: ontbrekende index/DB/Ollama levert een lege-maar-geldige response + status-veld, geen crash. Bewijs: test met verwijderde DB.
 - [ ] #5 Hermetische tests met fixture-vault (temp DBs); niet-recall-endpoints draaien zonder Ollama, recall-test mockt de embedder. Bewijs: tests groen zonder GitHub/cloud.
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+FastAPI-sidecar (localhost-only) compleet met 6 endpoints, allen TDD (14 hermetische tests groen) + real-vault-validatie:
+- /health: 6 source-readiness-vlaggen, ollama live.
+- /graph: 1106 raw graph-nodes -> 95 file-level wiki-nodes + 161 links, join op vault-relatief POSIX-pad (kb-index bewaart absolute paden), self-loops gedropt, degree.
+- /timeline: 11198 activity-events -> 27 week-buckets bi-temporeel (event-tijd vs capture-tijd) in 0.76s.
+- /memory-health: 811 memories -> 753 active/48 superseded/10 unverified, 48 supersede-chains, 355 warmth-rows (kb-usage-join), 0.28s.
+- /provenance: 97 wiki -> 49 sourced/48 unsourced (herkomst-wikilink-heuristiek).
+- /recall: live waterfall, hergebruikt kb-recall.recall_hits (importlib voor hyphen-naam) + _embeddings; live-smoke 'OTGW settings REST contract' -> otgw-v2-settings-rest-contract.md #1. Hermetisch getest via injectie.
+Read-only bewezen (?mode=ro, hash-onveranderd na alle endpoints). Loopback-entrypoint (__main__) bindt enkel 127.0.0.1 op ephemeral poort, print ATLAS_PORT voor de Tauri-handshake, vault via KENNISBANK_VAULT (ADR-0002). requirements.txt toegevoegd (sqlite-vec nodig voor recall). E2E-smoke groen: netstat bevestigt loopback-only.
+Commits 040de22..2cefa6f op branch feat/atlas-sidecar. Stages-waterfall in /recall is nu leeg (best-effort); volledige per-stage-uitsplitsing = 27.8 Recall Inspector.
+<!-- SECTION:FINAL_SUMMARY:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
