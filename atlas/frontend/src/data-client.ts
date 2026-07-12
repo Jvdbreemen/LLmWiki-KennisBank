@@ -92,4 +92,9 @@ export class DataClient {
   doc(path: string): Promise<Doc> {
     return this.get<Doc>(`/doc?path=${encodeURIComponent(path)}`);
   }
+  // Loopback URL for a vault image; <img src> loads it directly (no CORS issue
+  // for image display). Returns null when no sidecar port is configured.
+  assetUrl(path: string): string | null {
+    return this.base ? `${this.base}/asset?path=${encodeURIComponent(path)}` : null;
+  }
 }

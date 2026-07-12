@@ -473,3 +473,24 @@ def read_doc(vault: Path, rel_path: str) -> dict:
             break
     return {"status": "ok", "path": target.relative_to(vault_root).as_posix(),
             "title": title, "content": content}
+
+
+_ASSET_TYPES = {
+    ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+    ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml",
+}
+
+
+def resolve_asset(vault: Path, rel_path: str) -> tuple[Path, str]:
+    """Validate and locate a vault image for /asset. Fail-closed: only known
+    image extensions, and the resolved path must stay inside the vault."""
+    ext = Path(rel_path).suffix.lower() if rel_path else ""
+    if ext not in _ASSET_TYPES:
+        raise DocError(400, "alleen afbeeldingen")
+    vault_root = vault.resolve()
+    target = (vault_root / rel_path).resolve()
+    if vault_root != target and vault_root not in target.parents:
+        raise DocError(400, "pad buiten de vault")
+    if not target.is_file():
+        raise DocError(404, "afbeelding niet gevonden")
+    return target, _ASSET_TYPES[ext]

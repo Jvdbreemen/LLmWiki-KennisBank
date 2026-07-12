@@ -142,3 +142,9 @@ body {
 .insp-body ul { margin: 6px 0; padding-left: 20px; color: #cfd3dc; }
 .insp-body pre { background: #0b0d12; padding: 10px; border-radius: 6px; overflow-x: auto; }
 .insp-body code { font-family: ui-monospace, monospace; font-size: 12px; }
+
+/* inspect links */
+.insp-body .wikilink { color: #4f9cf9; cursor: pointer; border-bottom: 1px dotted #4f9cf9; }
+.insp-body .wikilink:hover { background: #4f9cf922; }
+.insp-body a.extlink { color: #58d68d; }
+.insp-body .insp-img { max-width: 100%; height: auto; border-radius: 6px; margin: 8px 0; display: block; }

@@ -15,6 +15,7 @@ from typing import Callable
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from atlas.sidecar import sources
 
@@ -124,6 +125,14 @@ def create_app(
             return sources.read_doc(vault, path)
         except sources.DocError as exc:
             raise HTTPException(status_code=exc.code, detail=exc.detail)
+
+    @app.get("/asset")
+    def asset(path: str = ""):
+        try:
+            target, media = sources.resolve_asset(vault, path)
+        except sources.DocError as exc:
+            raise HTTPException(status_code=exc.code, detail=exc.detail)
+        return FileResponse(target, media_type=media)
 
     @app.get("/recall")
     def recall(q: str = "", k: int = 3) -> dict:
