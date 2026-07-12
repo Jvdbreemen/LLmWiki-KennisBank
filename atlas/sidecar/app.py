@@ -14,10 +14,20 @@ from pathlib import Path
 from typing import Callable
 
 from fastapi import FastAPI, Query
+from fastapi.middleware.cors import CORSMiddleware
 
 from atlas.sidecar import sources
 
 VERSION = "0.1.0"
+
+# The frontend is served cross-origin from the sidecar: a localhost dev port in
+# dev, and the Tauri webview origin (tauri://localhost, https://tauri.localhost
+# on Windows) when bundled. Allow those, reject everything else. Loopback-only
+# binding remains the real trust boundary.
+_CORS_ORIGIN_REGEX = (
+    r"^(https?://(localhost|127\.0\.0\.1)(:\d+)?|"
+    r"tauri://localhost|https://tauri\.localhost)$"
+)
 
 
 def _default_ollama_probe() -> bool:
@@ -60,6 +70,12 @@ def create_app(
 ) -> FastAPI:
     vault = Path(vault)
     app = FastAPI(title="KennisBank Atlas sidecar", version=VERSION)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=_CORS_ORIGIN_REGEX,
+        allow_methods=["GET"],
+        allow_headers=["*"],
+    )
 
     def _recall(q: str, k: int) -> dict:
         fn = recall_fn or (lambda query, top_k: sources.live_recall(vault, query, top_k))
