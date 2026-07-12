@@ -86,4 +86,8 @@ def create_app(
     def memory_health() -> dict:
         return sources.build_memory_health(vault)
 
+    @app.get("/provenance")
+    def provenance() -> dict:
+        return sources.build_provenance(vault)
+
     return app
