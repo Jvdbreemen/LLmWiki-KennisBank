@@ -7,6 +7,7 @@ import { communityColor } from "../colors";
 import type { DataClient, Graph, GraphNode } from "../data-client";
 import { clear, el, withLoader } from "../dom";
 import { openInspect } from "../inspect";
+import { onLensLeave } from "../lifecycle";
 
 const nodeColor = (n: GraphNode): string =>
   n.kind === "memory" ? "#f5a623" : communityColor(n.community as number | null);
@@ -52,7 +53,9 @@ export function renderTimeSliderLens(host: HTMLElement, client: DataClient): Pro
       .nodeVal((n: object) => 1 + (n as GraphNode).degree)
       .onNodeClick((n: object) => void openInspect(client, (n as GraphNode).id))
       .linkColor(() => "rgba(160,160,160,0.25)")
-      .backgroundColor("#0f1117");
+      .backgroundColor("#0f1117")
+      .cooldownTicks(120)
+      .onEngineStop(() => graph.pauseAnimation());
 
     const apply = (asOf: number) => {
       const nodes = data.nodes.filter((n) => {
@@ -75,6 +78,11 @@ export function renderTimeSliderLens(host: HTMLElement, client: DataClient): Pro
     const resize = () => graph.width(canvas.clientWidth).height(canvas.clientHeight);
     resize();
     window.addEventListener("resize", resize);
+    onLensLeave(() => {
+      window.removeEventListener("resize", resize);
+      graph.pauseAnimation();
+      graph.graphData({ nodes: [], links: [] });
+    });
     apply(maxT);
   });
 }

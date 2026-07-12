@@ -5,6 +5,7 @@ import ForceGraph from "force-graph";
 import { communityColor } from "../colors";
 import type { DataClient, Graph, GraphNode } from "../data-client";
 import { openInspect } from "../inspect";
+import { onLensLeave } from "../lifecycle";
 
 function nodeColor(n: GraphNode): string {
   // memory stands apart; wiki is coloured by its community cluster.
@@ -49,9 +50,18 @@ export async function renderGraphLens(el: HTMLElement, client: DataClient): Prom
     .nodeVal((n: object) => 1 + (n as GraphNode).degree)
     .onNodeClick((n: object) => void openInspect(client, (n as GraphNode).id))
     .linkColor(() => "rgba(160,160,160,0.25)")
-    .backgroundColor("#0f1117");
+    .backgroundColor("#0f1117")
+    // stop the rAF loop once the layout settles: saves CPU and lets the page
+    // reach idle (otherwise the animation loop runs forever).
+    .cooldownTicks(120)
+    .onEngineStop(() => graph.pauseAnimation());
 
   const resize = () => graph.width(el.clientWidth).height(el.clientHeight);
   resize();
   window.addEventListener("resize", resize);
+  onLensLeave(() => {
+    window.removeEventListener("resize", resize);
+    graph.pauseAnimation();
+    graph.graphData({ nodes: [], links: [] });
+  });
 }
