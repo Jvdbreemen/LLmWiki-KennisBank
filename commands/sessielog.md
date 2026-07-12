@@ -71,11 +71,11 @@ Dit verwerkt pending transcripts naar `09-memory/` (extract -> dedup -> judge ->
    ```bash
    DG=$(python3 -c "import sys; sys.path.insert(0,'$VAULT/.claude/scripts'); import _settings; print('1' if _settings.get('daily_graphify', True) else '0')")
    ```
-   - `daily_graphify` UIT (`DG=0`): sla de automatische `--update` deze sessie over. `.needs-rebuild` is al bijgewerkt (gratis). Meld "auto-graph uit via settings; draai handmatig `/graphify $VAULT --update`". Sla ook item 6 (auto-crosslinks) over en ga naar item 7.
+   - `daily_graphify` UIT (`DG=0`): sla de automatische `--update` deze sessie over. `.needs-rebuild` is al bijgewerkt (gratis). Meld "auto-graph uit via settings; draai handmatig `/graphify $VAULT/02-wiki --update`". Sla ook item 6 (auto-crosslinks) over en ga naar item 7.
    - `daily_graphify` AAN (`DG=1`): volg de bestaande dag-gate hieronder.
 
    DAN de dag-gate op de mtime van `$VAULT/graphify-out/graph.json`:
-   - graph.json OUDER dan ~20 uur (eerste sessie van de dag) EN .needs-rebuild niet leeg: roep `/graphify $VAULT --update` aan. Graphify's manifest batcht ALLE sinds de vorige run gewijzigde bestanden in een keer (cache slaat ongewijzigde over; subagents doen alleen de nieuwe), herclustert. Leeg daarna `.needs-rebuild`. PATCH DAN de tokenkost in cost.json (graphify logt een subagent-extractie op 0; graphify blijft ongemodificeerd, we corrigeren het hier in sessielog): tel de `usage.subagent_tokens` op van ALLE extractie-subagents die je tijdens deze `--update` dispatchte (de Agent-API geeft een gecombineerd getal, geen in/out-splitsing) en schrijf dat naar de laatste run. Vervang `<SUBAGENT_TOKENS>` door die som:
+   - graph.json OUDER dan ~20 uur (eerste sessie van de dag) EN .needs-rebuild niet leeg: roep `/graphify $VAULT/02-wiki --update` aan (scope is bewust `02-wiki`: alleen gedestilleerde kennis in de graaf, geen tooling/scripts). Graphify's manifest batcht ALLE sinds de vorige run gewijzigde bestanden in een keer (cache slaat ongewijzigde over; subagents doen alleen de nieuwe), herclustert. Leeg daarna `.needs-rebuild`. PATCH DAN de tokenkost in cost.json (graphify logt een subagent-extractie op 0; graphify blijft ongemodificeerd, we corrigeren het hier in sessielog): tel de `usage.subagent_tokens` op van ALLE extractie-subagents die je tijdens deze `--update` dispatchte (de Agent-API geeft een gecombineerd getal, geen in/out-splitsing) en schrijf dat naar de laatste run. Vervang `<SUBAGENT_TOKENS>` door die som:
      ```bash
      python3 - "<SUBAGENT_TOKENS>" <<'PY'
      import json, os, sys
@@ -104,7 +104,7 @@ Dit verwerkt pending transcripts naar `09-memory/` (extract -> dedup -> judge ->
 
 ## Stap 3: Graphify (afgehandeld in Stap 2, dagelijkse batch)
 
-De graph-update zit in Stap 2 item 5 als DAGELIJKSE BATCH om tokens te sparen: elke sessie schrijft naar `.needs-rebuild` (gratis), maar `/graphify --update` draait alleen op de eerste sessie waarop `graph.json` ouder is dan ~20u. Graphify's eigen manifest bepaalt welke bestanden sinds de vorige run wijzigden en batcht ze in een keer; de cache zorgt dat elk bestand maar een keer wordt geextraheerd. Reden voor dagelijks i.p.v. per-sessie: de LLM-kost is per-bestand-extractie, dus meerdere sessies per dag samenvoegen scheelt de subagent-spawn- en clusteroverhead en her-extractie van bestanden die meerdere keren per dag wijzigen. Wil je de graph tussendoor forceren: draai handmatig `/graphify $VAULT --update`. `.needs-rebuild` is het "er staat werk klaar"-signaal plus fallback wanneer graphify niet beschikbaar is.
+De graph-update zit in Stap 2 item 5 als DAGELIJKSE BATCH om tokens te sparen: elke sessie schrijft naar `.needs-rebuild` (gratis), maar `/graphify --update` draait alleen op de eerste sessie waarop `graph.json` ouder is dan ~20u. Graphify's eigen manifest bepaalt welke bestanden sinds de vorige run wijzigden en batcht ze in een keer; de cache zorgt dat elk bestand maar een keer wordt geextraheerd. Reden voor dagelijks i.p.v. per-sessie: de LLM-kost is per-bestand-extractie, dus meerdere sessies per dag samenvoegen scheelt de subagent-spawn- en clusteroverhead en her-extractie van bestanden die meerdere keren per dag wijzigen. Wil je de graph tussendoor forceren: draai handmatig `/graphify $VAULT/02-wiki --update`. `.needs-rebuild` is het "er staat werk klaar"-signaal plus fallback wanneer graphify niet beschikbaar is.
 
 ---
 

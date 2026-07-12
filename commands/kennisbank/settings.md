@@ -38,9 +38,18 @@ doet:
 - **memory_recall** - injecteer memories in de context via hook + lokale MCP. Uit = geen memory-retrieval bij sessiestart.
 - **usage_telemetry** - registreer welke geinjecteerde kennis daadwerkelijk gebruikt wordt (kb-usage.db; voedt ranking-boost en stale-warm-skip). Uit = geen gebruiksmeting.
 
-Vraag de gebruiker via `AskUserQuestion` (multiSelect) welke toggles AAN moeten
-staan. Vink vooraf exact de toggles aan die nu `1` zijn (uit stap 1), zodat de
-gebruiker alleen het verschil hoeft te kiezen.
+Vraag de gewenste staat tekstueel uit (NIET via `AskUserQuestion`: die tool
+staat maximaal 4 opties per vraag toe, en er zijn 7 toggles; een enkele
+multiSelect-vraag met 7 opties faalt met een `InputValidationError`).
+
+Toon de 7 toggles genummerd met hun huidige staat (aan/uit uit stap 1) en vraag
+de gebruiker welke moeten wijzigen, bijvoorbeeld: "Noem de toggles die je wilt
+omzetten (bv. `auto_archive uit, memory_recall aan`), of antwoord `niets` om de
+huidige staat te behouden." Neem voor elke niet-genoemde toggle de huidige
+waarde ongewijzigd over.
+
+Wil je toch de klik-UI van `AskUserQuestion` gebruiken, splits dan over
+meerdere vragen van maximaal 4 opties elk.
 
 ## Stap 3: Schrijf de keuze terug
 Voor ELKE canonieke toggle: aangevinkt -> `true`, niet-aangevinkt -> `false`.

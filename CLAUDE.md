@@ -44,6 +44,16 @@ Dit repo gebruikt Backlog.md (`backlog/`) als bron van waarheid voor werk. Regel
 Gebruik de `mcp__backlog__*`-tools (of de `backlog` CLI). Houd taken klein genoeg
 om los af te ronden.
 
+## Vault-root: altijd via `vault_root()`, nooit hardcoded
+
+Scripts bepalen de vault-root uitsluitend via `from _vaultpath import vault_root`
+en dan `vault_root()`. Schrijf NOOIT een hardcoded default zoals
+`Path.home() / "KennisBank"` of een letterlijk absoluut pad buiten `_vaultpath.py`.
+De resolver eerbiedigt `KENNISBANK_VAULT` en houdt scripts portable over machines
+en vault-namen (bv. `Kluis`). Dit is ADR-0002 (`docs/adr/0002-cross-platform-scripts.md`);
+het gaat keer op keer fout wanneer een deploy-kopie de resolver vervangt door een
+hardcoded pad, dus behandel elk hardcoded vault-pad als een regressie.
+
 ## Lokaal, altijd
 
 Niets gaat zonder expliciete toestemming naar de cloud. Lokale opslag (SQLite, markdown),
