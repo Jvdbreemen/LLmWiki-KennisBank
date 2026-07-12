@@ -6,6 +6,7 @@ import {
   nodeColor,
   nodeVal,
   passesFilter,
+  provenanceColor,
   statusColor,
   warmthHalo,
 } from "./encoding";
@@ -54,6 +55,13 @@ describe("warmthHalo", () => {
   it("is zero without usage and positive with usage", () => {
     expect(warmthHalo(node({ warmth: 0 }))).toBe(0);
     expect(warmthHalo(node({ warmth: 5 }))).toBeGreaterThan(0);
+  });
+});
+
+describe("provenanceColor", () => {
+  it("at-risk is red, sourced is green", () => {
+    expect(provenanceColor(true)).toBe("#ec7063");
+    expect(provenanceColor(false)).toBe("#58d68d");
   });
 });
 

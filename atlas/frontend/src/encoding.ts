@@ -20,6 +20,11 @@ export function statusColor(status: string): string {
   return STATUS_COLOR[status] ?? "#8a90a0";
 }
 
+// Provenance overlay colour: at-risk (no/dead herkomst per kb-lint) vs sourced.
+export function provenanceColor(atRisk: boolean): string {
+  return atRisk ? "#ec7063" : "#58d68d";
+}
+
 // Node colour by the selected channel. Community is the default (clusters read
 // at a glance); status/kind are alternates surfaced via the legend toggle.
 export function nodeColor(node: GraphNode, mode: ColorMode): string {

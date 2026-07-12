@@ -13,19 +13,22 @@ import {
   nodeColor,
   nodeVal,
   passesFilter,
+  provenanceColor,
   statusColor,
   warmthHalo,
 } from "../encoding";
 import { openInspect } from "../inspect";
 import { onLensLeave } from "../lifecycle";
 
-function legend(colorMode: ColorMode): HTMLElement {
+function legend(colorMode: ColorMode | "provenance"): HTMLElement {
   const items: [string, string][] =
     colorMode === "status"
       ? [["#58d68d", "current"], ["#f5b041", "unverified"], ["#8a90a0", "superseded"], ["#ec7063", "quarantined"]]
       : colorMode === "kind"
         ? [["#4f9cf9", "wiki"], ["#f5a623", "memory"]]
-        : [["#4f9cf9", "community-cluster (kleur = cluster)"], ["#f5a623", "memory"]];
+        : colorMode === "provenance"
+          ? [["#58d68d", "gesourcet (herkomst resolveert)"], ["#ec7063", "at-risk (geen/dode herkomst)"]]
+          : [["#4f9cf9", "community-cluster (kleur = cluster)"], ["#f5a623", "memory"]];
   const row = el("div", { class: "legend" }, [el("span", { class: "muted" }, ["kleur: "])]);
   for (const [c, label] of items) {
     const sw = el("span", { class: "swatch" }, []);
@@ -48,20 +51,31 @@ export async function renderGraphLens(host: HTMLElement, client: DataClient): Pr
     host.appendChild(el("div", { class: "error" }, [`graaf onbeschikbaar: ${(e as Error).message}`]));
     return;
   }
+  // provenance overlay data (at-risk = unsourced per kb-lint); fail-soft.
+  const atRisk = new Set<string>();
+  try {
+    for (const u of (await client.provenance()).unsourced) atRisk.add(u.path);
+  } catch { /* overlay simply shows nothing at-risk */ }
   if (data.status === "empty" || data.nodes.length === 0) {
     clear(host);
     host.appendChild(el("div", { class: "empty" }, ["geen graaf-data (bron niet beschikbaar)"]));
     return;
   }
 
-  let colorMode: ColorMode = "community";
+  let colorMode: ColorMode | "provenance" = "community";
+  let atRiskOnly = false;
   const filter: GraphFilter = { hideSuperseded: false, kinds: new Set(["wiki", "memory"]) };
+
+  const colorFor = (node: GraphNode): string =>
+    colorMode === "provenance"
+      ? provenanceColor(atRisk.has(node.id))
+      : nodeColor(node, colorMode);
 
   clear(host);
 
   // controls
   const modeSel = document.createElement("select");
-  for (const m of ["community", "status", "kind"] as ColorMode[]) {
+  for (const m of ["community", "status", "kind", "provenance"]) {
     const o = document.createElement("option");
     o.value = m; o.textContent = `kleur: ${m}`;
     modeSel.appendChild(o);
@@ -69,8 +83,11 @@ export async function renderGraphLens(host: HTMLElement, client: DataClient): Pr
   const supCb = document.createElement("input");
   supCb.type = "checkbox";
   const supLabel = el("label", {}, [supCb, "verberg superseded"]);
+  const riskCb = document.createElement("input");
+  riskCb.type = "checkbox";
+  const riskLabel = el("label", {}, [riskCb, "toon alleen at-risk (geen herkomst)"]);
   const legendBox = el("div", { class: "legend-box" }, [legend(colorMode)]);
-  const controls = el("div", { class: "graph-controls" }, [modeSel, supLabel, legendBox]);
+  const controls = el("div", { class: "graph-controls" }, [modeSel, supLabel, riskLabel, legendBox]);
   const canvas = el("div", { class: "graph-canvas" });
   host.appendChild(el("div", { class: "graph-wrap" }, [controls, canvas]));
 
@@ -93,7 +110,7 @@ export async function renderGraphLens(host: HTMLElement, client: DataClient): Pr
       }
       ctx.beginPath();
       ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
-      ctx.fillStyle = nodeColor(node, colorMode);
+      ctx.fillStyle = colorFor(node);
       ctx.fill();
       if (node.node_status !== "current" && node.node_status !== "active") {
         ctx.lineWidth = 1.5;
@@ -108,7 +125,9 @@ export async function renderGraphLens(host: HTMLElement, client: DataClient): Pr
     .onEngineStop(() => graph.pauseAnimation());
 
   const apply = () => {
-    const nodes = data.nodes.filter((n) => passesFilter(n, filter));
+    const nodes = data.nodes.filter(
+      (n) => passesFilter(n, filter) && (!atRiskOnly || atRisk.has(n.id)),
+    );
     const ids = new Set(nodes.map((n) => n.id));
     const links = data.links.filter((l) => ids.has(l.source) && ids.has(l.target));
     graph.graphData({ nodes: nodes.map((n) => ({ ...n })), links: links.map((l) => ({ ...l })) });
@@ -116,12 +135,16 @@ export async function renderGraphLens(host: HTMLElement, client: DataClient): Pr
   };
 
   modeSel.addEventListener("change", () => {
-    colorMode = modeSel.value as ColorMode;
+    colorMode = modeSel.value as ColorMode | "provenance";
     clear(legendBox);
     legendBox.appendChild(legend(colorMode));
   });
   supCb.addEventListener("change", () => {
     filter.hideSuperseded = supCb.checked;
+    apply();
+  });
+  riskCb.addEventListener("change", () => {
+    atRiskOnly = riskCb.checked;
     apply();
   });
 

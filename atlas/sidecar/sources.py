@@ -365,9 +365,35 @@ def _has_herkomst(text: str) -> bool:
 
 
 def build_provenance(vault: Path) -> dict:
-    """kb-lint-style provenance coverage over 02-wiki. A wiki article is
-    sourced when it carries a herkomst wikilink ([[raw-sessie-...]] or
-    [[05-bronnen/...]]). See ADR-0004 /provenance contract."""
+    """Provenance coverage over 02-wiki. Reuses the vault's kb-lint (data-parity,
+    TASK-27.9 DoD #1): an article is at-risk when kb-lint reports a missing,
+    dangling, or path-only herkomst. Falls back to a local herkomst-link
+    heuristic only when kb-lint cannot be loaded (e.g. a fixture vault)."""
+    try:
+        kb_lint = _load_vault_module(vault, "kb_lint", "kb-lint.py")
+        report = kb_lint.lint_vault(vault.resolve())
+        by_file: dict[str, list[dict]] = {}
+        for w in report.get("warnings", []):
+            by_file.setdefault(w["file"], []).append(w)
+        unsourced = [
+            {"path": f"02-wiki/{f}",
+             "reason": "; ".join(w["detail"] for w in ws),
+             "types": [w["type"] for w in ws]}
+            for f, ws in sorted(by_file.items())
+        ]
+        return {
+            "status": "ok",
+            "coverage": {"sourced": report["clean"], "unsourced": report["warned"],
+                         "total": report["articles"]},
+            "unsourced": unsourced,
+        }
+    except Exception:
+        return _provenance_heuristic(vault)
+
+
+def _provenance_heuristic(vault: Path) -> dict:
+    """Fallback: a wiki article is sourced when it carries a herkomst wikilink
+    ([[raw-sessie-...]] or [[05-bronnen/...]]). Used when kb-lint is absent."""
     wiki_dir = vault / "02-wiki"
     if not wiki_dir.is_dir():
         return {"status": "empty",
