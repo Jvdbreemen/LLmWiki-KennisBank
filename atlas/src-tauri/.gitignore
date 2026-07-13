@@ -1,0 +1,7 @@
+target/
+gen/
+binaries/
+icon-src.png
+icons/*
+!icons/icon.ico
+!icons/icon.png

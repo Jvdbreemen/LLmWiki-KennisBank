@@ -1,0 +1,12 @@
+{
+  "name": "kennisbank-atlas",
+  "private": true,
+  "version": "0.1.0",
+  "description": "KennisBank Atlas standalone app (Tauri shell + frozen sidecar)",
+  "scripts": {
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}
