@@ -100,6 +100,16 @@ CASES: list[dict] = [
     {"q": "5 days ago", "start": "2026-07-04"},
     {"q": "twee weken terug", "start": "2026-06-25"},
 
+    # --- weekday within a week N weeks back ("N weeks ago <weekday>") ---
+    # this Monday=2026-07-06, so two weeks back week starts 2026-06-22.
+    {"q": "two weeks ago thursday", "start": "2026-06-25", "end": "2026-06-26"},
+    {"q": "thursday two weeks ago", "start": "2026-06-25"},
+    {"q": "twee weken geleden donderdag", "start": "2026-06-25"},
+    {"q": "donderdag twee weken geleden", "start": "2026-06-25"},
+    {"q": "3 weeks ago monday", "start": "2026-06-15"},
+    {"q": "vor zwei wochen donnerstag", "start": "2026-06-25"},        # de prefix-ago
+    {"q": "jeudi il y a deux semaines", "start": "2026-06-25"},        # fr weekday-first prefix-ago
+
     # --- whole relative months ---
     {"q": "deze maand", "start": "2026-07-01", "end": "2026-08-01"},
     {"q": "vorige maand", "start": "2026-06-01", "end": "2026-07-01"},
