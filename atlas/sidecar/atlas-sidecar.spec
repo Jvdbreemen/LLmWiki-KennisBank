@@ -6,7 +6,11 @@
 #
 # sqlite-vec ships a native extension that PyInstaller must collect; the hidden
 # imports cover FastAPI/uvicorn/httpx pulled in dynamically.
+import os
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+
+# repo root (two up from atlas/sidecar) so `import atlas.sidecar` resolves.
+ROOT = os.path.abspath(os.path.join(os.getcwd(), "..", ".."))
 
 datas = collect_data_files("sqlite_vec")
 hiddenimports = (
@@ -17,7 +21,7 @@ hiddenimports = (
 
 a = Analysis(
     ["__main__.py"],
-    pathex=[],
+    pathex=[ROOT],
     binaries=[],
     datas=datas,
     hiddenimports=hiddenimports,
