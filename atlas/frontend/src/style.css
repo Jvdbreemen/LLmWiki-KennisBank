@@ -134,6 +134,13 @@ body {
 }
 .insp-title { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .insp-close { background: none; border: none; color: var(--muted); font-size: 22px; cursor: pointer; line-height: 1; }
+.insp-nav {
+  background: none; border: 1px solid #2a2f3a; border-radius: 4px;
+  color: var(--fg); font-size: 14px; cursor: pointer; line-height: 1;
+  padding: 3px 8px; margin-right: 6px; flex: none;
+}
+.insp-nav:hover:not(:disabled) { background: #ffffff10; }
+.insp-nav:disabled { color: #3a4150; border-color: #232833; cursor: default; }
 .insp-body { padding: 16px 20px; overflow-y: auto; height: calc(100vh - 49px); font-size: 13px; }
 .insp-body h1 { font-size: 18px; }
 .insp-body h2 { font-size: 15px; color: var(--fg); }
@@ -179,3 +186,13 @@ body {
 .temp.t-tepid { background: #f5b04133; color: #f5b041; }
 .temp.t-stale { background: #8a90a033; color: #8a90a0; }
 .insp-body .entry-points { margin-top: 18px; border-top: 1px solid #2a2f3a; padding-top: 10px; }
+
+/* memory entry-point accordion */
+.entry-points ul.list { list-style: none; padding-left: 0; }
+.acc-item { margin: 2px 0; }
+.acc-head { display: flex; align-items: baseline; gap: 6px; padding: 3px 6px; border-radius: 4px; }
+.acc-marker { flex: none; color: var(--muted); font-size: 11px; width: 12px; }
+.acc-body {
+  margin: 2px 0 8px 18px; padding: 6px 10px;
+  border-left: 2px solid #2a3550; background: #ffffff05; border-radius: 0 4px 4px 0;
+}
