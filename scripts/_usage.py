@@ -18,9 +18,14 @@ gemiste registratie is een miss, geen breuk. Gegate op de
 ``usage_telemetry``-toggle in kennisbank-settings.json (default aan).
 
 Tabellen:
-    usage(stem PK, injected, used, last_injected, last_used)
+    usage(stem PK, injected, used, noise, last_injected, last_used, last_noise)
     pending(session_id, stem, ts) - injecties die nog op hun einde-sessie
         transcript-scan wachten (kb-usage-scan.py, SessionEnd).
+
+Het noise-signaal (TASK-17, yesmem-les) is MENS-GATED: alleen een expliciete
+menselijke markering (kb-noise.py) verhoogt de teller. Geen judge, geen
+autonome down-weight; de ranking-penalty is deterministisch en begrensd
+(_rank.noise_factor).
 """
 from __future__ import annotations
 
@@ -63,7 +68,22 @@ def _connect():
     p.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(p), timeout=5.0)
     conn.executescript(_SCHEMA)
+    _migrate(conn)
     return conn
+
+
+def _migrate(conn) -> None:
+    """In-place schema-migratie: noise-kolommen op een bestaande usage-tabel.
+    CREATE IF NOT EXISTS raakt bestaande tabellen niet, dus nieuwe kolommen
+    komen via ALTER. Idempotent en fail-open."""
+    try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(usage)")}
+        if "noise" not in cols:
+            conn.execute("ALTER TABLE usage ADD COLUMN noise INTEGER NOT NULL DEFAULT 0")
+        if "last_noise" not in cols:
+            conn.execute("ALTER TABLE usage ADD COLUMN last_noise TEXT")
+    except Exception:
+        pass
 
 
 def enabled() -> bool:
@@ -114,6 +134,35 @@ def mark_used(stems, today: str | None = None) -> int:
         return len(stems)
     except Exception:
         return 0
+
+
+def mark_noise(stems, today: str | None = None) -> int:
+    """Registreer een expliciete mens-markering 'dit was ruis in mijn context'.
+    Returns aantal; 0 bij uit/fout (fail-open)."""
+    if not stems or not enabled():
+        return 0
+    day = today or date.today().isoformat()
+    try:
+        with closing(_connect()) as conn, conn:
+            for stem in stems:
+                conn.execute(
+                    "INSERT INTO usage(stem, noise, last_noise) VALUES(?,1,?) "
+                    "ON CONFLICT(stem) DO UPDATE SET noise=noise+1, last_noise=?",
+                    (stem, day, day))
+        return len(stems)
+    except Exception:
+        return 0
+
+
+def noise_of(stem: str) -> tuple[int, int]:
+    """(noise, injected) voor een stem; (0, 0) bij onbekend/fout."""
+    try:
+        with closing(_connect()) as conn, conn:
+            row = conn.execute(
+                "SELECT noise, injected FROM usage WHERE stem = ?", (stem,)).fetchone()
+        return (row[0] or 0, row[1] or 0) if row else (0, 0)
+    except Exception:
+        return (0, 0)
 
 
 def pending_for(session_id: str) -> list:

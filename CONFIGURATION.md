@@ -452,8 +452,9 @@ The five env vars below control the behavior of the vault-onderhoud scripts
 
 - **Default**: aan (`usage_telemetry`-toggle in `kennisbank-settings.json`).
 - **Where set**: `scripts/_usage.py` (store, `<vault>/.claude/kb-usage.db`); SessionEnd-hook `kb-usage-scan.py` in het hooks-manifest.
-- **Effect**: kb-retrieve logt geïnjecteerde stems; de SessionEnd-scan markeert stems die in assistant-tekst/tool-calls voorkwamen als gebruikt. Voedt de gebruiks-boost in `_rank.usage_factor` (×1.10 ≤30d, ×1.05 ≤90d, beide lagen) en de warm-skip in `stale-check.py` (recent gebruikt = niet staal).
-- **To change**: toggle uit via `/kennisbank:settings` of `_settings.py set usage_telemetry false`; boost-waarden in `_rank.py`.
+- **Effect**: kb-retrieve logt geïnjecteerde stems; de SessionEnd-scan markeert stems die in tool-calls voorkwamen als gebruikt. Voedt de gebruiks-boost in `_rank.usage_factor` (×1.10 ≤30d, ×1.05 ≤90d, beide lagen) en de warm-skip in `stale-check.py` (recent gebruikt = niet staal).
+- **Noise-signaal (mens-gated)**: `python3 kb-noise.py <stem> ...` markeert geïnjecteerde-maar-storende kennis expliciet als ruis (`--list` toont markeringen). De ranking drukt zulke stems begrensd omlaag via `_rank.noise_factor` (max −20% bij 100% noise-rate, vloer 0.8); zonder markeringen is de factor exact 1.0. Nooit autonoom: alleen de mens markeert.
+- **To change**: toggle uit via `/kennisbank:settings` of `_settings.py set usage_telemetry false`; boost/penalty-waarden in `_rank.py` (`USAGE_BOOST_*`, `NOISE_PENALTY`, `NOISE_FLOOR`).
 
 ### Drempel-kalibratie (`scripts/kb-calibrate.py`)
 
