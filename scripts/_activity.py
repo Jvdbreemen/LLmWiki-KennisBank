@@ -138,6 +138,7 @@ class TemporalRange:
     original_text: str
     topic: str = ""
     error: str = ""
+    warning: str = ""
     suggestions: tuple[str, ...] = ()
 
     @property
@@ -1235,6 +1236,30 @@ def _extract_topic_and_clean(text: str) -> tuple[str, str]:
     return topic, cleaned
 
 
+_RESIDUAL_TIME_RE = None  # lazily built; depends on merged locale tables
+
+
+def _residual_time_warning(topic: str) -> str:
+    """Detect strong temporal tokens (weekdays, ago-words, relative-day words)
+    left behind in an extracted topic. Such residue almost always means the
+    parser understood only part of a time expression and demoted the rest to a
+    topic filter — surface that instead of failing silently with zero hits."""
+    global _RESIDUAL_TIME_RE
+    if not topic:
+        return ""
+    if _RESIDUAL_TIME_RE is None:
+        strong = set(WEEKDAYS) | set(_AGO_SUFFIX) | set(_AGO_PREFIX) | set(_RELDAY)
+        _RESIDUAL_TIME_RE = re.compile(r"\b(?:" + _alt(strong) + r")\b")
+    m = _RESIDUAL_TIME_RE.search(topic.casefold())
+    if not m:
+        return ""
+    return (
+        f'Topic "{topic}" bevat tijdswoorden ({m.group(0)!r}) die niet als periode zijn '
+        "geparset; mogelijk een misparse. Probeer een expliciete datum (YYYY-MM-DD) "
+        "of herformuleer de periode."
+    )
+
+
 def _mk_range(start: datetime, end: datetime, label: str, granularity: str, original: str, topic: str = "", confidence: float = 0.95) -> TemporalRange:
     return TemporalRange(
         start=_dt_iso(start),
@@ -1245,6 +1270,7 @@ def _mk_range(start: datetime, end: datetime, label: str, granularity: str, orig
         confidence=confidence,
         original_text=original,
         topic=topic,
+        warning=_residual_time_warning(topic),
     )
 
 
@@ -1593,6 +1619,44 @@ def parse_period(text: str = "", *, now: datetime | None = None, tz: ZoneInfo = 
         rest = (query[: m.start()] + " " + query[m.end() :]).strip()
         topic = topic or rest
         return _mk_range(sat, sat + timedelta(days=2), f"weekend {sat.date().isoformat()}", "range", original, topic)
+
+    # A weekday within a week N weeks back, e.g. "two weeks ago thursday",
+    # "twee weken geleden donderdag", or weekday-first ("donderdag twee weken
+    # geleden"). Must run before the bare-weekday branch, which would otherwise
+    # grab the weekday and demote "N weeks ago" to a bogus topic, and before
+    # the generic "N unit ago" branch, which would drop the weekday.
+    _wd_alt = _alt(WEEKDAYS)
+    _week_units = _alt(w for w, f in _AGO_UNITS.items() if f == 7)
+    _n_alt = r"(\d{1,3}|" + _alt(_NUMBERS) + r")"
+    ago_weekday_patterns = []
+    if _AGO_SUFFIX:
+        _ago_sfx = _alt(_AGO_SUFFIX)
+        ago_weekday_patterns += [
+            r"\b" + _n_alt + r"\s+(?:" + _week_units + r")\s+(?:" + _ago_sfx + r")\s+(" + _wd_alt + r")\b",
+            r"\b(?P<wd>" + _wd_alt + r")\s+" + _n_alt + r"\s+(?:" + _week_units + r")\s+(?:" + _ago_sfx + r")\b",
+        ]
+    if _AGO_PREFIX:
+        _ago_pfx = _alt(_AGO_PREFIX)
+        ago_weekday_patterns += [
+            r"\b(?:" + _ago_pfx + r")\s+" + _n_alt + r"\s+(?:" + _week_units + r")\s+(" + _wd_alt + r")\b",
+            r"\b(?P<wd>" + _wd_alt + r")\s+(?:" + _ago_pfx + r")\s+" + _n_alt + r"\s+(?:" + _week_units + r")\b",
+        ]
+    for pat in ago_weekday_patterns:
+        m = re.search(pat, lower)
+        if not m:
+            continue
+        groups = m.groupdict()
+        if "wd" in groups and groups["wd"] is not None:
+            wd_tok, num_tok = groups["wd"], m.group(2)
+        else:
+            num_tok, wd_tok = m.group(1), m.group(2)
+        n = int(num_tok) if num_tok.isdigit() else _NUMBERS[num_tok]
+        n = max(0, min(520, n))
+        week_start = today_start - timedelta(days=today.weekday()) - timedelta(days=7 * n)
+        d = (week_start + timedelta(days=WEEKDAYS[wd_tok])).date()
+        rest = (query[: m.start()] + " " + query[m.end() :]).strip()
+        topic = topic or rest
+        return _mk_range(_date_start(d, tz), _date_start(d + timedelta(days=1), tz), d.isoformat(), "day", original, topic)
 
     # A relative weekday without an explicit week, e.g. "afgelopen zaterdag",
     # "komende vrijdag", or a bare "zaterdag". Past-facing words resolve to the
@@ -2064,6 +2128,8 @@ def what_did_i_do(
     if not period.ok:
         result["warnings"].append(period.error)
         return result
+    if period.warning:
+        result["warnings"].append(period.warning)
     span_days = _period_span_days(period)
     # Adaptive cap: a single day stays terse, a week or month lifts the ceiling
     # so a busy period is not truncated to one cluster. Explicit max_events wins.

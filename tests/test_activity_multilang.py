@@ -41,6 +41,16 @@ class MultilingualTemporalTest(unittest.TestCase):
                 errs = tat._check(case)
                 self.assertFalse(errs, f"{case['q']!r}: {'; '.join(errs)}")
 
+    def test_residual_time_words_warn(self):
+        """A topic that still contains strong temporal tokens (weekdays,
+        ago-words) must surface a warning instead of degrading silently."""
+        p = _activity.parse_period("vorige week release ago spul", now=_NOW)
+        self.assertTrue(p.ok)
+        self.assertIn("tijdswoorden", p.warning)
+        clean = _activity.parse_period("vorige week over mqtt", now=_NOW)
+        self.assertTrue(clean.ok)
+        self.assertEqual(clean.warning, "")
+
     def test_layer3_llm_fallback(self):
         """Layer 3: stubbed LLM last resort (flag-off bypass, resolve, cache,
         graceful bad-output). No live model or DB."""
