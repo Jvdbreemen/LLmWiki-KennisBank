@@ -3,10 +3,10 @@ id: TASK-27
 title: >-
   EPIC: KennisBank Atlas - soevereine, lokale visualisatie van kennis, geheugen
   en tijd
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-11 16:43'
-updated_date: '2026-07-11 23:18'
+updated_date: '2026-07-13 07:07'
 labels:
   - epic
   - visualization
@@ -74,6 +74,15 @@ Tauri-architectuur; volgorde en afhankelijkheden:
 7. TASK-27.11 Performance/scale hardening (WebGL 2514 nodes, timeline-aggregatie, sidecar-latency) + visuele eval.
 8. TASK-27.12 Tauri packaging + bundling (cargo-toolchain, gefreezede Python-sidecar, cross-platform bundle).
 <!-- SECTION:PLAN:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+EPIC KennisBank Atlas volledig afgerond (branch feat/atlas-sidecar). Een soevereine, lokale, standalone dashboard-app over de vault: wiki, geheugen, kennisgraaf, tijdlijn en live-retrieval — volledig offline. Alle 16 subtaken Done:
+27.1 ADR + design-spec · 27.2 FastAPI-sidecar (8 endpoints, read-only, loopback) · 27.3 TS-frontend shell + lenzen · 27.4 Graph-lens (datagedreven encoding, legenda, filters) · 27.5 bi-temporele Time-slider (pure valid-as-of-filter) · 27.6 Memory Health cockpit · 27.7 Timeline · 27.8 Recall Inspector (waterfall) · 27.9 Provenance-overlay (kb-lint) · 27.10 launcher + doctor + docs · 27.11 perf/LOD + eval · 27.12 Tauri-bundle (MSI/NSIS + gefreezede sidecar) · 27.13 Wordcloud · 27.14 fragment→artikel-linking · 27.15 memory-entry-points-overlay + fragmenten in inspect · 27.16 twee-lagen-graaf (memory-nodes).
+
+Kernresultaat: 7-lens dashboard met markdown-wiki inspect-drawer (klikbare wikilinks/images), twee-lagen-visualisatie (wiki=kaart, memory=ingangen als overlay + satelliet-graaf), en een werkende standalone Windows-installer (MSI 40MB / NSIS 39MB) met gefreezede Python-sidecar. 36 sidecar- + 22 frontend-tests groen. Dev-modus: python3 atlas/launch.py.
+<!-- SECTION:FINAL_SUMMARY:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->

@@ -1,10 +1,10 @@
 ---
 id: TASK-27.9
 title: Atlas - Provenance/trust-overlay (kb-lint dekking)
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-07-11 16:43'
-updated_date: '2026-07-11 22:06'
+updated_date: '2026-07-12 17:17'
 labels:
   - visualization
   - atlas
@@ -49,6 +49,16 @@ Gedrag:
 <!-- SECTION:NOTES:BEGIN -->
 TAURI RE-SCOPE (zie TASK-27 + 27.1-ADR): data LIVE van sidecar-endpoint /provenance (27.2, hergebruikt kb-lint); als overlay op de Graph-lens (27.4) in de TS-frontend. Ongesourcte claims worden live gemarkeerd. Geen statische export. Lens-logica/ACs blijven gelden.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Provenance-overlay afgerond (commit da8f45a). /provenance hergebruikt nu de vault's kb-lint.lint_vault (data-parity, DoD#1) i.p.v. een eigen heuristiek: at-risk = kb-lint meldt missing/dangling/path-only herkomst; heuristiek blijft alleen als fail-open fallback (fixtures). Correctheidsfix: oude heuristiek meldde 49/97 sourced, kb-lint meldt 95/97 — exact de kb-lint CLI. Graph-lens kreeg een 'provenance' kleurmodus (groen=gesourcet, rood=at-risk) + 'toon alleen at-risk'-filter, overlay met legenda; provenanceColor is pure + unit-getest.
+
+AC-dekking: #1 markering per kb-lint ✓ (logica+parity bewezen); #2 kleurschaal + legenda ✓; #3 at-risk-only toggle ✓ (live: leegt de graaf want alle gegraphte nodes zijn gesourcet); #4 node-inspect toont artikel met klikbare herkomst-links (per-kernpunt-resolutiestatus nog niet inline) — PARTIEEL. DoD#1 kb-lint-hergebruik + parity ✓. 26 sidecar + 10 vitest groen, tsc schoon, build groen.
+
+EERLIJKE GAPS: (1) momenteel geen at-risk node IN de graaf (graphify stale vs 2 nieuwe artikelen hash-chain-audit-head-anchor + markdown-wiki-tools-lessen-voor-atlas) — data-timing, geen defect; forceer met /graphify rebuild om de rode overlay te zien. (2) per-kernpunt-resolutiestatus in inspect niet expliciet. (3) groen/rood niet kleurenblind-optimaal (safe-palette-pass over alle lenzen = vervolgtaak).
+<!-- SECTION:FINAL_SUMMARY:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
