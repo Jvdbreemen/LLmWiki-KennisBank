@@ -74,8 +74,10 @@ def test_warmth_temperature_by_last_used(vault_factory):
         {"stem": "cold", "used": 1, "last_used": ago(120)},  # > 90d -> stale
     ]
     r = sources.build_memory_health(vault_factory(memories=memories, usage=usage), today=TODAY)
+    # stems resolve to their real doc path (memory fixtures live in 09-memory/)
     temp = {w["path"]: w["temperature"] for w in r["warmth"]}
-    assert temp == {"hot": "warm", "warm": "tepid", "cold": "stale"}
+    assert temp == {"09-memory/hot.md": "warm", "09-memory/warm.md": "tepid",
+                    "09-memory/cold.md": "stale"}
 
 
 def test_memory_health_fail_open_without_memory_dir(tmp_path: Path):

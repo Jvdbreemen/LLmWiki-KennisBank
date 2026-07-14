@@ -74,7 +74,9 @@ export function renderMemoryHealthLens(host: HTMLElement, client: DataClient): P
     for (const w of d.warmth.slice(0, 15)) {
       const badge = el("span", { class: `temp ${TEMP_CLASS[w.temperature] ?? ""}` }, [w.temperature]);
       const li = el("li", { class: "clickable" }, [badge, ` ${w.warmth.toFixed(0)}× · ${w.path}${w.last_used ? ` · ${w.last_used}` : ""}`]);
-      li.addEventListener("click", () => void openInspect(client, memPath(w.path)));
+      // The sidecar resolves warmth stems to real doc paths (wiki or memory);
+      // only fall back to the memory dir for a bare, unresolved stem.
+      li.addEventListener("click", () => void openInspect(client, w.path.includes("/") ? w.path : memPath(w.path)));
       warm.appendChild(li);
     }
 

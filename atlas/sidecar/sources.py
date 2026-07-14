@@ -413,6 +413,16 @@ def build_memory_health(vault: Path, *, today: date | None = None) -> dict:
     }
 
 
+def _stem_doc_path(vault: Path, stem: str) -> str:
+    """kb-usage stores bare stems (mostly wiki articles, sometimes memory
+    fragments). Resolve to the real vault-relative doc path so the UI can open
+    it; a bare stem passed through unresolved yields a 404 in the viewer."""
+    for prefix in ("02-wiki", "09-memory"):
+        if (vault / prefix / f"{stem}.md").exists():
+            return f"{prefix}/{stem}.md"
+    return stem
+
+
 def _memory_warmth(vault: Path, today: date | None = None) -> list[dict]:
     today = today or date.today()
     conn = _connect_ro(vault / ".claude" / "kb-usage.db")
@@ -427,7 +437,8 @@ def _memory_warmth(vault: Path, today: date | None = None) -> list[dict]:
     finally:
         conn.close()
     warm = [
-        {"path": r["stem"], "warmth": float(r["used"] or 0), "last_used": r["last_used"],
+        {"path": _stem_doc_path(vault, r["stem"]), "warmth": float(r["used"] or 0),
+         "last_used": r["last_used"],
          "temperature": _temperature(r["last_used"], today)}
         for r in rows
     ]
