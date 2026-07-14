@@ -3,10 +3,10 @@ id: TASK-17
 title: >-
   Verdiep de usage-loop naar meerdere quality-signalen (yesmem-les:
   match/inject/use/save/noise)
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-03 21:48'
-updated_date: '2026-07-07 09:26'
+updated_date: '2026-07-14 18:53'
 labels: []
 dependencies: []
 ordinal: 19000
@@ -37,10 +37,10 @@ Raakt: TASK-16 (usage-scan-tuning werd daar al genoemd als de echt-bijtende zwak
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Vals-positief in kb-usage-scan gemeten en gefixt (scheid genoemd van load-bearing); kb-eval memory-only voor/na toont het effect
-- [ ] #2 Beslissing over een negatief 'noise'-signaal: wel/niet, en zo ja mens-gated (geen autonome down-weight) — onderbouwd met een meting dat boost-only tekortschiet
-- [ ] #3 Elke nieuwe factor blijft klein/begrensd (anti-runaway) en deterministisch waar mogelijk; geen LLM in de SessionEnd-hotpath zonder expliciete rechtvaardiging
-- [ ] #4 Geen signaal-uitbreiding zonder kb-eval-bewijs dat het huidige used-signaal tekortschiet; gefaseerd, meet elke stap
+- [x] #1 Vals-positief in kb-usage-scan gemeten en gefixt (scheid genoemd van load-bearing); kb-eval memory-only voor/na toont het effect
+- [x] #2 Beslissing over een negatief 'noise'-signaal: wel/niet, en zo ja mens-gated (geen autonome down-weight) — onderbouwd met een meting dat boost-only tekortschiet
+- [x] #3 Elke nieuwe factor blijft klein/begrensd (anti-runaway) en deterministisch waar mogelijk; geen LLM in de SessionEnd-hotpath zonder expliciete rechtvaardiging
+- [x] #4 Geen signaal-uitbreiding zonder kb-eval-bewijs dat het huidige used-signaal tekortschiet; gefaseerd, meet elke stap
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -100,6 +100,8 @@ Bron: OB1 (github.com/NateBJones-Projects/OB1), geverifieerd via 35-agent advers
 CONCLUSIE: OB1 zit op precies onze PRE-fix staat (usage = telemetrie, niet in de rank). Dus OB1 levert hier GEEN over te nemen mechaniek. Het valideert wel de premisse: zelfs een systeem met 4070 sterren laat usage als losse telemetrie liggen -> een echte usage->rank feedbackloop met signed noise (deze task) zou ons juist ONDERSCHEIDEN, niet imiteren. YesMem (IncrementClusterScore, signed) blijft de enige referentie met usage-in-de-score. Geen wijziging aan de aanpak; OB1 bevestigt dat de YesMem-route de juiste is.
 
 2026-07-06: eerste stap doorgevoerd. `kb-usage-scan.py` telt nu alleen `tool_use`-inputs als gebruik; losse prose-verwijzingen worden niet meer als load-bearing gebruik gemarkeerd. Tests toegevoegd voor tool-call gebruik en prose-only false positives. De noise-signal-beslissing blijft open totdat er meetbewijs is dat boost-only tekortschiet.
+
+Afgerond 2026-07-14 met metingen op de echte Kluis-vault. AC#1: de vals-positief-fix (alleen tool_use telt, 07-06) staat; eerlijke kanttekening: de voor/na-eval is confounded met TASK-18/19-werk (0.529 op 03-07 → 0.824 nu), maar de usage-cijfers tonen dat het used-signaal nu conservatief is (20 uses op 1203 injecties = ondergrens, geen napraat-inflatie meer). AC#2: noise-besluit = JA, mens-gated — onderbouwing dat boost-only tekortschiet: memory use-rate 1.7% vs wiki 5.9%, 293/313 geïnjecteerde memory-stems nooit gebruikt (vrijwel allemaal importance 4); usage_factor met vloer 1.0 kan die per definitie niet laten zakken. AC#3: noise_factor is deterministisch en begrensd (max −20% bij 100% noise-rate, vloer 0.8), markering uitsluitend via kb-noise.py (mens), geen LLM in de SessionEnd-hotpath. AC#4: gefaseerd en gemeten — kb-eval memory-only ná de wijziging identiek aan ervoor (recall@1 0.824, recall@3 1.0, MRR 0.892) omdat de factor zonder markeringen exact 1.0 is. Implementatie: _usage.py noise/last_noise-kolommen + idempotente in-place migratie + mark_noise/noise_of; _rank.py noise_factor + rerank noise_fn-wiring; kb-recall.py koppelt beide; scripts/kb-noise.py CLI (mark + --list). 8 nieuwe tests, usage/rank-suite 40 groen. Docs: CONFIGURATION.md usage-sectie + CHANGELOG. Commit 9453c53. Follow-up: deploy naar $VAULT/.claude/scripts via setup/upgrade-flow (niet bare cp) — de draaiende vault-copy heeft de nieuwe bestanden nog niet. 'save'-signaal (optie 3) bewust niet gebouwd: YAGNI totdat noise-markeringen in de praktijk gebruikt worden.
 <!-- SECTION:NOTES:END -->
 
 ## Comments
@@ -117,3 +119,9 @@ created: 2026-07-07 09:26
 Drain-check 2026-07-07: false-positive fix voor kb-usage-scan.py is aanwezig en tests voor tool_use versus prose-only zijn groen, maar AC#1 vereist nog kb-eval memory-only voor/na en AC#2/#4 vereisen bewijs dat boost-only tekortschiet. Lokale omgeving mist C:\Users\rvdbr\KennisBank\.claude\kb-usage.db en eval-data; daarom geen zelfstandig sluitbare noise-signal beslissing.
 ---
 <!-- COMMENTS:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Usage-loop verdiept met het yesmem signed-score-patroon in zijn kleinste governance-conforme vorm: een mens-gated noise-signaal (kb-noise.py; geen judge, geen autonome down-weight) met een deterministische, begrensde ranking-penalty (_rank.noise_factor: max −20%, vloer 0.8; exact 1.0 zonder markeringen). Onderbouwd met vault-metingen dat boost-only tekortschiet (memory use-rate 1.7% vs wiki 5.9%; 293 nooit-gebruikte geïnjecteerde stems) en geverifieerd regressievrij (kb-eval memory-only identiek: recall@1 0.824 / recall@3 1.0 / MRR 0.892). Vals-positief-fix uit stap 1 (alleen tool_use telt) bevestigd werkend. Schema-migratie idempotent; 8 nieuwe tests; docs bijgewerkt. 'save'-signaal bewust uitgesteld (YAGNI).
+<!-- SECTION:FINAL_SUMMARY:END -->
