@@ -1,10 +1,10 @@
 ---
 id: TASK-27.5
 title: Atlas - bi-temporele time-slider (valid-as-of graph)
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-07-11 16:43'
-updated_date: '2026-07-11 22:05'
+updated_date: '2026-07-12 20:32'
 labels:
   - visualization
   - atlas
@@ -51,6 +51,16 @@ Gedrag:
 <!-- SECTION:NOTES:BEGIN -->
 TAURI RE-SCOPE (zie TASK-27 + 27.1-ADR): de valid-as-of filtering draait client-side in de TS-frontend op de /graph-data (met valid_from/valid_until) van de sidecar (27.2); canvas/WebGL-rerender bij scrub. Geen statische export. Lens-logica/encoding-ACs blijven gelden.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Bi-temporele time-slider afgerond (commit dfb6a0d). Valid-as-of-filter geextraheerd naar een pure, deterministische timefilter.ts (as-of ingespoten, geen klok) met 9 grens-unit-tests: valid_from inclusief, valid_until EXCLUSIEF, open-ended blijft geldig, atemporele nodes altijd zichtbaar, en de twee assen divergeren voor een laat-geimporteerd feit (valid sinds 2020, captured 2026). Time-slider gebruikt het + as-toggle: capture-tijd (wanneer bekend) vs valid-tijd (wanneer waar). Live: scrubben naar 2026-05-28 krimpt de graaf tot de toen-bestaande artikelen (kennis 'groeit').
+
+AC-dekking: #1 valid-as-of-semantiek (valid_from<=D<valid_until, exclusief) — pure functie volledig unit-getest ✓ (visueel beperkt door wiki-only /graph); #2 supersede-overgang — logica getest (node verdwijnt na valid_until) maar NIET visueel op wiki-only graaf (geen memory-nodes met valid_until in /graph) — EERLIJKE GAP; #3 bi-temporeel valid vs capture — pure functie getest voor late-import + as-toggle bekabeld (op wiki-only data ~gelijk, geen zichtbaar verschil) — EERLIJKE GAP; #4 deterministisch met ingespoten as_of + pure-functie-unit-tests ✓. DoD#2 geisoleerde pure functie + grens-tests ✓; DoD#1 scrub + node-set-per-datum + screenshot ✓; DoD#4 geen console-errors ✓. 22 vitest + 32 sidecar groen, tsc schoon, build groen.
+
+TERUGKERENDE DATA-SCOPE-GAP (27.4/27.9/27.5): /graph is wiki-only; memory-nodes met valid_from/valid_until zitten niet in de graaf, dus valid-tijd-as + supersede-overgangen zijn nog niet visueel te tonen op echte data. Logica compleet + getest; data mist de temporele vensters. Memory-nodes toevoegen aan /graph = aparte data-scope-taak (kandidaat-vervolg).
+<!-- SECTION:FINAL_SUMMARY:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->

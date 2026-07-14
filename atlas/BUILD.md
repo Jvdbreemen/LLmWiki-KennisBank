@@ -1,0 +1,67 @@
+# Building the standalone KennisBank Atlas app (TASK-27.12)
+
+The bundled desktop app wraps the frontend in a Tauri WebView2 shell and ships a
+**frozen** Python sidecar, so end users need neither Python nor Node. This is the
+ADR-0004 / ADR-007 "two runtimes to package" cost, made explicit.
+
+> Status: the scaffold (`atlas/src-tauri/`, `atlas/sidecar/atlas-sidecar.spec`) is
+> build-ready but has NOT been built here (no Rust toolchain in this env). Expect
+> to smoke-test `cargo tauri dev` once and adjust `main.rs`/config if needed.
+
+## Prerequisites (build machine only)
+
+- **Rust toolchain** via rustup (`cargo`) - https://rustup.rs
+- **Tauri CLI**: `cargo install tauri-cli --version '^2'` (or `npm i -g @tauri-apps/cli`)
+- **WebView2 runtime** (present on modern Windows; the installer can bundle it)
+- **PyInstaller**: `pip install pyinstaller`
+- The frontend deps: `cd atlas/frontend && npm install`
+
+`python3 atlas/doctor.py` reports whether `cargo` is present (it is optional -
+only needed here).
+
+## Steps (Windows)
+
+1. Freeze the sidecar (**onedir** — onefile re-extracts ~76MB per launch and
+   antivirus rescans it every time, giving cold starts of minutes under load):
+   ```bash
+   cd atlas/sidecar && pyinstaller atlas-sidecar.spec
+   ```
+   This produces `dist/atlas-sidecar/atlas-sidecar.exe` + `dist/atlas-sidecar/_internal/`.
+
+2. Place both where Tauri expects them (exe renamed with the Rust target
+   triple; `_internal` is mapped into the install root via `resources` in
+   `tauri.conf.json` so the exe finds it at runtime):
+   ```bash
+   cd ../src-tauri/binaries
+   cp ../../sidecar/dist/atlas-sidecar/atlas-sidecar.exe atlas-sidecar-x86_64-pc-windows-msvc.exe
+   cp -r ../../sidecar/dist/atlas-sidecar/_internal _internal
+   ```
+
+3. Build the app (this also runs `npm run build` for the frontend via
+   `beforeBuildCommand`). NB: on this machine the Tauri CLI is the npm one,
+   not `cargo tauri`:
+   ```bash
+   cd atlas/src-tauri && npx --yes @tauri-apps/cli@^2 build
+   ```
+   The MSI/NSIS installer lands in `target/release/bundle/`.
+
+## Runtime model
+
+- The shell picks a free loopback port, spawns the frozen sidecar bound to
+  `127.0.0.1` on it, and injects the port into the webview
+  (`window.__ATLAS_PORT__`) before the frontend loads.
+- The sidecar child is owned by the shell and dies with the app (no orphan).
+- Fully offline: the CSP allows only `self` + `http://127.0.0.1:*`; the sidecar
+  calls only local stores and local Ollama. Dependency downloads happen at BUILD
+  time only.
+
+## Size expectation
+
+- Tauri shell: well under 10 MB (reuses the OS WebView2, no bundled Chromium).
+- Frozen sidecar: tens of MB (Python runtime + FastAPI + sqlite-vec). Total is a
+  fraction of an Electron app's 100 MB+.
+
+## Code signing
+
+Out of scope; documented. Unsigned installers show a SmartScreen prompt on first
+run. Sign with a code-signing certificate for distribution if desired.

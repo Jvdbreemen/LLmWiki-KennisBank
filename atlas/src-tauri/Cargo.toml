@@ -1,0 +1,18 @@
+[package]
+name = "kennisbank-atlas"
+version = "0.1.0"
+description = "KennisBank Atlas - local-first knowledge/memory dashboard"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[features]
+# by default Tauri runs in production mode; `cargo tauri dev` overrides.
+custom-protocol = ["tauri/custom-protocol"]

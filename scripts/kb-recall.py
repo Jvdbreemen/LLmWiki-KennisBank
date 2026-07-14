@@ -94,9 +94,11 @@ def recall_hits(query_vector, query_text: str = "", k: int = 3,
         try:
             import _usage
             _lu = _usage.last_used_of
+            _nf = _usage.noise_of
         except Exception:
             _lu = None
-        out = _rank.rerank(out, _frontmatter_of, last_used_fn=_lu)
+            _nf = None
+        out = _rank.rerank(out, _frontmatter_of, last_used_fn=_lu, noise_fn=_nf)
         if expand and out:
             try:
                 root = _vault_root()

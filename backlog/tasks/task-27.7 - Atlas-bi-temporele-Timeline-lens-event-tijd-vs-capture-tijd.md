@@ -1,10 +1,10 @@
 ---
 id: TASK-27.7
 title: Atlas - bi-temporele Timeline-lens (event-tijd vs capture-tijd)
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-07-11 16:43'
-updated_date: '2026-07-11 22:05'
+updated_date: '2026-07-14 18:33'
 labels:
   - visualization
   - atlas
@@ -51,6 +51,12 @@ Gedrag:
 <!-- SECTION:NOTES:BEGIN -->
 TAURI RE-SCOPE (zie TASK-27 + 27.1-ADR): data LIVE van sidecar-endpoint /timeline (27.2), dat de 10.868 events server-side AGGREGEERT naar buckets (event-tijd + capture-tijd rijen); gerenderd in de TS-frontend (canvas voor dichtheid). Geen statische export. Lens-logica/ACs blijven gelden.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Superseded door TASK-27.18: de Timeline-lens is gebouwd (wekelijkse buckets, event-tijd vs capture-tijd) maar na Roberts smoke-test-review bewust verwijderd — balkjes zonder drill-down of handelingsperspectief beantwoordden geen vraag. De /timeline-sidecar-endpoint en de bi-temporele datastroom blijven bestaan; een eventuele herintroductie vereist drill-down naar activity-events (zie notes 27.18).
+<!-- SECTION:FINAL_SUMMARY:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->

@@ -99,8 +99,23 @@ def usage_factor(last_used_iso: str, today: date | None = None) -> float:
     return 1.0
 
 
+#: Noise-penalty (TASK-17, yesmem signed-patroon): een mens-gemarkeerd
+#: ruis-document mag ONDER 1.0 zakken — begrensd, deterministisch, en
+#: uitsluitend gevoed door expliciete markeringen (kb-noise.py).
+NOISE_PENALTY = 0.20   # maximale aftrek bij 100% noise-rate
+NOISE_FLOOR = 0.80     # anti-runaway ondergrens
+
+
+def noise_factor(noise: int, injected: int) -> float:
+    """Signed tegenhanger van usage_factor. Zonder markeringen exact 1.0
+    (ranking identiek aan voorheen); met markeringen begrensd omlaag."""
+    if noise <= 0 or injected <= 0:
+        return 1.0
+    return max(NOISE_FLOOR, 1.0 - NOISE_PENALTY * min(1.0, noise / injected))
+
+
 def rerank(hits: list, meta_fn, today: date | None = None,
-           last_used_fn=None) -> list:
+           last_used_fn=None, noise_fn=None) -> list:
     """Herweeg hits op relevance x recency x importance x usage, hersorteer.
 
     ``hits``: dicts met minstens ``path``, ``layer``, ``score``.
@@ -108,6 +123,8 @@ def rerank(hits: list, meta_fn, today: date | None = None,
     ``last_used_fn(stem) -> iso-datum``: usage-telemetrie-reader (optioneel);
     de gebruiks-boost geldt voor BEIDE lagen (een warm wiki-artikel is
     bewezen nuttig), recency/importance alleen voor de memory-laag.
+    ``noise_fn(stem) -> (noise, injected)``: mens-gemarkeerde ruis (optioneel);
+    drukt de score begrensd onder 1.0 (noise_factor).
     Geeft een NIEUWE lijst terug.
     """
     today = today or date.today()
@@ -125,9 +142,15 @@ def rerank(hits: list, meta_fn, today: date | None = None,
                                       fm.get("memory_type", "feit"))
                      * importance_factor(fm.get("importance", 3))
                      * trust_factor(fm.get("evidence_basis")))
+        stem = Path(h.get("path", "")).stem
         if last_used_fn is not None:
             try:
-                score *= usage_factor(last_used_fn(Path(h.get("path", "")).stem), today)
+                score *= usage_factor(last_used_fn(stem), today)
+            except Exception:
+                pass
+        if noise_fn is not None:
+            try:
+                score *= noise_factor(*noise_fn(stem))
             except Exception:
                 pass
         out.append({**h, "score": score})

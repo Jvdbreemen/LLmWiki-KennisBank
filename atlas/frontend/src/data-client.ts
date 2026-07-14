@@ -1,0 +1,148 @@
+// The single module that talks to the sidecar. The localhost-only invariant is
+// enforced here in code: the base URL is always 127.0.0.1 on the negotiated
+// port, and no other module issues network calls (ADR-0004 module boundaries).
+
+export interface Health {
+  status: string;
+  version: string;
+  vault: string;
+  sources: Record<string, boolean>;
+}
+
+export interface GraphNode {
+  id: string;
+  label: string;
+  kind: "wiki" | "memory";
+  layer: string;
+  node_status: string;
+  degree: number;
+  [k: string]: unknown;
+}
+export interface GraphLink { source: string; target: string; rel: string; weight: number; }
+export interface Graph { status: string; nodes: GraphNode[]; links: GraphLink[]; }
+
+export interface TimelineBucket {
+  start: string; end: string;
+  event_count: number; capture_count: number;
+  by_kind: Record<string, number>;
+}
+export interface Timeline { status: string; buckets: TimelineBucket[]; }
+
+export interface MemoryHealth {
+  status: string;
+  counts: { active: number; quarantined: number; superseded: number; unverified: number };
+  queue: { id: string; importance: number; created: string }[];
+  supersede_chains: { head: string; chain: string[]; missing?: string[]; valid_until: string | null }[];
+  heatmap: { id: string; importance: number; age_days: number }[];
+  warmth: { path: string; warmth: number; last_used: string | null; temperature: string }[];
+  quarantine: { id: string; reason: string }[];
+}
+
+export interface Provenance {
+  status: string;
+  coverage: { sourced: number; unsourced: number; total: number };
+  unsourced: { path: string; reason: string }[];
+}
+
+export interface Doc { status: string; path: string; title: string; content: string; }
+
+export interface MemoryLinks {
+  status: string;
+  links: Record<string, string>;   // fragment stem -> wiki article path
+  counts: Record<string, number>;  // wiki article path -> #entry points
+  types: Record<string, string>;   // fragment stem -> memory_type
+}
+
+export interface Overview {
+  status: string;
+  wiki: { total: number; by_status: Record<string, number> };
+  memory: { active: number; quarantined: number; superseded: number; unverified: number };
+  memory_status: string;
+  raw: { sessies: number; transcripts: number };
+  inbox_waiting: number;
+  provenance: { sourced: number; total: number };
+  graph_stale: boolean;
+}
+
+export interface DecideResult { status: string; stem: string; new_status: string; }
+
+export interface RecallHit { path: string; score: number; snippet: string; neighbor?: boolean; }
+export interface StageEntry { path: string; score: number; }
+export interface RerankEntry extends StageEntry { factors?: Record<string, number>; }
+export interface RecallStages {
+  vector: StageEntry[]; fts: StageEntry[]; rrf: StageEntry[]; rerank: RerankEntry[];
+}
+export interface Recall {
+  status: string; query: string;
+  stages: RecallStages;
+  final: RecallHit[];
+}
+
+function resolvePort(): number | null {
+  // Tauri injects the sidecar port; in dev pass ?port=NNNN.
+  const fromGlobal = (window as unknown as { __ATLAS_PORT__?: number }).__ATLAS_PORT__;
+  if (typeof fromGlobal === "number") return fromGlobal;
+  const p = new URLSearchParams(location.search).get("port");
+  return p ? Number(p) : null;
+}
+
+export class DataClient {
+  private readonly base: string | null;
+
+  constructor(port: number | null = resolvePort()) {
+    this.base = port ? `http://127.0.0.1:${port}` : null;
+  }
+
+  get configured(): boolean {
+    return this.base !== null;
+  }
+
+  private guardBase(): string {
+    if (!this.base) throw new Error("no sidecar port; pass ?port=NNNN");
+    // Hard guard: never allow a non-loopback base to slip through.
+    if (!this.base.startsWith("http://127.0.0.1:")) {
+      throw new Error(`refusing non-loopback base: ${this.base}`);
+    }
+    return this.base;
+  }
+
+  private async get<T>(path: string): Promise<T> {
+    const resp = await fetch(this.guardBase() + path);
+    if (!resp.ok) throw new Error(`${path} -> HTTP ${resp.status}`);
+    return resp.json() as Promise<T>;
+  }
+
+  private async post<T>(path: string, body: unknown): Promise<T> {
+    const resp = await fetch(this.guardBase() + path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) throw new Error(`${path} -> HTTP ${resp.status}`);
+    return resp.json() as Promise<T>;
+  }
+
+  health(): Promise<Health> { return this.get<Health>("/health"); }
+  graph(includeMemory = false): Promise<Graph> {
+    return this.get<Graph>(`/graph${includeMemory ? "?include_memory=1" : ""}`);
+  }
+  timeline(): Promise<Timeline> { return this.get<Timeline>("/timeline?bucket=week"); }
+  memoryHealth(): Promise<MemoryHealth> { return this.get<MemoryHealth>("/memory-health"); }
+  provenance(): Promise<Provenance> { return this.get<Provenance>("/provenance"); }
+  recall(q: string, k = 5): Promise<Recall> {
+    return this.get<Recall>(`/recall?q=${encodeURIComponent(q)}&k=${k}`);
+  }
+  doc(path: string): Promise<Doc> {
+    return this.get<Doc>(`/doc?path=${encodeURIComponent(path)}`);
+  }
+  memoryLinks(): Promise<MemoryLinks> { return this.get<MemoryLinks>("/memory-links"); }
+  overview(): Promise<Overview> { return this.get<Overview>("/overview"); }
+  decideMemory(stem: string, decision: "approve" | "reject"): Promise<DecideResult> {
+    return this.post<DecideResult>("/memory/decide", { stem, decision });
+  }
+  // Loopback URL for a vault image; <img src> loads it directly (no CORS issue
+  // for image display). Returns null when no sidecar port is configured.
+  assetUrl(path: string): string | null {
+    return this.base ? `${this.base}/asset?path=${encodeURIComponent(path)}` : null;
+  }
+}
