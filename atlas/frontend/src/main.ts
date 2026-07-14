@@ -10,6 +10,7 @@ import { renderTimelineLens } from "./lenses/timeline";
 import { renderRecallLens } from "./lenses/recall";
 import { renderProvenanceLens } from "./lenses/provenance";
 import { renderWordcloudLens } from "./lenses/wordcloud";
+import { waitUntilReady } from "./readiness";
 import "./style.css";
 
 interface Lens {
@@ -30,33 +31,39 @@ const LENSES: Lens[] = [
 
 const client = new DataClient();
 
-function renderStatusbar(bar: HTMLElement): void {
+// Wait for the sidecar before rendering anything data-driven: the frozen
+// (PyInstaller) sidecar needs seconds to boot, and a single un-retried fetch
+// at startup loses that race with a permanent "Failed to fetch".
+async function connectSidecar(bar: HTMLElement): Promise<boolean> {
   bar.replaceChildren();
   const span = document.createElement("span");
+  bar.appendChild(span);
   if (!client.configured) {
     span.className = "warn";
     span.textContent = "geen sidecar-poort — start met ?port=NNNN";
-    bar.appendChild(span);
-    return;
+    return false;
   }
-  span.textContent = "sidecar verbinden…";
-  bar.appendChild(span);
-  client
-    .health()
-    .then((h) => {
-      const live = Object.entries(h.sources)
-        .filter(([, v]) => v)
-        .map(([k]) => k);
-      span.className = h.status === "ok" ? "ok" : "warn";
-      span.textContent = `sidecar ${h.status} · v${h.version} · bronnen: ${live.join(", ") || "geen"}`;
-    })
-    .catch((e) => {
-      span.className = "error";
-      span.textContent = `sidecar onbereikbaar: ${(e as Error).message}`;
-    });
+  span.textContent = "sidecar starten…";
+  try {
+    // 60s budget: the frozen sidecar's first boot after install can take tens
+    // of seconds (onefile extraction + AV scan); later boots are seconds.
+    const h = await waitUntilReady(() => client.health(), { timeoutMs: 60_000 });
+    const live = Object.entries(h.sources)
+      .filter(([, v]) => v)
+      .map(([k]) => k);
+    span.className = h.status === "ok" ? "ok" : "warn";
+    // Show the resolved vault path (from KENNISBANK_VAULT via the sidecar) so
+    // the user can verify at a glance that the right vault was picked up.
+    span.textContent = `sidecar ${h.status} · v${h.version} · vault: ${h.vault} · bronnen: ${live.join(", ") || "geen"}`;
+    return true;
+  } catch (e) {
+    span.className = "error";
+    span.textContent = `sidecar onbereikbaar: ${(e as Error).message}`;
+    return false;
+  }
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const tabs = document.getElementById("tabs")!;
   const bar = document.getElementById("statusbar")!;
   const lens = document.getElementById("lens")!;
@@ -81,8 +88,11 @@ function main(): void {
     tabs.appendChild(btn);
   }
 
-  renderStatusbar(bar);
+  // Gate the first lens render on sidecar readiness; tabs stay clickable and a
+  // manual tab switch simply retries the fetch.
+  lens.textContent = "wachten op sidecar…";
+  await connectSidecar(bar);
   select(active);
 }
 
-main();
+void main();
