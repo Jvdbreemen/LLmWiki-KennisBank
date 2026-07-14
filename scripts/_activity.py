@@ -1628,17 +1628,20 @@ def parse_period(text: str = "", *, now: datetime | None = None, tz: ZoneInfo = 
     _wd_alt = _alt(WEEKDAYS)
     _week_units = _alt(w for w, f in _AGO_UNITS.items() if f == 7)
     _n_alt = r"(\d{1,3}|" + _alt(_NUMBERS) + r")"
+    # Optional connector before the weekday: "twee weken geleden OP donderdag",
+    # "two weeks ago ON thursday", "vor zwei wochen AM donnerstag".
+    _wd_conn = r"(?:(?:op|on|am|le|el)\s+)?"
     ago_weekday_patterns = []
     if _AGO_SUFFIX:
         _ago_sfx = _alt(_AGO_SUFFIX)
         ago_weekday_patterns += [
-            r"\b" + _n_alt + r"\s+(?:" + _week_units + r")\s+(?:" + _ago_sfx + r")\s+(" + _wd_alt + r")\b",
+            r"\b" + _n_alt + r"\s+(?:" + _week_units + r")\s+(?:" + _ago_sfx + r")\s+" + _wd_conn + r"(" + _wd_alt + r")\b",
             r"\b(?P<wd>" + _wd_alt + r")\s+" + _n_alt + r"\s+(?:" + _week_units + r")\s+(?:" + _ago_sfx + r")\b",
         ]
     if _AGO_PREFIX:
         _ago_pfx = _alt(_AGO_PREFIX)
         ago_weekday_patterns += [
-            r"\b(?:" + _ago_pfx + r")\s+" + _n_alt + r"\s+(?:" + _week_units + r")\s+(" + _wd_alt + r")\b",
+            r"\b(?:" + _ago_pfx + r")\s+" + _n_alt + r"\s+(?:" + _week_units + r")\s+" + _wd_conn + r"(" + _wd_alt + r")\b",
             r"\b(?P<wd>" + _wd_alt + r")\s+(?:" + _ago_pfx + r")\s+" + _n_alt + r"\s+(?:" + _week_units + r")\b",
         ]
     for pat in ago_weekday_patterns:

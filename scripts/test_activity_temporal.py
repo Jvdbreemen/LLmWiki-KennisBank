@@ -107,7 +107,10 @@ CASES: list[dict] = [
     {"q": "twee weken geleden donderdag", "start": "2026-06-25"},
     {"q": "donderdag twee weken geleden", "start": "2026-06-25"},
     {"q": "3 weeks ago monday", "start": "2026-06-15"},
+    {"q": "twee weken geleden op donderdag", "start": "2026-06-25"},   # nl connector "op"
+    {"q": "two weeks ago on thursday", "start": "2026-06-25"},         # en connector "on"
     {"q": "vor zwei wochen donnerstag", "start": "2026-06-25"},        # de prefix-ago
+    {"q": "vor zwei wochen am donnerstag", "start": "2026-06-25"},     # de connector "am"
     {"q": "jeudi il y a deux semaines", "start": "2026-06-25"},        # fr weekday-first prefix-ago
 
     # --- whole relative months ---
