@@ -76,7 +76,8 @@ def create_app(
     app.add_middleware(
         CORSMiddleware,
         allow_origin_regex=_CORS_ORIGIN_REGEX,
-        allow_methods=["GET"],
+        # POST covers exactly one route: /memory/decide (approve/reject).
+        allow_methods=["GET", "POST"],
         allow_headers=["*"],
     )
 
@@ -116,6 +117,19 @@ def create_app(
     @app.get("/memory-health")
     def memory_health() -> dict:
         return sources.build_memory_health(vault)
+
+    @app.get("/overview")
+    def overview() -> dict:
+        return sources.build_overview(vault)
+
+    @app.post("/memory/decide")
+    def memory_decide(payload: dict) -> dict:
+        try:
+            return sources.decide_memory(
+                vault, str(payload.get("stem", "")), str(payload.get("decision", ""))
+            )
+        except sources.DocError as exc:
+            raise HTTPException(status_code=exc.code, detail=exc.detail)
 
     @app.get("/provenance")
     def provenance() -> dict:

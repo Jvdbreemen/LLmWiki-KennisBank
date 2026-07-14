@@ -4,11 +4,10 @@
 import { DataClient } from "./data-client";
 import { newGeneration, runLensLeave } from "./lifecycle";
 import { renderGraphLens } from "./lenses/graph";
+import { renderOverviewLens } from "./lenses/overview";
 import { renderTimeSliderLens } from "./lenses/time-slider";
 import { renderMemoryHealthLens } from "./lenses/memory-health";
-import { renderTimelineLens } from "./lenses/timeline";
 import { renderRecallLens } from "./lenses/recall";
-import { renderProvenanceLens } from "./lenses/provenance";
 import { renderWordcloudLens } from "./lenses/wordcloud";
 import { waitUntilReady } from "./readiness";
 import "./style.css";
@@ -19,14 +18,16 @@ interface Lens {
   render: (el: HTMLElement, client: DataClient) => void | Promise<void>;
 }
 
+// Timeline and Provenance lenses were dropped (TASK-27.18): bare bar charts
+// and a coverage percentage answered no question. Provenance survives as one
+// line in the Overzicht lens; the sidecar endpoints remain for tooling.
 const LENSES: Lens[] = [
+  { key: "overview", label: "Overzicht", render: renderOverviewLens },
   { key: "graph", label: "Graph", render: renderGraphLens },
   { key: "wordcloud", label: "Wordcloud", render: renderWordcloudLens },
   { key: "timeslider", label: "Time-slider", render: renderTimeSliderLens },
   { key: "memory", label: "Memory Health", render: renderMemoryHealthLens },
-  { key: "timeline", label: "Timeline", render: renderTimelineLens },
   { key: "recall", label: "Recall", render: renderRecallLens },
-  { key: "provenance", label: "Provenance", render: renderProvenanceLens },
 ];
 
 const client = new DataClient();

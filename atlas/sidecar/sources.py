@@ -361,7 +361,8 @@ def build_memory_health(vault: Path, *, today: date | None = None) -> dict:
             "created": ref,
             "valid_until": fm.get("valid_until"),
             "quarantine_reason": fm.get("quarantine_reason", ""),
-            "superseded_by": fm.get("superseded_by", []) or [],
+            # frontmatter may write targets as [[wikilink]]s; normalise to stems
+            "superseded_by": [_norm_ref(t) for t in (fm.get("superseded_by", []) or [])],
         }
     if not records:
         return empty
@@ -398,6 +399,9 @@ def build_memory_health(vault: Path, *, today: date | None = None) -> dict:
             chain.append(cur)
             guard += 1
         chains.append({"head": head, "chain": chain,
+                       # targets that do not exist as memory files: the UI
+                       # renders these muted instead of as a dead link.
+                       "missing": [s for s in chain if s not in records],
                        "valid_until": records.get(head, {}).get("valid_until")})
 
     warmth = _memory_warmth(vault, today)
@@ -877,3 +881,87 @@ def memory_links_for(vault: Path, article_path: str) -> list[str]:
     """The memory-fragment stems that point to a given wiki article path."""
     data = build_memory_links(vault)
     return sorted(s for s, a in data.get("links", {}).items() if a == article_path)
+
+
+def _norm_ref(ref) -> str:
+    """Normalise a frontmatter reference like ``[[stem]]`` to a bare stem."""
+    return str(ref).strip().removeprefix("[[").removesuffix("]]").strip()
+
+
+# --- Overview lens (TASK-27.18): one health page over all vault stores. ---
+
+def _count_files(directory: Path, pattern: str = "*") -> int:
+    if not directory.is_dir():
+        return 0
+    return sum(1 for p in directory.glob(pattern)
+               if p.is_file() and not p.name.startswith("."))
+
+
+def build_overview(vault: Path, *, today: date | None = None) -> dict:
+    """Aggregate vault-wide health metrics: wiki-article statuses, memory
+    lifecycle counts, raw-log volumes, inbox backlog (input waiting),
+    provenance as a single coverage line, and graph staleness. Fail-open:
+    each missing store yields zeros, never an error."""
+    docs = kbindex_docs(vault)
+    wiki_status: dict[str, int] = {}
+    for path, meta in docs.items():
+        if not path.startswith("02-wiki/"):
+            continue
+        st = (meta.get("status") or "onbekend").lower()
+        wiki_status[st] = wiki_status.get(st, 0) + 1
+
+    mh = build_memory_health(vault, today=today)
+    prov = build_provenance(vault)
+    cov = prov.get("coverage", {}) if isinstance(prov, dict) else {}
+
+    return {
+        "status": "ok",
+        "wiki": {"total": sum(wiki_status.values()), "by_status": wiki_status},
+        "memory": mh.get("counts", {}),
+        "memory_status": mh.get("status", "empty"),
+        "raw": {
+            "sessies": _count_files(vault / "01-raw" / "sessies", "*.md"),
+            "transcripts": _count_files(vault / "01-raw" / "transcripts"),
+        },
+        "inbox_waiting": _count_files(vault / "00-inbox"),
+        "provenance": {
+            "sourced": cov.get("sourced", 0),
+            "total": cov.get("total", 0),
+        },
+        "graph_stale": (vault / "graphify-out" / ".needs-rebuild").exists(),
+    }
+
+
+# --- Memory decide (TASK-27.18): the one deliberate write path in Atlas. ---
+# Everything else in this sidecar is read-only (ro SQLite, read-only file
+# access). This endpoint changes exactly one thing: the frontmatter ``status``
+# of an *unverified* memory fragment, to ``current`` (approve) or ``retracted``
+# (reject) — the same statuses the sweep/judge janitor writes. Nothing outside
+# 09-memory/ is ever touched.
+
+_DECISIONS = {"approve": "current", "reject": "retracted"}
+
+
+def decide_memory(vault: Path, stem: str, decision: str) -> dict:
+    new_status = _DECISIONS.get(decision)
+    if new_status is None:
+        raise DocError(400, f"onbekende beslissing: {decision!r} (approve|reject)")
+    if not stem or "/" in stem or "\\" in stem or ".." in stem:
+        raise DocError(400, "ongeldige stem")
+    mem_root = (vault / "09-memory").resolve()
+    target = (mem_root / f"{stem}.md").resolve()
+    if mem_root not in target.parents:
+        raise DocError(400, "pad buiten 09-memory")
+    if not target.is_file():
+        raise DocError(404, "memory-fragment niet gevonden")
+    text = target.read_text(encoding="utf-8")
+    fm = _parse_frontmatter(text)
+    current = str(fm.get("status", "")).strip()
+    if current != "unverified":
+        raise DocError(409, f"status is {current or 'onbekend'}, alleen unverified is beslisbaar")
+    new_text, n = _re.subn(r"^status:.*$", f"status: {new_status}", text,
+                           count=1, flags=_re.MULTILINE)
+    if n != 1:
+        raise DocError(409, "geen status-regel in frontmatter")
+    target.write_text(new_text, encoding="utf-8")
+    return {"status": "ok", "stem": stem, "new_status": new_status}

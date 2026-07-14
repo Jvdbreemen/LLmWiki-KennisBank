@@ -32,7 +32,7 @@ export interface MemoryHealth {
   status: string;
   counts: { active: number; quarantined: number; superseded: number; unverified: number };
   queue: { id: string; importance: number; created: string }[];
-  supersede_chains: { head: string; chain: string[]; valid_until: string | null }[];
+  supersede_chains: { head: string; chain: string[]; missing?: string[]; valid_until: string | null }[];
   heatmap: { id: string; importance: number; age_days: number }[];
   warmth: { path: string; warmth: number; last_used: string | null; temperature: string }[];
   quarantine: { id: string; reason: string }[];
@@ -52,6 +52,19 @@ export interface MemoryLinks {
   counts: Record<string, number>;  // wiki article path -> #entry points
   types: Record<string, string>;   // fragment stem -> memory_type
 }
+
+export interface Overview {
+  status: string;
+  wiki: { total: number; by_status: Record<string, number> };
+  memory: { active: number; quarantined: number; superseded: number; unverified: number };
+  memory_status: string;
+  raw: { sessies: number; transcripts: number };
+  inbox_waiting: number;
+  provenance: { sourced: number; total: number };
+  graph_stale: boolean;
+}
+
+export interface DecideResult { status: string; stem: string; new_status: string; }
 
 export interface RecallHit { path: string; score: number; snippet: string; neighbor?: boolean; }
 export interface StageEntry { path: string; score: number; }
@@ -84,13 +97,27 @@ export class DataClient {
     return this.base !== null;
   }
 
-  private async get<T>(path: string): Promise<T> {
+  private guardBase(): string {
     if (!this.base) throw new Error("no sidecar port; pass ?port=NNNN");
     // Hard guard: never allow a non-loopback base to slip through.
     if (!this.base.startsWith("http://127.0.0.1:")) {
       throw new Error(`refusing non-loopback base: ${this.base}`);
     }
-    const resp = await fetch(this.base + path);
+    return this.base;
+  }
+
+  private async get<T>(path: string): Promise<T> {
+    const resp = await fetch(this.guardBase() + path);
+    if (!resp.ok) throw new Error(`${path} -> HTTP ${resp.status}`);
+    return resp.json() as Promise<T>;
+  }
+
+  private async post<T>(path: string, body: unknown): Promise<T> {
+    const resp = await fetch(this.guardBase() + path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
     if (!resp.ok) throw new Error(`${path} -> HTTP ${resp.status}`);
     return resp.json() as Promise<T>;
   }
@@ -109,6 +136,10 @@ export class DataClient {
     return this.get<Doc>(`/doc?path=${encodeURIComponent(path)}`);
   }
   memoryLinks(): Promise<MemoryLinks> { return this.get<MemoryLinks>("/memory-links"); }
+  overview(): Promise<Overview> { return this.get<Overview>("/overview"); }
+  decideMemory(stem: string, decision: "approve" | "reject"): Promise<DecideResult> {
+    return this.post<DecideResult>("/memory/decide", { stem, decision });
+  }
   // Loopback URL for a vault image; <img src> loads it directly (no CORS issue
   // for image display). Returns null when no sidecar port is configured.
   assetUrl(path: string): string | null {
