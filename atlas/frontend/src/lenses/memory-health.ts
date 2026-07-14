@@ -59,14 +59,31 @@ export function renderMemoryHealthLens(host: HTMLElement, client: DataClient): P
       tile("quarantined", d.counts.quarantined, "error"),
     ]);
 
-    // quarantine queue: unverified memories awaiting human merge/reject
+    // quarantine queue: unverified memories awaiting a human decision. The
+    // label opens the fragment; ✓/✗ call the sidecar's single write path
+    // (frontmatter status -> current/retracted) and the row reflects it.
     const queue = el("ul", { class: "list" });
     if (d.queue.length === 0) {
       queue.appendChild(el("li", { class: "muted" }, ["niets in quarantaine — alles geverifieerd"]));
     }
     for (const q of d.queue.slice(0, 30)) {
-      const li = el("li", { class: "clickable" }, [`imp ${q.importance} · ${q.id}${q.created ? ` · ${q.created}` : ""}`]);
-      li.addEventListener("click", () => void openInspect(client, memPath(q.id)));
+      const label = el("span", { class: "clickable" }, [`imp ${q.importance} · ${q.id}${q.created ? ` · ${q.created}` : ""}`]);
+      label.addEventListener("click", () => void openInspect(client, memPath(q.id)));
+      const approve = el("button", { class: "decide approve", title: "goedkeuren → status current" }, ["✓"]) as HTMLButtonElement;
+      const reject = el("button", { class: "decide reject", title: "afwijzen → status retracted" }, ["✗"]) as HTMLButtonElement;
+      const li = el("li", { class: "queue-item" }, [approve, reject, label]);
+      const decide = async (decision: "approve" | "reject") => {
+        approve.disabled = reject.disabled = true;
+        try {
+          const r = await client.decideMemory(q.id, decision);
+          li.replaceChildren(el("span", { class: "muted" }, [`${q.id} → ${r.new_status}`]));
+        } catch (e) {
+          approve.disabled = reject.disabled = false;
+          li.appendChild(el("span", { class: "error" }, [` mislukt: ${(e as Error).message}`]));
+        }
+      };
+      approve.addEventListener("click", () => void decide("approve"));
+      reject.addEventListener("click", () => void decide("reject"));
       queue.appendChild(li);
     }
 
@@ -80,10 +97,23 @@ export function renderMemoryHealthLens(host: HTMLElement, client: DataClient): P
       warm.appendChild(li);
     }
 
+    // supersede chains: each existing target opens its fragment; targets whose
+    // file is gone render muted with a marker instead of a dead link.
     const chains = el("ul", { class: "list" });
     for (const c of d.supersede_chains.slice(0, 15)) {
-      const vu = c.valid_until ? ` (tot ${c.valid_until})` : "";
-      chains.appendChild(el("li", {}, [c.chain.join(" → ") + vu]));
+      const li = el("li", {});
+      c.chain.forEach((stem, i) => {
+        if (i > 0) li.appendChild(document.createTextNode(" → "));
+        if ((c.missing ?? []).includes(stem)) {
+          li.appendChild(el("span", { class: "muted", title: "fragment bestaat niet meer" }, [`${stem} (ontbreekt)`]));
+        } else {
+          const link = el("span", { class: "clickable chain-link" }, [stem]);
+          link.addEventListener("click", () => void openInspect(client, memPath(stem)));
+          li.appendChild(link);
+        }
+      });
+      if (c.valid_until) li.appendChild(document.createTextNode(` (tot ${c.valid_until})`));
+      chains.appendChild(li);
     }
 
     clear(host);

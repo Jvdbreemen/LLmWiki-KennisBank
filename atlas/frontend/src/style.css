@@ -196,3 +196,16 @@ body {
   margin: 2px 0 8px 18px; padding: 6px 10px;
   border-left: 2px solid #2a3550; background: #ffffff05; border-radius: 0 4px 4px 0;
 }
+
+/* memory decide buttons + queue rows */
+.queue-item { display: flex; align-items: baseline; gap: 6px; padding: 2px 4px; }
+.decide {
+  flex: none; width: 24px; border-radius: 4px; border: 1px solid #2a2f3a;
+  background: none; cursor: pointer; font-size: 12px; line-height: 1.4;
+}
+.decide.approve { color: #58d68d; }
+.decide.approve:hover:not(:disabled) { background: #58d68d22; }
+.decide.reject { color: #e07a7a; }
+.decide.reject:hover:not(:disabled) { background: #e07a7a22; }
+.decide:disabled { opacity: 0.4; cursor: default; }
+.chain-link { color: #4f9cf9; }
