@@ -76,7 +76,10 @@ def test_overview_aggregates_all_stores(vault_factory):
             {"stem": "m1", "status": "current"},
             {"stem": "m2", "status": "unverified"},
         ],
-        wiki=[{"stem": "a", "body": "# A\nBron: x"}, {"stem": "b", "body": "# B"}],
+        wiki=[
+            {"stem": "a", "body": "---\nstatus: actief\n---\n# A\nBron: x"},
+            {"stem": "b", "body": "---\nstatus: concept\n---\n# B"},
+        ],
     )
     (vault / "00-inbox").mkdir()
     (vault / "00-inbox" / "todo.txt").write_text("x", encoding="utf-8")

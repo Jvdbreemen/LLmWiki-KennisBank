@@ -902,13 +902,16 @@ def build_overview(vault: Path, *, today: date | None = None) -> dict:
     lifecycle counts, raw-log volumes, inbox backlog (input waiting),
     provenance as a single coverage line, and graph staleness. Fail-open:
     each missing store yields zeros, never an error."""
-    docs = kbindex_docs(vault)
+    # Wiki status from the articles' own frontmatter (actief/concept/stabiel/
+    # archief) — the kb-index status column holds lifecycle state ("current")
+    # and would collapse every article into one bucket.
     wiki_status: dict[str, int] = {}
-    for path, meta in docs.items():
-        if not path.startswith("02-wiki/"):
-            continue
-        st = (meta.get("status") or "onbekend").lower()
-        wiki_status[st] = wiki_status.get(st, 0) + 1
+    wiki_dir = vault / "02-wiki"
+    if wiki_dir.is_dir():
+        for p in wiki_dir.glob("*.md"):
+            fm = _parse_frontmatter(p.read_text(encoding="utf-8"))
+            st = str(fm.get("status") or "onbekend").lower()
+            wiki_status[st] = wiki_status.get(st, 0) + 1
 
     mh = build_memory_health(vault, today=today)
     prov = build_provenance(vault)
