@@ -22,12 +22,13 @@ from atlas.sidecar import sources
 VERSION = "0.1.0"
 
 # The frontend is served cross-origin from the sidecar: a localhost dev port in
-# dev, and the Tauri webview origin (tauri://localhost, https://tauri.localhost
-# on Windows) when bundled. Allow those, reject everything else. Loopback-only
-# binding remains the real trust boundary.
+# dev, and the Tauri webview origin when bundled (tauri://localhost on
+# macOS/Linux; on Windows WebView2 uses http://tauri.localhost — plain http,
+# no TLS). Allow those, reject everything else. Loopback-only binding remains
+# the real trust boundary.
 _CORS_ORIGIN_REGEX = (
     r"^(https?://(localhost|127\.0\.0\.1)(:\d+)?|"
-    r"tauri://localhost|https://tauri\.localhost)$"
+    r"tauri://localhost|https?://tauri\.localhost)$"
 )
 
 

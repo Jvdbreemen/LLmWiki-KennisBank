@@ -20,6 +20,14 @@ def test_cors_allows_tauri_origin(tmp_path: Path):
     assert resp.headers.get("access-control-allow-origin") == "https://tauri.localhost"
 
 
+def test_cors_allows_windows_tauri_http_origin(tmp_path: Path):
+    # Tauri v2 on Windows serves the webview from http://tauri.localhost (no
+    # TLS); without this origin every fetch in the bundled app fails.
+    client = TestClient(create_app(tmp_path))
+    resp = client.get("/health", headers={"Origin": "http://tauri.localhost"})
+    assert resp.headers.get("access-control-allow-origin") == "http://tauri.localhost"
+
+
 def test_cors_rejects_foreign_origin(tmp_path: Path):
     client = TestClient(create_app(tmp_path))
     resp = client.get("/health", headers={"Origin": "https://evil.example.com"})
