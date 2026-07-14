@@ -19,7 +19,7 @@
     "active": true,
     "targets": ["msi", "nsis"],
     "icon": ["icons/icon.ico"],
-    "resources": ["binaries/"],
+    "resources": { "binaries/_internal": "_internal" },
     "externalBin": ["binaries/atlas-sidecar"]
   }
 }

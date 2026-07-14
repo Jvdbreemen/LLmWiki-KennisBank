@@ -21,23 +21,27 @@ only needed here).
 
 ## Steps (Windows)
 
-1. Freeze the sidecar:
+1. Freeze the sidecar (**onedir** — onefile re-extracts ~76MB per launch and
+   antivirus rescans it every time, giving cold starts of minutes under load):
    ```bash
    cd atlas/sidecar && pyinstaller atlas-sidecar.spec
    ```
-   This produces `dist/atlas-sidecar.exe`.
+   This produces `dist/atlas-sidecar/atlas-sidecar.exe` + `dist/atlas-sidecar/_internal/`.
 
-2. Place the frozen sidecar where Tauri expects an external binary, renamed with
-   the Rust target triple:
+2. Place both where Tauri expects them (exe renamed with the Rust target
+   triple; `_internal` is mapped into the install root via `resources` in
+   `tauri.conf.json` so the exe finds it at runtime):
    ```bash
-   mkdir -p ../src-tauri/binaries
-   cp dist/atlas-sidecar.exe ../src-tauri/binaries/atlas-sidecar-x86_64-pc-windows-msvc.exe
+   cd ../src-tauri/binaries
+   cp ../../sidecar/dist/atlas-sidecar/atlas-sidecar.exe atlas-sidecar-x86_64-pc-windows-msvc.exe
+   cp -r ../../sidecar/dist/atlas-sidecar/_internal _internal
    ```
 
 3. Build the app (this also runs `npm run build` for the frontend via
-   `beforeBuildCommand`):
+   `beforeBuildCommand`). NB: on this machine the Tauri CLI is the npm one,
+   not `cargo tauri`:
    ```bash
-   cd ../src-tauri && cargo tauri build
+   cd atlas/src-tauri && npx --yes @tauri-apps/cli@^2 build
    ```
    The MSI/NSIS installer lands in `target/release/bundle/`.
 

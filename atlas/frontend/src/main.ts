@@ -44,10 +44,14 @@ async function connectSidecar(bar: HTMLElement): Promise<boolean> {
     return false;
   }
   span.textContent = "sidecar starten…";
+  // No deadline: a cold sidecar boot must never leave the app permanently on
+  // "Failed to fetch". Show elapsed time so a slow start is visibly alive.
+  const t0 = Date.now();
+  const ticker = window.setInterval(() => {
+    span.textContent = `sidecar starten… (${Math.round((Date.now() - t0) / 1000)}s)`;
+  }, 1000);
   try {
-    // 60s budget: the frozen sidecar's first boot after install can take tens
-    // of seconds (onefile extraction + AV scan); later boots are seconds.
-    const h = await waitUntilReady(() => client.health(), { timeoutMs: 60_000 });
+    const h = await waitUntilReady(() => client.health(), { timeoutMs: Number.POSITIVE_INFINITY });
     const live = Object.entries(h.sources)
       .filter(([, v]) => v)
       .map(([k]) => k);
@@ -60,6 +64,8 @@ async function connectSidecar(bar: HTMLElement): Promise<boolean> {
     span.className = "error";
     span.textContent = `sidecar onbereikbaar: ${(e as Error).message}`;
     return false;
+  } finally {
+    window.clearInterval(ticker);
   }
 }
 
