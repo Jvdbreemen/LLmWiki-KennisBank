@@ -1,10 +1,10 @@
 ---
 id: TASK-27.8
 title: Atlas - Recall Inspector-lens (retrieval waterfall)
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-07-11 16:43'
-updated_date: '2026-07-11 22:06'
+updated_date: '2026-07-12 16:58'
 labels:
   - visualization
   - atlas
@@ -57,6 +57,14 @@ teruggeeft. Geen voorgebakken snapshot; wel fail-open bij Ollama/index down.
 <!-- SECTION:NOTES:BEGIN -->
 TAURI RE-SCOPE (zie TASK-27 + 27.1-ADR): dit is nu LIVE — de frontend stuurt een query naar sidecar-endpoint /recall (27.2), dat de echte waterfall draait (vector+FTS -> RRF -> rerank via _kbindex/_rank/kb-recall, Ollama-embedding lokaal) en de tussenstappen + scores teruggeeft. Geen voorgebakken vaste queries meer. Fail-open bij Ollama down. Lens-logica/ACs blijven gelden.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Recall Inspector afgerond (commit cb43632, branch feat/atlas-sidecar). sources.recall_waterfall draait de live pipeline en hergebruikt exact de productie-bouwstenen (kb-recall._open_ro, _kbindex._rrf + dezelfde vector/FTS-SQL, _rank.recency/importance/trust/usage_factor, _rank.one_hop_neighbor) — data-parity by construction, final-volgorde == kb-recall. Exposet alle stages: vector-KNN kandidaten, FTS kandidaten, RRF-fusie, en per-hit rerank-factoren (relevance × recency × importance × trust × usage = final), plus graafbuur-expansie als extra entry. Frontend Recall-lens toont de waterfall: elke final-hit met factor-opbouw die naar de eindscore vermenigvuldigt, boven de drie kandidaat-stages. /recall default = waterfall, injecteerbaar voor hermetische tests.
+
+AC-dekking: #1 vector+FTS+RRF getoond ✓; #2 factoren == _rank (hergebruik) ✓; #3 graafbuur-expansie (one_hop_neighbor) ✓ — live: otgw-firmware-project verschijnt; #4 product == final (contracttest test_recall_waterfall_shape_and_factor_product + visueel) ✓; #5 live via localhost /recall, geen externe requests ✓. Live geverifieerd: 'OTGW settings REST contract' → otgw-v2-settings-rest-contract #1, wiki-hits relevance×usage, memory-hits volledige 5-factor-opbouw (R 0.017 × R 0.981 × I 1.000 × T 0.950 × U 1.000 = 0.01554). 26 sidecar-tests + 9 vitest groen, tsc schoon, vite build groen. Rest: hermetische stage-parity-test vereist sqlite_vec+embeddings (nu gedekt via factor-product-contracttest + reuse + live-smoke).
+<!-- SECTION:FINAL_SUMMARY:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->

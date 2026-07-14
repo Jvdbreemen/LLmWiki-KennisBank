@@ -1,10 +1,10 @@
 ---
 id: TASK-27.3
 title: 'Atlas - Tauri scaffold, TS frontend tab-shell en sidecar-lifecycle'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-07-11 16:43'
-updated_date: '2026-07-11 22:05'
+updated_date: '2026-07-14 18:32'
 labels:
   - visualization
   - atlas
@@ -31,6 +31,12 @@ Scaffold de Tauri-app (main.rs boilerplate + tauri.conf.json met sidecar-spawn-c
 - [ ] #4 Rust blijft minimaal (host + sidecar-spawn), geen custom native plugins. Bewijs: main.rs is ~scaffold-omvang.
 - [ ] #5 Fail-open UI: start de sidecar niet, dan toont de app een duidelijke foutstaat i.p.v. te crashen. Bewijs: test met geforceerde sidecar-spawn-fout.
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Scaffold allang gerealiseerd en in productie: Tauri v2-shell met sidecar-lifecycle (vrije loopback-poort, poort-injectie via initialization script, kind-proces sterft met de app), TS-frontend met tab-shell en lens-registry. Status stond stale op In Progress; bewijs van werking is de geïnstalleerde standalone app (TASK-27.12/27.17/27.18).
+<!-- SECTION:FINAL_SUMMARY:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->

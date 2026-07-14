@@ -1,10 +1,10 @@
 ---
 id: TASK-27.6
 title: 'Atlas - Memory Health-lens (quarantaine, supersede-ketens, warmth)'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-07-11 16:43'
-updated_date: '2026-07-11 22:05'
+updated_date: '2026-07-12 17:33'
 labels:
   - visualization
   - atlas
@@ -53,6 +53,16 @@ het principe "systeem stelt voor, mens beslist".
 <!-- SECTION:NOTES:BEGIN -->
 TAURI RE-SCOPE (zie TASK-27 + 27.1-ADR): data LIVE van sidecar-endpoint /memory-health (27.2, hergebruikt _memory + usage); gerenderd in de TS-frontend. Quarantaine/supersede-ketens/warmth-heatmap komen uit de live-response, niet uit een statische export. Lens-logica/ACs blijven gelden.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Memory Health cockpit afgerond (commit be7c764). /memory-health uitgebreid met: quarantaine-queue (unverified, gesorteerd op importance), supersede-ketens met valid_until, importance×recency-heatmap-data, en warm/tepid/stale-temperatuur per warmth (drempels spiegelen _rank.usage_factor: ≤30d warm, ≤90d tepid). `today` injecteerbaar → deterministische, datum-relatieve tests (geldig ook tegen live instance). Frontend-lens: tiles, klikbare quarantaine-queue (→ bron-memory), 5×4 importance×recency-heatmap met intensiteit, warm/stale-badges, ketens met valid_until. ageBucket = pure unit-geteste helper.
+
+AC-dekking: #1 queue == unverified (data-parity test) ✓; #2 ketens met valid_until ✓; #3 heatmap plaatst elke active memory in de juiste cel (test) ✓; #4 warm/stale per _rank-drempels ✓; #5 klikbaar bronpad ✓. Live: 753 active / 10 unverified-queue / heatmap (imp4,8-30d=395) / WARM-badges. 30 sidecar + 12 vitest groen, tsc schoon, build groen.
+
+BONUS-FIX: race-bug die ALLE lenzen trof — een trage async-lens (Graph await /graph+/provenance) kon na een lens-switch resolven en de nieuwe lens-DOM overschrijven. Opgelost met een render-generatie (lifecycle.ts) die bij elke switch bumpt; withLoader + Graph-lens verwerpen hun resultaat als niet meer actueel.
+<!-- SECTION:FINAL_SUMMARY:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->

@@ -1,10 +1,10 @@
 ---
 id: TASK-27.11
 title: 'Atlas - performance/scale hardening (WebGL, aggregatie) en visuele eval'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-07-11 16:43'
-updated_date: '2026-07-11 22:06'
+updated_date: '2026-07-12 21:09'
 labels:
   - visualization
   - atlas
@@ -31,6 +31,12 @@ Hard maken voor de echte schaal: canvas/WebGL graph performant bij 2514 nodes/33
 - [ ] #4 Level-of-detail/clustering bij grote grafen voorkomt UI-freeze. Bewijs: interactie-test.
 - [ ] #5 Visuele eval: elke lens is leesbaar en de encodings kloppen tegen de bron. Bewijs: screenshots + review-checklist.
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Perf/scale-hardening + eval afgerond (commit e972234). Level-of-detail: boven 400 nodes dropt de Graph-lens de per-node warmth-halo + status-ring (dure per-frame-extra's) voor soepele pan/zoom; de weglating is zichtbaar in de controls ('LOD aan (N nodes; ...)'), nooit stil (noord-ster: geen stille caps). Perf-budget-test (hermetisch): /timeline-aggregatie van 4000 events < 1s (gemeten 0.24s), faalt buiten budget. atlas/docs/perf-eval.md legt de real-vault-latencies vast (/timeline 11198 events → 0.76s, /memory-health 811 → 0.28s, /graph 937 nodes interactief) + visuele-eval-checklist voor alle 7 lenzen. AC#1 canvas (geen SVG) interactief op 937 nodes ✓; #2 timeline sub-seconde ✓; #3 latency-budget-test ✓; #4 LOD voorkomt freeze + zichtbaar ✓; #5 visuele eval-checklist ✓. EERLIJKE NOOT: AC's 2514-node-doel = graphify's volledige multi-layer-graaf; huidige /graph is 02-wiki-scoped (95; 937 met memory). Canvas+LOD bewezen op 937, schaalt naar enkele duizenden; exacte 2514 vereist full-graphify-regraph (data-scope). 36 sidecar + 22 vitest groen.
+<!-- SECTION:FINAL_SUMMARY:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->

@@ -1,10 +1,10 @@
 ---
 id: TASK-14
 title: 'Over-extractie temmen: extractie-cap of dedup-drempel voor mega-transcripts'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-03 18:38'
-updated_date: '2026-07-07 09:26'
+updated_date: '2026-07-14 18:36'
 labels: []
 dependencies: []
 ordinal: 16000
@@ -39,10 +39,10 @@ Meet elke optie met kb-eval memory-only (recall@1 moet omhoog zonder recall@3 te
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Beslissing gebaseerd op een week usage-data + kb-eval memory-only, niet op onderbuik: is de facet-ruis een echt injectie-probleem?
-- [ ] #2 Als ingegrepen: memory recall@1 stijgt meetbaar (kb-eval memory-only) zonder recall@3 te verlagen
-- [ ] #3 Een drempelwijziging wordt geherijkt met kb-calibrate.py; de reguliere per-sessie sweep (max_chunks=6) blijft ongewijzigd tenzij bewezen nodig
-- [ ] #4 Geen legitiem-verschillende feiten worden gemerged (steekproef-verificatie na een facet-merge of dedup-verlaging)
+- [x] #1 Beslissing gebaseerd op een week usage-data + kb-eval memory-only, niet op onderbuik: is de facet-ruis een echt injectie-probleem?
+- [x] #2 Als ingegrepen: memory recall@1 stijgt meetbaar (kb-eval memory-only) zonder recall@3 te verlagen
+- [x] #3 Een drempelwijziging wordt geherijkt met kb-calibrate.py; de reguliere per-sessie sweep (max_chunks=6) blijft ongewijzigd tenzij bewezen nodig
+- [x] #4 Geen legitiem-verschillende feiten worden gemerged (steekproef-verificatie na een facet-merge of dedup-verlaging)
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -65,6 +65,8 @@ GEVOLG voor de ingreep-opties: optie 3 (dedup-drempel verlagen) en een facet-mer
 2026-07-06: toegevoegd `max_memories_per_transcript` (default 20) aan `scripts/memory-sweep.py`; de cap stopt de kandidaat-loop na N geschreven memories per source_session, ook in `--all`/rebuild-pad. CLI uitgebreid met `--max-per-transcript N`. Regresstest toegevoegd die een backfill met meerdere kandidaten op 2 geschreven memories begrenst. Gerichte `tests.test_memory_sweep` draait groen; volledige suite time-outte na 124s.
 
 2026-07-07: documented `--max-per-transcript` in CONFIGURATION.md and CHANGELOG.md. Local environment still lacks an installed `~/KennisBank` vault / `kb-usage.db` / memory eval-set files, so the acceptance-criteria piece that depends on real week usage-data + memory-only kb-eval cannot be re-run on this machine.
+
+Meetronde 2026-07-14 op de echte Kluis-vault (dit kon eerder niet: die omgeving had geen vault). (1) kb-eval memory-only: recall@1 0.824, recall@3 1.0, recall@5 1.0, MRR 0.892 — tegen 0.529/0.882 op 2026-07-03. Retrieval is gezond; de stijging komt uit de combinatie van de extractie-cap (07-06) en het tussenliggende TASK-18/19/23-werk, niet uit één geïsoleerde ingreep. (2) Usage-telemetrie: memory use-rate 1.7% (20/1203) vs wiki 5.9%; 293/313 geïnjecteerde memory-stems nooit gebruikt, vrijwel allemaal importance 4 — injectie-ruis is reëel maar is een injectie-selectieprobleem (TASK-17-domein), geen extractieprobleem. Kanttekening: 'used'-detectie telt alleen tool_use, dus absolute aantallen zijn ondergrens. (3) Facet-voorraad: top-sessies 141/127 memories dateren van de backfill vóór de cap; de cap (default 20, ook in --all-pad) voorkomt herhaling. BESLUIT: geen verdere ingreep — geen facet-merge, geen dedup-verlaging (AC#4 n.v.t., niets gemerged), geen drempelwijziging (AC#3: kb-calibrate niet nodig, reguliere sweep max_chunks=6 ongewijzigd). Injectie-kwaliteit doorontwikkelen in TASK-17.
 <!-- SECTION:NOTES:END -->
 
 ## Comments
@@ -88,3 +90,9 @@ created: 2026-07-07 09:26
 Drain-check 2026-07-07: code/doc-pad voor max_memories_per_transcript is aanwezig en gericht getest, maar AC#1/#2/#4 blijven meet-afhankelijk. Lokale omgeving mist C:\Users\rvdbr\KennisBank\09-memory, 01-raw\transcripts, .claude\kb-usage.db en memory-eval-set data; daarom kan ik hier geen week-usage + kb-eval memory-only bewijs leveren en de taak niet eerlijk sluiten.
 ---
 <!-- COMMENTS:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Over-extractie getemd en met metingen afgesloten. De extractie-cap (max_memories_per_transcript, default 20, óók in het --all/rebuild-pad; CLI --max-per-transcript) stond al sinds 07-06 met regressietest en docs; de ontbrekende bewijslast is nu geleverd op de echte vault: kb-eval memory-only recall@1 0.824 / recall@3 1.0 / MRR 0.892 (baseline 03-07: 0.529/0.882) — retrieval gezond, dus facet-merge en dedup-verlaging terecht niet uitgevoerd. Usage-telemetrie toont wel lage memory use-rate (1.7% vs wiki 5.9%; 293 nooit-gebruikte geïnjecteerde stems) — dat is injectie-selectie en verhuist inhoudelijk naar TASK-17. Reguliere sweep ongewijzigd; geen drempels aangepast.
+<!-- SECTION:FINAL_SUMMARY:END -->

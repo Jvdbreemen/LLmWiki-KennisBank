@@ -1,15 +1,19 @@
 ---
 id: TASK-30
 title: 'Temporal recall: fix "N weeks ago <weekday>"-parsing in datum-parser'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-13 19:52'
-updated_date: '2026-07-13 21:45'
+updated_date: '2026-07-13 21:46'
 labels:
   - temporal-recall
   - parser
   - bug
 dependencies: []
+modified_files:
+  - scripts/_activity.py
+  - scripts/test_activity_temporal.py
+  - tests/test_activity_multilang.py
 priority: medium
 ordinal: 46000
 ---
@@ -41,3 +45,9 @@ Scope:
 <!-- SECTION:NOTES:BEGIN -->
 Fix in scripts/_activity.py parse_period: nieuwe branch vóór de bare-weekday-branch die "N <weekunit> ago/geleden + <weekdag>" herkent in vier woordvolgordes (suffix-ago en prefix-ago, weekdag voor of na). Resolvet naar de weekdag binnen de ISO-week N weken terug. Daarnaast TemporalRange.warning toegevoegd: _residual_time_warning() detecteert sterke tijdstokens (weekdagen, ago-woorden, relatieve-dag-woorden) die in het topic zijn achtergebleven en geeft een expliciete waarschuwing; what_did_i_do propageert die naar result.warnings (zichtbaar als WARN in output). Tests: 7 nieuwe cases in scripts/test_activity_temporal.py (nl/en/de/fr) + test_residual_time_words_warn in tests/test_activity_multilang.py. 145 deterministische cases + 8 unittests groen. E2e geverifieerd tegen Kluis-vault: "two weeks ago thursday" → 2026-07-02 met resultaten. Deploy naar $VAULT/.claude/scripts nog nodig via setup/upgrade-flow (niet bare cp).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Parser-fix voor "N weeks ago <weekday>": nieuwe deterministische branch in parse_period (vóór bare-weekday) die de weekdag binnen de ISO-week N weken terug resolvet, in vier woordvolgordes over nl/en/de/fr/es/it. Plus TemporalRange.warning voor residuele tijdswoorden in het topic, gepropageerd naar /watdeedik WARN-output. 7 nieuwe parsercases + 1 warning-unittest; 145 cases en 8 unittests groen; e2e geverifieerd tegen de Kluis-vault. Commit df0cc14 op feat/atlas-sidecar. Follow-up: deploy naar $VAULT/.claude/scripts via setup/upgrade-flow.
+<!-- SECTION:FINAL_SUMMARY:END -->

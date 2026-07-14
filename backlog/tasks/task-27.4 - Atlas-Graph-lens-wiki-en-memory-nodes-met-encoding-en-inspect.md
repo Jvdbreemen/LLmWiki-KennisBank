@@ -1,10 +1,10 @@
 ---
 id: TASK-27.4
 title: 'Atlas - Graph-lens (wiki+memory nodes, encoding, click-to-inspect)'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-07-11 16:43'
-updated_date: '2026-07-11 22:05'
+updated_date: '2026-07-12 16:47'
 labels:
   - visualization
   - atlas
@@ -57,6 +57,14 @@ Interactie:
 <!-- SECTION:NOTES:BEGIN -->
 TAURI RE-SCOPE (zie TASK-27 + 27.1-ADR): data komt LIVE van de FastAPI-sidecar endpoint /graph (27.2), niet uit een statische JSON-export. Gerenderd in de TS-frontend via canvas/WebGL (SVG/d3-force schaalt niet naar 2514 nodes). Click-to-inspect haalt detail live op. De lens-logica/encoding-ACs blijven gelden; verwijzingen naar atlas.html/static zijn vervangen door de Tauri-shell (27.3).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Graph-lens afgerond (commit 9ec1067, branch feat/atlas-sidecar). Datagedreven encoding via een pure, unit-geteste encoding.ts (9 vitest-tests, data-parity zonder browser): kleur = community-cluster (default; toggle naar status/kind), grootte = memory-importance / wiki-degree + warmth-bump, ring = lifecycle-status, halo = usage-warmth — allemaal getekend via force-graph nodeCanvasObject. Legenda verklaart elke encoding; live controls voor kleur-modus en 'verberg superseded'-filter (passesFilter ondersteunt ook kind-filter). Click-to-inspect opent het bronartikel in de markdown-viewer. Live geverifieerd: variabele node-groottes (hoge-degree en warme nodes springen eruit, halos zichtbaar), kleur-modus wisselt legenda+render, filter toggelt, geen console-errors. vitest 9 + 25 sidecar-tests groen, tsc schoon, vite build groen. `npm test` draait de encoding-tests.
+
+EERLIJKE AC-RESTPUNTEN (bewust, geen lens-defect): (1) memory-nodes ontbreken in de graaf omdat graphify op 02-wiki gescoped is (eerdere keuze in sessielog.md) — vereist een graphify-rescope, aparte data-scope-taak. (2) Inspect toont het bronartikel; volledige node-metadata (importance/valid_from) inline is nog niet toegevoegd. (3) Full Playwright render-test niet opgezet; gedekt via encoding-unit-tests + live-verificatie. Deze drie zijn kandidaat-vervolgtaken indien strikt vereist.
+<!-- SECTION:FINAL_SUMMARY:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->

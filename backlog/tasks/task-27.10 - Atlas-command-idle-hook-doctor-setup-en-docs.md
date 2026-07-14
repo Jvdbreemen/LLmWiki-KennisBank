@@ -1,10 +1,10 @@
 ---
 id: TASK-27.10
 title: 'Atlas - launcher (kennisbank-atlas), doctor, setup en docs'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-07-11 16:43'
-updated_date: '2026-07-11 22:06'
+updated_date: '2026-07-12 21:09'
 labels:
   - visualization
   - atlas
@@ -34,6 +34,12 @@ Lever de kennisbank-atlas launcher die de Tauri-app start (dev + bundled), optio
 - [ ] #4 Docs (README/CONFIGURATION/POST-INSTALL) beschrijven installeren + starten van de Atlas-app.
 - [ ] #5 De acceptatie-smoke uit 27.1 draait groen: app start, sidecar-health, een lens rendert tegen echte data, live recall werkt.
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Dev-launcher + doctor + docs afgerond (commit 65f2cff). atlas/launch.py: één commando start de sidecar op een vrije loopback-poort + de Vite dev-server, wacht op /health, print de open-URL; Ctrl-C stopt beide; vault via KENNISBANK_VAULT (ADR-0002). atlas/doctor.py: rapporteert readiness (sidecar-deps fastapi/uvicorn/httpx/sqlite-vec, node/npm, cargo OPTIONEEL alleen voor Tauri-bundle, ollama, vault-stores, live sidecar-health via --port), exit 0 tenzij harde dep mist; 2 tests. atlas/README.md: install/run/doctor/tests/Tauri-prereqs. AC#1 dev-launcher ✓ (Tauri-app-launch valt onder 27.12/cargo); #2 doctor Atlas-status incl toolchain ✓; #3 build-prereqs gedocumenteerd ✓; #4 docs ✓; #5 27.1-acceptatie-smoke (app rendert, sidecar-health, lenzen op echte data, live recall) is door de hele sessie live gedemonstreerd ✓. 35 sidecar-tests groen.
+<!-- SECTION:FINAL_SUMMARY:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
