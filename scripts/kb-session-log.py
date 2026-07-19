@@ -24,6 +24,7 @@ from _vaultpath import vault_root  # noqa: E402
 @dataclass(frozen=True)
 class Job:
     script: str
+    args: tuple[str, ...] = ()
     timeout: int = 180
 
 
@@ -37,15 +38,15 @@ class Result:
 
 
 INDEX_JOBS = (
-    Job("build-karpathy-index.py"),
+    Job("build-karpathy-index.py", ("--force",)),
     Job("build-embed-index.py"),
     Job("build-kb-index.py"),
     Job("build-activity-index.py"),
-    Job("sweep-launch.py", 30),
+    Job("sweep-launch.py", timeout=30),
 )
 NOTIFICATION_JOBS = (
-    Job("memory-notify.py", 30),
-    Job("distill-notify.py", 30),
+    Job("memory-notify.py", timeout=30),
+    Job("distill-notify.py", timeout=30),
 )
 
 
@@ -56,7 +57,7 @@ def _vault() -> Path:
 def run_child(job: Job, scripts: Path) -> Result:
     try:
         proc = subprocess.run(
-            [sys.executable, str(scripts / job.script)],
+            [sys.executable, str(scripts / job.script), *job.args],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             timeout=job.timeout,
@@ -91,25 +92,51 @@ def _count(text: str, pattern: str) -> int:
     return int(match.group(1)) if match else 0
 
 
+def _context_text(text: str) -> str:
+    stripped = text.strip()
+    if not stripped:
+        return ""
+    try:
+        payload = json.loads(stripped)
+    except json.JSONDecodeError:
+        return stripped
+    if not isinstance(payload, dict):
+        return stripped
+    direct = payload.get("additionalContext")
+    if isinstance(direct, str):
+        return direct.strip()
+    nested = payload.get("hookSpecificOutput")
+    if isinstance(nested, dict) and isinstance(nested.get("additionalContext"), str):
+        return nested["additionalContext"].strip()
+    return stripped
+
+
 def relevant_report(result: Result) -> str:
     if result.error:
         return f"{result.script}: {result.error}"
-    relevant = bool(result.stderr) or result.returncode != 0
+    out = _context_text(result.stdout)
+    actionable_err = bool(re.search(
+        r"\b(?:error|failed|failure|warning|warn|fout|mislukt|traceback|"
+        r"timed out)\b",
+        result.stderr,
+        re.IGNORECASE,
+    ))
+    relevant = actionable_err or result.returncode != 0
     if result.script == "build-embed-index.py":
-        relevant = relevant or _count(result.stdout, r"(\d+)\s+\(re\)embedded") > 0
+        relevant = relevant or _count(out, r"(\d+)\s+\(re\)embedded") > 0
     elif result.script == "build-kb-index.py":
-        relevant = relevant or _count(result.stdout, r"(\d+)\s+\(re\)indexed") > 0
-        relevant = relevant or _count(result.stdout, r"(\d+)\s+(?:removed|verwijderd)") > 0
+        relevant = relevant or _count(out, r"(\d+)\s+\(re\)indexed") > 0
+        relevant = relevant or _count(out, r"(\d+)\s+(?:removed|verwijderd)") > 0
     elif result.script == "build-activity-index.py":
-        relevant = relevant or _count(result.stdout, r"(\d+)\s+changed") > 0
+        relevant = relevant or _count(out, r"(\d+)\s+changed") > 0
     elif result.script == "sweep-launch.py":
         relevant = relevant or result.returncode != 0
     else:
-        relevant = relevant or bool(result.stdout)
+        relevant = relevant or bool(out)
     if not relevant:
         return ""
     details = "\n".join(
-        part for part in (result.stdout, result.stderr) if part
+        part for part in (out, result.stderr if actionable_err else "") if part
     )
     if result.returncode:
         details = f"{details}\nexited with status {result.returncode}".strip()

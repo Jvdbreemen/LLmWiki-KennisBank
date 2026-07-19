@@ -34,6 +34,8 @@ def test_post_save_jobs_are_parallel_and_notices_follow(tmp_path):
     def runner(job, _scripts):
         nonlocal active, peak
         if job in module.INDEX_JOBS:
+            if job.script == "build-karpathy-index.py":
+                assert job.args == ("--force",)
             with lock:
                 active += 1
                 peak = max(peak, active)
@@ -47,6 +49,24 @@ def test_post_save_jobs_are_parallel_and_notices_follow(tmp_path):
 
     assert module.coordinate(vault, str(log), runner=runner) == ""
     assert peak == len(module.INDEX_JOBS)
+
+
+def test_reports_unwrap_notices_and_ignore_routine_progress():
+    module = _load()
+    progress = module.Result(
+        "build-activity-index.py",
+        stdout="activity-index: 20 events, 8 sources, 0 changed, 8 unchanged",
+        stderr="activity-index: 8/8 sources, 0 events indexed, 8 unchanged",
+    )
+    assert module.relevant_report(progress) == ""
+
+    notice = module.Result(
+        "memory-notify.py",
+        stdout='{"hookSpecificOutput":{"additionalContext":"13 memories need review"}}',
+    )
+    assert module.relevant_report(notice) == (
+        "memory-notify.py: 13 memories need review"
+    )
 
 
 def test_rejects_paths_outside_session_log_directory(tmp_path):
