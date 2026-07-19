@@ -28,12 +28,11 @@ and Linux. OpenCode remains supported as an additional local client.
 
 - Skill and generated prompt descriptions are English so every client can
   discover them consistently.
-- Routine no-change index, sweep, archive, telemetry, and capture hooks are
-  silent. Changed indexes and warnings become concise session reports; Claude
-  Code and Codex receive those reports and retrieval hits through structured
-  model-only output with raw hook output suppressed.
-- Actionable memory and distillation notices remain agent context; all hooks
-  fail open and never block a turn.
+- Claude Code keeps fail-open automatic hooks. Codex and Copilot intentionally
+  install no KennisBank lifecycle hooks, so their clients cannot print
+  `Running ... hook` or `SessionStart hook (completed)` rows.
+- Codex and Copilot use native personal skills plus MCP. Upgrades remove only
+  KennisBank-owned hooks and preserve unrelated user hooks.
 - The same local stdio MCP server and explicitly pinned `KENNISBANK_VAULT`
   serve every installed client.
 
@@ -42,6 +41,10 @@ Install or upgrade selected clients:
 ```bash
 KENNISBANK_VAULT="/absolute/path/to/vault" bash setup.sh --yes --agents claude,codex,copilot
 ```
+
+After restart, use `$sessiestart` and `$sessielog` in Codex
+(`/prompts:sessiestart` remains a compatibility alias), or `/sessiestart` and
+`/sessielog` in Copilot.
 
 Based on [Andrej Karpathy's LLM Wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f): raw sessions go in, structured knowledge comes out. KennisBank extends the pattern into a closed loop:
 
@@ -63,15 +66,15 @@ Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: 
 
 The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
 
-## Feature highlights (v0.16.1)
+## Feature highlights (v0.16.2)
 
-### New in v0.16.1
+### New in v0.16.2
 
-- **Quiet three-client hooks.** Claude Code, Codex, and GitHub Copilot CLI no
-  longer expose routine successful lifecycle output. Structured retrieval and
-  actionable notices still reach the agent, and every hook remains fail-open.
-- **English skill discovery metadata.** Shipped skills and generated Codex
-  prompt aliases now use English descriptions consistently.
+- **Zero hook rows in Codex and Copilot.** Their KennisBank integrations are
+  hookless by design and use native command skills plus MCP.
+- **Native session workflows.** Copilot exposes `/sessiestart` and
+  `/sessielog`; Codex exposes `$sessiestart` and `$sessielog` plus its existing
+  `/prompts:*` compatibility aliases.
 
 ### New in v0.15
 - **Multilingual temporal recall.** `/watdeedik`, `/timeline`, and `/weeklog`
@@ -205,8 +208,11 @@ In one idempotent run, the setup script:
 - bootstraps the settings toggles and runs version-gated migrations
 - asks which agent environments to install (`claude`, `codex`, `opencode`, or `all`; default `claude,codex`)
 - installs Claude Code commands/skills/hooks when `claude` is selected
-- installs Codex shared skills, `/prompts:*` aliases, hooks, MCP config, and global `AGENTS.md` when `codex` is selected
+- installs Codex command skills, `/prompts:*` compatibility aliases, MCP config,
+  and global `AGENTS.md`; upgrades remove old KennisBank Codex hooks
 - installs OpenCode commands, shared skills, MCP config, global `AGENTS.md`, and a local plugin hook when `opencode` is selected
+- installs Copilot command skills, MCP config, personal instructions, and a
+  custom agent profile; upgrades remove old KennisBank Copilot hooks
 - asks for the LLM backend in interactive mode: default `ollama`, optional `openrouter` with model slug and API key env-var
 - validates the install before returning: `doctor.sh`, agent config checks, MCP runtime handshake for Codex/OpenCode, local Ollama smoke tests, and OpenRouter smoke tests when OpenRouter is selected
 
@@ -216,7 +222,7 @@ Useful flags:
 
 ```bash
 bash setup.sh --yes --agents claude,codex      # default non-interactive target set
-bash setup.sh --yes --agents all               # Claude Code + Codex + OpenCode
+bash setup.sh --yes --agents all               # Claude Code + Codex + OpenCode + Copilot
 bash setup.sh --yes --agents codex             # Codex only
 bash setup.sh --yes --skip-model-check         # CI/offline validation without Ollama smoke tests
 ```
@@ -231,7 +237,10 @@ After install, read [POST-INSTALL.md](POST-INSTALL.md) for the first-session wal
 
 ### The hookset
 
-Claude Code receives the full hookset below in `~/.claude/settings.json`. Codex receives equivalent lifecycle hooks in `~/.codex/hooks.json` where Codex supports them, plus MCP and skill guidance. OpenCode receives MCP plus a global plugin under `~/.config/opencode/plugins/`; OpenCode's plugin events are not a byte-for-byte Claude hook clone, so retrieval should be treated as MCP/skill-guided there.
+Claude Code receives the hookset below in `~/.claude/settings.json`. Codex and
+Copilot deliberately receive no KennisBank lifecycle hooks; native skills and
+MCP avoid client-generated progress/completion rows. OpenCode receives MCP plus
+a global plugin under `~/.config/opencode/plugins/`.
 
 | Hook | Script | What it does |
 |------|--------|--------------|
@@ -362,13 +371,18 @@ internet - it is the manual bridge below.
 
 `setup.sh --agents codex` installs:
 
-- `~/.agents/skills/{autoresearch,kennisbank-upgrade,kennisbank-contribute}/`
+- `~/.agents/skills/<command>/SKILL.md`, including `sessiestart`, `sessielog`,
+  temporal commands, and the hand-authored KennisBank skills
 - `~/.codex/prompts/*.md` aliases, invoked as `/prompts:sessielog`, `/prompts:sessiestart`, `/prompts:kennisbank-upgrade`, etc.
 - `~/.codex/AGENTS.md` with the active vault path
-- `~/.codex/hooks.json` with KennisBank lifecycle hooks
 - `~/.codex/config.toml` MCP server `kennisbank`
 
-Codex does not expose arbitrary bare slash commands like `/sessielog`; its reusable prompt files are invoked as `/prompts:<name>`, and reusable workflows should prefer skills. MCP tools `recall` and `capture` are available through the configured `kennisbank` server. Setup installs the required Python MCP SDK and proves the server starts before it reports success.
+Use `$sessiestart` and `$sessielog` as native Codex skills. Codex does not
+expose arbitrary bare slash aliases; the deprecated compatibility form is
+`/prompts:<name>`. KennisBank installs no Codex lifecycle hooks because Codex
+currently parses but does not implement hook `suppressOutput`. Setup removes
+legacy KennisBank entries while preserving unrelated hooks. MCP remains
+available through the configured `kennisbank` server.
 
 Manual MCP equivalent:
 
@@ -412,14 +426,22 @@ KENNISBANK_VAULT="/absolute/path/to/vault" bash setup.sh --yes --agents copilot
 `setup.sh --agents copilot` installs, idempotently and login-free:
 
 - `~/.copilot/mcp-config.json` - MCP server `kennisbank` (`recall`, `capture`, and the temporal tools), registered by a key-scoped JSON merge and validated with a real initialize/list-tools handshake
-- `~/.copilot/hooks/kennisbank.json` - fail-open lifecycle hooks (cross-platform: each carries a `bash` and a `powershell` command) that refresh the indexes at session start and capture session/tool activity
 - `~/.copilot/copilot-instructions.md` - a KennisBank managed instruction block
 - `~/.copilot/agents/kennisbank.agent.md` - a custom agent profile, selected with `copilot --agent kennisbank`
-- the shared skills at `~/.agents/skills/` are picked up automatically (`copilot skill list`)
+- native slash-command skills at `~/.agents/skills/`, including
+  `/sessiestart`, `/sessielog`, `/weeklog`, and `/timeline`
+
+KennisBank installs no Copilot lifecycle hooks because Copilot has no hook field
+that hides its own timeline rows. Upgrades remove only known KennisBank hook
+commands and leave unrelated entries untouched.
 
 Run Copilot through the wrapper to pin the vault and local-LLM env: `python3 <vault>/.claude/scripts/kennisbank-copilot.py` (a trivial exec that hands off to the real `copilot`; `--kb-doctor`, `--kb-dry-run`, and `--kb-print-env` work without a GitHub login).
 
-**The cloud boundary is precise.** Copilot is cloud-backed - a live model turn needs a GitHub Copilot subscription and sends requests to GitHub. But that is the *only* thing that leaves your machine: your vault, your recall, the MCP server, and every hook stay 100% local, and MCP/hook/instruction install plus `copilot mcp list` all work **without** logging in. The integration is opt-in and never in the default target set. Full reference in [docs/agent-integrations.md](docs/agent-integrations.md), design rationale in [docs/adr/0003-copilot-cli-integration.md](docs/adr/0003-copilot-cli-integration.md), and why the wrapper is not a Headroom-style proxy in [docs/copilot-headroom-evaluation.md](docs/copilot-headroom-evaluation.md).
+**The cloud boundary is precise.** Copilot is cloud-backed, but your vault,
+recall, MCP server, skills, and instructions stay local. See
+[agent integrations](docs/agent-integrations.md), the original
+[Copilot ADR](docs/adr/0003-copilot-cli-integration.md), and the superseding
+[hookless ADR](docs/adr/ADR-005-hookless-codex-copilot-integration.md).
 
 ### GitHub Copilot (VS Code agent mode) - works, with one caveat
 

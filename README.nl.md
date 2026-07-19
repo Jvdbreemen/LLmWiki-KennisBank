@@ -30,13 +30,11 @@ Linux. OpenCode blijft ondersteund als extra lokale client.
 
 - Skill- en promptbeschrijvingen zijn in het Engels, zodat elke client ze
   consistent kan ontdekken.
-- Routinematige index-, sweep-, archief-, telemetrie- en capture-hooks zonder
-  wijzigingen zijn stil. Gewijzigde indexen en waarschuwingen worden beknopte
-  sessierapporten; Claude Code en Codex ontvangen die rapporten en
-  retrievalcontext via gestructureerde modelcontext met onderdrukte ruwe
-  hookuitvoer.
-- Actiegerichte memory- en destillatiemeldingen blijven agentcontext; alle
-  hooks zijn fail-open en blokkeren nooit een beurt.
+- Claude Code behoudt fail-open automatische hooks. Codex en Copilot
+  installeren bewust geen KennisBank lifecycle-hooks, zodat hun clients geen
+  `Running ... hook`- of `SessionStart hook (completed)`-regels tonen.
+- Codex en Copilot gebruiken native persoonlijke skills plus MCP. Upgrades
+  verwijderen alleen KennisBank-hooks en bewaren overige hooks.
 - Dezelfde lokale stdio MCP-server en expliciet ingestelde
   `KENNISBANK_VAULT` bedienen alle geïnstalleerde clients.
 
@@ -45,6 +43,9 @@ Installeer of upgrade de drie eersteklas clients:
 ```bash
 KENNISBANK_VAULT="/absoluut/pad/naar/kluis" bash setup.sh --yes --agents claude,codex,copilot
 ```
+
+Gebruik na herstart `$sessiestart` en `$sessielog` in Codex, of
+`/sessiestart` en `/sessielog` in Copilot.
 
 Gebaseerd op [Andrej Karpathy's LLM Wiki-patroon](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f): ruwe sessies gaan erin, gestructureerde kennis komt eruit. KennisBank breidt het patroon uit tot een gesloten lus:
 
@@ -66,17 +67,14 @@ Geheugensystemen van leveranciers (Mem0, Zep, Letta, Cognee) zijn krachtig maar 
 
 De ontwerpvoorkeur is overal dezelfde: **deterministisch waar mogelijk, LLM alleen waar het oordeelsvermogen toevoegt, fail-open overal**. Een dood model blokkeert nooit een sessie, verliest nooit een transcript, en verwijdert nooit geverifieerde kennis.
 
-## Functie-highlights (v0.16.1)
+## Functie-highlights (v0.16.2)
 
-### Nieuw in v0.16.1
+### Nieuw in v0.16.2
 
-- **Stille hooks voor drie clients.** Claude Code, Codex en GitHub Copilot CLI
-  tonen geen routinematige succesvolle lifecycle-uitvoer meer. Gestructureerde
-  retrieval en actiegerichte meldingen bereiken de agent nog steeds, en elke
-  hook blijft fail-open.
-- **Engelse metadata voor skill-discovery.** Meegeleverde skills en
-  gegenereerde Codex-promptaliassen gebruiken nu consequent Engelse
-  beschrijvingen.
+- **Geen hookregels in Codex en Copilot.** Hun KennisBank-integraties zijn
+  hookloos en gebruiken native commandskills plus MCP.
+- **Native sessieworkflows.** Copilot biedt `/sessiestart` en `/sessielog`;
+  Codex biedt `$sessiestart` en `$sessielog` plus `/prompts:*`-compatibiliteit.
 
 ### Nieuw in v0.15
 - **Meertalige temporele recall.** `/watdeedik`, `/timeline`, en `/weeklog`
@@ -215,8 +213,11 @@ In één idempotente run doet het setup-script:
 - initialiseert de settings-toggles en voert versie-gebonden migraties uit
 - vraagt welke agent-omgevingen geïnstalleerd moeten worden (`claude`, `codex`, `opencode`, of `all`; standaard `claude,codex`)
 - installeert Claude Code-commando's/skills/hooks wanneer `claude` is geselecteerd
-- installeert Codex gedeelde skills, `/prompts:*`-aliassen, hooks, MCP-config, en globale `AGENTS.md` wanneer `codex` is geselecteerd
+- installeert Codex-commandskills, `/prompts:*`-compatibiliteitsaliassen,
+  MCP-config en globale `AGENTS.md`; upgrades verwijderen oude KennisBank-hooks
 - installeert OpenCode-commando's, gedeelde skills, MCP-config, globale `AGENTS.md`, en een lokale plugin-hook wanneer `opencode` is geselecteerd
+- installeert Copilot-commandskills, MCP-config, persoonlijke instructies en
+  een agentprofiel; upgrades verwijderen oude KennisBank-hooks
 - vraagt om de LLM-backend in interactieve modus: standaard `ollama`, optioneel `openrouter` met model-slug en API-sleutel-omgevingsvariabele
 - valideert de installatie voordat het terugkeert: `doctor.sh`, agent-config-controles, MCP-runtime-handshake voor Codex/OpenCode, lokale Ollama-smoke-tests, en OpenRouter-smoke-tests wanneer OpenRouter is geselecteerd
 
@@ -226,7 +227,7 @@ Nuttige vlaggen:
 
 ```bash
 bash setup.sh --yes --agents claude,codex      # default non-interactive target set
-bash setup.sh --yes --agents all               # Claude Code + Codex + OpenCode
+bash setup.sh --yes --agents all               # Claude Code + Codex + OpenCode + Copilot
 bash setup.sh --yes --agents codex             # Codex only
 bash setup.sh --yes --skip-model-check         # CI/offline validation without Ollama smoke tests
 ```
@@ -242,7 +243,9 @@ Lees na installatie [POST-INSTALL.md](POST-INSTALL.md) voor de eerste-sessie-wal
 
 ### De hookset
 
-Claude Code ontvangt de volledige hookset hieronder in `~/.claude/settings.json`. Codex ontvangt equivalente lifecycle-hooks in `~/.codex/hooks.json` waar Codex ze ondersteunt, plus MCP- en skill-begeleiding. OpenCode ontvangt MCP plus een globale plugin onder `~/.config/opencode/plugins/`; de plugin-events van OpenCode zijn geen byte-voor-byte kloon van Claude-hooks, dus retrieval moet daar als MCP-/skill-geleid worden beschouwd.
+Claude Code ontvangt de hookset hieronder in `~/.claude/settings.json`. Codex en
+Copilot krijgen bewust geen KennisBank lifecycle-hooks; native skills en MCP
+voorkomen client-gegenereerde voortgangs- en voltooiingsregels.
 
 | Hook | Script | Wat het doet |
 |------|--------|--------------|
@@ -373,13 +376,16 @@ het internet te tunnelen - het is de handmatige brug hieronder.
 
 `setup.sh --agents codex` installeert:
 
-- `~/.agents/skills/{autoresearch,kennisbank-upgrade,kennisbank-contribute}/`
+- `~/.agents/skills/<commando>/SKILL.md`, inclusief `sessiestart`, `sessielog`
+  en de handgeschreven KennisBank-skills
 - `~/.codex/prompts/*.md`-aliassen, aangeroepen als `/prompts:sessielog`, `/prompts:sessiestart`, `/prompts:kennisbank-upgrade`, enz.
 - `~/.codex/AGENTS.md` met het actieve kluispad
-- `~/.codex/hooks.json` met KennisBank lifecycle-hooks
 - `~/.codex/config.toml` MCP-server `kennisbank`
 
-Codex stelt geen willekeurige kale slash-commando's zoals `/sessielog` beschikbaar; zijn herbruikbare promptbestanden worden aangeroepen als `/prompts:<name>`, en herbruikbare workflows kunnen beter skills gebruiken. MCP-tools `recall` en `capture` zijn beschikbaar via de geconfigureerde `kennisbank`-server. Setup installeert de vereiste Python MCP SDK en bewijst dat de server start voordat het succes meldt.
+Gebruik `$sessiestart` en `$sessielog` als native Codex-skills. De verouderde
+promptcompatibiliteit is `/prompts:<name>`. KennisBank installeert geen Codex
+lifecycle-hooks omdat `suppressOutput` nog niet wordt uitgevoerd. Setup bewaart
+overige hooks; MCP blijft beschikbaar.
 
 Handmatig MCP-equivalent:
 
@@ -423,10 +429,13 @@ KENNISBANK_VAULT="/absolute/path/to/vault" bash setup.sh --yes --agents copilot
 `setup.sh --agents copilot` installeert, idempotent en zonder login:
 
 - `~/.copilot/mcp-config.json` - MCP-server `kennisbank` (`recall`, `capture`, en de temporele tools), geregistreerd via een key-scoped JSON-merge en gevalideerd met een echte initialize/list-tools-handshake
-- `~/.copilot/hooks/kennisbank.json` - fail-open lifecycle-hooks (cross-platform: elk draagt een `bash`- en een `powershell`-commando) die de indexen verversen bij sessiestart en sessie-/tool-activiteit vastleggen
 - `~/.copilot/copilot-instructions.md` - een door KennisBank beheerd instructieblok
 - `~/.copilot/agents/kennisbank.agent.md` - een aangepast agent-profiel, geselecteerd met `copilot --agent kennisbank`
-- de gedeelde skills op `~/.agents/skills/` worden automatisch opgepikt (`copilot skill list`)
+- native slash-commandskills onder `~/.agents/skills/`, inclusief
+  `/sessiestart` en `/sessielog`
+
+KennisBank installeert geen Copilot lifecycle-hooks, omdat Copilot geen
+hookveld biedt om zijn eigen tijdlijnregels te verbergen.
 
 Draai Copilot via de wrapper om de kluis en local-LLM-env vast te pinnen: `python3 <vault>/.claude/scripts/kennisbank-copilot.py` (een triviale exec die het overdraagt aan de echte `copilot`; `--kb-doctor`, `--kb-dry-run`, en `--kb-print-env` werken zonder GitHub-login).
 
