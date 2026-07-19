@@ -1,4 +1,5 @@
-Schrijf een sessie-log voor de huidige Claude-sessie naar de KennisBank vault, en compileer daarna direct de wiki-kandidaten uit deze sessie.
+Schrijf een sessie-log voor de huidige agent-sessie naar de KennisBank vault,
+en compileer daarna direct de wiki-kandidaten uit deze sessie.
 
 ## Vault-root bepalen (VERPLICHT — lees dit eerst)
 
@@ -47,7 +48,10 @@ Dit voegt de nieuwe sessie toe aan `$VAULT/02-wiki/log.md` (het chronologische i
 
 ### Memory-sweep (optioneel, on-demand)
 
-De autonome capture-sweep (`sweep-launch.py`) draait normaal automatisch bij SessionStart. Wil je de sweep op-demand draaien (bijvoorbeeld na een lange sessie met veel nieuwe transcripts), dan kan dat direct:
+Claude Code start de autonome capture-sweep (`sweep-launch.py`) automatisch bij
+SessionStart. In Codex en Copilot is session maintenance bewust expliciet om
+client hookmeldingen te voorkomen. Wil je de sweep op-demand draaien, dan kan
+dat direct:
 ```bash
 python3 "$VAULT/.claude/scripts/memory-sweep.py"
 ```

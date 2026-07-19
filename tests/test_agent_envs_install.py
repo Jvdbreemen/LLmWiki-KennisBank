@@ -58,34 +58,62 @@ class AgentEnvInstallTest(unittest.TestCase):
                 os.environ[k] = v
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def test_codex_install_creates_skills_prompts_hooks_and_mcp(self):
+    def test_codex_install_creates_native_skills_compat_prompts_and_mcp(self):
         self.m.install_codex(REPO_ROOT, self.vault)
         home = self.tmp
         codex = home / ".codex"
         self.assertTrue((home / ".agents" / "skills" / "kennisbank-upgrade" / "SKILL.md").is_file())
+        self.assertTrue((home / ".agents" / "skills" / "sessielog" / "SKILL.md").is_file())
+        self.assertTrue((home / ".agents" / "skills" / "sessiestart" / "SKILL.md").is_file())
         self.assertTrue((codex / "prompts" / "sessiestart.md").is_file())
         self.assertTrue((codex / "prompts" / "weeklog.md").is_file())
         self.assertTrue((codex / "prompts" / "timeline.md").is_file())
         self.assertTrue((codex / "prompts" / "watdeedik.md").is_file())
-        hooks = json.loads((codex / "hooks.json").read_text(encoding="utf-8"))
-        hook_text = json.dumps(hooks)
-        self.assertIn("kb-retrieve.py", hook_text)
-        self.assertIn("kb-presearch.py", hook_text)
-        self.assertIn("build-activity-index.py", hook_text)
-        self.assertNotIn("statusMessage", hook_text)
-        build_group = next(
-            group
-            for group in hooks["hooks"]["SessionStart"]
-            if "build-kb-index.py" in json.dumps(group)
-        )
-        retrieve_group = hooks["hooks"]["UserPromptSubmit"][0]
-        self.assertIn("quiet-hook.py", json.dumps(build_group))
-        self.assertNotIn("quiet-hook.py", json.dumps(retrieve_group))
+        self.assertFalse((codex / "hooks.json").exists())
         prompt = (codex / "prompts" / "sessiestart.md").read_text(encoding="utf-8")
         self.assertIn("description: Load KennisBank session-start context.", prompt)
+        skill = (home / ".agents" / "skills" / "sessiestart" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("name: sessiestart", skill)
         config = (codex / "config.toml").read_text(encoding="utf-8")
         self.assertIn("[mcp_servers.kennisbank]", config)
         self.assertIn(str(self.vault).replace("\\", "/"), config)
+
+    def test_codex_install_removes_only_kennisbank_hooks(self):
+        codex = self.tmp / ".codex"
+        codex.mkdir(parents=True)
+        hooks_path = codex / "hooks.json"
+        hooks_path.write_text(json.dumps({
+            "description": "user hooks",
+            "hooks": {
+                "SessionStart": [{
+                    "hooks": [
+                        {"type": "command", "command": "echo user-hook"},
+                        {
+                            "type": "command",
+                            "command": (
+                                "py -3 C:/old-vault/.claude/scripts/quiet-hook.py "
+                                "--client codex C:/old-vault/.claude/scripts/build-kb-index.py"
+                            ),
+                        },
+                    ],
+                }],
+                "Stop": [{
+                    "hooks": [{
+                        "type": "command",
+                        "command": "py -3 C:/old-vault/.claude/scripts/kb-usage-scan.py",
+                    }],
+                }],
+            },
+        }), encoding="utf-8")
+
+        self.m.install_codex(REPO_ROOT, self.vault)
+
+        text = hooks_path.read_text(encoding="utf-8")
+        self.assertIn("echo user-hook", text)
+        self.assertNotIn("build-kb-index.py", text)
+        self.assertNotIn("kb-usage-scan.py", text)
 
     def test_codex_mcp_repair_does_not_duplicate_env_subtable(self):
         codex = self.tmp / ".codex"
@@ -136,19 +164,17 @@ command = "other"
         info = self.m.install_copilot(REPO_ROOT, self.vault)
         home = self.tmp / ".copilot"
         self.assertTrue((home / "mcp-config.json").is_file())
-        self.assertTrue((home / "hooks" / "kennisbank.json").is_file())
+        self.assertFalse((home / "hooks" / "kennisbank.json").exists())
         self.assertTrue((home / "copilot-instructions.md").is_file())
         self.assertTrue((home / "agents" / "kennisbank.agent.md").is_file())
         self.assertTrue((self.tmp / ".agents" / "skills" / "autoresearch" / "SKILL.md").is_file())
+        self.assertTrue((self.tmp / ".agents" / "skills" / "sessielog" / "SKILL.md").is_file())
+        self.assertTrue((self.tmp / ".agents" / "skills" / "sessiestart" / "SKILL.md").is_file())
         mcp = json.loads((home / "mcp-config.json").read_text(encoding="utf-8"))
         self.assertEqual(mcp["mcpServers"]["kennisbank"]["env"]["KENNISBANK_VAULT"],
                          str(self.vault).replace("\\", "/"))
         # capture hook script present in repo so the deployed hook is safe.
         self.assertTrue((REPO_ROOT / "scripts" / "kb-copilot-capture.py").is_file())
-        hooks = json.loads(
-            (home / "hooks" / "kennisbank.json").read_text(encoding="utf-8")
-        )
-        self.assertIn("quiet-hook.py", json.dumps(hooks))
 
     def test_copilot_install_is_idempotent(self):
         self.m.install_copilot(REPO_ROOT, self.vault)

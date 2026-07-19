@@ -22,9 +22,9 @@ via `--agents`.
 - **Read by**:
   - all Python scripts through `scripts/_vaultpath.py` or a self-locating `<vault>/.claude/scripts/` fallback
   - Claude hooks through `~/.claude/settings.json`
-  - Codex hooks/MCP through `~/.codex/hooks.json` and `~/.codex/config.toml`
+  - Codex skills/MCP through `~/.agents/skills` and `~/.codex/config.toml`
   - OpenCode MCP/plugin through `~/.config/opencode/opencode.json` and `~/.config/opencode/plugins/kennisbank.js`
-  - Copilot MCP/hooks through `~/.copilot/mcp-config.json` and `~/.copilot/hooks/kennisbank.json` (honors `COPILOT_HOME`)
+  - Copilot skills/MCP through `~/.agents/skills` and `~/.copilot/mcp-config.json` (honors `COPILOT_HOME`)
 - **Effect**: root of the knowledge vault. Everything below this path.
 - **To change**: rerun setup with `KENNISBANK_VAULT=/new/path bash setup.sh --yes --agents ...`. Do not hand-edit generated agent configs unless you are repairing setup itself.
 
@@ -62,9 +62,11 @@ via `--agents`.
 - **Values**: `claude`, `codex`, `opencode`, `copilot`, comma-separated combinations, or `all`
 - **Effect**:
   - `claude`: installs `~/.claude/commands`, `~/.claude/skills`, and `~/.claude/settings.json` hooks.
-  - `codex`: installs `~/.agents/skills`, `~/.codex/prompts`, `~/.codex/AGENTS.md`, `~/.codex/hooks.json`, and `~/.codex/config.toml` MCP.
+  - `codex`: installs command skills, compatibility prompts, `AGENTS.md`, and
+    MCP; removes only legacy KennisBank hooks.
   - `opencode`: installs `~/.config/opencode/commands`, `~/.agents/skills`, `~/.config/opencode/AGENTS.md`, `~/.config/opencode/opencode.json` MCP, and `~/.config/opencode/plugins/kennisbank.js`.
-  - `copilot`: installs the KennisBank MCP server, hooks, personal instructions, and a custom agent profile under `~/.copilot/` (see section 14). Opt-in; cloud-backed; not in the default target set.
+  - `copilot`: installs command skills, MCP, personal instructions, and a custom
+    agent profile; removes only legacy KennisBank hooks (see section 14).
 - **Validation**: `setup.sh` calls `scripts/install-agent-envs.py --validate` and fails when selected agent config is incomplete.
 
 ### Post-install model validation
@@ -700,12 +702,12 @@ De achtergrond-automatieken zijn individueel aan/uit te zetten via
 | `usage_telemetry` | aan | registreer geinjecteerde + gebruikte kennis in `kb-usage.db` (ranking-boost, stale-warm-skip) | geen gebruiksmeting; ranking en stale-check vallen terug op leeftijd |
 
 - **Wijzigen**: draai `/kennisbank:settings` (toont een tabel en zet toggles aan/uit), of bewerk het JSON-bestand (waarden zijn JSON-booleans).
-- **Self-gating**: de hooks blijven statisch geregistreerd in `~/.claude/settings.json`; elk hookscript leest zijn toggle en eindigt fail-open (`exit 0`) als hij uit staat. Een toggle-wijziging werkt vanaf de volgende sessie.
-- **Stille routine-uitvoer**: index-, sweep-, archief- en telemetriehooks lopen
-  via `quiet-hook.py`. Geen-wijziging-uitvoer blijft stil; gewijzigde indexen
-  en waarschuwingen worden beknopte sessierapporten. Retrieval, rapporten en
-  actiegerichte meldingen blijven gestructureerde agentcontext met onderdrukte
-  ruwe hookuitvoer. Setup verwijdert verouderde `statusMessage`-velden.
+- **Self-gating**: automatische hooks blijven alleen voor Claude geregistreerd;
+  Codex en Copilot voeren dezelfde workflows expliciet via skills uit.
+- **Stille routine-uitvoer**: Claude gebruikt `quiet-hook.py`. Codex en Copilot
+  hebben geen KennisBank lifecycle-hooks en tonen daarom geen KennisBank
+  hookregels; gebruik respectievelijk `$sessiestart`/`$sessielog` en
+  `/sessiestart`/`/sessielog`.
 - **Defaults bij ontbreken**: ontbreekt het bestand of een key, dan geldt de default-kolom hierboven. `setup` en `upgrade` schrijven expliciete waarden.
 - **Interactie**: met `embed_index` uit wordt `graphify-out/.needs-rebuild` niet bij SessionStart geleegd; dat is benign, de flag wordt door de graphify-rebuild zelf geleegd.
 
@@ -772,14 +774,16 @@ alleen voor scans en alleen wanneer lokale Tesseract/tessdata beschikbaar is.
 (`npm install -g @github/copilot`, invoked as `copilot`, v1.0.70+) as a fourth
 local agent, mirroring the Codex/OpenCode integration. It is **not** the older
 `gh copilot` gh-extension and **not** Copilot's VS Code agent mode. The
-authoritative design is [`docs/adr/0003-copilot-cli-integration.md`](docs/adr/0003-copilot-cli-integration.md);
+original design is [`docs/adr/0003-copilot-cli-integration.md`](docs/adr/0003-copilot-cli-integration.md);
+its hook decision is superseded by
+[`ADR-005`](docs/adr/ADR-005-hookless-codex-copilot-integration.md);
 the wrapper's "trivial exec, not a proxy" decision is derived in
 [`docs/copilot-headroom-evaluation.md`](docs/copilot-headroom-evaluation.md).
 
 Copilot is **cloud-backed and opt-in**: a live model turn sends requests to
 GitHub and needs a GitHub Copilot subscription (`copilot` `/login`). KennisBank's
-vault and recall stay 100% local; MCP registration, hook install, instruction
-install, and `copilot mcp list` all work **without** a GitHub login. This
+vault and recall stay 100% local; MCP, skill, and instruction installation plus
+`copilot mcp list` work **without** a GitHub login. This
 integration does not change KennisBank's "nothing to the cloud without consent"
 default for the vault. Auth tokens (`COPILOT_GITHUB_TOKEN` / `GH_TOKEN` /
 `GITHUB_TOKEN`) are the user's and are never stored, logged, or committed.
@@ -801,10 +805,9 @@ edit.
 | Surface | File | KennisBank writes |
 |---|---|---|
 | MCP server | `~/.copilot/mcp-config.json` | key `mcpServers.kennisbank` |
-| Hooks | `~/.copilot/hooks/kennisbank.json` | the `hooks` object (`version: 1`) |
 | Personal instructions | `~/.copilot/copilot-instructions.md` | a managed marker block |
 | Custom agent profile | `~/.copilot/agents/kennisbank.agent.md` | the whole KennisBank-owned file |
-| Skills | `~/.agents/skills/<name>/` | already installed for Codex/OpenCode; free for Copilot |
+| Skills | `~/.agents/skills/<name>/` | generated commands plus authored workflows |
 
 The custom agent profile requires the `.agent.md` extension (a plain `.md` is
 silently ignored) and is selected with `copilot --agent kennisbank`. Installed
@@ -841,23 +844,14 @@ Registration is a login-free key-scoped JSON merge (not `copilot mcp add`),
 validated with the same real initialize/list-tools handshake used for
 Codex/OpenCode. `copilot mcp list` then shows the server.
 
-### Hooks file (`~/.copilot/hooks/kennisbank.json`)
+### Hookless command workflow
 
-Shape is `{ "version": 1, "hooks": { <event>: [ ... ] } }`. Each entry carries
-**both** a `bash` and a `powershell` command; Copilot picks by OS (matching the
-`python3` / `py -3` interpreter convention). Events wired:
+KennisBank installs no Copilot lifecycle hooks. Copilot renders timeline rows
+for registered hooks and exposes no field that hides them. Setup removes only
+known KennisBank commands from `~/.copilot/hooks/kennisbank.json`.
 
-- **`sessionStart`**: `import-copilot.py`, `build-embed-index.py`,
-  `build-kb-index.py`, `build-activity-index.py`, `sweep-launch.py`,
-  `memory-notify.py`, `distill-notify.py`, and the capture hook.
-- **`userPromptSubmitted`, `preToolUse`, `postToolUse`, `sessionEnd`**: the
-  capture hook (`kb-copilot-capture.py`).
-
-**Fail-open is mandatory.** Every command ends with `; exit 0`. A `preToolUse`
-hook that exits non-zero would **deny** the tool call (exit code 2 denies,
-hardened in v1.0.70); KennisBank never emits a deny — a missing Ollama, a script
-error, or a malformed payload skips the KennisBank side effect but never blocks
-Copilot.
+Use `/sessiestart` for maintenance and `/sessielog` for capture. MCP supplies
+live local recall independently of lifecycle hooks.
 
 ### Wrapper / launcher (`<vault>/.claude/scripts/kennisbank-copilot.py`)
 
@@ -882,13 +876,8 @@ Related env vars:
 
 ### Capture and import flow
 
-Two local sources, both tagged `agent=github-copilot-cli`:
-
-- **Live events**: the capture hook writes redacted JSONL to
-  `<vault>/.claude/copilot-events/*.jsonl`. Secret-bearing keys and inline
-  secrets (`Bearer`, `ghp_`, `sk-`, `KEY=VALUE`) are masked before disk; the hook
-  is fail-open.
-- **Import**: `import-copilot.py --vault <vault>` normalizes events into
+Use `/sessielog` for explicit capture. Existing local event data remains
+supported: `import-copilot.py --vault <vault>` normalizes events into
   `01-raw/transcripts/copilot-<sid>.jsonl` (idempotent dedupe, active-session
   skip). `--include-history` adds an opt-in best-effort import of Copilot's own
   session-state.
@@ -904,10 +893,8 @@ reports `copilot integration: not configured` as **INFO** (0 FAIL). When
 configured it reports:
 
 ```
-[PASS] copilot config: mcp, hooks, instructions and agent profile present; vault pinned
+[PASS] copilot config: mcp, instructions and agent profile present; no KennisBank hooks
 [PASS] copilot cli: v1.0.70; kennisbank MCP visible to copilot
-[PASS] copilot capture hook: kb-copilot-capture.py deployed
-[INFO] copilot hook events: ...
 ```
 
 It distinguishes optional-missing (`copilot_missing` / `platform_binary_missing`
