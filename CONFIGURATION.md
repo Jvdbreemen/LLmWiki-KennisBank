@@ -65,8 +65,9 @@ via `--agents`.
   - `codex`: installs command skills, compatibility prompts, `AGENTS.md`, and
     MCP; removes only legacy KennisBank hooks.
   - `opencode`: installs `~/.config/opencode/commands`, `~/.agents/skills`, `~/.config/opencode/AGENTS.md`, `~/.config/opencode/opencode.json` MCP, and `~/.config/opencode/plugins/kennisbank.js`.
-  - `copilot`: installs command skills, MCP, personal instructions, and a custom
-    agent profile; removes only legacy KennisBank hooks (see section 14).
+  - `copilot`: installs command skills, the KennisBank MCP server, personal
+    instructions, and a custom agent profile; removes only legacy KennisBank
+    hooks (see section 14). Opt-in and cloud-backed.
 - **Validation**: `setup.sh` calls `scripts/install-agent-envs.py --validate` and fails when selected agent config is incomplete.
 
 ### Post-install model validation
@@ -206,15 +207,15 @@ override the config file; both override the built-in defaults.
 - **`KB_RETRIEVE_THRESHOLD`** (config `retrieve_threshold`, default `0.60`): minimum cosine to inject. Model-specific; empirical on `qwen3-embedding:8b`: true match 0.73-0.80, noise <= 0.51. Re-tune after a model switch.
 - **`KB_RETRIEVE_TIMEOUT`** (default `20`s): embed-call timeout.
 
-### Index builder (`scripts/build-embed-index.py`, SessionStart)
+### Index builder (`scripts/build-embed-index.py`, coordinated SessionStart)
 
-- **Effect**: warms/refreshes the wiki embedding cache once per session, off the per-prompt path, and warms the local model. Incremental (only changed files or a model switch trigger real embed calls); prunes vanished files; clears the graphify `.needs-rebuild` flag. Registered as a global `SessionStart` hook.
+- **Effect**: warms/refreshes the wiki embedding cache once per session, off the per-prompt path, and warms the local model. Incremental (only changed files or a model switch trigger real embed calls); prunes vanished files; clears the graphify `.needs-rebuild` flag. Run by `kb-session-start.py`.
 
-### Geheugen-index (`scripts/build-kb-index.py`, SessionStart)
+### Geheugen-index (`scripts/build-kb-index.py`, coordinated SessionStart)
 
-- **Effect**: bouwt/verfrist `kb-index.db` (de hybride sqlite-vec + FTS5 zoekindex over wiki + memory) eenmaal per sessie, buiten het per-prompt-pad. Incrementeel: alleen gewijzigde bestanden of een model-switch triggert echte embed-aanroepen; verwijderde bestanden worden gepruned. Hergebruikt de JSON embed-cache (`emb.get_cached`) zodat vectoren niet opnieuw berekend worden. Registered as a global `SessionStart` hook naast `build-embed-index.py`. Gegate op `embed_index` (wiki-laag) en `memory_capture` (memory-laag).
+- **Effect**: bouwt/verfrist `kb-index.db` (de hybride sqlite-vec + FTS5 zoekindex over wiki + memory) eenmaal per sessie, buiten het per-prompt-pad. Incrementeel: alleen gewijzigde bestanden of een model-switch triggert echte embed-aanroepen; verwijderde bestanden worden gepruned. Hergebruikt de JSON embed-cache (`emb.get_cached`) zodat vectoren niet opnieuw berekend worden. Draait parallel met de andere onafhankelijke indexjobs in `kb-session-start.py`. Gegate op `embed_index` (wiki-laag) en `memory_capture` (memory-laag).
 
-### Temporal Activity index (`scripts/build-activity-index.py`, SessionStart)
+### Temporal Activity index (`scripts/build-activity-index.py`, coordinated SessionStart)
 
 - **Effect**: builds/refresht `<vault>/.claude/kb-activity.db`, a derived SQLite
   index for `/weeklog`, `/timeline`, `/watdeedik` and the MCP temporal tools.
@@ -263,26 +264,26 @@ override the config file; both override the built-in defaults.
   Personal eval sets live at `<vault>/06-claude/kb-activity-eval-set.json`; the
   repo ships `kb-activity-eval-set.example.json`.
 
-### Autonome capture-sweep (`scripts/sweep-launch.py`, SessionStart)
+### Autonome capture-sweep (`scripts/sweep-launch.py`, coordinated SessionStart)
 
-- **Effect**: dun launcher voor de autonome memory-sweep; gegate op `memory_capture`. Neemt een single-flight lockfile (`<vault>/.claude/.sweep.lock`, PID + mtime, stale-reclaim na 1u) zodat nooit twee sweeps gelijktijdig draaien. Spawnt `memory-sweep.py` DETACHED (niet-blokkerend: Windows DETACHED_PROCESS|CREATE_NO_WINDOW, POSIX start_new_session) en daarna `build-kb-index.py` (sweep-voor-index-ordening zodat verse memories meteen in de index landen). Eindigt met exit 0 fail-open. De zware LLM-sweep draait los van SessionStart en houdt de sessiestart onzichtbaar/snel. Draait naast de directe `build-kb-index.py`-hook (die de wiki-laag via `embed_index` bedient onafhankelijk van `memory_capture`; de dubbele run is benign want incrementeel en idempotent).
+- **Effect**: dun launcher voor de autonome memory-sweep; gegate op `memory_capture`. Neemt een single-flight lockfile (`<vault>/.claude/.sweep.lock`, PID + mtime, stale-reclaim na 1u) zodat nooit twee sweeps gelijktijdig draaien. Spawnt `memory-sweep.py` DETACHED (niet-blokkerend: Windows DETACHED_PROCESS|CREATE_NO_WINDOW, POSIX start_new_session). Eindigt met exit 0 fail-open. `kb-session-start.py` start de launcher in de parallelle onderhoudsfase en voert healthmeldingen pas daarna uit.
 - **Backfill-cap**: `scripts/memory-sweep.py` ondersteunt `--max-per-transcript N` (default 20) zodat `/kennisbank:rebuild-memory` of een directe `--all`-run een mega-transcript niet onbeperkt facetten laat schrijven. De normale per-sessie sweep blijft op `max_chunks=6`; de cap raakt alleen het aantal geschreven memories per source_session.
 
-### Transcript-archief (`scripts/archive-transcript.py`, SessionEnd)
+### Transcript-archief (`scripts/archive-transcript.py`, exit-coördinator)
 
 - **Effect:** kopieert het transcript van elke beëindigde sessie naar
   `$VAULT/01-raw/transcripts/<datum>-<project>-<sid8>.jsonl`. Deterministisch,
   fail-open, idempotent. Overleeft `cleanupPeriodDays` omdat de vault een
   backup-locatie is. Lege/`-p`-transcripts (< 200 bytes) worden overgeslagen.
 
-### Destillatie-melding (`scripts/distill-notify.py`, SessionStart)
+### Destillatie-melding (`scripts/distill-notify.py`, coordinated SessionStart)
 
 - **Effect:** telt transcripts in `01-raw/transcripts/` die niet in de
   `.distilled`-watermark staan en injecteert een melding "N wachten op
   destillatie". Geen LLM. Met `--mark <stem...>` (door `/destilleer`) worden
   exact de verwerkte stems aan de watermark toegevoegd.
 
-### Geheugen-gezondheid-melding (`scripts/memory-notify.py`, SessionStart)
+### Geheugen-gezondheid-melding (`scripts/memory-notify.py`, coordinated SessionStart)
 
 - **Effect:** leest de sweep-heartbeat (`<vault>/.claude/memory-sweep-status.json`)
   en telt unverified memories ouder dan 48u via `memory-doctor.py`. Meldt ALLEEN
@@ -299,39 +300,23 @@ override the config file; both override the built-in defaults.
 
 ### Hookregistratie (`~/.claude/settings.json`)
 
-De scripts worden door `setup.sh` naar `$VAULT/.claude/scripts/` gedeployed. Voeg
-daarna onderstaande entries TOE aan de bestaande `hooks`-arrays in je
-`~/.claude/settings.json` (Windows `py -3`-launcher; pas `<VAULT>` aan).
-
-> LET OP: dit is GEEN volledige settings.json. Plak het niet als geheel; dat
-> wist je bestaande hooks, env (incl. `KENNISBANK_VAULT`) en permissions. Voeg
-> alleen deze entries toe aan de respectieve arrays. De `SessionStart`-array
-> bevat al `build-embed-index.py` (en evt. caveman) -- zet `distill-notify.py`
-> en `build-kb-index.py` erNAAST, niet eroverheen.
+De scripts worden door `setup.sh` naar `$VAULT/.claude/scripts/` gedeployed.
+Setup registreert precies één KennisBank SessionStart-coördinator en één
+SessionEnd-coördinator en bewaart andere hooks, permissions en
+env-instellingen. Handmatige registratie is normaal niet nodig.
 
 ```jsonc
-// toe te voegen ENTRIES (geen complete settings.json):
-"SessionEnd": [
-  { "matcher": "", "hooks": [
-    { "type": "command", "command": "py -3 \"<VAULT>/.claude/scripts/archive-transcript.py\"" }
-  ]}
-],
-// onder de BESTAANDE SessionStart-array vier extra hook-blokken:
+// referentiefragment; geen complete settings.json
 "SessionStart": [
-  { "matcher": "", "hooks": [
-    { "type": "command", "command": "py -3 \"<VAULT>/.claude/scripts/distill-notify.py\"" }
-  ]},
-  { "matcher": "", "hooks": [
-    { "type": "command", "command": "py -3 \"<VAULT>/.claude/scripts/memory-notify.py\"" }
-  ]},
-  { "matcher": "", "hooks": [
-    { "type": "command", "command": "py -3 \"<VAULT>/.claude/scripts/build-kb-index.py\"" }
-  ]},
-  { "matcher": "", "hooks": [
-    { "type": "command", "command": "py -3 \"<VAULT>/.claude/scripts/sweep-launch.py\"" }
+  { "hooks": [
+    { "type": "command", "command": "py -3 \"<VAULT>/.claude/scripts/kb-session-start.py\" --client claude" }
   ]}
 ],
-// PreToolUse presearch-hook (geheugen+wiki vóór WebSearch/WebFetch):
+"SessionEnd": [
+  { "hooks": [
+    { "type": "command", "command": "py -3 \"<VAULT>/.claude/scripts/kb-session-end.py\" --client claude" }
+  ]}
+],
 "PreToolUse": [
   { "matcher": "WebSearch|WebFetch", "hooks": [
     { "type": "command", "command": "py -3 \"<VAULT>/.claude/scripts/kb-presearch.py\"" }
@@ -347,12 +332,22 @@ Op macOS/Linux: vervang `py -3` door `python3`.
 
 `setup.sh` registers the **full hookset** via `register-hooks.py --manifest`, covering:
 
-- **SessionStart**: `build-embed-index.py` (warm wiki embed cache), `distill-notify.py` (note pending transcripts), `build-kb-index.py` (refresh memory index), `sweep-launch.py` (launch memory sweep)
-- **SessionEnd**: `archive-transcript.py` (archive transcript to vault)
+- **SessionStart**: one `kb-session-start.py` coordinator. It runs independent
+  index/maintenance work concurrently, notifications afterward, applies
+  per-child timeouts, and emits one actionable report at most.
+- **SessionEnd**: one `kb-session-end.py` coordinator. It captures the
+  transcript first, then runs usage attribution; routine output is empty and
+  diagnostic state lands in `<vault>/.claude/kb-session-end-state.json`.
 - **UserPromptSubmit**: `kb-retrieve.py` (inject matching wiki snippets, hybrid cosine|FTS5)
 - **PreToolUse** (matcher `WebSearch|WebFetch`): `kb-presearch.py` (inject memory+wiki before external search)
 
-Registration is idempotent and non-destructive: existing hooks, permissions, and env are preserved. Re-running `setup.sh` is safe for new **and existing** vaults — it refreshes the tooling without clobbering user data or overwriting customisations. Interpreter is **interpreter-aware**: uses `py -3` on Windows, `python3` elsewhere; a self-heal on stale paths preserves the original interpreter. Skip registration with `setup.sh --no-hooks`.
+Registration is idempotent and non-destructive: existing hooks, permissions,
+and env are preserved. During upgrade known old start/exit script entries are
+removed and replaced by their coordinators; unrelated hooks remain. The same
+migration runs for Codex and Copilot. A vault-local lock and five-minute
+freshness stamp prevent duplicate work after rapid startup/resume events.
+Interpreter selection is cross-platform: `py -3` on Windows and `python3` on
+macOS/Linux. Skip Claude registration with `setup.sh --no-hooks`.
 
 **Version stamp.** `setup.sh` creates `<vault>/.claude/.kennisbank-schema-version` (current: `0.9.0`) — de migratie-schema-versie. Dit is een **apart** bestand van `.kennisbank-version` (de release-tag-stamp die de `kennisbank-upgrade`/`kennisbank-contribute`-skills beheren); ze worden bewust niet gedeeld. If a hook is stubbornly missing after re-run, force a re-registration by removing the schema-version stamp and re-running:
 
@@ -453,8 +448,13 @@ The five env vars below control the behavior of the vault-onderhoud scripts
 ### Usage-telemetrie (`scripts/_usage.py`, `scripts/kb-usage-scan.py`)
 
 - **Default**: aan (`usage_telemetry`-toggle in `kennisbank-settings.json`).
-- **Where set**: `scripts/_usage.py` (store, `<vault>/.claude/kb-usage.db`); SessionEnd-hook `kb-usage-scan.py` in het hooks-manifest.
-- **Effect**: kb-retrieve logt geïnjecteerde stems; de SessionEnd-scan markeert stems die in tool-calls voorkwamen als gebruikt. Voedt de gebruiks-boost in `_rank.usage_factor` (×1.10 ≤30d, ×1.05 ≤90d, beide lagen) en de warm-skip in `stale-check.py` (recent gebruikt = niet staal).
+- **Where set**: `scripts/_usage.py` (store,
+  `<vault>/.claude/kb-usage.db`); `kb-session-end.py` roept
+  `kb-usage-scan.py` na capture aan.
+- **Effect**: kb-retrieve logt geïnjecteerde stems; de exit-scan markeert stems
+  die in tool-calls voorkwamen als gebruikt. Voedt de gebruiks-boost in
+  `_rank.usage_factor` (×1.10 ≤30d, ×1.05 ≤90d, beide lagen) en de warm-skip in
+  `stale-check.py` (recent gebruikt = niet staal).
 - **Noise-signaal (mens-gated)**: `python3 kb-noise.py <stem> ...` markeert geïnjecteerde-maar-storende kennis expliciet als ruis (`--list` toont markeringen). De ranking drukt zulke stems begrensd omlaag via `_rank.noise_factor` (max −20% bij 100% noise-rate, vloer 0.8); zonder markeringen is de factor exact 1.0. Nooit autonoom: alleen de mens markeert.
 - **To change**: toggle uit via `/kennisbank:settings` of `_settings.py set usage_telemetry false`; boost/penalty-waarden in `_rank.py` (`USAGE_BOOST_*`, `NOISE_PENALTY`, `NOISE_FLOOR`).
 
@@ -702,12 +702,13 @@ De achtergrond-automatieken zijn individueel aan/uit te zetten via
 | `usage_telemetry` | aan | registreer geinjecteerde + gebruikte kennis in `kb-usage.db` (ranking-boost, stale-warm-skip) | geen gebruiksmeting; ranking en stale-check vallen terug op leeftijd |
 
 - **Wijzigen**: draai `/kennisbank:settings` (toont een tabel en zet toggles aan/uit), of bewerk het JSON-bestand (waarden zijn JSON-booleans).
-- **Self-gating**: automatische hooks blijven alleen voor Claude geregistreerd;
-  Codex en Copilot voeren dezelfde workflows expliciet via skills uit.
-- **Stille routine-uitvoer**: Claude gebruikt `quiet-hook.py`. Codex en Copilot
-  hebben geen KennisBank lifecycle-hooks en tonen daarom geen KennisBank
-  hookregels; gebruik respectievelijk `$sessiestart`/`$sessielog` en
-  `/sessiestart`/`/sessielog`.
+- **Self-gating**: één SessionStart-coördinator blijft per client statisch
+  geregistreerd. Elk childscript leest zijn toggle en eindigt fail-open
+  (`exit 0`) als hij uit staat.
+- **Stille routine-uitvoer**: `kb-session-start.py` vangt child-uitvoer af.
+  Geen-wijziging-uitvoer blijft stil; gewijzigde indexen en waarschuwingen
+  worden één beknopt rapport. Een client kan nog één generieke lifecycle-regel
+  tonen; die wordt door de client zelf gerenderd.
 - **Defaults bij ontbreken**: ontbreekt het bestand of een key, dan geldt de default-kolom hierboven. `setup` en `upgrade` schrijven expliciete waarden.
 - **Interactie**: met `embed_index` uit wordt `graphify-out/.needs-rebuild` niet bij SessionStart geleegd; dat is benign, de flag wordt door de graphify-rebuild zelf geleegd.
 
@@ -775,8 +776,8 @@ alleen voor scans en alleen wanneer lokale Tesseract/tessdata beschikbaar is.
 local agent, mirroring the Codex/OpenCode integration. It is **not** the older
 `gh copilot` gh-extension and **not** Copilot's VS Code agent mode. The
 original design is [`docs/adr/0003-copilot-cli-integration.md`](docs/adr/0003-copilot-cli-integration.md);
-its hook decision is superseded by
-[`ADR-005`](docs/adr/ADR-005-hookless-codex-copilot-integration.md);
+its SessionStart fan-out is refined by
+[`ADR-006`](docs/adr/ADR-006-coordinate-sessionstart-work-behind-one-client-hook.md);
 the wrapper's "trivial exec, not a proxy" decision is derived in
 [`docs/copilot-headroom-evaluation.md`](docs/copilot-headroom-evaluation.md).
 
@@ -807,7 +808,7 @@ edit.
 | MCP server | `~/.copilot/mcp-config.json` | key `mcpServers.kennisbank` |
 | Personal instructions | `~/.copilot/copilot-instructions.md` | a managed marker block |
 | Custom agent profile | `~/.copilot/agents/kennisbank.agent.md` | the whole KennisBank-owned file |
-| Skills | `~/.agents/skills/<name>/` | generated commands plus authored workflows |
+| Skills | `~/.agents/skills/<name>/` | generated commands plus hand-authored workflows |
 
 The custom agent profile requires the `.agent.md` extension (a plain `.md` is
 silently ignored) and is selected with `copilot --agent kennisbank`. Installed
@@ -844,14 +845,31 @@ Registration is a login-free key-scoped JSON merge (not `copilot mcp add`),
 validated with the same real initialize/list-tools handshake used for
 Codex/OpenCode. `copilot mcp list` then shows the server.
 
-### Hookless command workflow
+### Coordinated hooks and native command workflows
 
-KennisBank installs no Copilot lifecycle hooks. Copilot renders timeline rows
-for registered hooks and exposes no field that hides them. Setup removes only
-known KennisBank commands from `~/.copilot/hooks/kennisbank.json`.
+KennisBank registers exactly one Copilot `sessionStart` and one `sessionEnd`
+coordinator with both `bash` and `powershell` commands. Startup imports first,
+runs independent maintenance concurrently, and notices afterward. Exit captures
+the terminal event first, then runs immediate import and usage attribution
+concurrently. Routine exit output is empty; actionable startup results use
+Copilot's native `additionalContext`. Copilot may still render one generic row
+per lifecycle event.
 
-Use `/sessiestart` for maintenance and `/sessielog` for capture. MCP supplies
-live local recall independently of lifecycle hooks.
+Prompt and tool capture remain fail-open so temporal recall stays complete.
+Setup removes only legacy start/exit fan-out and preserves unrelated entries.
+
+Generated personal skills are cross-platform Markdown workflows:
+
+```text
+/sessiestart
+/sessielog
+/weeklog
+/timeline
+```
+
+`/sessiestart` runs maintenance on request. `/sessielog` performs semantic
+capture, then calls `kb-session-log.py` once to run deterministic post-save
+index/sweep work. MCP supplies live local recall independently of hooks.
 
 ### Wrapper / launcher (`<vault>/.claude/scripts/kennisbank-copilot.py`)
 
@@ -893,8 +911,9 @@ reports `copilot integration: not configured` as **INFO** (0 FAIL). When
 configured it reports:
 
 ```
-[PASS] copilot config: mcp, instructions and agent profile present; no KennisBank hooks
+[PASS] copilot config: mcp, instructions and agent profile present; one start and one exit coordinator
 [PASS] copilot cli: v1.0.70; kennisbank MCP visible to copilot
+[PASS] copilot command skills: sessiestart and sessielog discoverable
 ```
 
 It distinguishes optional-missing (`copilot_missing` / `platform_binary_missing`

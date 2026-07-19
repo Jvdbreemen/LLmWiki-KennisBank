@@ -62,16 +62,47 @@ class RegisterHooksTest(unittest.TestCase):
         self.m.register_manifest(s, "/v")
         cmds = [h["command"] for ev in s["hooks"].values() for g in ev for h in g["hooks"]]
         joined = " ".join(cmds)
-        for need in ("build-kb-index.py", "sweep-launch.py", "memory-notify.py", "kb-presearch.py"):
+        for need in ("kb-session-start.py", "kb-session-end.py", "kb-presearch.py"):
             self.assertIn(need, joined)
         pre = s["hooks"]["PreToolUse"][0]
         self.assertEqual(pre.get("matcher"), "WebSearch|WebFetch")
         self.assertEqual(s["env"]["KENNISBANK_VAULT"], "/v")
-        build = next(cmd for cmd in cmds if "build-kb-index.py" in cmd)
+        build = next(cmd for cmd in cmds if "kb-session-start.py" in cmd)
         retrieve = next(cmd for cmd in cmds if "kb-retrieve.py" in cmd)
-        self.assertIn("quiet-hook.py", build)
+        self.assertIn("--client claude", build)
+        self.assertNotIn("quiet-hook.py", build)
         self.assertNotIn("quiet-hook.py", retrieve)
         self.assertNotIn("statusMessage", json.dumps(s))
+
+    def test_register_manifest_migrates_legacy_session_end_fanout(self):
+        s = {"hooks": {"SessionEnd": [
+            {"hooks": [{"type": "command", "command": 'python3 "/v/.claude/scripts/archive-transcript.py"'}]},
+            {"hooks": [{"type": "command", "command": 'python3 "/v/.claude/scripts/kb-usage-scan.py"'}]},
+            {"hooks": [{"type": "command", "command": 'python3 "/old/.claude/scripts/kb-session-end.py" --client claude'}]},
+            {"hooks": [{"type": "command", "command": 'python3 "/duplicate/.claude/scripts/kb-session-end.py" --client claude'}]},
+            {"hooks": [{"type": "command", "command": "echo user-exit-hook"}]},
+        ]}}
+        self.assertTrue(self.m.register_manifest(s, "/v"))
+        blob = json.dumps(s["hooks"]["SessionEnd"])
+        self.assertEqual(blob.count("kb-session-end.py"), 1)
+        self.assertIn("--client claude", blob)
+        self.assertIn("echo user-exit-hook", blob)
+        self.assertNotIn("archive-transcript.py", blob)
+        self.assertNotIn("kb-usage-scan.py", blob)
+
+    def test_register_manifest_migrates_legacy_session_fanout(self):
+        s = {"hooks": {"SessionStart": [
+            {"hooks": [{"type": "command", "command": 'python3 "/v/.claude/scripts/build-kb-index.py"'}]},
+            {"hooks": [{"type": "command", "command": 'python3 "/old/.claude/scripts/kb-session-start.py" --client claude'}]},
+            {"hooks": [{"type": "command", "command": 'python3 "/duplicate/.claude/scripts/kb-session-start.py" --client claude'}]},
+            {"hooks": [{"type": "command", "command": "echo user-hook"}]},
+        ]}}
+        self.assertTrue(self.m.register_manifest(s, "/v"))
+        blob = json.dumps(s["hooks"]["SessionStart"])
+        self.assertIn("kb-session-start.py", blob)
+        self.assertEqual(blob.count("kb-session-start.py"), 1)
+        self.assertIn("echo user-hook", blob)
+        self.assertNotIn("build-kb-index.py", blob)
 
     def test_selfheal_removes_routine_status_message(self):
         s = {"hooks": {"SessionStart": [

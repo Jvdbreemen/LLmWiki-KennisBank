@@ -51,6 +51,12 @@ def build_command(
 ) -> str:
     """Build a quoted hook command, optionally through the quiet runner."""
     command = interp or interpreter()
+    coordinator = {
+        "kb-session-start.py": "claude",
+        "kb-session-end.py": "claude",
+    }.get(Path(script_path).name)
+    if coordinator:
+        return f'{command} "{script_path}" --client {coordinator}'
     if quiet:
         wrapper = str(Path(script_path).with_name("quiet-hook.py"))
         return (
@@ -172,6 +178,56 @@ def register_manifest(settings: dict, vault_root: str) -> bool:
     if env.get("KENNISBANK_VAULT") != vault_root:
         env["KENNISBANK_VAULT"] = vault_root
         changed = True
+    session_groups = settings.setdefault("hooks", {}).get("SessionStart", [])
+    if isinstance(session_groups, list):
+        kept = []
+        coordinator_seen = False
+        for group in session_groups:
+            if not isinstance(group, dict) or not isinstance(group.get("hooks"), list):
+                kept.append(group)
+                continue
+            entries = []
+            for entry in group["hooks"]:
+                command = str(entry.get("command", "")) if isinstance(entry, dict) else ""
+                if any(script in command for script in man.LEGACY_SESSION_START_SCRIPTS):
+                    continue
+                if "kb-session-start.py" in command:
+                    if coordinator_seen:
+                        continue
+                    coordinator_seen = True
+                entries.append(entry)
+            if len(entries) != len(group["hooks"]):
+                changed = True
+            if entries:
+                updated = dict(group)
+                updated["hooks"] = entries
+                kept.append(updated)
+        settings["hooks"]["SessionStart"] = kept
+    end_groups = settings.setdefault("hooks", {}).get("SessionEnd", [])
+    if isinstance(end_groups, list):
+        kept = []
+        coordinator_seen = False
+        for group in end_groups:
+            if not isinstance(group, dict) or not isinstance(group.get("hooks"), list):
+                kept.append(group)
+                continue
+            entries = []
+            for entry in group["hooks"]:
+                command = str(entry.get("command", "")) if isinstance(entry, dict) else ""
+                if any(script in command for script in man.LEGACY_SESSION_END_SCRIPTS):
+                    changed = True
+                    continue
+                if "kb-session-end.py" in command:
+                    if coordinator_seen:
+                        changed = True
+                        continue
+                    coordinator_seen = True
+                entries.append(entry)
+            if entries:
+                updated = dict(group)
+                updated["hooks"] = entries
+                kept.append(updated)
+        settings["hooks"]["SessionEnd"] = kept
     for event, script, matcher in man.hooks():
         path = f"{vault_root}/.claude/scripts/{script}"
         if ensure_hook(

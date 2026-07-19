@@ -40,6 +40,7 @@ class AgentEnvInstallTest(unittest.TestCase):
             "kb-presearch.py",
             "build-kb-index.py",
             "quiet-hook.py",
+            "kb-session-start.py",
         ):
             (self.vault / ".claude" / "scripts" / script).write_text("# test\n", encoding="utf-8")
         self.saved = {k: os.environ.get(k) for k in (
@@ -69,7 +70,14 @@ class AgentEnvInstallTest(unittest.TestCase):
         self.assertTrue((codex / "prompts" / "weeklog.md").is_file())
         self.assertTrue((codex / "prompts" / "timeline.md").is_file())
         self.assertTrue((codex / "prompts" / "watdeedik.md").is_file())
-        self.assertFalse((codex / "hooks.json").exists())
+        hooks = json.loads((codex / "hooks.json").read_text(encoding="utf-8"))
+        session = json.dumps(hooks["hooks"]["SessionStart"])
+        self.assertEqual(session.count("kb-session-start.py"), 1)
+        self.assertNotIn("build-kb-index.py", session)
+        stop = json.dumps(hooks["hooks"]["Stop"])
+        self.assertEqual(stop.count("kb-session-end.py"), 1)
+        self.assertNotIn("archive-transcript.py", stop)
+        self.assertNotIn("kb-usage-scan.py", stop)
         prompt = (codex / "prompts" / "sessiestart.md").read_text(encoding="utf-8")
         self.assertIn("description: Load KennisBank session-start context.", prompt)
         skill = (home / ".agents" / "skills" / "sessiestart" / "SKILL.md").read_text(
@@ -81,7 +89,7 @@ class AgentEnvInstallTest(unittest.TestCase):
         self.assertIn("[mcp_servers.kennisbank]", config)
         self.assertIn(str(self.vault).replace("\\", "/"), config)
 
-    def test_codex_install_removes_only_kennisbank_hooks(self):
+    def test_codex_install_consolidates_only_sessionstart_hooks(self):
         codex = self.tmp / ".codex"
         codex.mkdir(parents=True)
         hooks_path = codex / "hooks.json"
@@ -98,23 +106,57 @@ class AgentEnvInstallTest(unittest.TestCase):
                                 "--client codex C:/old-vault/.claude/scripts/build-kb-index.py"
                             ),
                         },
+                        {
+                            "type": "command",
+                            "command": "py -3 C:/old/.claude/scripts/kb-session-start.py --client codex",
+                        },
+                        {
+                            "type": "command",
+                            "command": "py -3 C:/duplicate/.claude/scripts/kb-session-start.py --client codex",
+                        },
                     ],
                 }],
                 "Stop": [{
-                    "hooks": [{
-                        "type": "command",
-                        "command": "py -3 C:/old-vault/.claude/scripts/kb-usage-scan.py",
-                    }],
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": "py -3 C:/old-vault/.claude/scripts/kb-usage-scan.py",
+                        },
+                        {
+                            "type": "command",
+                            "command": "py -3 C:/old-vault/.claude/scripts/archive-transcript.py",
+                        },
+                        {
+                            "type": "command",
+                            "command": "py -3 C:/old/.claude/scripts/kb-session-end.py --client codex",
+                        },
+                        {
+                            "type": "command",
+                            "command": "py -3 C:/duplicate/.claude/scripts/kb-session-end.py --client codex",
+                        },
+                        {
+                            "type": "command",
+                            "command": "echo user-exit-hook",
+                        },
+                    ],
                 }],
             },
         }), encoding="utf-8")
 
         self.m.install_codex(REPO_ROOT, self.vault)
 
-        text = hooks_path.read_text(encoding="utf-8")
+        data = json.loads(hooks_path.read_text(encoding="utf-8"))
+        text = json.dumps(data)
         self.assertIn("echo user-hook", text)
         self.assertNotIn("build-kb-index.py", text)
+        self.assertIn("kb-session-start.py", text)
+        self.assertEqual(text.count("kb-session-start.py"), 1)
         self.assertNotIn("kb-usage-scan.py", text)
+        self.assertNotIn("archive-transcript.py", text)
+        self.assertIn("kb-session-end.py", text)
+        self.assertEqual(text.count("kb-session-end.py"), 1)
+        self.assertIn("echo user-exit-hook", text)
+        self.assertIn("Stop", data["hooks"])
 
     def test_codex_mcp_repair_does_not_duplicate_env_subtable(self):
         codex = self.tmp / ".codex"
@@ -165,15 +207,22 @@ command = "other"
         info = self.m.install_copilot(REPO_ROOT, self.vault)
         home = self.tmp / ".copilot"
         self.assertTrue((home / "mcp-config.json").is_file())
-        self.assertFalse((home / "hooks" / "kennisbank.json").exists())
+        hooks_path = home / "hooks" / "kennisbank.json"
+        self.assertTrue(hooks_path.is_file())
         self.assertTrue((home / "copilot-instructions.md").is_file())
         self.assertTrue((home / "agents" / "kennisbank.agent.md").is_file())
         self.assertTrue((self.tmp / ".agents" / "skills" / "autoresearch" / "SKILL.md").is_file())
-        self.assertTrue((self.tmp / ".agents" / "skills" / "sessielog" / "SKILL.md").is_file())
-        self.assertTrue((self.tmp / ".agents" / "skills" / "sessiestart" / "SKILL.md").is_file())
+        for command in ("sessielog", "sessiestart", "weeklog", "timeline"):
+            skill = self.tmp / ".agents" / "skills" / command / "SKILL.md"
+            self.assertTrue(skill.is_file(), command)
+            self.assertIn(f"name: {command}", skill.read_text(encoding="utf-8"))
         mcp = json.loads((home / "mcp-config.json").read_text(encoding="utf-8"))
         self.assertEqual(mcp["mcpServers"]["kennisbank"]["env"]["KENNISBANK_VAULT"],
                          str(self.vault).replace("\\", "/"))
+        hooks = json.loads(hooks_path.read_text(encoding="utf-8"))
+        session = json.dumps(hooks["hooks"]["sessionStart"])
+        self.assertEqual(session.count("kb-session-start.py"), 2)
+        self.assertNotIn("build-kb-index.py", session)
         # capture hook script present in repo so the deployed hook is safe.
         self.assertTrue((REPO_ROOT / "scripts" / "kb-copilot-capture.py").is_file())
 

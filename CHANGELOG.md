@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.1] - 2026-07-19
+
+### Added
+
+- **Cross-client SessionStart coordinator.** Claude Code, Codex, and the
+  standalone GitHub Copilot CLI register one `kb-session-start.py` handler
+  instead of six to eight independent startup handlers. Independent index jobs
+  run concurrently, notifications follow maintenance, rapid startup/resume
+  events are freshness-gated, every child has a timeout, and failures remain
+  fail-open.
+- **Cross-client exit coordinator.** Claude `SessionEnd`, Codex `Stop`, and
+  Copilot `sessionEnd` each register one `kb-session-end.py` handler. Capture
+  completes first; independent usage attribution and Copilot immediate import
+  then run concurrently. Routine output is empty, failures are time-bounded and
+  fail-open, and the last aggregate diagnostic is stored locally.
+- **Coordinated `/sessielog` follow-up.** Semantic summarization remains an
+  agent workflow. One `kb-session-log.py` helper coordinates mechanical
+  post-save indexes, sweep launch, and dependent notices.
+- **ADR-006 and ADR-007.** ADR-006 formally supersedes the v0.17.0 hookless
+  policy in ADR-005; ADR-007 records capture-before-follow-up and the
+  semantic/mechanical sessielog boundary.
+
+### Changed
+
+- **Deterministic hook migration.** Setup and upgrade recognize legacy
+  start/exit script basenames, replace only those entries, deduplicate the two
+  coordinators, and preserve unrelated user hooks plus prompt/presearch
+  behavior on Windows, macOS, and Linux.
+- **Consolidated reporting.** Progress-only stderr and routine no-change output
+  are suppressed. Changes and actions become at most one startup context
+  payload; exit remains silent and writes local diagnostics.
+
 ## [0.17.0] - 2026-07-19
 
 ### Changed
@@ -503,7 +535,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.17.0...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.17.1...HEAD
+[0.17.1]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.17.0...v0.17.1
 [0.17.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.16.3...v0.17.0
 [0.16.3]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.16.2...v0.16.3
 [0.16.2]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.16.1...v0.16.2
