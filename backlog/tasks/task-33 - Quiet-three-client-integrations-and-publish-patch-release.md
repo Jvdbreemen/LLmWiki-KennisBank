@@ -1,11 +1,11 @@
 ---
 id: TASK-33
 title: Quiet three-client integrations and publish patch release
-status: In Progress
+status: Done
 assignee:
   - Codex
 created_date: '2026-07-19 10:56'
-updated_date: '2026-07-19 11:45'
+updated_date: '2026-07-19 11:49'
 labels:
   - hooks
   - claude
@@ -50,7 +50,7 @@ Make KennisBank quiet on successful background activity across Claude Code, Code
 - [x] #3 Codex and Copilot integrations remain silent on routine success; hook capture, MCP registration, and skill discovery remain functional and fail-open.
 - [x] #4 Regression tests cover quiet hook envelopes, English metadata, three-client installer output, fail-open behavior, and documentation contracts.
 - [x] #5 Focused tests, full repository tests, setup validation, and live installed-vault validation pass without modifying personal vault content unexpectedly.
-- [ ] #6 A patch version is merged to upstream main through a green pull request, tagged on the merged commit, and published as an upstream GitHub Release for automatic upgrades.
+- [x] #6 A patch version is merged to upstream main through a green pull request, tagged on the merged commit, and published as an upstream GitHub Release for automatic upgrades.
 - [x] #7 README, CONFIGURATION, integration documentation, installers, and runtime help prominently document Claude Code, Codex, and GitHub Copilot CLI; OpenCode remains supported and Cursor product references are removed.
 <!-- AC:END -->
 
@@ -68,4 +68,12 @@ Implemented fail-open quiet-hook.py for routine Claude/Codex/Copilot lifecycle c
 User clarified that suppression must preserve useful KennisBank reporting. Implemented relevance-aware quiet-hook behavior: routine no-change maintenance is silent; changed index counts and warnings become structured session context; retrieval hits and actionable notices remain structured context; Copilot uses its native sessionStart additionalContext output.
 
 Validation evidence: focused hook/client tests 96 passed, 1 skipped; complete non-deployment suite 752 passed, 2 skipped; real setup deployment smoke passed; live setup against KENNISBANK_VAULT=D:/Users/Robert/Documents/Claude/Projects/Kluis validated Claude, Codex, and Copilot configs, MCP tool registration, Copilot v1.0.71 visibility, and quiet/relevant output behavior. Live doctor reported only two pre-existing vault-content findings: 13 unverified memories older than 48h and 2 wiki articles with dangling provenance; personal content was intentionally not mutated. Direct live probes confirmed no-change index output is empty, notification context is suppressed/structured, and retrieval returns relevant structured results.
+
+Release evidence: upstream PR #38 merged at 2026-07-19T11:49:06Z as commit 877b2bdb0db7aaa02e135cce32d7bbdf39585f86 after green CI; annotated tag v0.16.1 was pushed to that merged commit and the public upstream GitHub Release was published at https://github.com/Jvdbreemen/LLmWiki-KennisBank/releases/tag/v0.16.1.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Delivered KennisBank v0.16.1 with relevance-aware quiet hooks for Claude Code, Codex, and GitHub Copilot CLI. Routine no-change maintenance is silent; relevant SessionStart findings, index changes, warnings, retrieval matches, reports, and query results reach agents as structured context. English skill metadata, updated three-client documentation, MCP registration compatibility, Windows safe-edit behavior, and Copilot doctor shell selection are included. Full local validation passed (752 passed, 2 skipped), upstream CI passed, PR #38 was merged, and v0.16.1 was tagged and released for automatic upgrades.
+<!-- SECTION:FINAL_SUMMARY:END -->
