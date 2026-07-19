@@ -1,6 +1,12 @@
 ---
 name: kennisbank-contribute
-description: Isolate local tooling improvements made in a deployed LLmWiki-KennisBank vault and contribute them upstream as a pull request. Diffs deployed scripts/templates/commands/skill against the installed release tag, filters out personal vault content, then branches, commits, pushes, and opens a PR. Triggers: /kennisbank-contribute, "contribute kennisbank changes", "PR my kennisbank tweaks upstream".
+description: >-
+  Isolate local tooling improvements made in a deployed LLmWiki-KennisBank
+  vault and contribute them upstream as a pull request. Diff deployed
+  scripts, templates, commands, and skills against the installed release tag,
+  filter out personal vault content, then branch, commit, push, and open a pull
+  request. Triggers: /kennisbank-contribute, "contribute kennisbank changes",
+  "PR my kennisbank tweaks upstream".
 ---
 
 # Kennisbank Contribute
