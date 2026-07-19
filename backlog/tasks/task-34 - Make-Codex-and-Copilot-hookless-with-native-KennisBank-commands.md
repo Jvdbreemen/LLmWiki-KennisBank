@@ -1,11 +1,11 @@
 ---
 id: TASK-34
 title: Make Codex and Copilot hookless with native KennisBank commands
-status: In Progress
+status: Done
 assignee:
   - Codex
 created_date: '2026-07-19 15:11'
-updated_date: '2026-07-19 15:12'
+updated_date: '2026-07-19 15:16'
 labels: []
 dependencies: []
 modified_files:
@@ -46,3 +46,9 @@ Implement selective hook migration and generated command skills; update validati
 <!-- SECTION:NOTES:BEGIN -->
 Implemented hookless Codex/Copilot installs with selective removal, generated command skills, updated validation/doctor, English and Dutch docs, and accepted MADR ADR-005. Verification: 50 passed + 1 skipped focused integration slice; 276 passed + 1 skipped a-h batch; 270 passed + 1 skipped i-m after documentation fix; 104 passed n-z excluding long setup deploy; changed setup path smoke passed; ADR gates had 0 failures (one advisory for no numeric consequence metric). Full monolithic suite exceeds the local command timeout because test_setup_deploy repeatedly runs setup; deterministic batches isolate it.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Implemented and verified hookless KennisBank integrations for Codex and Copilot. Setup installs native sessiestart/sessielog command skills plus MCP, selectively removes legacy KennisBank hooks while preserving unrelated hooks, and updates validation, doctor, README, configuration, integration, troubleshooting, changelog, and accepted MADR ADR-005. GitHub CI passed the full suite.
+<!-- SECTION:FINAL_SUMMARY:END -->
