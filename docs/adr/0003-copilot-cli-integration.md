@@ -131,6 +131,10 @@ fight a user's existing instructions.
 
 ### D3 — Hooks (TASK-26.6): native Copilot hooks, fail-open
 
+> **Refined by ADR-006 (2026-07-19).** The native hook and fail-open decision
+> remains accepted, but the independent `sessionStart` fan-out is replaced by
+> one coordinator. Prompt/tool/session-end capture hooks remain separate.
+
 Copilot CLI **does** support hooks (shipped v1.0.21, hardened in the installed
 v1.0.70). They are configured by JSON files, not a subcommand — which is why
 `copilot --help` shows no `hooks` command. Install a KennisBank-managed
