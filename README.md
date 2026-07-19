@@ -56,7 +56,10 @@ capture ──> consolidate ──> retrieve ──> measure
 
 - **Capture**: session logs, transcript archiving, and an autonomous memory sweep that extracts, types, and judges candidate memories after each session.
 - **Consolidate**: `/wiki` compiles sessions into wiki articles with per-claim provenance; new facts reconcile against old ones at write time (add, supersede, or drop) with a bi-temporal validity model.
-- **Retrieve**: hooks inject relevant wiki articles and memories into every prompt, in any project: hybrid semantic + keyword search, ranked by relevance x recency x importance, expanded with the best-connected graph neighbour.
+- **Retrieve**: Claude hooks inject relevant wiki articles and memories
+  automatically; Codex and Copilot use explicit skills and MCP. All routes use
+  hybrid semantic + keyword search, ranked by relevance x recency x importance
+  and expanded with the best-connected graph neighbour.
 - **Measure**: a recall@k eval harness and a threshold calibration harness make every retrieval change testable instead of vibes-based.
 - **Learn**: usage telemetry tracks which injected knowledge was actually used, boosting warm documents and keeping recently-used articles out of the stale list.
 
@@ -66,15 +69,18 @@ Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: 
 
 The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
 
-## Feature highlights (v0.16.2)
+## Feature highlights (v0.17.0)
 
-### New in v0.16.2
+### New in v0.17
 
 - **Zero hook rows in Codex and Copilot.** Their KennisBank integrations are
   hookless by design and use native command skills plus MCP.
 - **Native session workflows.** Copilot exposes `/sessiestart` and
   `/sessielog`; Codex exposes `$sessiestart` and `$sessielog` plus its existing
   `/prompts:*` compatibility aliases.
+- **Reliable command discovery.** Generated skill metadata is valid,
+  English-language YAML across supported coding agents, including Copilot's
+  stricter frontmatter parser.
 
 ### New in v0.15
 - **Multilingual temporal recall.** `/watdeedik`, `/timeline`, and `/weeklog`
@@ -127,8 +133,9 @@ The design bias throughout: **deterministic where possible, LLM only where it ad
   completion when validation fails.
 - **Multi-agent by design.** Choose `claude`, `codex`, `opencode`, or `all`.
   Claude Code gets native commands and hooks; Codex gets shared skills,
-  `/prompts:*` aliases, hooks, MCP, and `AGENTS.md`; OpenCode gets commands,
-  shared skills, MCP, global rules, and a local plugin.
+  `/prompts:*` aliases, MCP, and `AGENTS.md`; OpenCode gets commands, shared
+  skills, MCP, global rules, and a local plugin. Current releases deliberately
+  keep Codex lifecycle-hook-free.
 - **Verified local-first models.** Setup validates the selected backend before
   it returns. Ollama remains the default for local memory extraction and judging,
   including smoke tests for the configured embedding and chat models.
