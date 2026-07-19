@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.3] - 2026-07-19
+
+### Fixed
+
+- **Copilot command-skill discovery.** Generated `argument-hint` frontmatter is
+  now a quoted YAML string instead of a YAML list, so Copilot loads
+  `/sessiestart`, `/sessielog`, and the other generated commands.
+
 ## [0.16.2] - 2026-07-19
 
 ### Changed
@@ -473,7 +481,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.16.2...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.16.3...HEAD
+[0.16.3]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.16.2...v0.16.3
 [0.16.2]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.16.1...v0.16.2
 [0.16.1]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.16.0...v0.16.1
 [0.16.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.15.0...v0.16.0

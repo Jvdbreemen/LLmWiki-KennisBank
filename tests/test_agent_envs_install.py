@@ -76,6 +76,7 @@ class AgentEnvInstallTest(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("name: sessiestart", skill)
+        self.assertIn('argument-hint: "[ARGUMENTS]"', skill)
         config = (codex / "config.toml").read_text(encoding="utf-8")
         self.assertIn("[mcp_servers.kennisbank]", config)
         self.assertIn(str(self.vault).replace("\\", "/"), config)
