@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-07-19
+
+### Changed
+
+- **Hookless Codex and Copilot integrations.** KennisBank no longer registers
+  lifecycle hooks in Codex or the standalone GitHub Copilot CLI, eliminating
+  client-rendered `Running ... hook` and `SessionStart hook (completed)` rows.
+  Setup and upgrades remove only legacy KennisBank-owned hook entries and
+  preserve unrelated user hooks.
+- **Native, agent-friendly session commands.** Generated personal skills expose
+  `$sessiestart` and `$sessielog` in Codex and `/sessiestart` and `/sessielog`
+  in Copilot. The existing Codex `/prompts:*` aliases remain compatible.
+- **Current integration contract.** README, configuration, troubleshooting, and
+  agent guidance now consistently describe Claude's quiet automatic hooks and
+  the explicit skill-plus-MCP model used by Codex and Copilot.
+
+### Fixed
+
+- **Cross-client skill discovery.** Generated skill frontmatter uses an
+  explicitly quoted YAML string for `argument-hint`, allowing Copilot to load
+  every generated KennisBank command skill.
+
 ## [0.16.3] - 2026-07-19
 
 ### Fixed
@@ -481,7 +503,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.16.3...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.16.3...v0.17.0
 [0.16.3]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.16.2...v0.16.3
 [0.16.2]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.16.1...v0.16.2
 [0.16.1]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.16.0...v0.16.1
