@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.2] - 2026-07-19
+
+### Changed
+
+- **Hookless Codex and Copilot integrations.** Setup removes only
+  KennisBank-owned lifecycle hooks, preserving unrelated hooks. This
+  deterministically suppresses client-rendered hook progress/completion rows.
+- **Native command skills.** Every command is installed under
+  `~/.agents/skills/`. Copilot exposes `/sessiestart` and `/sessielog`; Codex
+  exposes `$sessiestart` and `$sessielog` with `/prompts:*` compatibility.
+- **Documented suppression boundary.** README, configuration, integration, and
+  troubleshooting docs explain the explicit-session trade-off and upgrade path.
+- **Architecture decision.** ADR-005 supersedes the Copilot lifecycle-hook
+  requirement in ADR-0003 D3 and its live-hook path in D5.
+
 ## [0.16.1] - 2026-07-19
 
 ### Changed
@@ -458,7 +473,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.16.1...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.16.2...HEAD
+[0.16.2]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.16.1...v0.16.2
 [0.16.1]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.16.0...v0.16.1
 [0.16.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.14.0...v0.15.0

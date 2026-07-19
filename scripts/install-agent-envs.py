@@ -4,7 +4,10 @@
 This helper is intentionally stdlib-only. setup.sh owns the vault scaffold and
 Claude Code deploy; this script owns the cross-agent layer:
 
-- Codex: skills, prompt aliases, AGENTS.md, hooks.json, MCP config.
+- Codex: command skills, compatibility prompts, AGENTS.md, MCP config, and
+  selective migration of legacy KennisBank hooks.
+- Copilot: command skills, MCP, instructions, agent profile, and selective
+  migration of legacy KennisBank hooks.
 - OpenCode: skills, commands, AGENTS.md, plugin hook, MCP config.
 - Claude Code validation: verifies the files setup.sh installed.
 
@@ -200,6 +203,22 @@ def _prompt_text(name: str, source: Path, description: str, target_agent: str) -
     )
 
 
+def _command_skill_text(name: str, source: Path, description: str) -> str:
+    """Render one command as a Codex/Copilot personal skill."""
+    body = source.read_text(encoding="utf-8")
+    return (
+        "---\n"
+        f"name: {name}\n"
+        f"description: {description}\n"
+        "argument-hint: [ARGUMENTS]\n"
+        "---\n\n"
+        f"Run the KennisBank `{name}` workflow for the active coding agent.\n"
+        "Use the active KENNISBANK_VAULT from the agent configuration; do not "
+        "fall back to `~/KennisBank` when that environment variable exists.\n\n"
+        f"{body.rstrip()}\n"
+    )
+
+
 def _install_shared_skills(repo: Path, skills_root: Path) -> list[Path]:
     installed = []
     src_root = repo / "skills"
@@ -214,12 +233,31 @@ def _install_shared_skills(repo: Path, skills_root: Path) -> list[Path]:
     return installed
 
 
+def _install_command_skills(repo: Path, skills_root: Path) -> list[Path]:
+    """Install command workflows without replacing richer authored skills."""
+    installed = []
+    authored_root = repo / "skills"
+    authored = {
+        path.name
+        for path in authored_root.iterdir()
+        if path.is_dir() and (path / "SKILL.md").is_file()
+    } if authored_root.is_dir() else set()
+    for name, source, description in _command_sources(repo):
+        if name in authored:
+            continue
+        dst = skills_root / name / "SKILL.md"
+        _write_text(dst, _command_skill_text(name, source, description))
+        installed.append(dst)
+    return installed
+
+
 def install_codex(repo: Path, vault: Path) -> dict:
     codex = _codex_home()
     shared_skills = _home() / ".agents" / "skills"
     prompts = codex / "prompts"
 
     skills = _install_shared_skills(repo, shared_skills)
+    skills.extend(_install_command_skills(repo, shared_skills))
     written_prompts = []
     for name, source, desc in _command_sources(repo):
         dst = prompts / f"{name}.md"
@@ -227,13 +265,13 @@ def install_codex(repo: Path, vault: Path) -> dict:
         written_prompts.append(dst)
 
     _replace_block(codex / "AGENTS.md", _agent_block("Codex", vault))
-    _ensure_codex_hooks(codex / "hooks.json", vault)
+    _remove_codex_hooks(codex / "hooks.json")
     _ensure_codex_mcp(codex / "config.toml", vault)
     return {
         "skills": [str(p) for p in skills],
         "prompts": [str(p) for p in written_prompts],
         "agents_md": str(codex / "AGENTS.md"),
-        "hooks": str(codex / "hooks.json"),
+        "hooks": "removed",
         "mcp": str(codex / "config.toml"),
     }
 
@@ -333,6 +371,77 @@ def _ensure_codex_hooks(path: Path, vault: Path) -> None:
                     timeout=timeout,
                 ))
     _write_text(path, json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+
+
+_CODEX_KB_HOOK_SCRIPTS = frozenset({
+    script for _event, script, _matcher in _hooks_manifest.hooks()
+}) | frozenset({
+    "import-copilot.py",
+    "kb-copilot-capture.py",
+})
+
+
+def _is_kennisbank_hook_command(command: str) -> bool:
+    normalized = str(command).replace("\\", "/").lower()
+    if ".claude/scripts/" not in normalized:
+        return False
+    return any(f"/{script.lower()}" in normalized for script in _CODEX_KB_HOOK_SCRIPTS)
+
+
+def _remove_codex_hooks(path: Path) -> None:
+    """Remove only KennisBank handlers, preserving every unrelated hook."""
+    if not path.is_file():
+        return
+    data = json.loads(path.read_text(encoding="utf-8") or "{}")
+    if not isinstance(data, dict):
+        raise ValueError(f"{path} must contain a JSON object")
+    hooks = data.get("hooks")
+    if not isinstance(hooks, dict):
+        return
+
+    changed = False
+    for event in list(hooks):
+        groups = hooks.get(event)
+        if not isinstance(groups, list):
+            continue
+        kept_groups = []
+        for group in groups:
+            if not isinstance(group, dict):
+                kept_groups.append(group)
+                continue
+            entries = group.get("hooks")
+            if not isinstance(entries, list):
+                kept_groups.append(group)
+                continue
+            kept_entries = [
+                entry
+                for entry in entries
+                if not (
+                    isinstance(entry, dict)
+                    and _is_kennisbank_hook_command(str(entry.get("command", "")))
+                )
+            ]
+            if len(kept_entries) != len(entries):
+                changed = True
+            if kept_entries:
+                updated = dict(group)
+                updated["hooks"] = kept_entries
+                kept_groups.append(updated)
+        if kept_groups:
+            hooks[event] = kept_groups
+        else:
+            hooks.pop(event, None)
+
+    if not changed:
+        return
+    if hooks:
+        data["hooks"] = hooks
+    else:
+        data.pop("hooks", None)
+    if data:
+        _write_text(path, json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+    else:
+        path.unlink()
 
 
 def _toml_quote(value: str) -> str:
@@ -469,10 +578,11 @@ def install_copilot(repo: Path, vault: Path) -> dict:
     """Install the KennisBank integration for the standalone GitHub Copilot CLI.
 
     Delegates config mutation to the idempotent _copilot layer (ADR-0003 D1-D6):
-    MCP registration, hooks, global instructions and the custom agent profile.
-    Shared skills are already discoverable by Copilot from ~/.agents/skills.
+    MCP registration, legacy-hook migration, global instructions and the custom
+    agent profile. Commands become personal skills in ~/.agents/skills.
     """
     skills = _install_shared_skills(repo, _home() / ".agents" / "skills")
+    skills.extend(_install_command_skills(repo, _home() / ".agents" / "skills"))
     report = _copilot.install(vault)
     res = report["results"]
     return {
@@ -554,13 +664,19 @@ def validate_files(repo: Path, vault: Path, agents: list[str]) -> list[str]:
 
     if "codex" in agents:
         codex = _codex_home()
-        for skill in ("autoresearch", "kennisbank-upgrade", "kennisbank-contribute"):
+        for skill in (
+            "autoresearch",
+            "kennisbank-upgrade",
+            "kennisbank-contribute",
+            "sessielog",
+            "sessiestart",
+        ):
             if not (_home() / ".agents" / "skills" / skill / "SKILL.md").is_file():
                 errors.append(f"missing Codex shared skill: {skill}")
         for prompt in ("sessielog", "sessiestart", "kennisbank-upgrade", "weeklog", "timeline", "watdeedik"):
             if not (codex / "prompts" / f"{prompt}.md").is_file():
                 errors.append(f"missing Codex prompt alias: {prompt}")
-        for p in (codex / "AGENTS.md", codex / "hooks.json", codex / "config.toml"):
+        for p in (codex / "AGENTS.md", codex / "config.toml"):
             if not p.is_file():
                 errors.append(f"missing Codex config file: {p}")
         codex_config = _read_text(codex / "config.toml")
@@ -573,25 +689,17 @@ def validate_files(repo: Path, vault: Path, agents: list[str]) -> list[str]:
                 tomllib.loads(codex_config)
             except Exception as e:
                 errors.append(f"Codex config.toml is not valid TOML: {e}")
-        for need in ("kb-retrieve.py", "kb-presearch.py", "build-activity-index.py", "mcp_servers.kennisbank", _posix(vault)):
-            combined = _read_text(codex / "hooks.json") + "\n" + codex_config
-            if need not in combined:
+        for need in ("mcp_servers.kennisbank", _posix(vault)):
+            if need not in codex_config:
                 errors.append(f"Codex config lacks {need}")
-        hooks_text = _read_text(codex / "hooks.json")
-        if "quiet-hook.py" not in hooks_text:
-            errors.append("Codex maintenance hooks lack quiet-hook.py")
         codex_data = _json_file(codex / "hooks.json")
-        script_names = {script for _, script, _ in _hooks_manifest.hooks()}
         kb_entries = [
             entry
             for entry in _hook_entries(codex_data)
-            if any(
-                name in str(entry.get("command", ""))
-                for name in script_names
-            )
+            if _is_kennisbank_hook_command(str(entry.get("command", "")))
         ]
-        if any("statusMessage" in entry for entry in kb_entries):
-            errors.append("Codex KennisBank hooks still contain statusMessage")
+        if kb_entries:
+            errors.append("Codex still contains KennisBank lifecycle hooks")
 
     if "opencode" in agents:
         cfg = _opencode_home()
@@ -607,7 +715,13 @@ def validate_files(repo: Path, vault: Path, agents: list[str]) -> list[str]:
                 errors.append(f"OpenCode config lacks {need}")
 
     if "copilot" in agents:
-        for skill in ("autoresearch", "kennisbank-upgrade", "kennisbank-contribute"):
+        for skill in (
+            "autoresearch",
+            "kennisbank-upgrade",
+            "kennisbank-contribute",
+            "sessielog",
+            "sessiestart",
+        ):
             if not (_home() / ".agents" / "skills" / skill / "SKILL.md").is_file():
                 errors.append(f"missing Copilot shared skill: {skill}")
         if not (vault / ".claude" / "scripts" / "kb-copilot-capture.py").is_file():

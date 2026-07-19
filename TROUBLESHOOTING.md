@@ -492,7 +492,7 @@ auth.
 **Symptom**: `copilot mcp list` and doctor pass, but an actual Copilot prompt
 fails asking you to log in.
 
-**Cause**: Copilot is cloud-backed. MCP registration, hooks, and instructions are
+**Cause**: Copilot is cloud-backed. MCP, skill, and instruction installation is
 login-free, but a live model turn needs a GitHub Copilot subscription.
 
 **Fix**: run `copilot` and complete `/login`. KennisBank never forces or stores a
@@ -503,35 +503,34 @@ yours and are never written to the repo or vault.
 
 **Symptom**: `/watdeedik` or `/timeline` do not surface a Copilot session.
 
-**Cause**: the capture hook is fail-open by design — a missing Ollama, a script
-error, or a malformed payload silently skips capture rather than blocking
-Copilot. Every hook command ends `; exit 0`, and no `preToolUse` hook ever
-returns a non-zero (deny) exit, so a skipped event never errors loudly.
+**Cause**: capture is explicit because KennisBank no longer installs Copilot
+lifecycle hooks.
 
-**Fix**: confirm the hook is deployed and events are landing, then rebuild the
-index:
+**Fix**: run `/sessielog` before ending the session. Existing event data or
+Copilot history can still be imported:
 ```bash
-ls "$HOME/KennisBank/.claude/scripts/kb-copilot-capture.py"
-ls "$HOME/KennisBank/.claude/copilot-events/"
 python3 "$HOME/KennisBank/.claude/scripts/import-copilot.py" --vault "$HOME/KennisBank"
 python3 "$HOME/KennisBank/.claude/scripts/build-activity-index.py" --vault "$HOME/KennisBank" --full
 ```
-`doctor.sh` also reports `[PASS] copilot capture hook` and a `copilot hook events`
-INFO line with the last captured event.
 
 ### 9.6 Keeping a Copilot session out of the vault (privacy)
 
 **Symptom**: you want a Copilot session that is not recorded into KennisBank.
 
-**Cause**: capture is on by default (fail-open, but on).
+**Cause**: capture is explicit in v0.16.2 and later.
 
-**Fix**: launch through the wrapper with `--no-capture`, or set the env var
-directly:
+**Fix**: do not run `/sessielog` for that session.
+
+### 9.7 Copilot still prints `SessionStart hook (completed)`
+
+**Cause**: an older KennisBank hook or a hook owned by another integration is
+still installed. Copilot renders the row itself.
+
+**Fix**:
+
 ```bash
-python3 "$HOME/KennisBank/.claude/scripts/kennisbank-copilot.py" --no-capture
-# or for a whole shell:
-export KENNISBANK_COPILOT_NO_CAPTURE=1
+KENNISBANK_VAULT="$HOME/KennisBank" bash setup.sh --yes --agents copilot
 ```
-Captured payloads are already redacted before disk — secret-bearing keys and
-inline secrets (`Bearer`, `ghp_`, `sk-`, `KEY=VALUE`) are masked — but
-`--no-capture` disables writing events at all.
+
+Setup removes only KennisBank commands. If the row remains, inspect
+`~/.copilot/hooks/*.json`; the remaining hook belongs to another integration.

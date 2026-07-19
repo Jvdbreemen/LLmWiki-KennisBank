@@ -46,11 +46,10 @@ Installed by `--agents codex`.
 - Skills: `~/.agents/skills/<name>/SKILL.md`
 - Prompt aliases: `~/.codex/prompts/*.md`
 - Global instructions: `~/.codex/AGENTS.md`
-- Hooks: `~/.codex/hooks.json`
 - MCP: `~/.codex/config.toml`, server name `kennisbank`
 
-Codex custom prompt files are invoked as `/prompts:<name>`, not as bare custom
-slash commands. For example:
+Use `$sessiestart` and `$sessielog` as native Codex skills. Compatibility
+prompts are invoked as `/prompts:<name>`:
 
 ```text
 /prompts:sessielog
@@ -64,14 +63,11 @@ slash commands. For example:
 Codex should use the installed skills for reusable workflows and the MCP tools
 `recall` and `capture` for live vault access. For temporal questions, use
 `what_did_i_do`, `timeline`, `weeklog`, or `topic_timeline` before generic
-recall. Hooks are installed for lifecycle maintenance and best-effort recall,
-but MCP is the durable cross-client API.
+recall. KennisBank installs no Codex lifecycle hooks because the client renders
+rows for registered hooks and `suppressOutput` is not implemented. Setup removes
+only legacy KennisBank entries and preserves unrelated hooks.
 Setup installs the Python MCP SDK and validates Codex MCP with a real
 initialize/list-tools handshake before it reports success.
-Generated Codex hook entries omit progress labels. Routine maintenance uses
-the same quiet runner as Claude Code: no-change work stays silent, while
-changed indexes and warnings are returned as agent context. Retrieval context
-remains structured and hidden from raw hook output.
 
 Manual MCP shape:
 
@@ -142,15 +138,16 @@ local KennisBank maintenance scripts.
 
 Installed by `--agents copilot`. Targets the **standalone** GitHub Copilot CLI
 (`npm install -g @github/copilot`, invoked as `copilot`, v1.0.70+), not the older
-`gh copilot` gh-extension and not Copilot's VS Code agent mode. The authoritative
-design is [ADR-0003](adr/0003-copilot-cli-integration.md); the wrapper's "trivial
-exec, not a proxy" stance is derived in
+`gh copilot` gh-extension and not Copilot's VS Code agent mode. The original
+design is [ADR-0003](adr/0003-copilot-cli-integration.md); its hook
+decision is superseded by
+[ADR-005](adr/ADR-005-hookless-codex-copilot-integration.md). The wrapper's
+"trivial exec, not a proxy" stance is derived in
 [docs/copilot-headroom-evaluation.md](copilot-headroom-evaluation.md).
 
 - Skills: `~/.agents/skills/<name>/SKILL.md` (shared with Codex/OpenCode; no
   separate install — list with `copilot skill list`)
 - MCP: `~/.copilot/mcp-config.json`, server name `kennisbank`
-- Hooks: `~/.copilot/hooks/kennisbank.json`
 - Personal instructions: `~/.copilot/copilot-instructions.md` (KennisBank managed block)
 - Custom agent profile: `~/.copilot/agents/kennisbank.agent.md`, selected with
   `copilot --agent kennisbank` (the `.agent.md` extension is required)
@@ -159,20 +156,20 @@ exec, not a proxy" stance is derived in
 
 All user-level paths honor `COPILOT_HOME`. KennisBank writes **only** its own
 namespaced keys and marker-delimited blocks: `mcpServers.kennisbank` in the MCP
-file, the `hooks` object in `kennisbank.json`, a managed block in the freeform
-instruction files. It never rewrites unmanaged Copilot config, and it backs up
+file and a managed block in the freeform instruction files. Upgrade removes
+only known KennisBank hook commands. It never rewrites unmanaged Copilot config,
+and it backs up
 any freeform file before editing.
 
 `setup.sh --agents copilot` registers the MCP server by a key-scoped JSON merge
 (login-free and idempotent, not `copilot mcp add`) and validates it with the same
 real initialize/list-tools handshake used for Codex/OpenCode. `copilot mcp list`
-(login-free) then shows the server. MCP registration, hook install, and
-instruction install all work **without** a GitHub login; only a live model turn
+(login-free) then shows the server. MCP, skill, and instruction installation
+work **without** a GitHub login; only a live model turn
 needs `copilot` `/login`.
 
-Copilot `sessionStart` hooks use its native `additionalContext` output: routine
-no-change maintenance stays silent, while changed indexes and warnings are
-available to the agent as a concise report.
+Use `/sessiestart` for explicit maintenance and `/sessielog` to capture the
+session. No KennisBank lifecycle hooks means no KennisBank hook rows.
 
 Manual MCP shape (`~/.copilot/mcp-config.json`, top-level `mcpServers`,
 Claude-Desktop style; `type: "local"` for the stdio server; literal env values,
@@ -216,13 +213,8 @@ not on `PATH`.
 
 ### How Copilot activity becomes recall
 
-Two local, complementary sources, both tagged `agent=github-copilot-cli`:
-
-- **Live events.** A capture hook (`kb-copilot-capture.py`) writes redacted JSONL
-  to `<vault>/.claude/copilot-events/*.jsonl` on `sessionStart`,
-  `userPromptSubmitted`, `preToolUse`, `postToolUse`, and `sessionEnd`. Payloads
-  are secret-masked before disk; the hook is fail-open and always exits 0.
-- **Session import.** `import-copilot.py` normalizes those events into
+Use `/sessielog` to capture the current session. Existing event data remains
+importable: `import-copilot.py` normalizes it into
   `01-raw/transcripts/copilot-<sid>.jsonl` (idempotent dedupe, active-session
   skip). `import-copilot.py --include-history` additionally does a best-effort
   import of Copilot's own session-state.

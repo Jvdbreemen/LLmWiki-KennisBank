@@ -5,7 +5,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_readmes_document_first_class_quiet_integrations():
+def test_readmes_document_first_class_hookless_integrations():
     for name in ("README.md", "README.nl.md"):
         text = (REPO_ROOT / name).read_text(encoding="utf-8")
         normalized = re.sub(r"\s+", " ", text)
@@ -13,13 +13,11 @@ def test_readmes_document_first_class_quiet_integrations():
             assert client in text
         assert "OpenCode" in text
         assert (
-            "silent on success" in normalized
-            or "stil bij succes" in normalized
-            or "Routine no-change" in normalized
-            or "Geen-wijziging-uitvoer blijft stil" in normalized
-            or "zonder wijzigingen zijn stil" in normalized
-            or "quiet-hook.py" in normalized
+            "no KennisBank lifecycle hooks" in normalized
+            or "geen KennisBank lifecycle-hooks" in normalized
         )
+        assert "sessiestart" in normalized
+        assert "sessielog" in normalized
         assert "--agents claude,codex,copilot" in text
 
 
