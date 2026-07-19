@@ -1,6 +1,11 @@
 ---
 name: kennisbank-upgrade
-description: Upgrade a deployed LLmWiki-KennisBank vault to the latest official release tag. Checks the upstream tag, shows the changelog, backs up the current deploy, copies the new tooling into the vault, stamps the version, and verifies with doctor.sh. Triggers: /kennisbank-upgrade, "upgrade kennisbank", "update kennisbank tooling".
+description: >-
+  Upgrade a deployed LLmWiki-KennisBank vault to the latest official release
+  tag. Checks the upstream tag, shows the changelog, backs up the current
+  deploy, copies the new tooling into the vault, stamps the version, and
+  verifies with doctor.sh. Triggers: /kennisbank-upgrade, "upgrade
+  kennisbank", "update kennisbank tooling".
 ---
 
 # Kennisbank Upgrade
