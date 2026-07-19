@@ -210,7 +210,7 @@ def _command_skill_text(name: str, source: Path, description: str) -> str:
         "---\n"
         f"name: {name}\n"
         f"description: {description}\n"
-        "argument-hint: [ARGUMENTS]\n"
+        'argument-hint: "[ARGUMENTS]"\n'
         "---\n\n"
         f"Run the KennisBank `{name}` workflow for the active coding agent.\n"
         "Use the active KENNISBANK_VAULT from the agent configuration; do not "
