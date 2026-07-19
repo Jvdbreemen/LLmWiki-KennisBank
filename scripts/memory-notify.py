@@ -86,6 +86,7 @@ def main() -> int:
     msg = notice()
     if msg:
         sys.stdout.write(json.dumps({
+            "suppressOutput": True,
             "hookSpecificOutput": {
                 "hookEventName": "SessionStart",
                 "additionalContext": "KennisBank-geheugen: " + msg,

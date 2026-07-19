@@ -105,6 +105,8 @@ class CopilotConfigTest(unittest.TestCase):
         entry = hooks["hooks"]["sessionStart"][0]
         self.assertIn("bash", entry)
         self.assertIn("powershell", entry)
+        self.assertIn("quiet-hook.py", entry["bash"])
+        self.assertIn("quiet-hook.py", entry["powershell"])
 
     def test_agent_profile_uses_dot_agent_md_extension(self):
         self.m.install(self.vault)

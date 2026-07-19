@@ -1,11 +1,11 @@
 ---
 name: autoresearch
 description: >
-  Autonome iteratieve research-loop voor journalistiek en algemeen onderzoek.
-  Geef een topic mee, de skill draait multi-round web searches, synthetiseert
-  bevindingen en slaat alles op als één gestructureerd document in ~/Claude/research/.
-  Gebouwd op Karpathy's autoresearch-patroon, aangepast voor Claude Code.
-  Triggers: /autoresearch [topic], "research [topic]", "deep dive [topic]", "onderzoek [topic]"
+  Autonomous iterative research loop for journalism and general research.
+  Given a topic, the skill runs multi-round web searches, synthesizes findings,
+  and saves one structured document in ~/Claude/research/. Based on Karpathy's
+  autoresearch pattern and adapted for coding agents. Triggers: /autoresearch
+  [topic], "research [topic]", "deep dive [topic]", "onderzoek [topic]"
 allowed-tools: Read Write Bash WebFetch WebSearch Glob Grep
 ---
 

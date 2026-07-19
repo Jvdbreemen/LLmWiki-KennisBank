@@ -20,6 +20,29 @@ stay the editor-in-chief: the system proposes, quarantines, and flags, but a
 human merges, supersedes, and decides. Open the vault in Obsidian and it is
 just notes. Very well-organized notes that happen to power an AI memory.
 
+## First-class coding-agent integrations
+
+One `setup.sh` flow installs and upgrades KennisBank for **Claude Code**,
+**OpenAI Codex**, and the standalone **GitHub Copilot CLI** on Windows, macOS,
+and Linux. OpenCode remains supported as an additional local client.
+
+- Skill and generated prompt descriptions are English so every client can
+  discover them consistently.
+- Routine no-change index, sweep, archive, telemetry, and capture hooks are
+  silent. Changed indexes and warnings become concise session reports; Claude
+  Code and Codex receive those reports and retrieval hits through structured
+  model-only output with raw hook output suppressed.
+- Actionable memory and distillation notices remain agent context; all hooks
+  fail open and never block a turn.
+- The same local stdio MCP server and explicitly pinned `KENNISBANK_VAULT`
+  serve every installed client.
+
+Install or upgrade selected clients:
+
+```bash
+KENNISBANK_VAULT="/absolute/path/to/vault" bash setup.sh --yes --agents claude,codex,copilot
+```
+
 Based on [Andrej Karpathy's LLM Wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f): raw sessions go in, structured knowledge comes out. KennisBank extends the pattern into a closed loop:
 
 ```
@@ -40,7 +63,15 @@ Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: 
 
 The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
 
-## Feature highlights (v0.15.0)
+## Feature highlights (v0.16.1)
+
+### New in v0.16.1
+
+- **Quiet three-client hooks.** Claude Code, Codex, and GitHub Copilot CLI no
+  longer expose routine successful lifecycle output. Structured retrieval and
+  actionable notices still reach the agent, and every hook remains fail-open.
+- **English skill discovery metadata.** Shipped skills and generated Codex
+  prompt aliases now use English descriptions consistently.
 
 ### New in v0.15
 - **Multilingual temporal recall.** `/watdeedik`, `/timeline`, and `/weeklog`
@@ -320,7 +351,12 @@ reports.
 
 The vault is not Claude-Code-only. `scripts/kb-mcp.py` is a local **MCP server** exposing three primitives - `recall` (search memory + wiki), `capture` (save a new memory), and an `instructions` resource (a nudge to pull before searching externally). MCP is the one protocol every modern agent already speaks, so any client running **on this machine** can use the vault.
 
-**The hard boundary: local only.** The MCP server binds nothing to the network (stdio transport); the vault never leaves your machine. Agents that run *on your machine* (Codex CLI, GitHub Copilot in VS Code, Claude Code, Cursor, Cline, Windsurf) reach it directly. Agents that run *in the cloud* (hosted ChatGPT) cannot reach a local stdio server, and the answer is **not** to tunnel your sovereign vault to the internet - it is the manual bridge below.
+**The hard boundary: local only.** The MCP server binds nothing to the network
+(stdio transport); the vault never leaves your machine. Claude Code, Codex,
+GitHub Copilot CLI, OpenCode, and compatible local stdio clients can reach it
+directly. Agents that run *in the cloud* (hosted ChatGPT) cannot reach a local
+stdio server, and the answer is **not** to tunnel your sovereign vault to the
+internet - it is the manual bridge below.
 
 ### Codex CLI
 
@@ -444,7 +480,7 @@ The importer walks ChatGPT's message *tree* (`mapping`), orders turns by timesta
 | [docs/guiding-principles-and-values.md](docs/guiding-principles-and-values.md) | The guiding principles and values, worked out as one document |
 | [PRINCIPLES.md](PRINCIPLES.md) | The design laws that govern every decision (concise reference) |
 | [VALUES.md](VALUES.md) | What the project cares about - its character (concise reference) |
-| [AGENTS.md](AGENTS.md) | AI coding agents (Claude Code, Cursor, Aider) installing this on a user's behalf |
+| [AGENTS.md](AGENTS.md) | AI coding agents (Claude Code, Codex, GitHub Copilot CLI, and OpenCode) installing this on a user's behalf |
 | [POST-INSTALL.md](POST-INSTALL.md) | First-session walkthrough after `setup.sh` finishes |
 | [CONFIGURATION.md](CONFIGURATION.md) | Every configurable knob: paths, thresholds, models, toggles |
 | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | Symptom / cause / fix for common problems |
