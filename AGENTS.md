@@ -9,9 +9,9 @@ LLmWiki-KennisBank deploys a local personal knowledge vault plus agent
 integrations. It is not Claude-Code-only. Supported install targets are:
 
 - `claude` - Claude Code commands, skills, and hooks.
-- `codex` - Codex skills, prompt aliases, hooks, MCP config, and `AGENTS.md`.
+- `codex` - Codex skills, prompt aliases, MCP config, and `AGENTS.md`.
 - `opencode` - OpenCode commands, skills, MCP config, `AGENTS.md`, and plugin.
-- `copilot` - standalone GitHub Copilot CLI: MCP config, hooks, personal
+- `copilot` - standalone GitHub Copilot CLI: MCP config, personal
   instructions, and a custom agent profile under `~/.copilot/`. Opt-in and
   cloud-backed; not in the default target set.
 
@@ -49,7 +49,8 @@ $env:KENNISBANK_VAULT = "D:/Users/Robert/Documents/Claude/Projects/Kluis"
 & "C:\Program Files\Git\bin\bash.exe" setup.sh --yes --agents claude,codex,opencode
 ```
 
-All generated hooks and MCP configs must contain this explicit vault path.
+All generated Claude hooks and all MCP configs must contain this explicit vault
+path.
 
 ## Pre-Flight
 
@@ -111,7 +112,7 @@ Interactive setup asks which agent environments to install unless `--yes` or
 - migrations have run,
 - the temporal activity index has been built/refreshed,
 - `doctor.sh` has passed,
-- selected agent hooks/skills/MCP config validate,
+- selected agent skills/MCP config and any selected Claude hooks validate,
 - local Ollama and/or OpenRouter backend smoke checks pass, unless
   `--skip-model-check` is explicit.
 - LiteParse document parsing is installed or reported accurately by doctor.
@@ -119,21 +120,21 @@ Interactive setup asks which agent environments to install unless `--yes` or
 Use `--skip-model-check` only for CI/offline tests or when the user explicitly
 accepts that model validation is skipped.
 
-### Copilot integration (opt-in, safe by construction)
+### Copilot integration (opt-in, hookless by construction)
 
 `--agents copilot` targets the standalone `@github/copilot` CLI (invoked
 `copilot`, v1.0.70+), not the `gh copilot` extension or VS Code agent mode. It is
 idempotent for both install and upgrade and never overwrites unmanaged Copilot
 config:
 
-- Structured files (`~/.copilot/mcp-config.json`, `~/.copilot/hooks/kennisbank.json`)
-  get a key-scoped read-modify-write of a single namespaced key — never a
-  whole-file overwrite.
+- Structured MCP config (`~/.copilot/mcp-config.json`) gets a key-scoped
+  read-modify-write of the `mcpServers.kennisbank` key — never a whole-file
+  overwrite.
 - Freeform files (`~/.copilot/copilot-instructions.md`, the agent profile) get a
   marker-delimited managed block, with a backup before any edit.
-- Hooks are fail-open: every command ends `; exit 0`, and no `preToolUse` hook
-  ever returns a deny — a non-zero `preToolUse` exit would block a Copilot tool
-  call, which KennisBank must never do.
+- KennisBank installs no Copilot lifecycle hooks. During install or upgrade it
+  removes only known legacy KennisBank entries and preserves unrelated user
+  hooks. Session work is explicit through `/sessiestart` and `/sessielog`.
 - Registration and validation are login-free; only a live model turn needs
   `copilot` `/login`. On Windows/nvm4w, if `copilot --version` reports "no
   platform package found", also install `@github/copilot-<platform>-<arch>` at
@@ -158,7 +159,8 @@ Codex:
 - Prompt aliases go to `~/.codex/prompts/` and are invoked as
   `/prompts:<name>`.
 - MCP server `kennisbank` goes in `~/.codex/config.toml`.
-- Hooks go in `~/.codex/hooks.json`.
+- KennisBank installs no Codex lifecycle hooks. Upgrades remove only known
+  legacy KennisBank entries and preserve unrelated user hooks.
 - Global KennisBank instructions go in `~/.codex/AGENTS.md`.
 - Temporal prompt aliases go to `~/.codex/prompts/weeklog.md`,
   `timeline.md`, and `watdeedik.md`.
@@ -177,8 +179,8 @@ Copilot (standalone GitHub Copilot CLI, opt-in):
 
 - MCP server `kennisbank` goes in `~/.copilot/mcp-config.json` (key
   `mcpServers.kennisbank`, key-scoped JSON merge, login-free).
-- Hooks go in `~/.copilot/hooks/kennisbank.json` (fail-open; each entry has both
-  a `bash` and a `powershell` command).
+- No KennisBank lifecycle hooks are installed. Use `/sessiestart` and
+  `/sessielog`; upgrades selectively clean up legacy KennisBank hook entries.
 - Personal instructions go in `~/.copilot/copilot-instructions.md` (managed
   marker block).
 - Custom agent profile goes in `~/.copilot/agents/kennisbank.agent.md` (the
@@ -231,7 +233,8 @@ python3 "<vault>/.claude/scripts/agent-status.py" --vault "<vault>"
 
 Expected: a `kennisbank` server visible to Copilot (login-free), and
 `_copilot.py validate` reporting `OK`. `agent-status.py` is the multi-agent
-rollup. When Copilot is not selected, `doctor.sh` reports
+rollup. Validation also expects no KennisBank lifecycle hooks. When Copilot is
+not selected, `doctor.sh` reports
 `copilot integration: not configured` as INFO (0 FAIL) — that is expected, not a
 blocker.
 
@@ -241,7 +244,7 @@ blocker.
   Use append/managed blocks.
 - Never overwrite user agent settings with a full template. Merge only the
   KennisBank entries.
-- Keep hook scripts fail-open.
+- Keep Claude hook scripts fail-open.
 - Long backfills or sweeps must emit meaningful progress at least every five
   minutes; do not replace progress with dot-only output.
 - Do not force-close setup as complete when model validation failed, unless
