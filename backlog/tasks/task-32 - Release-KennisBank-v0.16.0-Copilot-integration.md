@@ -1,11 +1,11 @@
 ---
 id: TASK-32
 title: Release KennisBank v0.16.0 Copilot integration
-status: In Progress
+status: Done
 assignee:
   - Codex
 created_date: '2026-07-19 07:48'
-updated_date: '2026-07-19 07:50'
+updated_date: '2026-07-19 07:58'
 labels:
   - release
   - copilot
@@ -28,9 +28,9 @@ Publish the merged GitHub Copilot CLI integration and the skill-frontmatter repa
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [x] #1 CHANGELOG rolls the current Copilot integration notes into v0.16.0 and includes the skill parsing fix.
-- [ ] #2 The repository CI passes for the release commit.
-- [ ] #3 The release commit is merged to upstream main through a GitHub pull request.
-- [ ] #4 Annotated tag v0.16.0 and a GitHub Release are published on the upstream repository.
+- [x] #2 The repository CI passes for the release commit.
+- [x] #3 The release commit is merged to upstream main through a GitHub pull request.
+- [x] #4 Annotated tag v0.16.0 and a GitHub Release are published on the upstream repository.
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -43,4 +43,12 @@ Publish the merged GitHub Copilot CLI integration and the skill-frontmatter repa
 
 <!-- SECTION:NOTES:BEGIN -->
 Prepared v0.16.0 changelog by rolling the existing Copilot CLI integration notes out of Unreleased and adding the Copilot skill-frontmatter fix. Local validation: 15 focused skill/installer tests passed; all Python scripts compile; setup.sh and doctor.sh pass bash syntax checks; git diff check passed.
+
+GitHub release evidence: fix PR #35 and release PR #36 merged; both CI runs passed; annotated tag v0.16.0 points to merged upstream main commit 01fc6c10214e7e27f7d30673fdc9b935b8bd044b; release published at https://github.com/Jvdbreemen/LLmWiki-KennisBank/releases/tag/v0.16.0.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Released KennisBank v0.16.0 with the opt-in GitHub Copilot CLI integration and the repaired personal-skill YAML frontmatter. Both implementation and release PRs passed CI and merged upstream; annotated tag v0.16.0 and user-facing GitHub Release notes are published.
+<!-- SECTION:FINAL_SUMMARY:END -->
