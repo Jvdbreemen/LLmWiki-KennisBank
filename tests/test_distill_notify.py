@@ -83,6 +83,7 @@ class DistillNotifyTest(unittest.TestCase):
         # extern SessionStart-contract. Kruis het echte hook-outputformaat een
         # keer met de docs voor productie (zie kb-retrieve.py voor het UserPromptSubmit-precedent).
         payload = json.loads(out)
+        self.assertTrue(payload["suppressOutput"])
         self.assertEqual(payload["hookSpecificOutput"]["hookEventName"], "SessionStart")
         self.assertIn("1", payload["hookSpecificOutput"]["additionalContext"])
 

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax.
 
-**Goal:** Een dunne lokale **stdio** MCP-server `kb-mcp.py` die de KennisBank (memory + wiki) als `recall`-tool blootlegt aan lokale MCP-clients (Cursor, LM Studio, Claude Desktop). De waarde zit in de testbare core (`recall_tool`); de MCP-transport is een dunne, optioneel-gegate schil.
+**Goal:** Een dunne lokale **stdio** MCP-server `kb-mcp.py` die de KennisBank (memory + wiki) als `recall`-tool blootlegt aan compatibele lokale MCP-clients. De waarde zit in de testbare core (`recall_tool`); de MCP-transport is een dunne, optioneel-gegate schil.
 
 **Architecture:** `recall_tool(query, k)` is een pure functie (embed query → `kb_recall.recall_hits` over beide lagen → tekst) die **zonder** het `mcp`-pakket unit-getest wordt. De MCP-server-wrapper importeert `mcp` **achter try/except**: ontbreekt het pakket, dan kan de server niet draaien maar raakt het **niets** anders (hook-recall, tests, no-cloud blijven heel). Read-only over `kb-index.db`. Lokaal-only (stdio, geen netwerk).
 
@@ -129,8 +129,8 @@ Create `scripts/kb-mcp.py`:
 #!/usr/bin/env python3
 """kb-mcp.py - lokale stdio MCP-server over de KennisBank (memory + wiki).
 
-Exposeert een `recall`-tool aan lokale MCP-clients (Cursor, LM Studio, Claude
-Desktop). De waarde zit in recall_tool() (puur, testbaar zonder mcp/model); de
+Exposeert een `recall`-tool aan compatibele lokale MCP-clients. De waarde zit
+in recall_tool() (puur, testbaar zonder mcp/model); de
 MCP-transport is een dunne, optioneel-gegate schil. Read-only over kb-index.db,
 lokaal-only (stdio, geen netwerk-bind). Fail-soft.
 
@@ -259,8 +259,8 @@ Voeg een sectie toe (mirror de stijl van de bestaande secties):
 ```markdown
 ### Lokale MCP-server (kb-mcp.py, optioneel)
 
-`kb-mcp.py` exposeert je KennisBank (geheugen + wiki) als `recall`-tool aan lokale
-MCP-clients (Cursor, LM Studio, Claude Desktop) via **stdio** — lokaal, geen netwerk.
+`kb-mcp.py` exposeert je KennisBank (geheugen + wiki) als `recall`-tool aan
+compatibele lokale MCP-clients via **stdio** — lokaal, geen netwerk.
 Vereist eenmalig `pip install mcp`. Registreer bij je MCP-client met commando:
 
 ​```

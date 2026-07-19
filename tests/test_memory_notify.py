@@ -108,6 +108,7 @@ class MemoryNotifyTest(unittest.TestCase):
         out = buf.getvalue()
         self.assertTrue(out, "main() should produce JSON output for stale/failing state")
         data = json.loads(out)
+        self.assertTrue(data["suppressOutput"])
         self.assertEqual(data["hookSpecificOutput"]["hookEventName"], "SessionStart")
         self.assertIn("gestald", data["hookSpecificOutput"]["additionalContext"])
 

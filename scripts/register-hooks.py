@@ -42,9 +42,22 @@ def interpreter() -> str:
     return "py -3" if os.name == "nt" else "python3"
 
 
-def build_command(script_path: str, interp: str | None = None) -> str:
-    """Hook-commando: '<interpreter> "<pad>"'. Pad gequote i.v.m. spaties."""
-    return f'{interp or interpreter()} "{script_path}"'
+def build_command(
+    script_path: str,
+    interp: str | None = None,
+    *,
+    quiet: bool = False,
+    event: str = "SessionStart",
+) -> str:
+    """Build a quoted hook command, optionally through the quiet runner."""
+    command = interp or interpreter()
+    if quiet:
+        wrapper = str(Path(script_path).with_name("quiet-hook.py"))
+        return (
+            f'{command} "{wrapper}" --client claude --event {event} '
+            f'"{script_path}"'
+        )
+    return f'{command} "{script_path}"'
 
 
 def _existing_prefix(command: str) -> str | None:
@@ -82,7 +95,14 @@ def save_settings(path, settings: dict) -> None:
     p.write_text(json.dumps(settings, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
-def ensure_hook(settings: dict, event: str, script_path: str, matcher=None) -> bool:
+def ensure_hook(
+    settings: dict,
+    event: str,
+    script_path: str,
+    matcher=None,
+    *,
+    quiet: bool = False,
+) -> bool:
     """Zorg dat `event` `script_path` als command-hook draait. Idempotent.
 
     Match op basename: bestaat een entry, dan wordt alleen het PAD ververst en
@@ -108,9 +128,17 @@ def ensure_hook(settings: dict, event: str, script_path: str, matcher=None) -> b
                 # Safe because each KennisBank hook lives in its own group (one hook per group).
                 changed = False
                 prefix = _existing_prefix(existing)
-                desired = f'{prefix}"{script_path}"' if prefix else build_command(script_path)
+                desired = build_command(
+                    script_path,
+                    interp=prefix.strip() if prefix else None,
+                    quiet=quiet,
+                    event=event,
+                )
                 if desired != existing:
                     h["command"] = desired  # self-heal pad, behoud interpreter
+                    changed = True
+                if "statusMessage" in h:
+                    h.pop("statusMessage", None)
                     changed = True
                 if matcher and group.get("matcher") != matcher:
                     group["matcher"] = matcher  # self-heal ontbrekende/stale matcher
@@ -120,9 +148,11 @@ def ensure_hook(settings: dict, event: str, script_path: str, matcher=None) -> b
     group: dict
     if matcher:
         group = {"matcher": matcher,
-                 "hooks": [{"type": "command", "command": build_command(script_path)}]}
+                 "hooks": [{"type": "command", "command": build_command(
+                     script_path, quiet=quiet, event=event)}]}
     else:
-        group = {"hooks": [{"type": "command", "command": build_command(script_path)}]}
+        group = {"hooks": [{"type": "command", "command": build_command(
+            script_path, quiet=quiet, event=event)}]}
     event_groups.append(group)
     return True
 
@@ -144,7 +174,13 @@ def register_manifest(settings: dict, vault_root: str) -> bool:
         changed = True
     for event, script, matcher in man.hooks():
         path = f"{vault_root}/.claude/scripts/{script}"
-        if ensure_hook(settings, event, path, matcher=matcher):
+        if ensure_hook(
+            settings,
+            event,
+            path,
+            matcher=matcher,
+            quiet=script in man.SILENT_HOOK_SCRIPTS,
+        ):
             changed = True
     return changed
 

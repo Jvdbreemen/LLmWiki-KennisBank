@@ -337,6 +337,8 @@ class SetupDeployTest(unittest.TestCase):
             for need in ("build-embed-index.py", "build-kb-index.py", "sweep-launch.py",
                          "memory-notify.py", "build-activity-index.py"):
                 self.assertIn(need, session, f"{need} niet op SessionStart")
+            self.assertIn("quiet-hook.py", session)
+            self.assertNotIn("statusMessage", json.dumps(settings))
             pre = settings.get("hooks", {}).get("PreToolUse", [])
             self.assertTrue(pre, "geen PreToolUse-hook")
             self.assertEqual(pre[0].get("matcher"), "WebSearch|WebFetch")

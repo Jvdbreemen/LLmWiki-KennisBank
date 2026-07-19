@@ -34,7 +34,13 @@ class AgentEnvInstallTest(unittest.TestCase):
             '{"provider":"ollama","model":"qwen3-embedding:8b"}', encoding="utf-8")
         (self.vault / ".claude" / "kennisbank-llm.json").write_text(
             '{"providers":["ollama"],"model":"gemma4:12b"}', encoding="utf-8")
-        for script in ("kb-mcp.py", "kb-retrieve.py", "kb-presearch.py", "build-kb-index.py"):
+        for script in (
+            "kb-mcp.py",
+            "kb-retrieve.py",
+            "kb-presearch.py",
+            "build-kb-index.py",
+            "quiet-hook.py",
+        ):
             (self.vault / ".claude" / "scripts" / script).write_text("# test\n", encoding="utf-8")
         self.saved = {k: os.environ.get(k) for k in (
             "HOME", "USERPROFILE", "CODEX_HOME", "OPENCODE_CONFIG_DIR", "COPILOT_HOME")}
@@ -66,6 +72,17 @@ class AgentEnvInstallTest(unittest.TestCase):
         self.assertIn("kb-retrieve.py", hook_text)
         self.assertIn("kb-presearch.py", hook_text)
         self.assertIn("build-activity-index.py", hook_text)
+        self.assertNotIn("statusMessage", hook_text)
+        build_group = next(
+            group
+            for group in hooks["hooks"]["SessionStart"]
+            if "build-kb-index.py" in json.dumps(group)
+        )
+        retrieve_group = hooks["hooks"]["UserPromptSubmit"][0]
+        self.assertIn("quiet-hook.py", json.dumps(build_group))
+        self.assertNotIn("quiet-hook.py", json.dumps(retrieve_group))
+        prompt = (codex / "prompts" / "sessiestart.md").read_text(encoding="utf-8")
+        self.assertIn("description: Load KennisBank session-start context.", prompt)
         config = (codex / "config.toml").read_text(encoding="utf-8")
         self.assertIn("[mcp_servers.kennisbank]", config)
         self.assertIn(str(self.vault).replace("\\", "/"), config)
@@ -128,6 +145,10 @@ command = "other"
                          str(self.vault).replace("\\", "/"))
         # capture hook script present in repo so the deployed hook is safe.
         self.assertTrue((REPO_ROOT / "scripts" / "kb-copilot-capture.py").is_file())
+        hooks = json.loads(
+            (home / "hooks" / "kennisbank.json").read_text(encoding="utf-8")
+        )
+        self.assertIn("quiet-hook.py", json.dumps(hooks))
 
     def test_copilot_install_is_idempotent(self):
         self.m.install_copilot(REPO_ROOT, self.vault)

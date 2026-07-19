@@ -11,8 +11,11 @@ Do not rely on the default `~/KennisBank` path when the user has a different
 vault. Run setup with the active vault path:
 
 ```bash
-KENNISBANK_VAULT="/absolute/path/to/vault" bash setup.sh --yes --agents claude,codex,opencode
+KENNISBANK_VAULT="/absolute/path/to/vault" bash setup.sh --yes --agents claude,codex,copilot
 ```
+
+Add `opencode` to that list when the additional OpenCode integration is also
+wanted.
 
 `setup.sh` is the only supported install and upgrade entrypoint. It refreshes the
 deployed tooling, repairs agent configuration, runs migrations, validates hooks
@@ -30,7 +33,11 @@ Installed by `--agents claude`.
 
 Claude Code receives the complete hookset: `SessionStart`, `UserPromptSubmit`,
 `PreToolUse`, and `SessionEnd`. The hook scripts are fail-open and keep user
-settings intact.
+settings intact. Routine maintenance runs through `quiet-hook.py`; successful
+no-change index, sweep, archive, and telemetry hooks emit no user-facing
+output. Changed indexes and warnings become concise session reports. Retrieval,
+reports, and actionable notices use structured `additionalContext` with
+`suppressOutput`, so the agent receives useful context without raw hook chatter.
 
 ## Codex
 
@@ -61,6 +68,10 @@ recall. Hooks are installed for lifecycle maintenance and best-effort recall,
 but MCP is the durable cross-client API.
 Setup installs the Python MCP SDK and validates Codex MCP with a real
 initialize/list-tools handshake before it reports success.
+Generated Codex hook entries omit progress labels. Routine maintenance uses
+the same quiet runner as Claude Code: no-change work stays silent, while
+changed indexes and warnings are returned as agent context. Retrieval context
+remains structured and hidden from raw hook output.
 
 Manual MCP shape:
 
@@ -159,6 +170,10 @@ real initialize/list-tools handshake used for Codex/OpenCode. `copilot mcp list`
 instruction install all work **without** a GitHub login; only a live model turn
 needs `copilot` `/login`.
 
+Copilot `sessionStart` hooks use its native `additionalContext` output: routine
+no-change maintenance stays silent, while changed indexes and warnings are
+available to the agent as a concise report.
+
 Manual MCP shape (`~/.copilot/mcp-config.json`, top-level `mcpServers`,
 Claude-Desktop style; `type: "local"` for the stdio server; literal env values,
 no `${VAR}` interpolation):
@@ -219,8 +234,8 @@ other agents'.
 
 ## Other MCP Clients
 
-Cursor, Cline, Windsurf, Gemini CLI, and similar local MCP clients can point to
-the same stdio server. Use the client's native MCP config format and include
+Other compatible local MCP clients can point to the same stdio server. Use the
+client's native MCP config format and include
 `KENNISBANK_VAULT` in the server environment when the vault is not at the
 default path. Manual clients must install the MCP SDK into the same Python
 interpreter used by the configured command.

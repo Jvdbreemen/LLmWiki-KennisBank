@@ -2,7 +2,7 @@
 """kb-mcp.py - lokale stdio MCP-server over de KennisBank (memory + wiki).
 
 Het universele, ecosysteem-onafhankelijke oppervlak van de KennisBank (TASK-22):
-elke MCP-client die op DEZELFDE machine draait (Claude Code, Cursor, Codex CLI,
+elke compatibele MCP-client die op DEZELFDE machine draait (Claude Code, Codex,
 GitHub Copilot in VS Code, Cline, Windsurf, LM Studio, Claude Desktop) kan de
 vault gebruiken zonder platform-specifieke hook. MCP is het enige protocol dat
 al die omgevingen al spreken, dus dit is het brede-bereik-oppervlak.
@@ -29,8 +29,6 @@ de MCP-transport is een dunne, optioneel-gegate schil. Vereist `pip install mcp`
 om de server te DRAAIEN; ontbreekt het pakket, dan blijven de *_tool-functies
 bruikbaar. Stdlib + optioneel mcp.
 """
-from __future__ import annotations
-
 import importlib.util
 import json
 import os
@@ -97,7 +95,7 @@ def capture_tool(title: str, body: str, memory_type: str = "feit",
                  importance: int = 3) -> str:
     """Leg een nieuwe memory vast in de KennisBank (PULL-write).
 
-    Voor agents die geen KennisBank-hooks hebben (Codex, Cursor, ...) en toch
+    Voor agents die geen KennisBank-hooks hebben en toch
     kennis willen bijdragen. De memory landt bewust als status=unverified,
     evidence_basis=agent: de sweep-judge of de mens promoot 'm later naar
     current (mens = update-autoriteit). Geen write-time reconcile hier — dat
@@ -205,7 +203,7 @@ def topic_timeline_tool(topic: str, period: str = "afgelopen 90 dagen",
 
 
 # Pull-nudge voor MCP-clients zonder push-hook (zie module-docstring). Aangeboden
-# als resource; clients die resources ondersteunen (Cursor, Claude Desktop) tonen
+# als resource; clients die resources ondersteunen tonen
 # 'm. Copilot ondersteunt geen resources -> README verwijst naar copilot-instructions.md.
 INSTRUCTIONS_TEXT = (
     "Je hebt een lokale KennisBank (persoonlijk geheugen + gecureerde wiki) via de "

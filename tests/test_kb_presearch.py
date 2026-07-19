@@ -64,6 +64,7 @@ class KbPresearchTest(unittest.TestCase):
     def test_websearch_injects_context(self):
         out = self._run({"tool_name": "WebSearch", "tool_input": {"query": "token expiry bug"}})
         data = json.loads(out)
+        self.assertTrue(data["suppressOutput"])
         self.assertEqual(data["hookSpecificOutput"]["hookEventName"], "PreToolUse")
         self.assertEqual(data["hookSpecificOutput"]["permissionDecision"], "defer")
         self.assertIn("Oude bug", data["hookSpecificOutput"]["additionalContext"])
