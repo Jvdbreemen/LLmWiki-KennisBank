@@ -67,6 +67,30 @@ class RegisterHooksTest(unittest.TestCase):
         pre = s["hooks"]["PreToolUse"][0]
         self.assertEqual(pre.get("matcher"), "WebSearch|WebFetch")
         self.assertEqual(s["env"]["KENNISBANK_VAULT"], "/v")
+        build = next(cmd for cmd in cmds if "build-kb-index.py" in cmd)
+        retrieve = next(cmd for cmd in cmds if "kb-retrieve.py" in cmd)
+        self.assertIn("quiet-hook.py", build)
+        self.assertNotIn("quiet-hook.py", retrieve)
+        self.assertNotIn("statusMessage", json.dumps(s))
+
+    def test_selfheal_removes_routine_status_message(self):
+        s = {"hooks": {"SessionStart": [
+            {"hooks": [{
+                "type": "command",
+                "command": 'python3 "/v/.claude/scripts/memory-notify.py"',
+                "statusMessage": "KennisBank: memory-notify.py",
+            }]}
+        ]}}
+        changed = self.m.ensure_hook(
+            s,
+            "SessionStart",
+            "/v/.claude/scripts/memory-notify.py",
+        )
+        self.assertTrue(changed)
+        self.assertNotIn(
+            "statusMessage",
+            s["hooks"]["SessionStart"][0]["hooks"][0],
+        )
 
     def test_register_manifest_selfheals_vault_env(self):
         s = {"env": {"KENNISBANK_VAULT": "/old"}}

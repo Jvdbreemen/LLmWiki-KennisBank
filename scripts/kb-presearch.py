@@ -75,6 +75,7 @@ def build_context(hits: list) -> str:
 
 def _emit(ctx: str) -> None:
     sys.stdout.write(json.dumps({
+        "suppressOutput": True,
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
             "permissionDecision": "defer",

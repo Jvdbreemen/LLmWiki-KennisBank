@@ -48,6 +48,7 @@ _TRIVIAL = {
 def _emit(ctx: str) -> None:
     if ctx:
         sys.stdout.write(json.dumps({
+            "suppressOutput": True,
             "hookSpecificOutput": {
                 "hookEventName": "UserPromptSubmit",
                 "additionalContext": ctx,

@@ -701,6 +701,11 @@ De achtergrond-automatieken zijn individueel aan/uit te zetten via
 
 - **Wijzigen**: draai `/kennisbank:settings` (toont een tabel en zet toggles aan/uit), of bewerk het JSON-bestand (waarden zijn JSON-booleans).
 - **Self-gating**: de hooks blijven statisch geregistreerd in `~/.claude/settings.json`; elk hookscript leest zijn toggle en eindigt fail-open (`exit 0`) als hij uit staat. Een toggle-wijziging werkt vanaf de volgende sessie.
+- **Stille routine-uitvoer**: index-, sweep-, archief- en telemetriehooks lopen
+  via `quiet-hook.py`. Geen-wijziging-uitvoer blijft stil; gewijzigde indexen
+  en waarschuwingen worden beknopte sessierapporten. Retrieval, rapporten en
+  actiegerichte meldingen blijven gestructureerde agentcontext met onderdrukte
+  ruwe hookuitvoer. Setup verwijdert verouderde `statusMessage`-velden.
 - **Defaults bij ontbreken**: ontbreekt het bestand of een key, dan geldt de default-kolom hierboven. `setup` en `upgrade` schrijven expliciete waarden.
 - **Interactie**: met `embed_index` uit wordt `graphify-out/.needs-rebuild` niet bij SessionStart geleegd; dat is benign, de flag wordt door de graphify-rebuild zelf geleegd.
 
@@ -708,8 +713,8 @@ De achtergrond-automatieken zijn individueel aan/uit te zetten via
 
 ## 12. Lokale MCP-server (kb-mcp.py)
 
-`kb-mcp.py` exposeert je KennisBank (geheugen + wiki) als `recall`-tool aan lokale
-MCP-clients (Cursor, LM Studio, Claude Desktop) via **stdio** — lokaal, geen netwerk.
+`kb-mcp.py` exposeert je KennisBank (geheugen + wiki) als `recall`-tool aan
+compatibele lokale MCP-clients via **stdio** — lokaal, geen netwerk.
 Voor Codex/OpenCode is dit geen losse handmatige stap meer: `setup.sh --agents
 codex` of `setup.sh --agents opencode` installeert `mcp==1.28.1` in dezelfde
 Python-interpreter als de gegenereerde MCP-config en valideert daarna een echte

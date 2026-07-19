@@ -60,7 +60,7 @@ De DB wordt nooit autoritatief. `rm kb-index.db && kb-index --rebuild` reconstru
 ```
                   ┌─────────────────────────────────────────┐
    agents ──push──┤  RECALL (kb-retrieve hook + lokale MCP)  │
-   (CC, Cursor)   │  zoekt: wiki + memory(current), beide  │
+   (lokale agent) │  zoekt: wiki + memory(current), beide  │
                   └──────────────┬──────────────────────────┘
                                  │ hybride query (<1s)
         ┌────────────────────────┴───────────────────────┐
@@ -230,7 +230,7 @@ Hybride query, gebruikt door zowel de hook als de MCP-server:
 ### 6. kb MCP-server (nieuw)
 
 - Lokale **stdio**-MCP-server; exposeert `kb-recall` (read) aan lokale MCP-clients
-  (Cursor, LM Studio, Claude Desktop). Gegate op `memory_recall`.
+  (compatibele lokale MCP-clients). Gegate op `memory_recall`.
 - Geen netwerk-bind; cloud-web-AI's bewust uitgesloten (#4).
 - Write-via-MCP: externe lokale client schrijft direct een memory → landt als
   `unverified`, wordt door de eerstvolgende sweep gejudged (zelfde quarantaine-poort).

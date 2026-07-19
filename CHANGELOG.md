@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-07-19
+
+### Changed
+
+- **Relevant, quiet hooks for Claude Code, Codex, and GitHub Copilot CLI.**
+  Routine no-change indexing, sweep, archive, telemetry, and capture hooks now
+  run silently through a fail-open wrapper. Changed indexes and warnings become
+  concise session reports. Existing progress labels are removed during setup
+  and upgrades. Retrieval, reports, and actionable notices reach each client
+  through its native structured agent-context output.
+- **English agent metadata.** All shipped skill descriptions and generated
+  Codex prompt descriptions are English for consistent discovery across agent
+  clients.
+- **Reliable local query and Windows validation paths.** The pinned MCP SDK can
+  now register every KennisBank tool under Python's runtime annotation rules,
+  safe-edit treats CRLF/LF-equivalent input as a no-op, and Copilot doctor
+  tests use Git Bash instead of accidentally crossing into WSL paths.
+- **Three-client documentation.** README and integration guides now prominently
+  cover Claude Code, OpenAI Codex, and the standalone GitHub Copilot CLI while
+  retaining OpenCode support. Obsolete client product references were removed.
+
 ## [0.16.0] - 2026-07-19
 
 ### Added
@@ -150,7 +171,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Geheugen-recall (`scripts/kb-recall.py`, `scripts/kb-retrieve.py`-hook, SessionStart-indexbouw).** `kb-recall.py` injecteert additief memory-fragmenten (`09-memory/`) in de retrieval-hook; gegate op `memory_recall`. `build-kb-index.py` draait als extra SessionStart-hook naast `build-embed-index.py` om `kb-index.db` vers te houden.
 - **Autonome capture-sweep + detached launcher (`scripts/memory-sweep.py` + `scripts/sweep-launch.py`, SessionStart).** `memory-sweep.py` orchestreert de extract -> dedup -> judge -> schrijf pipeline over pending transcripts. `sweep-launch.py` spawnt de sweep DETACHED (niet-blokkerend) met een single-flight lockfile, gevolgd door `build-kb-index.py` (sweep-voor-index-ordening); gegate op `memory_capture`; exit 0 fail-open.
 - **Upgrade-backfill (eenmalig memory-sweep over transcript-archief).** De `kennisbank-upgrade`-skill draait bij upgrade naar deze versie eenmalig `memory-sweep.py --all` over de bestaande transcript-backlog (idempotent via dedup), na bevestiging als `memory_capture` aan staat. Voltooit het geheugen-subsysteem: rebuild-memory, health-doctor, backfill.
-- **Lokale stdio MCP-server (`scripts/kb-mcp.py`, optioneel).** Exposeert geheugen + wiki als `recall`-tool aan lokale MCP-clients (Cursor, LM Studio, Claude Desktop) via stdio; read-only via `kb-index.db` en lokale Ollama-embeddings. Vereist eenmalig `pip install mcp`; zonder de dep meldt het script dit netjes en de rest van KennisBank (hooks, sweep) werkt onafhankelijk.
+- **Lokale stdio MCP-server (`scripts/kb-mcp.py`, optioneel).** Exposeert geheugen + wiki als `recall`-tool aan compatibele lokale MCP-clients via stdio; read-only via `kb-index.db` en lokale Ollama-embeddings. Vereist eenmalig `pip install mcp`; zonder de dep meldt het script dit netjes en de rest van KennisBank (hooks, sweep) werkt onafhankelijk.
 
 ### Changed
 - **Hooks gaten zichzelf op hun toggle.** `archive-transcript.py` (auto_archive), `distill-notify.py`-meldpad (distill_notify) en `build-embed-index.py` (embed_index) eindigen fail-open als hun toggle uit staat. De daily-graphify-batch in `sessielog`/`wiki`/`destilleer` respecteert `daily_graphify`.
@@ -437,7 +458,10 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.16.1...HEAD
+[0.16.1]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.16.0...v0.16.1
+[0.16.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.15.0...v0.16.0
+[0.15.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.12.2...v0.13.0
 [0.12.2]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.12.1...v0.12.2

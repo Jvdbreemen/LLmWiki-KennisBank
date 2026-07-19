@@ -22,6 +22,30 @@ markeert, maar een mens voegt samen, vervangt, en beslist. Open de kluis in
 Obsidian en het zijn gewoon notities. Zeer goed geordende notities die toevallig
 een AI-geheugen aandrijven.
 
+## Eersteklas integraties voor codeeragents
+
+Eén `setup.sh`-flow installeert en upgradet KennisBank voor **Claude Code**,
+**OpenAI Codex** en de standalone **GitHub Copilot CLI** op Windows, macOS en
+Linux. OpenCode blijft ondersteund als extra lokale client.
+
+- Skill- en promptbeschrijvingen zijn in het Engels, zodat elke client ze
+  consistent kan ontdekken.
+- Routinematige index-, sweep-, archief-, telemetrie- en capture-hooks zonder
+  wijzigingen zijn stil. Gewijzigde indexen en waarschuwingen worden beknopte
+  sessierapporten; Claude Code en Codex ontvangen die rapporten en
+  retrievalcontext via gestructureerde modelcontext met onderdrukte ruwe
+  hookuitvoer.
+- Actiegerichte memory- en destillatiemeldingen blijven agentcontext; alle
+  hooks zijn fail-open en blokkeren nooit een beurt.
+- Dezelfde lokale stdio MCP-server en expliciet ingestelde
+  `KENNISBANK_VAULT` bedienen alle geïnstalleerde clients.
+
+Installeer of upgrade de drie eersteklas clients:
+
+```bash
+KENNISBANK_VAULT="/absoluut/pad/naar/kluis" bash setup.sh --yes --agents claude,codex,copilot
+```
+
 Gebaseerd op [Andrej Karpathy's LLM Wiki-patroon](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f): ruwe sessies gaan erin, gestructureerde kennis komt eruit. KennisBank breidt het patroon uit tot een gesloten lus:
 
 ```
@@ -42,7 +66,17 @@ Geheugensystemen van leveranciers (Mem0, Zep, Letta, Cognee) zijn krachtig maar 
 
 De ontwerpvoorkeur is overal dezelfde: **deterministisch waar mogelijk, LLM alleen waar het oordeelsvermogen toevoegt, fail-open overal**. Een dood model blokkeert nooit een sessie, verliest nooit een transcript, en verwijdert nooit geverifieerde kennis.
 
-## Functie-highlights (v0.15.0)
+## Functie-highlights (v0.16.1)
+
+### Nieuw in v0.16.1
+
+- **Stille hooks voor drie clients.** Claude Code, Codex en GitHub Copilot CLI
+  tonen geen routinematige succesvolle lifecycle-uitvoer meer. Gestructureerde
+  retrieval en actiegerichte meldingen bereiken de agent nog steeds, en elke
+  hook blijft fail-open.
+- **Engelse metadata voor skill-discovery.** Meegeleverde skills en
+  gegenereerde Codex-promptaliassen gebruiken nu consequent Engelse
+  beschrijvingen.
 
 ### Nieuw in v0.15
 - **Meertalige temporele recall.** `/watdeedik`, `/timeline`, en `/weeklog`
@@ -328,7 +362,12 @@ lokale LibreOffice-/ImageMagick-tooling vereisen, zoals LiteParse rapporteert.
 
 De kluis is niet alleen voor Claude Code. `scripts/kb-mcp.py` is een lokale **MCP-server** die drie primitieven blootstelt - `recall` (zoek geheugen + wiki), `capture` (sla een nieuwe herinnering op), en een `instructions`-resource (een duwtje om te trekken vóór je extern zoekt). MCP is het ene protocol dat elke moderne agent al spreekt, dus elke client die **op deze machine** draait kan de kluis gebruiken.
 
-**De harde grens: alleen lokaal.** De MCP-server bindt niets aan het netwerk (stdio-transport); de kluis verlaat nooit je machine. Agents die *op jouw machine* draaien (Codex CLI, GitHub Copilot in VS Code, Claude Code, Cursor, Cline, Windsurf) bereiken hem direct. Agents die *in de cloud* draaien (gehoste ChatGPT) kunnen geen lokale stdio-server bereiken, en het antwoord is **niet** om je soevereine kluis naar het internet te tunnelen - het is de handmatige brug hieronder.
+**De harde grens: alleen lokaal.** De MCP-server bindt niets aan het netwerk
+(stdio-transport); de kluis verlaat nooit je machine. Claude Code, Codex,
+GitHub Copilot CLI, OpenCode en compatibele lokale stdio-clients bereiken hem
+direct. Agents die *in de cloud* draaien (gehoste ChatGPT) kunnen geen lokale
+stdio-server bereiken, en het antwoord is **niet** om je soevereine kluis naar
+het internet te tunnelen - het is de handmatige brug hieronder.
 
 ### Codex CLI
 
@@ -452,7 +491,7 @@ De importer loopt door ChatGPT's bericht-*boom* (`mapping`), ordent beurten op t
 | [docs/guiding-principles-and-values.nl.md](docs/guiding-principles-and-values.nl.md) | De guiding principles en values, uitgewerkt als één document |
 | [PRINCIPLES.nl.md](PRINCIPLES.nl.md) | De ontwerp-wetten die elke beslissing sturen (beknopte referentie) |
 | [VALUES.nl.md](VALUES.nl.md) | Waar het project om geeft - het karakter (beknopte referentie) |
-| [AGENTS.md](AGENTS.md) | AI-codeer-agents (Claude Code, Cursor, Aider) die dit namens een gebruiker installeren |
+| [AGENTS.md](AGENTS.md) | AI-codeer-agents (Claude Code, Codex, GitHub Copilot CLI en OpenCode) die dit namens een gebruiker installeren |
 | [POST-INSTALL.md](POST-INSTALL.md) | Eerste-sessie-walkthrough nadat `setup.sh` klaar is |
 | [CONFIGURATION.md](CONFIGURATION.md) | Elke configureerbare knop: paden, drempels, modellen, toggles |
 | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | Symptoom / oorzaak / oplossing voor veelvoorkomende problemen |

@@ -16,6 +16,8 @@ Twee testklassen:
 from __future__ import annotations
 
 import importlib.util
+import contextlib
+import io
 import json
 import os
 import subprocess
@@ -34,6 +36,19 @@ def _load_kb_retrieve():
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
+
+
+def test_retrieve_context_requests_raw_output_suppression():
+    mod = _load_kb_retrieve()
+    output = io.StringIO()
+    with contextlib.redirect_stdout(output):
+        mod._emit("relevant local context")
+    payload = json.loads(output.getvalue())
+    assert payload["suppressOutput"] is True
+    assert (
+        payload["hookSpecificOutput"]["additionalContext"]
+        == "relevant local context"
+    )
 
 
 class KbRetrieveMemoryTest(unittest.TestCase):

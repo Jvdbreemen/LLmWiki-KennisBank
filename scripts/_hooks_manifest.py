@@ -22,6 +22,15 @@ HOOKS = [
     ("PreToolUse",       "kb-presearch.py",       "WebSearch|WebFetch"),
 ]
 
+SILENT_HOOK_SCRIPTS = frozenset({
+    "build-embed-index.py",
+    "build-kb-index.py",
+    "build-activity-index.py",
+    "sweep-launch.py",
+    "archive-transcript.py",
+    "kb-usage-scan.py",
+})
+
 
 def hooks():
     """Een kopie van het manifest (consumenten mogen muteren zonder de bron te raken)."""

@@ -95,6 +95,15 @@ class SkillFrontmatterTest(unittest.TestCase):
             fm = parse_frontmatter(path.read_text(encoding="utf-8"), str(path))
             self.assertIn("Triggers:", fm["description"])
 
+    def test_all_skill_descriptions_are_english_metadata(self):
+        dutch_markers = re.compile(
+            r"\b(?:autonome|iteratieve|voor|geef|bevindingen|nieuwste|bruikbare)\b",
+            re.IGNORECASE,
+        )
+        for path in sorted(SKILLS_ROOT.glob("*/SKILL.md")):
+            fm = parse_frontmatter(path.read_text(encoding="utf-8"), str(path))
+            self.assertNotRegex(fm["description"], dutch_markers, str(path))
+
     def test_upgrade_skill_mentions_memory_backfill(self):
         text = (Path(__file__).resolve().parent.parent /
                 "skills" / "kennisbank-upgrade" / "SKILL.md").read_text(encoding="utf-8")

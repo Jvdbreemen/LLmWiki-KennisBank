@@ -342,11 +342,25 @@ def _desired_hooks(vault: Path) -> dict:
     }
 
 
-def _hook_command(vault: Path, script: str, arg: "str | None", shell: str) -> str:
+def _hook_command(
+    vault: Path,
+    script: str,
+    arg: "str | None",
+    shell: str,
+    event: str,
+) -> str:
+    wrapper = vault / ".claude" / "scripts" / "quiet-hook.py"
+    target = vault / ".claude" / "scripts" / script
     if shell == "powershell":
-        base = f'py -3 "{_win(vault / ".claude" / "scripts" / script)}"'
+        base = (
+            f'py -3 "{_win(wrapper)}" --client copilot --event {event} '
+            f'"{_win(target)}"'
+        )
     else:
-        base = f'python3 "{_posix(vault / ".claude" / "scripts" / script)}"'
+        base = (
+            f'python3 "{_posix(wrapper)}" --client copilot --event {event} '
+            f'"{_posix(target)}"'
+        )
     cmd = f"{base} {arg}" if arg else base
     # Fail-open guard (ADR D3): a KennisBank hook must NEVER block Copilot. Force
     # exit 0 at the shell level so a missing/erroring script can never make a
@@ -355,11 +369,17 @@ def _hook_command(vault: Path, script: str, arg: "str | None", shell: str) -> st
     return f"{cmd}; exit 0"
 
 
-def _hook_entry(vault: Path, script: str, arg: "str | None", timeout: int) -> dict:
+def _hook_entry(
+    vault: Path,
+    script: str,
+    arg: "str | None",
+    timeout: int,
+    event: str,
+) -> dict:
     return {
         "type": "command",
-        "bash": _hook_command(vault, script, arg, "bash"),
-        "powershell": _hook_command(vault, script, arg, "powershell"),
+        "bash": _hook_command(vault, script, arg, "bash", event),
+        "powershell": _hook_command(vault, script, arg, "powershell", event),
         "cwd": ".",
         "timeoutSec": timeout,
         "env": _kb_env(vault),
@@ -398,7 +418,7 @@ def ensure_hooks(home: Path, vault: Path, *, dry_run: bool = False) -> dict:
         if not isinstance(groups, list):
             groups = []
         for script, arg, timeout in specs:
-            entry = _hook_entry(vault, script, arg, timeout)
+            entry = _hook_entry(vault, script, arg, timeout, event)
             found = False
             for i, existing in enumerate(groups):
                 if _hook_matches(existing, script, arg):

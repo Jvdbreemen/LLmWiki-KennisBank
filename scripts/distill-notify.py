@@ -77,6 +77,7 @@ def _emit_notify(count: int) -> None:
     ctx = (f"{count} gearchiveerde CC-transcript(s) wachten op destillatie. "
            f"Draai /destilleer om ze te importeren en in de wiki te verwerken.")
     sys.stdout.write(json.dumps({
+        "suppressOutput": True,
         "hookSpecificOutput": {
             "hookEventName": "SessionStart",
             "additionalContext": ctx,

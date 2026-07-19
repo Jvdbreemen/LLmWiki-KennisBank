@@ -13,7 +13,34 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DOCTOR = REPO_ROOT / "scripts" / "doctor.sh"
-BASH = shutil.which("bash")
+
+
+def _find_bash():
+    """Prefer Git Bash on Windows; reject the WSL filesystem namespace."""
+    if os.name != "nt":
+        return shutil.which("bash")
+    git = shutil.which("git")
+    candidates = []
+    if git:
+        candidates.append(Path(git).resolve().parent.parent / "bin" / "bash.exe")
+    for root in (
+        os.environ.get("GIT_INSTALL_ROOT"),
+        os.environ.get("ProgramFiles"),
+        os.environ.get("ProgramFiles(x86)"),
+    ):
+        if root:
+            base = Path(root)
+            candidates.extend(
+                (base / "bin" / "bash.exe", base / "Git" / "bin" / "bash.exe")
+            )
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+    bash = shutil.which("bash")
+    return bash if bash and "system32" not in bash.lower() else None
+
+
+BASH = _find_bash()
 
 # Scripts the Copilot doctor block invokes from the vault's .claude/scripts.
 VAULT_SCRIPTS = (

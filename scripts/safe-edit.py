@@ -255,10 +255,11 @@ def main(argv=None):
             sys.exit(3)
 
     # ---- No-op detection ----
-    # If proposed content is byte-identical to current file, nothing to do.
+    # Text comparison normalizes platform newline translation so a Windows
+    # CRLF checkout does not create an empty commit for identical stdin input.
     if target_exists:
-        current_bytes = target.read_bytes()
-        if current_bytes == proposed.encode("utf-8"):
+        current_text = target.read_text(encoding="utf-8")
+        if current_text == proposed:
             _emit({"action": "no-op"})
             sys.exit(0)
 

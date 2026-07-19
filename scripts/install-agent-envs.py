@@ -32,6 +32,7 @@ except ModuleNotFoundError:  # Python 3.10 support.
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _copilot  # noqa: E402  (Copilot config layer, ADR-0003)
+import _hooks_manifest  # noqa: E402
 
 
 AGENTS = ("claude", "codex", "opencode", "copilot")
@@ -39,21 +40,21 @@ KB_START = "<!-- BEGIN LLmWiki-KennisBank -->"
 KB_END = "<!-- END LLmWiki-KennisBank -->"
 
 ROOT_COMMANDS = {
-    "sessielog": "Maak of werk een KennisBank sessielog bij.",
-    "wiki": "Compileer raw sessies naar wiki-artikelen.",
-    "intake": "Verwerk bestanden uit de KennisBank inbox.",
-    "stale": "Controleer stale wiki-artikelen.",
-    "sessiestart": "Laad KennisBank sessiestart-context.",
-    "import": "Importeer bestaande sessies of exports naar de KennisBank.",
-    "reconcile": "Reconcile tegenstrijdige wiki-informatie.",
-    "uitdaag": "Daag een idee uit met KennisBank-context.",
-    "brug": "Zoek bruggen tussen KennisBank-onderwerpen.",
-    "weeklog": "Maak een temporal activity weeklog met source refs.",
-    "timeline": "Maak een chronologische activity timeline.",
-    "watdeedik": "Beantwoord wat je deed op een datum of in een periode.",
-    "destilleer": "Destilleer ruwe sessies naar bruikbare kennis.",
-    "kennisbank-upgrade": "Upgrade de KennisBank tooling naar de nieuwste release.",
-    "kennisbank-contribute": "Breng lokale KennisBank-toolingverbeteringen upstream.",
+    "sessielog": "Create or update a KennisBank session log.",
+    "wiki": "Compile raw sessions into wiki articles.",
+    "intake": "Process files from the KennisBank inbox.",
+    "stale": "Check for stale wiki articles.",
+    "sessiestart": "Load KennisBank session-start context.",
+    "import": "Import existing sessions or exports into KennisBank.",
+    "reconcile": "Reconcile conflicting wiki information.",
+    "uitdaag": "Challenge an idea using KennisBank context.",
+    "brug": "Find bridges between KennisBank topics.",
+    "weeklog": "Create a temporal activity week log with source references.",
+    "timeline": "Create a chronological activity timeline.",
+    "watdeedik": "Answer what you did on a date or during a period.",
+    "destilleer": "Distill raw sessions into reusable knowledge.",
+    "kennisbank-upgrade": "Upgrade KennisBank tooling to the latest release.",
+    "kennisbank-contribute": "Contribute local KennisBank tooling improvements upstream.",
 }
 
 NESTED_COMMAND_ALIASES = {
@@ -181,7 +182,7 @@ def _command_sources(repo: Path) -> list[tuple[str, Path, str]]:
     for rel, alias in NESTED_COMMAND_ALIASES.items():
         p = repo / "commands" / f"{rel}.md"
         if p.is_file():
-            out.append((alias, p, f"KennisBank command alias voor {rel}."))
+            out.append((alias, p, f"KennisBank command alias for {rel}."))
     return out
 
 
@@ -237,17 +238,35 @@ def install_codex(repo: Path, vault: Path) -> dict:
     }
 
 
-def _codex_command(script: str, vault: Path) -> str:
-    return _shell_join([*_agent_python_argv(), _posix(vault / ".claude" / "scripts" / script)])
+def _codex_command(script: str, vault: Path, event: str) -> str:
+    script_path = vault / ".claude" / "scripts" / script
+    argv = [*_agent_python_argv()]
+    if script in _hooks_manifest.SILENT_HOOK_SCRIPTS:
+        argv.extend([
+            _posix(vault / ".claude" / "scripts" / "quiet-hook.py"),
+            "--client",
+            "codex",
+            "--event",
+            event,
+            _posix(script_path),
+        ])
+    else:
+        argv.append(_posix(script_path))
+    return _shell_join(argv)
 
 
-def _hook_group(script: str, vault: Path, matcher: str | None = None, timeout: int = 60) -> dict:
+def _hook_group(
+    script: str,
+    vault: Path,
+    event: str,
+    matcher: str | None = None,
+    timeout: int = 60,
+) -> dict:
     group: dict = {
         "hooks": [{
             "type": "command",
-            "command": _codex_command(script, vault),
+            "command": _codex_command(script, vault, event),
             "timeout": timeout,
-            "statusMessage": f"KennisBank: {script}",
         }]
     }
     if matcher:
@@ -291,7 +310,7 @@ def _ensure_codex_hooks(path: Path, vault: Path) -> None:
         if not isinstance(groups, list):
             raise ValueError(f"{path}: hooks.{event} must be a list")
         for script, matcher, timeout in specs:
-            command = _codex_command(script, vault)
+            command = _codex_command(script, vault, event)
             found = False
             for group in groups:
                 if not isinstance(group, dict):
@@ -301,12 +320,18 @@ def _ensure_codex_hooks(path: Path, vault: Path) -> None:
                         h["command"] = command
                         h.setdefault("type", "command")
                         h["timeout"] = timeout
-                        h.setdefault("statusMessage", f"KennisBank: {script}")
+                        h.pop("statusMessage", None)
                         if matcher:
                             group["matcher"] = matcher
                         found = True
             if not found:
-                groups.append(_hook_group(script, vault, matcher=matcher, timeout=timeout))
+                groups.append(_hook_group(
+                    script,
+                    vault,
+                    event,
+                    matcher=matcher,
+                    timeout=timeout,
+                ))
     _write_text(path, json.dumps(data, indent=2, ensure_ascii=False) + "\n")
 
 
@@ -460,12 +485,31 @@ def install_copilot(repo: Path, vault: Path) -> dict:
     }
 
 
+def _hook_entries(data: dict):
+    hooks = data.get("hooks")
+    if not isinstance(hooks, dict):
+        return
+    for groups in hooks.values():
+        if not isinstance(groups, list):
+            continue
+        for group in groups:
+            if not isinstance(group, dict):
+                continue
+            entries = group.get("hooks")
+            if not isinstance(entries, list):
+                continue
+            for entry in entries:
+                if isinstance(entry, dict):
+                    yield entry
+
+
 def validate_files(repo: Path, vault: Path, agents: list[str]) -> list[str]:
     errors: list[str] = []
     for p in (
         vault / ".claude" / "scripts" / "kb-mcp.py",
         vault / ".claude" / "scripts" / "kb-retrieve.py",
         vault / ".claude" / "scripts" / "kb-presearch.py",
+        vault / ".claude" / "scripts" / "quiet-hook.py",
         vault / ".claude" / "scripts" / "build-activity-index.py",
         vault / ".claude" / "scripts" / "kb-activity.py",
         vault / ".claude" / "scripts" / "kb-activity-eval.py",
@@ -486,11 +530,25 @@ def validate_files(repo: Path, vault: Path, agents: list[str]) -> list[str]:
         settings = base / "settings.json"
         if settings.is_file():
             txt = settings.read_text(encoding="utf-8")
+            data = _json_file(settings)
+            script_names = {script for _, script, _ in _hooks_manifest.hooks()}
+            kb_entries = [
+                entry
+                for entry in _hook_entries(data)
+                if any(
+                    name in str(entry.get("command", ""))
+                    for name in script_names
+                )
+            ]
             for need in ("kb-retrieve.py", "kb-presearch.py", "build-kb-index.py", "build-activity-index.py"):
                 if need not in txt:
                     errors.append(f"missing Claude hook for {need}")
             if "KENNISBANK_VAULT" not in txt:
                 errors.append("Claude settings.json lacks KENNISBANK_VAULT env")
+            if "quiet-hook.py" not in txt:
+                errors.append("Claude maintenance hooks lack quiet-hook.py")
+            if any("statusMessage" in entry for entry in kb_entries):
+                errors.append("Claude KennisBank hooks still contain statusMessage")
         else:
             errors.append(f"missing Claude settings.json: {settings}")
 
@@ -519,6 +577,21 @@ def validate_files(repo: Path, vault: Path, agents: list[str]) -> list[str]:
             combined = _read_text(codex / "hooks.json") + "\n" + codex_config
             if need not in combined:
                 errors.append(f"Codex config lacks {need}")
+        hooks_text = _read_text(codex / "hooks.json")
+        if "quiet-hook.py" not in hooks_text:
+            errors.append("Codex maintenance hooks lack quiet-hook.py")
+        codex_data = _json_file(codex / "hooks.json")
+        script_names = {script for _, script, _ in _hooks_manifest.hooks()}
+        kb_entries = [
+            entry
+            for entry in _hook_entries(codex_data)
+            if any(
+                name in str(entry.get("command", ""))
+                for name in script_names
+            )
+        ]
+        if any("statusMessage" in entry for entry in kb_entries):
+            errors.append("Codex KennisBank hooks still contain statusMessage")
 
     if "opencode" in agents:
         cfg = _opencode_home()
