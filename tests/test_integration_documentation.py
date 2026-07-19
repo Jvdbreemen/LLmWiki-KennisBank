@@ -5,7 +5,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_readmes_document_first_class_hookless_integrations():
+def test_readmes_document_first_class_coordinated_integrations():
     for name in ("README.md", "README.nl.md"):
         text = (REPO_ROOT / name).read_text(encoding="utf-8")
         normalized = re.sub(r"\s+", " ", text)
@@ -13,8 +13,11 @@ def test_readmes_document_first_class_hookless_integrations():
             assert client in text
         assert "OpenCode" in text
         assert (
-            "no KennisBank lifecycle hooks" in normalized
-            or "geen KennisBank lifecycle-hooks" in normalized
+            "one fail-open coordinator at session start and one at exit" in normalized
+            or "één fail-open coördinator bij sessiestart en één bij afsluiten" in normalized
+        )
+        assert "Routine no-change output stays silent" in normalized or (
+            "Geen-wijziging-uitvoer blijft stil" in normalized
         )
         assert "sessiestart" in normalized
         assert "sessielog" in normalized

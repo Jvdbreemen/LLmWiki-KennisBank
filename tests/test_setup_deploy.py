@@ -149,7 +149,13 @@ class SetupDeployTest(unittest.TestCase):
         tmp, vault = self.run_setup()
         try:
             scripts = vault / ".claude" / "scripts"
-            for name in ("archive-transcript.py", "distill-notify.py"):
+            for name in (
+                "archive-transcript.py",
+                "distill-notify.py",
+                "kb-session-start.py",
+                "kb-session-end.py",
+                "kb-session-log.py",
+            ):
                 self.assertTrue((scripts / name).is_file(), f"{name} not deployed")
             self.assertTrue((vault / "01-raw" / "transcripts").is_dir(),
                             "transcripts dir not created")
@@ -261,10 +267,19 @@ class SetupDeployTest(unittest.TestCase):
             settings = json.loads(settings_path.read_text(encoding="utf-8"))
             session = _hook_commands(settings, "SessionStart")
             prompt = _hook_commands(settings, "UserPromptSubmit")
-            self.assertTrue(any("build-embed-index.py" in c for c in session),
-                            f"build-embed-index.py not on SessionStart: {session}")
+            end = _hook_commands(settings, "SessionEnd")
+            self.assertEqual(
+                sum("kb-session-start.py" in c for c in session),
+                1,
+                f"expected one KennisBank coordinator: {session}",
+            )
             self.assertTrue(any("kb-retrieve.py" in c for c in prompt),
                             f"kb-retrieve.py not on UserPromptSubmit: {prompt}")
+            self.assertEqual(
+                sum("kb-session-end.py" in c for c in end),
+                1,
+                f"expected one KennisBank exit coordinator: {end}",
+            )
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
@@ -273,7 +288,7 @@ class SetupDeployTest(unittest.TestCase):
         try:
             result = self.run_doctor_in(tmp, vault)
             out = result.stdout
-            self.assertRegex(out, r"\[PASS\].*build-embed-index\.py.*registered")
+            self.assertRegex(out, r"\[PASS\].*kb-session-start\.py.*registered")
             self.assertRegex(out, r"\[PASS\].*kb-retrieve\.py.*registered")
             self.assertEqual(result.returncode, 0, f"doctor exited {result.returncode}:\n{out}\n{result.stderr}")
         finally:
@@ -298,9 +313,11 @@ class SetupDeployTest(unittest.TestCase):
             self.run_setup_in(tmp)
             settings_path = tmp / ".claude" / "settings.json"
             settings = json.loads(settings_path.read_text(encoding="utf-8"))
-            session = [c for c in _hook_commands(settings, "SessionStart") if "build-embed-index.py" in c]
+            session = [c for c in _hook_commands(settings, "SessionStart") if "kb-session-start.py" in c]
+            end = [c for c in _hook_commands(settings, "SessionEnd") if "kb-session-end.py" in c]
             prompt = [c for c in _hook_commands(settings, "UserPromptSubmit") if "kb-retrieve.py" in c]
             self.assertEqual(len(session), 1, f"duplicate SessionStart hooks: {session}")
+            self.assertEqual(len(end), 1, f"duplicate SessionEnd hooks: {end}")
             self.assertEqual(len(prompt), 1, f"duplicate UserPromptSubmit hooks: {prompt}")
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
@@ -319,7 +336,7 @@ class SetupDeployTest(unittest.TestCase):
             self.assertEqual(settings["permissions"], {"allow": ["Bash(ls:*)"]})
             session = _hook_commands(settings, "SessionStart")
             self.assertIn("echo pre-existing", session)
-            self.assertTrue(any("build-embed-index.py" in c for c in session))
+            self.assertTrue(any("kb-session-start.py" in c for c in session))
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
@@ -334,10 +351,11 @@ class SetupDeployTest(unittest.TestCase):
         try:
             settings = json.loads((tmp / ".claude" / "settings.json").read_text(encoding="utf-8"))
             session = " ".join(_hook_commands(settings, "SessionStart"))
-            for need in ("build-embed-index.py", "build-kb-index.py", "sweep-launch.py",
-                         "memory-notify.py", "build-activity-index.py"):
-                self.assertIn(need, session, f"{need} niet op SessionStart")
-            self.assertIn("quiet-hook.py", session)
+            self.assertIn("kb-session-start.py", session)
+            self.assertIn("--client claude", session)
+            for legacy in ("build-embed-index.py", "build-kb-index.py", "sweep-launch.py",
+                           "memory-notify.py", "build-activity-index.py"):
+                self.assertNotIn(legacy, session, f"{legacy} bleef als losse SessionStart-hook")
             self.assertNotIn("statusMessage", json.dumps(settings))
             pre = settings.get("hooks", {}).get("PreToolUse", [])
             self.assertTrue(pre, "geen PreToolUse-hook")
@@ -360,7 +378,7 @@ class SetupDeployTest(unittest.TestCase):
         try:
             result = self.run_doctor_in(tmp, vault)
             out = result.stdout
-            self.assertRegex(out, r"\[PASS\].*build-kb-index\.py.*registered")
+            self.assertRegex(out, r"\[PASS\].*kb-session-start\.py.*registered")
             self.assertRegex(out, r"\[PASS\].*kb-presearch\.py.*registered")
             self.assertRegex(out, r"kennisbank-schema-versie.*0\.9\.0")
             self.assertEqual(result.returncode, 0, f"doctor exited {result.returncode}:\n{out}")

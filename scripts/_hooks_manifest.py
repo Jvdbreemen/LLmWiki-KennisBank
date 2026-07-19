@@ -10,25 +10,27 @@ from __future__ import annotations
 # (event, script_basename, matcher_of_None). Alleen KennisBank-hooks; de hooks
 # van de gebruiker (bv. caveman) staan hier NIET in en blijven ongemoeid.
 HOOKS = [
-    ("SessionStart",     "build-embed-index.py",  None),
-    ("SessionStart",     "build-kb-index.py",     None),
-    ("SessionStart",     "build-activity-index.py", None),
-    ("SessionStart",     "sweep-launch.py",       None),
-    ("SessionStart",     "memory-notify.py",      None),
-    ("SessionStart",     "distill-notify.py",     None),
+    ("SessionStart",     "kb-session-start.py",   None),
     ("UserPromptSubmit", "kb-retrieve.py",        None),
-    ("SessionEnd",       "archive-transcript.py", None),
-    ("SessionEnd",       "kb-usage-scan.py",      None),
+    ("SessionEnd",       "kb-session-end.py",     None),
     ("PreToolUse",       "kb-presearch.py",       "WebSearch|WebFetch"),
 ]
 
-SILENT_HOOK_SCRIPTS = frozenset({
+SILENT_HOOK_SCRIPTS = frozenset()
+
+LEGACY_SESSION_END_SCRIPTS = frozenset({
+    "archive-transcript.py",
+    "kb-usage-scan.py",
+})
+
+# Removed from SessionStart during upgrade, then replaced by the coordinator.
+LEGACY_SESSION_START_SCRIPTS = frozenset({
     "build-embed-index.py",
     "build-kb-index.py",
     "build-activity-index.py",
     "sweep-launch.py",
-    "archive-transcript.py",
-    "kb-usage-scan.py",
+    "memory-notify.py",
+    "distill-notify.py",
 })
 
 

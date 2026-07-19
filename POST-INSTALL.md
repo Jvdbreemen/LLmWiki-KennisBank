@@ -303,8 +303,10 @@ as an INFO line and counts zero failures — Copilot is never required.
 `doctor.sh` is the source of truth. When Copilot is configured, look for:
 
 ```
-[PASS] copilot config: mcp, instructions and agent profile present; no KennisBank hooks
+[PASS] copilot config: mcp, hooks, instructions and agent profile present; vault pinned
 [PASS] copilot cli: v1.0.70; kennisbank MCP visible to copilot
+[PASS] copilot capture hook: kb-copilot-capture.py deployed
+[INFO] copilot hook events: none captured yet (populated on first Copilot session)
 ```
 
 Reading the results:
@@ -333,8 +335,10 @@ python3 $HOME/KennisBank/.claude/scripts/kennisbank-copilot.py --kb-dry-run
 `--kb-dry-run` shows what the wrapper would launch (vault, binary, env, argv)
 without starting Copilot. Both work offline.
 
-Then start a Copilot session, run `/sessiestart` when maintenance is wanted and
-`/sessielog` before exit when it should be captured. Confirm it surfaces in recall:
+Then start a Copilot session. The one SessionStart coordinator keeps indexes
+fresh; the one exit coordinator captures and imports the completed session.
+`/sessielog` remains available for explicit semantic capture and runs its
+mechanical post-save work through one helper. Confirm it surfaces in recall:
 
 ```
 /watdeedik vandaag

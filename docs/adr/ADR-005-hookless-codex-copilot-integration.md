@@ -1,7 +1,7 @@
 ---
 id: "ADR-005"
 title: "Use hookless integrations for Codex and Copilot"
-status: "Accepted"
+status: "Superseded"
 date: "2026-07-19"
 binding: false
 gate: null
@@ -10,7 +10,7 @@ verified_in:
   - "tests/test_agent_envs_install.py"
   - "tests/test_copilot_config.py"
 supersedes: []
-superseded_by: null
+superseded_by: "ADR-006"
 format: "madr"
 ---
 
@@ -20,7 +20,7 @@ format: "madr"
 
 ## Status
 
-Accepted, 2026-07-19.
+Superseded by ADR-006, 2026-07-19.
 
 ## Status History
 
@@ -36,6 +36,11 @@ status_history:
     changed_by: Codex
     reason: TASK-34 implementation and migration tests satisfy the decision gates
     changed_via: adr-kit
+  - date: 2026-07-19
+    status: Superseded
+    changed_by: Codex
+    reason: Coordinated automation selected for v0.17.0 after the explicit-session trade-off was reconsidered
+    changed_via: adr-kit lifecycle
 ```
 
 ## Context and Problem Statement

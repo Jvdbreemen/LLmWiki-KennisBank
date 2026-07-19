@@ -503,12 +503,14 @@ yours and are never written to the repo or vault.
 
 **Symptom**: `/watdeedik` or `/timeline` do not surface a Copilot session.
 
-**Cause**: capture is explicit because KennisBank no longer installs Copilot
-lifecycle hooks.
+**Cause**: capture hooks are fail-open by design. A script error or malformed
+payload skips capture rather than blocking Copilot.
 
-**Fix**: run `/sessielog` before ending the session. Existing event data or
-Copilot history can still be imported:
+**Fix**: confirm the capture script and event directory, then import and rebuild.
+`/sessielog` is also available for explicit capture:
 ```bash
+ls "$HOME/KennisBank/.claude/scripts/kb-copilot-capture.py"
+ls "$HOME/KennisBank/.claude/copilot-events/"
 python3 "$HOME/KennisBank/.claude/scripts/import-copilot.py" --vault "$HOME/KennisBank"
 python3 "$HOME/KennisBank/.claude/scripts/build-activity-index.py" --vault "$HOME/KennisBank" --full
 ```
@@ -517,20 +519,47 @@ python3 "$HOME/KennisBank/.claude/scripts/build-activity-index.py" --vault "$HOM
 
 **Symptom**: you want a Copilot session that is not recorded into KennisBank.
 
-**Cause**: capture is explicit in v0.16.2 and later.
+**Cause**: capture is on by default and fail-open.
 
-**Fix**: do not run `/sessielog` for that session.
+**Fix**: launch through the wrapper with `--no-capture`, or set
+`KENNISBANK_COPILOT_NO_CAPTURE=1`.
 
 ### 9.7 Copilot still prints `SessionStart hook (completed)`
 
-**Cause**: an older KennisBank hook or a hook owned by another integration is
-still installed. Copilot renders the row itself.
+**Cause**: one row is expected: Copilot renders it for the single coordinator
+and child process output cannot hide it. Multiple KennisBank rows mean an older
+fan-out is still installed; other rows may belong to another tool.
 
-**Fix**:
+**Fix**: upgrade and inspect the remaining hooks:
 
 ```bash
 KENNISBANK_VAULT="$HOME/KennisBank" bash setup.sh --yes --agents copilot
 ```
 
-Setup removes only KennisBank commands. If the row remains, inspect
-`~/.copilot/hooks/*.json`; the remaining hook belongs to another integration.
+Setup replaces only legacy KennisBank SessionStart commands. If more than one
+row remains, inspect `~/.copilot/hooks/*.json`; unrelated integrations are
+intentionally preserved.
+
+### 9.8 Multiple exit-hook rows or missing final-session activity
+
+**Cause**: an older install still registers `archive-transcript.py`,
+`kb-usage-scan.py`, or Copilot `kb-copilot-capture.py --event sessionEnd`
+separately. One generic SessionEnd/Stop row may remain because the client owns
+that UI; multiple KennisBank rows indicate legacy fan-out.
+
+**Fix**: rerun setup for the affected clients. Migration removes only the known
+KennisBank exit basenames, deduplicates `kb-session-end.py`, and preserves
+unrelated exit hooks:
+
+```bash
+KENNISBANK_VAULT="$HOME/KennisBank" bash setup.sh --yes --agents claude,codex,copilot
+```
+
+The exit coordinator is silent and fail-open. Its last diagnostic state is:
+
+```bash
+python3 -m json.tool "$HOME/KennisBank/.claude/kb-session-end-state.json"
+```
+
+`"ok": false` lists the timed-out or failing child without delaying or blocking
+client shutdown.

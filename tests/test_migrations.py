@@ -53,7 +53,10 @@ class MigrationsTest(unittest.TestCase):
         # hooks migratie
         s = json.loads(self.settings.read_text(encoding="utf-8"))
         joined = json.dumps(s)
-        self.assertIn("build-kb-index.py", joined)
+        self.assertIn("kb-session-start.py", joined)
+        self.assertIn("kb-session-end.py", joined)
+        self.assertNotIn("build-kb-index.py", joined)
+        self.assertNotIn("archive-transcript.py", joined)
 
     def test_run_idempotent(self):
         self.m.run(self.vault, str(self.settings))

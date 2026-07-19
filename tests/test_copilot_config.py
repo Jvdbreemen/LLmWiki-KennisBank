@@ -86,7 +86,8 @@ class CopilotConfigTest(unittest.TestCase):
         report = self.m.install(self.vault)
         self.assertTrue(report["changed"])
         self.assertTrue((self.home / "mcp-config.json").is_file())
-        self.assertFalse((self.home / "hooks" / "kennisbank.json").exists())
+        hooks_path = self.home / "hooks" / "kennisbank.json"
+        self.assertTrue(hooks_path.is_file())
         self.assertTrue((self.home / "copilot-instructions.md").is_file())
         self.assertTrue((self.home / "agents" / "kennisbank.agent.md").is_file())
 
@@ -96,9 +97,16 @@ class CopilotConfigTest(unittest.TestCase):
         self.assertEqual(mcp["mcpServers"]["kennisbank"]["env"]["KENNISBANK_VAULT"],
                          str(self.vault).replace("\\", "/"))
 
-        self.assertEqual(report["results"]["hooks"]["action"], "skipped")
+        hooks = json.loads(hooks_path.read_text(encoding="utf-8"))
+        session = json.dumps(hooks["hooks"]["sessionStart"])
+        self.assertEqual(session.count("kb-session-start.py"), 2)
+        end = json.dumps(hooks["hooks"]["sessionEnd"])
+        self.assertEqual(end.count("kb-session-end.py"), 2)
+        self.assertNotIn("kb-copilot-capture.py", end)
+        self.assertNotIn("kb-usage-scan.py", end)
+        self.assertEqual(report["results"]["hooks"]["action"], "created")
 
-    def test_install_migrates_hooks_and_preserves_unrelated_entries(self):
+    def test_install_migrates_legacy_hooks_and_preserves_unrelated_entries(self):
         hooks_path = self.home / "hooks" / "kennisbank.json"
         hooks_path.parent.mkdir(parents=True)
         hooks_path.write_text(json.dumps({
@@ -108,6 +116,14 @@ class CopilotConfigTest(unittest.TestCase):
                     self.m._hook_entry(
                         self.vault, "build-kb-index.py", None, 180, "sessionStart"
                     ),
+                    self.m._hook_entry(
+                        self.vault, "kb-session-start.py",
+                        "--client copilot", 240, "sessionStart"
+                    ),
+                    self.m._hook_entry(
+                        self.vault, "kb-session-start.py",
+                        "--client copilot", 240, "sessionStart"
+                    ),
                     {
                         "type": "command",
                         "bash": "echo user-hook",
@@ -116,18 +132,42 @@ class CopilotConfigTest(unittest.TestCase):
                 ],
                 "sessionEnd": [
                     self.m._hook_entry(
+                        self.vault, "kb-copilot-capture.py",
+                        "--event sessionEnd", 30, "sessionEnd"
+                    ),
+                    self.m._hook_entry(
                         self.vault, "kb-usage-scan.py", None, 30, "sessionEnd"
                     ),
+                    self.m._hook_entry(
+                        self.vault, "kb-session-end.py",
+                        "--client copilot", 90, "sessionEnd"
+                    ),
+                    self.m._hook_entry(
+                        self.vault, "kb-session-end.py",
+                        "--client copilot", 90, "sessionEnd"
+                    ),
+                    {
+                        "type": "command",
+                        "bash": "echo user-exit-hook",
+                        "powershell": "Write-Output user-exit-hook",
+                    },
                 ],
             },
         }), encoding="utf-8")
 
         report = self.m.install(self.vault)
 
-        blob = hooks_path.read_text(encoding="utf-8")
+        data = json.loads(hooks_path.read_text(encoding="utf-8"))
+        blob = json.dumps(data)
         self.assertIn("echo user-hook", blob)
         self.assertNotIn("build-kb-index.py", blob)
-        self.assertNotIn("kb-usage-scan.py", blob)
+        self.assertIn("kb-session-start.py", blob)
+        self.assertEqual(blob.count("kb-session-start.py"), 2)
+        end = json.dumps(data["hooks"]["sessionEnd"])
+        self.assertNotIn("kb-copilot-capture.py", end)
+        self.assertNotIn("kb-usage-scan.py", end)
+        self.assertEqual(end.count("kb-session-end.py"), 2)
+        self.assertIn("echo user-exit-hook", end)
         self.assertEqual(report["results"]["hooks"]["action"], "updated")
 
     def test_agent_profile_uses_dot_agent_md_extension(self):
@@ -322,7 +362,24 @@ class CopilotConfigTest(unittest.TestCase):
             },
         }), encoding="utf-8")
         errors = self.m.validate_config(self.vault)
-        self.assertTrue(any("lifecycle hooks" in error for error in errors), errors)
+        self.assertTrue(any("legacy SessionStart" in error for error in errors), errors)
+
+    def test_validate_config_flags_legacy_exit_hooks(self):
+        self.m.install(self.vault)
+        hooks_path = self.home / "hooks" / "kennisbank.json"
+        data = json.loads(hooks_path.read_text(encoding="utf-8"))
+        data["hooks"]["sessionEnd"].append(
+            self.m._hook_entry(
+                self.vault,
+                "kb-usage-scan.py",
+                None,
+                30,
+                "sessionEnd",
+            )
+        )
+        hooks_path.write_text(json.dumps(data), encoding="utf-8")
+        errors = self.m.validate_config(self.vault)
+        self.assertTrue(any("legacy sessionEnd" in error for error in errors), errors)
 
     # --- instructions / agent profile co-existence (TASK-26.4) -------------
 
@@ -343,7 +400,8 @@ class CopilotConfigTest(unittest.TestCase):
     def test_agent_profile_mentions_required_items(self):
         text = self.m._agent_profile_text(self.vault)
         for needle in (self.m._posix(self.vault), "recall", "capture",
-                       "what_did_i_do", "timeline", "/sessiestart", "rawlog"):
+                       "what_did_i_do", "timeline", "/sessiestart", "/sessielog",
+                       "rawlog"):
             self.assertIn(needle, text, f"agent profile missing: {needle}")
 
     def test_agent_profile_uses_marker(self):
