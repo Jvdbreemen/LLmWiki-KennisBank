@@ -1,11 +1,11 @@
 ---
 id: TASK-34
 title: Make Codex and Copilot hookless with native KennisBank commands
-status: In Progress
+status: Done
 assignee:
   - Codex
 created_date: '2026-07-19 15:11'
-updated_date: '2026-07-19 15:23'
+updated_date: '2026-07-19 15:26'
 labels: []
 dependencies: []
 modified_files:
@@ -30,9 +30,9 @@ Suppress client-rendered lifecycle progress/completion rows by removing KennisBa
 <!-- AC:BEGIN -->
 - [x] #1 Fresh Codex and Copilot installs create no KennisBank lifecycle hooks.
 - [x] #2 Upgrade removes only legacy KennisBank hooks and preserves unrelated entries.
-- [ ] #3 Codex installs sessiestart/sessielog skills plus prompt compatibility aliases; Copilot exposes native slash-command skills.
+- [x] #3 Codex installs sessiestart/sessielog skills plus prompt compatibility aliases; Copilot exposes native slash-command skills.
 - [x] #4 README, configuration, integration, troubleshooting, changelog, and MADR explain the suppression boundary and trade-off.
-- [ ] #5 Focused integration tests, setup validation, and ADR gates pass.
+- [x] #5 Focused integration tests, setup validation, and ADR gates pass.
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -47,10 +47,12 @@ Ship v0.16.3 hotfix: quote generated YAML argument-hint, verify with Copilot ski
 Implemented hookless Codex/Copilot installs with selective removal, generated command skills, updated validation/doctor, English and Dutch docs, and accepted MADR ADR-005. Verification: 50 passed + 1 skipped focused integration slice; 276 passed + 1 skipped a-h batch; 270 passed + 1 skipped i-m after documentation fix; 104 passed n-z excluding long setup deploy; changed setup path smoke passed; ADR gates had 0 failures (one advisory for no numeric consequence metric). Full monolithic suite exceeds the local command timeout because test_setup_deploy repeatedly runs setup; deterministic batches isolate it.
 
 Live copilot skill list found generated argument-hint parsed as YAML list; reopen for quoted-string hotfix and live discovery regression.
+
+Hotfix verification: 46 focused tests passed; GitHub CI passed full suite; direct Windows install/validate returned no errors; copilot skill list now loads sessielog and sessiestart; Codex/Copilot KennisBank hook counts remain zero.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Implemented and verified hookless KennisBank integrations for Codex and Copilot. Setup installs native sessiestart/sessielog command skills plus MCP, selectively removes legacy KennisBank hooks while preserving unrelated hooks, and updates validation, doctor, README, configuration, integration, troubleshooting, changelog, and accepted MADR ADR-005. GitHub CI passed the full suite.
+Hookless Codex/Copilot integration is implemented, documented, merged in v0.16.2, and corrected for live Copilot YAML discovery in v0.16.3. Active Windows configs have zero KennisBank hook references, native sessiestart/sessielog skills load in Copilot, Codex compatibility prompts remain, and MCP points at the explicit Kluis vault.
 <!-- SECTION:FINAL_SUMMARY:END -->
