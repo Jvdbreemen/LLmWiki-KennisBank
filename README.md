@@ -28,11 +28,13 @@ and Linux. OpenCode remains supported as an additional local client.
 
 - Skill and generated prompt descriptions are English so every client can
   discover them consistently.
-- Claude Code keeps fail-open automatic hooks. Codex and Copilot intentionally
-  install no KennisBank lifecycle hooks, so their clients cannot print
-  `Running ... hook` or `SessionStart hook (completed)` rows.
-- Codex and Copilot use native personal skills plus MCP. Upgrades remove only
-  KennisBank-owned hooks and preserve unrelated user hooks.
+- Each client registers one fail-open coordinator at session start and one at
+  exit. Independent jobs run concurrently, dependent work follows in explicit
+  phases. Routine no-change output stays silent.
+- A client may still show one generic row for each lifecycle event; those
+  UI-owned rows cannot be suppressed portably while keeping automation.
+- Setup replaces only legacy KennisBank start/exit entries and preserves
+  unrelated user hooks plus prompt and presearch behavior.
 - The same local stdio MCP server and explicitly pinned `KENNISBANK_VAULT`
   serve every installed client.
 
@@ -42,9 +44,9 @@ Install or upgrade selected clients:
 KENNISBANK_VAULT="/absolute/path/to/vault" bash setup.sh --yes --agents claude,codex,copilot
 ```
 
-After restart, use `$sessiestart` and `$sessielog` in Codex
+After restarting the client, use `$sessiestart` and `$sessielog` in Codex
 (`/prompts:sessiestart` remains a compatibility alias), or `/sessiestart` and
-`/sessielog` in Copilot.
+`/sessielog` in Copilot for explicit on-demand workflows.
 
 Based on [Andrej Karpathy's LLM Wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f): raw sessions go in, structured knowledge comes out. KennisBank extends the pattern into a closed loop:
 
@@ -56,10 +58,7 @@ capture ──> consolidate ──> retrieve ──> measure
 
 - **Capture**: session logs, transcript archiving, and an autonomous memory sweep that extracts, types, and judges candidate memories after each session.
 - **Consolidate**: `/wiki` compiles sessions into wiki articles with per-claim provenance; new facts reconcile against old ones at write time (add, supersede, or drop) with a bi-temporal validity model.
-- **Retrieve**: Claude hooks inject relevant wiki articles and memories
-  automatically; Codex and Copilot use explicit skills and MCP. All routes use
-  hybrid semantic + keyword search, ranked by relevance x recency x importance
-  and expanded with the best-connected graph neighbour.
+- **Retrieve**: hooks inject relevant wiki articles and memories into every prompt, in any project: hybrid semantic + keyword search, ranked by relevance x recency x importance, expanded with the best-connected graph neighbour.
 - **Measure**: a recall@k eval harness and a threshold calibration harness make every retrieval change testable instead of vibes-based.
 - **Learn**: usage telemetry tracks which injected knowledge was actually used, boosting warm documents and keeping recently-used articles out of the stale list.
 
@@ -69,18 +68,21 @@ Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: 
 
 The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
 
-## Feature highlights (v0.17.0)
+## Feature highlights (v0.17.1)
 
-### New in v0.17
+### New in v0.17.1
 
-- **Zero hook rows in Codex and Copilot.** Their KennisBank integrations are
-  hookless by design and use native command skills plus MCP.
-- **Native session workflows.** Copilot exposes `/sessiestart` and
-  `/sessielog`; Codex exposes `$sessiestart` and `$sessielog` plus its existing
-  `/prompts:*` compatibility aliases.
-- **Reliable command discovery.** Generated skill metadata is valid,
-  English-language YAML across supported coding agents, including Copilot's
-  stricter frontmatter parser.
+- **One coordinated start and exit hook per client.** Startup maintenance is
+  phased and concurrent. Exit capture completes first, then independent usage
+  attribution and Copilot import work run concurrently. Both paths are
+  time-bounded, silent on routine success, and fail-open.
+- **Native coordinated session workflows.** Copilot exposes `/sessiestart` and
+  `/sessielog`; Codex exposes `$sessiestart` and `$sessielog` plus `/prompts:*`
+  compatibility. The semantic `/sessielog` workflow invokes one deterministic
+  helper for its post-save indexes, sweep launch, and notices.
+- **Deterministic, non-destructive upgrade.** Setup recognizes old script
+  basenames, removes only legacy KennisBank start/exit entries, deduplicates
+  coordinators, and preserves unrelated hooks plus prompt/presearch behavior.
 
 ### New in v0.15
 - **Multilingual temporal recall.** `/watdeedik`, `/timeline`, and `/weeklog`
@@ -133,9 +135,8 @@ The design bias throughout: **deterministic where possible, LLM only where it ad
   completion when validation fails.
 - **Multi-agent by design.** Choose `claude`, `codex`, `opencode`, or `all`.
   Claude Code gets native commands and hooks; Codex gets shared skills,
-  `/prompts:*` aliases, MCP, and `AGENTS.md`; OpenCode gets commands, shared
-  skills, MCP, global rules, and a local plugin. Current releases deliberately
-  keep Codex lifecycle-hook-free.
+  `/prompts:*` aliases, hooks, MCP, and `AGENTS.md`; OpenCode gets commands,
+  shared skills, MCP, global rules, and a local plugin.
 - **Verified local-first models.** Setup validates the selected backend before
   it returns. Ollama remains the default for local memory extraction and judging,
   including smoke tests for the configured embedding and chat models.
@@ -244,22 +245,20 @@ After install, read [POST-INSTALL.md](POST-INSTALL.md) for the first-session wal
 
 ### The hookset
 
-Claude Code receives the hookset below in `~/.claude/settings.json`. Codex and
-Copilot deliberately receive no KennisBank lifecycle hooks; native skills and
-MCP avoid client-generated progress/completion rows. OpenCode receives MCP plus
-a global plugin under `~/.config/opencode/plugins/`.
+Claude Code, Codex, and Copilot each receive one SessionStart coordinator and
+one exit coordinator plus their prompt/tool hooks. The table names coordinator
+children as jobs, not separately registered handlers. OpenCode receives MCP
+plus a global plugin under `~/.config/opencode/plugins/`.
 
 | Hook | Script | What it does |
 |------|--------|--------------|
-| SessionStart | `build-embed-index.py` | Warm the wiki embedding cache (incremental) |
-| SessionStart | `build-kb-index.py` | Refresh the hybrid vector+FTS index |
-| SessionStart | `build-activity-index.py` | Refresh the temporal activity index for `/weeklog`, `/timeline`, and MCP temporal tools |
-| SessionStart | `sweep-launch.py` | Launch the detached memory capture sweep |
-| SessionStart | `memory-notify.py` | Report memory-quarantine health |
-| SessionStart | `distill-notify.py` | Report transcripts waiting for distillation |
+| SessionStart | `kb-session-start.py` | Coordinate concurrent index/sweep jobs, then notices; emit one actionable report |
+| Coordinator job | `build-embed-index.py`, `build-kb-index.py`, `build-activity-index.py`, `sweep-launch.py` | Run independent maintenance concurrently |
+| Coordinator notice | `memory-notify.py`, `distill-notify.py` | Report health/actions after maintenance |
 | UserPromptSubmit | `kb-retrieve.py` | Inject matching wiki + memory context into the prompt |
-| SessionEnd | `archive-transcript.py` | Archive the session transcript into the vault |
-| SessionEnd | `kb-usage-scan.py` | Mark which injected knowledge was actually used |
+| SessionEnd/Stop | `kb-session-end.py` | Capture the transcript/event first; then attribute usage and import Copilot activity concurrently |
+| Exit coordinator capture | `archive-transcript.py` or `kb-copilot-capture.py` | Persist the client-native session source before follow-up work |
+| Exit coordinator jobs | `kb-usage-scan.py`, Copilot `import-copilot.py` | Attribute useful recall and make Copilot activity immediately indexable |
 | PreToolUse (WebSearch\|WebFetch) | `kb-presearch.py` | Consult the vault before searching the web |
 
 The hooks are fail-open by design: an error means no injected context or a skipped background step, never a blocked session.
@@ -268,7 +267,7 @@ The hooks are fail-open by design: an error means no injected context or a skipp
 
 | Command | Arguments | What it does |
 |---------|-----------|--------------|
-| `/sessielog` | none | Writes session log, compiles wiki candidates, runs semantic tiling |
+| `/sessielog` | none | Writes and curates the semantic session log, then runs one mechanical post-save coordinator |
 | `/sessiestart` | none | Read vault context, memory, wiki status, suggest next actions |
 | `/wiki` | optional topic | Compiles raw logs (last 7 days) into wiki articles with per-key-point provenance, validated by kb-lint |
 | `/intake` | none | Processes files in `~/KennisBank/00-inbox/`, including local LiteParse conversion of PDF/Office/image documents to source markdown |
@@ -382,14 +381,18 @@ internet - it is the manual bridge below.
   temporal commands, and the hand-authored KennisBank skills
 - `~/.codex/prompts/*.md` aliases, invoked as `/prompts:sessielog`, `/prompts:sessiestart`, `/prompts:kennisbank-upgrade`, etc.
 - `~/.codex/AGENTS.md` with the active vault path
+- `~/.codex/hooks.json` with one SessionStart and one exit coordinator plus
+  fail-open prompt/tool hooks
 - `~/.codex/config.toml` MCP server `kennisbank`
 
 Use `$sessiestart` and `$sessielog` as native Codex skills. Codex does not
-expose arbitrary bare slash aliases; the deprecated compatibility form is
-`/prompts:<name>`. KennisBank installs no Codex lifecycle hooks because Codex
-currently parses but does not implement hook `suppressOutput`. Setup removes
-legacy KennisBank entries while preserving unrelated hooks. MCP remains
-available through the configured `kennisbank` server.
+expose arbitrary bare slash aliases; the deprecated prompt compatibility form
+is `/prompts:<name>`. KennisBank installs one start and one exit coordinator.
+Codex may show one client-owned row per lifecycle event, but routine output
+stays silent. Setup replaces legacy start/exit entries while
+preserving unrelated and non-startup hooks. MCP tools remain available through
+the configured `kennisbank` server, and setup proves the server starts before
+reporting success.
 
 Manual MCP equivalent:
 
@@ -433,22 +436,29 @@ KENNISBANK_VAULT="/absolute/path/to/vault" bash setup.sh --yes --agents copilot
 `setup.sh --agents copilot` installs, idempotently and login-free:
 
 - `~/.copilot/mcp-config.json` - MCP server `kennisbank` (`recall`, `capture`, and the temporal tools), registered by a key-scoped JSON merge and validated with a real initialize/list-tools handshake
+- `~/.copilot/hooks/kennisbank.json` - one cross-platform SessionStart
+  coordinator plus fail-open activity capture hooks
 - `~/.copilot/copilot-instructions.md` - a KennisBank managed instruction block
 - `~/.copilot/agents/kennisbank.agent.md` - a custom agent profile, selected with `copilot --agent kennisbank`
 - native slash-command skills at `~/.agents/skills/`, including
-  `/sessiestart`, `/sessielog`, `/weeklog`, and `/timeline`
+  `/sessiestart`, `/sessielog`, `/weeklog`, and `/timeline` (list with
+  `copilot skill list`)
 
-KennisBank installs no Copilot lifecycle hooks because Copilot has no hook field
-that hides its own timeline rows. Upgrades remove only known KennisBank hook
-commands and leave unrelated entries untouched.
+KennisBank coordinates startup behind one hook because Copilot has no hook
+field that hides its own timeline rows. One generic row can remain; six to
+eight old rows become one. On upgrade, setup removes only known legacy
+SessionStart commands and leaves unrelated entries untouched.
 
 Run Copilot through the wrapper to pin the vault and local-LLM env: `python3 <vault>/.claude/scripts/kennisbank-copilot.py` (a trivial exec that hands off to the real `copilot`; `--kb-doctor`, `--kb-dry-run`, and `--kb-print-env` work without a GitHub login).
 
-**The cloud boundary is precise.** Copilot is cloud-backed, but your vault,
-recall, MCP server, skills, and instructions stay local. See
+**The cloud boundary is precise.** Copilot is cloud-backed - a live model turn
+needs a GitHub Copilot subscription and sends requests to GitHub. Your vault,
+recall, MCP server, skills, and instructions stay local; their installation and
+`copilot mcp list` work without login. The integration is opt-in. See
 [agent integrations](docs/agent-integrations.md), the original
-[Copilot ADR](docs/adr/0003-copilot-cli-integration.md), and the superseding
-[hookless ADR](docs/adr/ADR-005-hookless-codex-copilot-integration.md).
+[Copilot ADR](docs/adr/0003-copilot-cli-integration.md), and the
+[SessionStart coordinator ADR](docs/adr/ADR-006-coordinate-sessionstart-work-behind-one-client-hook.md)
+and [session logging/exit coordinator ADR](docs/adr/ADR-007-coordinate-session-logging-and-exit-work-behind-one-client-hook.md).
 
 ### GitHub Copilot (VS Code agent mode) - works, with one caveat
 

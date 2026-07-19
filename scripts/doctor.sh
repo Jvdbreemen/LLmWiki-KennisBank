@@ -302,8 +302,8 @@ fi
 if [ "$COPILOT_CONFIGURED" = "0" ]; then
   report_info "copilot integration" "not configured (optional; run setup.sh --agents copilot)"
 elif command -v python3 >/dev/null 2>&1 && [ -f "$SCRIPTS_DIR/_copilot.py" ]; then
-  # Managed config validation: MCP/instructions/profile, vault pinning, and no
-  # legacy KennisBank lifecycle hooks.
+  # Managed config validation: MCP/instructions/profile, vault pinning, one
+  # start/exit coordinator, and no legacy KennisBank lifecycle fan-out.
   CP_VALIDATE="$(python3 "$SCRIPTS_DIR/_copilot.py" validate --vault "$VAULT" 2>/dev/null | python3 -c '
 import json, sys
 try:
@@ -313,7 +313,7 @@ except Exception:
     print("ERR")
 ' 2>/dev/null | tr -d '\r')"
   case "$CP_VALIDATE" in
-    OK) report_pass "copilot config" "mcp, instructions and agent profile present; no KennisBank hooks" ;;
+    OK) report_pass "copilot config" "mcp, instructions and agent profile present; one start and one exit coordinator" ;;
     ERR|"") report_warn "copilot config" "kon _copilot.py validate niet lezen (setup opnieuw draaien?)" ;;
     *) report_fail "copilot config" "${CP_VALIDATE#FAIL }; fix: setup.sh --agents copilot" ;;
   esac

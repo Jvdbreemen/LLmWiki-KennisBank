@@ -40,22 +40,12 @@ Elke kennisregel moet leesbaar zijn door een toekomstige sessie zonder context v
 - Geen em dashes
 
 ### Karpathy-index updaten
-Na het schrijven van het sessie-log:
-```bash
-python3 $VAULT/.claude/scripts/build-karpathy-index.py
-```
-Dit voegt de nieuwe sessie toe aan `$VAULT/02-wiki/log.md` (het chronologische index-bestand in `## [YYYY-MM-DD] OPERATION | Title` formaat).
+Bewaar het absolute pad van het geschreven bestand als `SESSION_LOG`. De
+mechanische coördinator aan het einde werkt de Karpathy-index en de andere
+afgeleide indexen in één run bij.
 
-### Memory-sweep (optioneel, on-demand)
-
-Claude Code start de autonome capture-sweep (`sweep-launch.py`) automatisch bij
-SessionStart. In Codex en Copilot is session maintenance bewust expliciet om
-client hookmeldingen te voorkomen. Wil je de sweep op-demand draaien, dan kan
-dat direct:
-```bash
-python3 "$VAULT/.claude/scripts/memory-sweep.py"
-```
-Dit verwerkt pending transcripts naar `09-memory/` (extract -> dedup -> judge -> schrijf). Gegate op `memory_capture`; exit 0 fail-open.
+De mechanische coördinator start ook `sweep-launch.py`. Die launcher is
+single-flight, losgekoppeld en fail-open; voer hier geen tweede sweep uit.
 
 ---
 
@@ -146,9 +136,27 @@ Sla alleen over als er niets configureerds gevonden is — niet als het bestand 
 
 ---
 
+## Stap 6: Mechanische sessielog-coördinator (VERPLICHT)
+
+Voer na alle semantische schrijfwerk precies één helper uit. Gebruik `python3`
+op macOS/Linux of `py -3` op Windows:
+
+```bash
+python3 "$VAULT/.claude/scripts/kb-session-log.py" --session-log "$SESSION_LOG"
+```
+
+De helper valideert dat het sessielog onder
+`$VAULT/01-raw/sessies/` staat, draait de Karpathy-, embedding-, kennis- en
+activiteitsindexen plus de sweep-launcher parallel, en voert geheugen- en
+destillatiemeldingen pas daarna uit. Hij is fail-open en geeft één samengevoegd
+resultaat terug. Voer de losse child-scripts niet daarnaast uit.
+
+---
+
 ## Bevestiging
 - Pad naar het geschreven sessie-log
 - Welke wiki-artikelen nieuw of bijgewerkt zijn
 - Tiling-resultaten (of "overgeslagen — installeer qwen3-embedding:8b")
 - Welke learnings-entries toegevoegd zijn (of "overgeslagen — geen learnings-bestand geconfigureerd")
+- Het ene resultaat van `kb-session-log.py` (alleen wijzigingen of acties)
 - Als Decision Log entries aanwezig: overweeg of deze beslissingen een ADR (Architecture Decision Record) verdienen in het betreffende project. Als je een /adr workflow gebruikt: draai die nu.

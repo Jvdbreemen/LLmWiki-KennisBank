@@ -10,7 +10,7 @@ This module is the reusable, hermetically testable helper layer (TASK-26.2) that
 - mutates Copilot config *idempotently and non-destructively* using two KISS
   mechanisms (ADR D6):
     * structured config (JSON) -> key-scoped read-modify-write + equivalence
-      check, no markers needed (mcp-config.json);
+      check, no markers needed (mcp-config.json, hooks/kennisbank.json);
     * freeform files -> a marker-delimited managed block, never clobbering user
       content (copilot-instructions.md, the .agent.md profile).
 - reports every mutation as added / updated / skipped / created with the backup
@@ -36,7 +36,7 @@ from pathlib import Path
 KB_START = "<!-- BEGIN LLmWiki-KennisBank -->"
 KB_END = "<!-- END LLmWiki-KennisBank -->"
 
-# Copilot hooks (exit code 2 = deny) were hardened in v1.0.70; target that.
+# Copilot hook behavior is validated against v1.0.70+.
 MIN_VERSION = (1, 0, 70)
 
 # Env every KennisBank-generated Copilot config pins so the right vault + local
@@ -314,7 +314,7 @@ def ensure_mcp(home: Path, vault: Path, *, dry_run: bool = False) -> dict:
 # Capture script (built by TASK-26.6); the hook map references it here so the
 # registration is one place. Fail-open is the script's responsibility.
 _CAPTURE_SCRIPT = "kb-copilot-capture.py"
-_MANAGED_HOOK_SCRIPTS = frozenset({
+_LEGACY_SESSION_START = frozenset({
     "import-copilot.py",
     "build-embed-index.py",
     "build-kb-index.py",
@@ -323,35 +323,31 @@ _MANAGED_HOOK_SCRIPTS = frozenset({
     "memory-notify.py",
     "distill-notify.py",
     "kb-copilot-capture.py",
+})
+_MANAGED_HOOK_SCRIPTS = _LEGACY_SESSION_START | frozenset({
     "kb-session-start.py",
+    "kb-session-end.py",
+    "kb-usage-scan.py",
+    "archive-transcript.py",
+})
+_LEGACY_SESSION_END = frozenset({
+    "kb-copilot-capture.py",
     "kb-usage-scan.py",
     "archive-transcript.py",
 })
 
 
 def _desired_hooks(vault: Path) -> dict:
-    """Copilot hook map (camelCase events). Lifecycle maintenance mirrors the
-    Codex hookset; capture entries feed rawlog/activity (TASK-26.6/26.8). Every
-    KennisBank hook is fail-open: the scripts always exit 0."""
+    """Copilot hook map with one coordinated SessionStart entry."""
     cap = _CAPTURE_SCRIPT
     return {
         "sessionStart": [
-            ("import-copilot.py", None, 60),
-            ("build-embed-index.py", None, 180),
-            ("build-kb-index.py", None, 180),
-            ("build-activity-index.py", None, 180),
-            ("sweep-launch.py", None, 30),
-            ("memory-notify.py", None, 30),
-            ("distill-notify.py", None, 30),
-            (cap, "--event sessionStart", 30),
+            ("kb-session-start.py", "--client copilot", 240),
         ],
         "userPromptSubmitted": [(cap, "--event userPromptSubmitted", 30)],
         "preToolUse": [(cap, "--event preToolUse", 30)],
         "postToolUse": [(cap, "--event postToolUse", 30)],
-        "sessionEnd": [
-            (cap, "--event sessionEnd", 30),
-            ("kb-usage-scan.py", None, 30),
-        ],
+        "sessionEnd": [("kb-session-end.py", "--client copilot", 90)],
     }
 
 
@@ -364,15 +360,20 @@ def _hook_command(
 ) -> str:
     wrapper = vault / ".claude" / "scripts" / "quiet-hook.py"
     target = vault / ".claude" / "scripts" / script
+    direct = script in {"kb-session-start.py", "kb-session-end.py"}
     if shell == "powershell":
         base = (
-            f'py -3 "{_win(wrapper)}" --client copilot --event {event} '
-            f'"{_win(target)}"'
+            f'py -3 "{_win(target)}"'
+            if direct
+            else f'py -3 "{_win(wrapper)}" --client copilot --event {event} '
+                 f'"{_win(target)}"'
         )
     else:
         base = (
-            f'python3 "{_posix(wrapper)}" --client copilot --event {event} '
-            f'"{_posix(target)}"'
+            f'python3 "{_posix(target)}"'
+            if direct
+            else f'python3 "{_posix(wrapper)}" --client copilot --event {event} '
+                 f'"{_posix(target)}"'
         )
     cmd = f"{base} {arg}" if arg else base
     # Fail-open guard (ADR D3): a KennisBank hook must NEVER block Copilot. Force
@@ -425,6 +426,45 @@ def ensure_hooks(home: Path, vault: Path, *, dry_run: bool = False) -> dict:
     if not isinstance(hooks, dict):
         hooks = {}
     changed = not existed or data.get("version") != 1
+    session_groups = hooks.get("sessionStart")
+    if isinstance(session_groups, list):
+        kept = []
+        coordinator_seen = False
+        for entry in session_groups:
+            blob = (
+                str(entry.get("bash", "")) + "\n"
+                + str(entry.get("powershell", ""))
+            ) if isinstance(entry, dict) else ""
+            if any(script in blob for script in _LEGACY_SESSION_START):
+                continue
+            if "kb-session-start.py" in blob:
+                if coordinator_seen:
+                    continue
+                coordinator_seen = True
+            kept.append(entry)
+        if len(kept) != len(session_groups):
+            changed = True
+        hooks["sessionStart"] = kept
+
+    end_groups = hooks.get("sessionEnd")
+    if isinstance(end_groups, list):
+        kept = []
+        coordinator_seen = False
+        for entry in end_groups:
+            blob = (
+                str(entry.get("bash", "")) + "\n"
+                + str(entry.get("powershell", ""))
+            ) if isinstance(entry, dict) else ""
+            if any(script in blob for script in _LEGACY_SESSION_END):
+                continue
+            if "kb-session-end.py" in blob:
+                if coordinator_seen:
+                    continue
+                coordinator_seen = True
+            kept.append(entry)
+        if len(kept) != len(end_groups):
+            changed = True
+        hooks["sessionEnd"] = kept
 
     for event, specs in _desired_hooks(vault).items():
         groups = hooks.get(event)
@@ -468,7 +508,8 @@ Operational rules for GitHub Copilot CLI:
 - Always set or preserve `KENNISBANK_VAULT={vault_s}` for KennisBank scripts, skills and the MCP server.
 - Do not use `~/KennisBank` as the active vault on this machine unless the user explicitly changes it.
 - Prefer the local KennisBank MCP server (`recall`, `capture`) before external search when a task may depend on prior local knowledge. For temporal questions use `what_did_i_do`, `timeline`, `weeklog` or `topic_timeline` first.
-- KennisBank intentionally installs no Copilot lifecycle hooks because the CLI renders hook timeline rows. Use `/sessiestart` for explicit startup maintenance and `/sessielog` for session capture.
+- KennisBank uses one fail-open start and one exit coordinator. Copilot may render one row per lifecycle event; routine details stay silent and actionable startup results are consolidated.
+- Use `/sessiestart` for explicit startup maintenance and `/sessielog` for session capture.
 
 Client: Copilot
 {KB_END}
@@ -497,11 +538,14 @@ Use the local KennisBank MCP server before external search:
 - `capture(title, body, memory_type, importance)` for unverified memory.
 - `what_did_i_do`, `timeline`, `weeklog`, `topic_timeline` for temporal recall.
 
-Use `/sessiestart` for explicit startup maintenance and `/sessielog` to capture
-the current session into the local rawlog and activity index.
+Your Copilot prompt, tool, and session events are captured locally (rawlog to
+activity index) so you can recall "what did I do" later; capture is fail-open.
+Use `/sessiestart` for explicit maintenance and `/sessielog` for an on-demand
+session log.
 
-Prefer local knowledge and the local Ollama backend. KennisBank intentionally
-uses no Copilot lifecycle hooks, so it adds no hook progress or completion rows.
+Prefer local knowledge and the local Ollama backend. One fail-open start
+coordinator keeps indexes fresh; one silent exit coordinator captures and
+imports the completed session.
 {KB_END}
 """
 
@@ -521,12 +565,12 @@ def ensure_agent_profile(home: Path, vault: Path, *, dry_run: bool = False) -> d
 # --- orchestration ---------------------------------------------------------
 
 def install(vault: Path, *, home: "Path | None" = None, dry_run: bool = False) -> dict:
-    """Install Copilot surfaces and remove legacy KennisBank hooks."""
+    """Install Copilot surfaces and consolidate legacy start/exit hooks."""
     home = home or copilot_home()
     vault = _norm_path(vault)
     results = {
         "mcp": ensure_mcp(home, vault, dry_run=dry_run),
-        "hooks": _remove_hooks(home, vault, dry_run=dry_run),
+        "hooks": ensure_hooks(home, vault, dry_run=dry_run),
         "instructions": ensure_instructions(home, vault, dry_run=dry_run),
         "agent_profile": ensure_agent_profile(home, vault, dry_run=dry_run),
     }
@@ -619,10 +663,27 @@ def validate_config(vault: Path, *, home: "Path | None" = None) -> list:
             errors.append("Copilot MCP kennisbank args do not point at kb-mcp.py")
     hooks_path = home / "hooks" / "kennisbank.json"
     hooks = _read_json(hooks_path).get("hooks") if hooks_path.is_file() else {}
-    if isinstance(hooks, dict):
-        blob = json.dumps(hooks)
-        if any(script in blob for script in _MANAGED_HOOK_SCRIPTS):
-            errors.append("Copilot still contains KennisBank lifecycle hooks")
+    desired = _desired_hooks(vault)
+    if not isinstance(hooks, dict):
+        errors.append(f"Copilot hooks missing: {_posix(hooks_path)}")
+    else:
+        for event, specs in desired.items():
+            groups = hooks.get(event)
+            if not isinstance(groups, list):
+                errors.append(f"Copilot hooks missing event: {event}")
+                continue
+            for script, arg, _timeout in specs:
+                matches = [group for group in groups if _hook_matches(group, script, arg)]
+                if len(matches) != 1:
+                    errors.append(
+                        f"Copilot hook {event}/{script} must appear exactly once"
+                    )
+        session_blob = json.dumps(hooks.get("sessionStart", []))
+        if any(script in session_blob for script in _LEGACY_SESSION_START):
+            errors.append("Copilot still contains legacy SessionStart hooks")
+        end_blob = json.dumps(hooks.get("sessionEnd", []))
+        if any(script in end_blob for script in _LEGACY_SESSION_END):
+            errors.append("Copilot still contains legacy sessionEnd hooks")
     for label, p in (
         ("instructions", home / "copilot-instructions.md"),
         ("agent profile", home / "agents" / "kennisbank.agent.md"),
@@ -670,7 +731,7 @@ def probe_cli(vault: Path, *, home: "Path | None" = None, timeout: int = 25) -> 
         out["mcp_listed"] = True
         out["status"] = "ok" if out["version_ok"] else "version_old"
         if not out["version_ok"]:
-            out["detail"] = f"copilot {out['version']} < {out['min_version']}; hooks exit-2-deny needs {out['min_version']}+"
+            out["detail"] = f"copilot {out['version']} < {out['min_version']}; KennisBank targets {out['min_version']}+"
     else:
         out["mcp_listed"] = False
         if any(k in blob for k in ("log in", "login", "not authenticated", "sign in", "/login")):

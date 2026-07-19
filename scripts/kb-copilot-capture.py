@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """KennisBank capture hook for the GitHub Copilot CLI (TASK-26.6).
 
-Legacy event-capture helper retained for importing older Copilot hook data. It
-is no longer registered by setup because the hookless Copilot integration uses
-explicit command skills. The helper supports the former
+Event-capture helper used by the coordinated Copilot integration. Setup
+registers it indirectly through the start and exit coordinators and directly
+for prompt/tool events. The helper supports
 Copilot lifecycle events (sessionStart, userPromptSubmitted, preToolUse,
 postToolUse, sessionEnd). Copilot delivers a single-line JSON payload on stdin;
 this script parses it, redacts known secret fields, and appends one structured

@@ -4,10 +4,8 @@
 This helper is intentionally stdlib-only. setup.sh owns the vault scaffold and
 Claude Code deploy; this script owns the cross-agent layer:
 
-- Codex: command skills, compatibility prompts, AGENTS.md, MCP config, and
-  selective migration of legacy KennisBank hooks.
-- Copilot: command skills, MCP, instructions, agent profile, and selective
-  migration of legacy KennisBank hooks.
+- Codex: command skills, compatibility prompts, AGENTS.md, one coordinated
+  hook at session start and exit, prompt/tool hooks, and MCP config.
 - OpenCode: skills, commands, AGENTS.md, plugin hook, MCP config.
 - Claude Code validation: verifies the files setup.sh installed.
 
@@ -194,7 +192,7 @@ def _prompt_text(name: str, source: Path, description: str, target_agent: str) -
     return (
         "---\n"
         f"description: {description}\n"
-        "argument-hint: [ARGUMENTS]\n"
+        'argument-hint: "[ARGUMENTS]"\n'
         "---\n\n"
         f"Je voert de KennisBank-workflow `{name}` uit voor {target_agent}.\n"
         "Gebruik de actieve KENNISBANK_VAULT uit de agentconfig; val niet terug op "
@@ -204,7 +202,7 @@ def _prompt_text(name: str, source: Path, description: str, target_agent: str) -
 
 
 def _command_skill_text(name: str, source: Path, description: str) -> str:
-    """Render one command as a Codex/Copilot personal skill."""
+    """Render one Claude command as a cross-client, user-invocable skill."""
     body = source.read_text(encoding="utf-8")
     return (
         "---\n"
@@ -234,14 +232,17 @@ def _install_shared_skills(repo: Path, skills_root: Path) -> list[Path]:
 
 
 def _install_command_skills(repo: Path, skills_root: Path) -> list[Path]:
-    """Install command workflows without replacing richer authored skills."""
+    """Install command workflows as native Codex/Copilot skills.
+
+    A hand-authored skill wins over a generated command skill with the same
+    name so packaged scripts and richer instructions are never overwritten.
+    """
     installed = []
-    authored_root = repo / "skills"
     authored = {
-        path.name
-        for path in authored_root.iterdir()
-        if path.is_dir() and (path / "SKILL.md").is_file()
-    } if authored_root.is_dir() else set()
+        p.name
+        for p in (repo / "skills").iterdir()
+        if p.is_dir() and (p / "SKILL.md").is_file()
+    } if (repo / "skills").is_dir() else set()
     for name, source, description in _command_sources(repo):
         if name in authored:
             continue
@@ -265,13 +266,13 @@ def install_codex(repo: Path, vault: Path) -> dict:
         written_prompts.append(dst)
 
     _replace_block(codex / "AGENTS.md", _agent_block("Codex", vault))
-    _remove_codex_hooks(codex / "hooks.json")
+    _ensure_codex_hooks(codex / "hooks.json", vault)
     _ensure_codex_mcp(codex / "config.toml", vault)
     return {
         "skills": [str(p) for p in skills],
         "prompts": [str(p) for p in written_prompts],
         "agents_md": str(codex / "AGENTS.md"),
-        "hooks": "removed",
+        "hooks": str(codex / "hooks.json"),
         "mcp": str(codex / "config.toml"),
     }
 
@@ -279,7 +280,9 @@ def install_codex(repo: Path, vault: Path) -> dict:
 def _codex_command(script: str, vault: Path, event: str) -> str:
     script_path = vault / ".claude" / "scripts" / script
     argv = [*_agent_python_argv()]
-    if script in _hooks_manifest.SILENT_HOOK_SCRIPTS:
+    if script in {"kb-session-start.py", "kb-session-end.py"}:
+        argv.extend([_posix(script_path), "--client", "codex"])
+    elif script in _hooks_manifest.SILENT_HOOK_SCRIPTS:
         argv.extend([
             _posix(vault / ".claude" / "scripts" / "quiet-hook.py"),
             "--client",
@@ -323,21 +326,69 @@ def _ensure_codex_hooks(path: Path, vault: Path) -> None:
     if not isinstance(hooks, dict):
         raise ValueError(f"{path}: hooks must be an object")
 
+    session_groups = hooks.get("SessionStart")
+    if isinstance(session_groups, list):
+        kept_groups = []
+        coordinator_seen = False
+        for group in session_groups:
+            if not isinstance(group, dict) or not isinstance(group.get("hooks"), list):
+                kept_groups.append(group)
+                continue
+            entries = []
+            for entry in group["hooks"]:
+                command = str(entry.get("command", "")) if isinstance(entry, dict) else ""
+                if any(
+                    script in command
+                    for script in _hooks_manifest.LEGACY_SESSION_START_SCRIPTS
+                ):
+                    continue
+                if "kb-session-start.py" in command:
+                    if coordinator_seen:
+                        continue
+                    coordinator_seen = True
+                entries.append(entry)
+            if entries:
+                updated = dict(group)
+                updated["hooks"] = entries
+                kept_groups.append(updated)
+        hooks["SessionStart"] = kept_groups
+
+    stop_groups = hooks.get("Stop")
+    if isinstance(stop_groups, list):
+        kept_groups = []
+        coordinator_seen = False
+        for group in stop_groups:
+            if not isinstance(group, dict) or not isinstance(group.get("hooks"), list):
+                kept_groups.append(group)
+                continue
+            entries = []
+            for entry in group["hooks"]:
+                command = str(entry.get("command", "")) if isinstance(entry, dict) else ""
+                if any(
+                    script in command
+                    for script in _hooks_manifest.LEGACY_SESSION_END_SCRIPTS
+                ):
+                    continue
+                if "kb-session-end.py" in command:
+                    if coordinator_seen:
+                        continue
+                    coordinator_seen = True
+                entries.append(entry)
+            if entries:
+                updated = dict(group)
+                updated["hooks"] = entries
+                kept_groups.append(updated)
+        hooks["Stop"] = kept_groups
+
     desired = {
         "SessionStart": [
-            ("build-embed-index.py", "startup|resume|clear|compact", 180),
-            ("build-kb-index.py", "startup|resume|clear|compact", 180),
-            ("build-activity-index.py", "startup|resume|clear|compact", 180),
-            ("sweep-launch.py", "startup|resume|clear|compact", 30),
-            ("memory-notify.py", "startup|resume|clear|compact", 30),
-            ("distill-notify.py", "startup|resume|clear|compact", 30),
+            ("kb-session-start.py", "startup|resume|clear|compact", 240),
         ],
         "UserPromptSubmit": [
             ("kb-retrieve.py", None, 30),
         ],
         "Stop": [
-            ("archive-transcript.py", None, 30),
-            ("kb-usage-scan.py", None, 30),
+            ("kb-session-end.py", None, 90),
         ],
         "PreToolUse": [
             ("kb-presearch.py", "web|web_search|WebSearch|WebFetch", 30),
@@ -353,12 +404,12 @@ def _ensure_codex_hooks(path: Path, vault: Path) -> None:
             for group in groups:
                 if not isinstance(group, dict):
                     continue
-                for h in group.get("hooks", []):
-                    if isinstance(h, dict) and script in str(h.get("command", "")):
-                        h["command"] = command
-                        h.setdefault("type", "command")
-                        h["timeout"] = timeout
-                        h.pop("statusMessage", None)
+                for hook in group.get("hooks", []):
+                    if isinstance(hook, dict) and script in str(hook.get("command", "")):
+                        hook["command"] = command
+                        hook.setdefault("type", "command")
+                        hook["timeout"] = timeout
+                        hook.pop("statusMessage", None)
                         if matcher:
                             group["matcher"] = matcher
                         found = True
@@ -373,75 +424,15 @@ def _ensure_codex_hooks(path: Path, vault: Path) -> None:
     _write_text(path, json.dumps(data, indent=2, ensure_ascii=False) + "\n")
 
 
-_CODEX_KB_HOOK_SCRIPTS = frozenset({
-    script for _event, script, _matcher in _hooks_manifest.hooks()
-}) | frozenset({
-    "import-copilot.py",
-    "kb-copilot-capture.py",
-})
-
-
 def _is_kennisbank_hook_command(command: str) -> bool:
     normalized = str(command).replace("\\", "/").lower()
     if ".claude/scripts/" not in normalized:
         return False
-    return any(f"/{script.lower()}" in normalized for script in _CODEX_KB_HOOK_SCRIPTS)
-
-
-def _remove_codex_hooks(path: Path) -> None:
-    """Remove only KennisBank handlers, preserving every unrelated hook."""
-    if not path.is_file():
-        return
-    data = json.loads(path.read_text(encoding="utf-8") or "{}")
-    if not isinstance(data, dict):
-        raise ValueError(f"{path} must contain a JSON object")
-    hooks = data.get("hooks")
-    if not isinstance(hooks, dict):
-        return
-
-    changed = False
-    for event in list(hooks):
-        groups = hooks.get(event)
-        if not isinstance(groups, list):
-            continue
-        kept_groups = []
-        for group in groups:
-            if not isinstance(group, dict):
-                kept_groups.append(group)
-                continue
-            entries = group.get("hooks")
-            if not isinstance(entries, list):
-                kept_groups.append(group)
-                continue
-            kept_entries = [
-                entry
-                for entry in entries
-                if not (
-                    isinstance(entry, dict)
-                    and _is_kennisbank_hook_command(str(entry.get("command", "")))
-                )
-            ]
-            if len(kept_entries) != len(entries):
-                changed = True
-            if kept_entries:
-                updated = dict(group)
-                updated["hooks"] = kept_entries
-                kept_groups.append(updated)
-        if kept_groups:
-            hooks[event] = kept_groups
-        else:
-            hooks.pop(event, None)
-
-    if not changed:
-        return
-    if hooks:
-        data["hooks"] = hooks
-    else:
-        data.pop("hooks", None)
-    if data:
-        _write_text(path, json.dumps(data, indent=2, ensure_ascii=False) + "\n")
-    else:
-        path.unlink()
+    scripts = {script.lower() for _, script, _ in _hooks_manifest.hooks()}
+    scripts.update(script.lower() for script in _hooks_manifest.LEGACY_SESSION_START_SCRIPTS)
+    scripts.update(script.lower() for script in _hooks_manifest.LEGACY_SESSION_END_SCRIPTS)
+    scripts.update({"import-copilot.py", "kb-copilot-capture.py"})
+    return any(f"/{script}" in normalized for script in scripts)
 
 
 def _toml_quote(value: str) -> str:
@@ -578,8 +569,8 @@ def install_copilot(repo: Path, vault: Path) -> dict:
     """Install the KennisBank integration for the standalone GitHub Copilot CLI.
 
     Delegates config mutation to the idempotent _copilot layer (ADR-0003 D1-D6):
-    MCP registration, legacy-hook migration, global instructions and the custom
-    agent profile. Commands become personal skills in ~/.agents/skills.
+    MCP registration, hook migration, global instructions and the custom agent
+    profile. Commands become native personal skills in ~/.agents/skills.
     """
     skills = _install_shared_skills(repo, _home() / ".agents" / "skills")
     skills.extend(_install_command_skills(repo, _home() / ".agents" / "skills"))
@@ -620,6 +611,7 @@ def validate_files(repo: Path, vault: Path, agents: list[str]) -> list[str]:
         vault / ".claude" / "scripts" / "kb-retrieve.py",
         vault / ".claude" / "scripts" / "kb-presearch.py",
         vault / ".claude" / "scripts" / "quiet-hook.py",
+        vault / ".claude" / "scripts" / "kb-session-start.py",
         vault / ".claude" / "scripts" / "build-activity-index.py",
         vault / ".claude" / "scripts" / "kb-activity.py",
         vault / ".claude" / "scripts" / "kb-activity-eval.py",
@@ -650,13 +642,36 @@ def validate_files(repo: Path, vault: Path, agents: list[str]) -> list[str]:
                     for name in script_names
                 )
             ]
-            for need in ("kb-retrieve.py", "kb-presearch.py", "build-kb-index.py", "build-activity-index.py"):
+            for need in (
+                "kb-retrieve.py",
+                "kb-presearch.py",
+                "kb-session-start.py",
+                "kb-session-end.py",
+            ):
                 if need not in txt:
                     errors.append(f"missing Claude hook for {need}")
             if "KENNISBANK_VAULT" not in txt:
                 errors.append("Claude settings.json lacks KENNISBANK_VAULT env")
-            if "quiet-hook.py" not in txt:
-                errors.append("Claude maintenance hooks lack quiet-hook.py")
+            session_blob = json.dumps(
+                data.get("hooks", {}).get("SessionStart", []),
+                ensure_ascii=False,
+            )
+            if any(
+                name in session_blob
+                for name in _hooks_manifest.LEGACY_SESSION_START_SCRIPTS
+            ):
+                errors.append("Claude still contains legacy KennisBank SessionStart hooks")
+            end_blob = json.dumps(
+                data.get("hooks", {}).get("SessionEnd", []),
+                ensure_ascii=False,
+            )
+            if any(
+                name in end_blob
+                for name in _hooks_manifest.LEGACY_SESSION_END_SCRIPTS
+            ):
+                errors.append("Claude still contains legacy KennisBank exit hooks")
+            if end_blob.count("kb-session-end.py") != 1:
+                errors.append("Claude must contain exactly one KennisBank exit coordinator")
             if any("statusMessage" in entry for entry in kb_entries):
                 errors.append("Claude KennisBank hooks still contain statusMessage")
         else:
@@ -676,7 +691,7 @@ def validate_files(repo: Path, vault: Path, agents: list[str]) -> list[str]:
         for prompt in ("sessielog", "sessiestart", "kennisbank-upgrade", "weeklog", "timeline", "watdeedik"):
             if not (codex / "prompts" / f"{prompt}.md").is_file():
                 errors.append(f"missing Codex prompt alias: {prompt}")
-        for p in (codex / "AGENTS.md", codex / "config.toml"):
+        for p in (codex / "AGENTS.md", codex / "hooks.json", codex / "config.toml"):
             if not p.is_file():
                 errors.append(f"missing Codex config file: {p}")
         codex_config = _read_text(codex / "config.toml")
@@ -690,7 +705,8 @@ def validate_files(repo: Path, vault: Path, agents: list[str]) -> list[str]:
             except Exception as e:
                 errors.append(f"Codex config.toml is not valid TOML: {e}")
         for need in ("mcp_servers.kennisbank", _posix(vault)):
-            if need not in codex_config:
+            combined = codex_config
+            if need not in combined:
                 errors.append(f"Codex config lacks {need}")
         codex_data = _json_file(codex / "hooks.json")
         kb_entries = [
@@ -698,8 +714,32 @@ def validate_files(repo: Path, vault: Path, agents: list[str]) -> list[str]:
             for entry in _hook_entries(codex_data)
             if _is_kennisbank_hook_command(str(entry.get("command", "")))
         ]
-        if kb_entries:
-            errors.append("Codex still contains KennisBank lifecycle hooks")
+        coordinators = [
+            entry
+            for entry in kb_entries
+            if "kb-session-start.py" in str(entry.get("command", ""))
+        ]
+        if len(coordinators) != 1:
+            errors.append("Codex must contain exactly one KennisBank SessionStart coordinator")
+        if any(
+            name in str(entry.get("command", ""))
+            for entry in kb_entries
+            for name in _hooks_manifest.LEGACY_SESSION_START_SCRIPTS
+        ):
+            errors.append("Codex still contains legacy KennisBank SessionStart hooks")
+        end_coordinators = [
+            entry
+            for entry in kb_entries
+            if "kb-session-end.py" in str(entry.get("command", ""))
+        ]
+        if len(end_coordinators) != 1:
+            errors.append("Codex must contain exactly one KennisBank exit coordinator")
+        if any(
+            name in str(entry.get("command", ""))
+            for entry in kb_entries
+            for name in _hooks_manifest.LEGACY_SESSION_END_SCRIPTS
+        ):
+            errors.append("Codex still contains legacy KennisBank exit hooks")
 
     if "opencode" in agents:
         cfg = _opencode_home()
