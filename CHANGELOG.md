@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-07-19
+
 ### Added
 - **Human-gated noise signal in the usage loop (yesmem lesson, TASK-17).** `python3 scripts/kb-noise.py <stem> ...` marks injected-but-unhelpful knowledge as noise (`--list` shows current marks). Ranking applies a bounded, deterministic penalty via `_rank.noise_factor` (up to −20% at 100% noise rate, floor 0.8); with zero marks the factor is exactly 1.0, so existing rankings are untouched — verified with an identical before/after `kb-eval` memory-only run (MRR 0.892). The `usage` table gains `noise`/`last_noise` columns via an idempotent in-place migration; marking is strictly human-initiated (no judge, no autonomous down-weighting).
 - **GitHub Copilot CLI as a fourth local agent (`--agents copilot`).** The standalone GitHub Copilot CLI (`npm install -g @github/copilot`, invoked `copilot`, v1.0.70+) joins Claude Code, Codex, and OpenCode as a first-class local target, sharing the same vault, stdio MCP server, and local recall. New scripts: `scripts/kennisbank-copilot.py` (wrapper/launcher — a trivial exec, not a proxy), `scripts/_copilot.py` (detect/probe/validate plus install/remove), `scripts/kb-copilot-capture.py` (fail-open capture hook), `scripts/import-copilot.py` (rawlog import), and `scripts/agent-status.py` (multi-agent rollup). `setup.sh --agents copilot` installs, idempotently and login-free, the KennisBank MCP server (`~/.copilot/mcp-config.json`, key `mcpServers.kennisbank`), fail-open cross-platform hooks (`~/.copilot/hooks/kennisbank.json`, each entry with a `bash` and a `powershell` command), a managed personal-instructions block (`~/.copilot/copilot-instructions.md`), and a custom agent profile (`~/.copilot/agents/kennisbank.agent.md`, selected with `copilot --agent kennisbank`); the shared `~/.agents/skills/` set is reused as-is. All user-level paths honor `COPILOT_HOME`.
@@ -16,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Setup and doctor cover Copilot.** `setup.sh` accepts `copilot` in `--agents` (`claude,codex,opencode,copilot,all`); the default target set is unchanged (`claude,codex`). `doctor.sh` gained a read-only Copilot section that reports `copilot integration: not configured` (INFO, 0 FAIL) when unselected and `[PASS]`/`[WARN]`/`[FAIL]` lines when configured, distinguishing optional-missing (`copilot_missing` / `platform_binary_missing` → WARN) from broken config (validate → FAIL). Repair is a re-run of `setup.sh --agents copilot`.
 - **Upgrade/migration.** Existing installs are unaffected until they explicitly add `--agents copilot`; no current agent's behavior changes and nothing new reaches the cloud. Copilot is cloud-backed and opt-in — MCP/hook/instruction install and `copilot mcp list` work without a GitHub login; only a live model turn needs a GitHub Copilot subscription and `/login`. The vault and recall stay 100% local, and auth tokens are never stored, logged, or committed.
+
+### Fixed
+- **Copilot skill frontmatter.** The `kennisbank-upgrade` and `kennisbank-contribute` descriptions now use valid folded YAML scalars, so Copilot loads both personal skills while preserving their trigger phrases. Regression coverage validates every shipped skill manifest and rejects the original unquoted `Triggers: ` delimiter.
 
 ## [0.15.0] - 2026-07-09
 
