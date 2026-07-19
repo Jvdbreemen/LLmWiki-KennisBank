@@ -66,13 +66,23 @@ def test_coordinator_aggregates_only_actionable_results(tmp_path):
                 "additionalContext": "13 unverified memories need attention."
             }),
         }
-        return module.Result(job.script, stdout=outputs.get(job.script, ""))
+        stderr = (
+            "activity-index: 8/8 sources, 0 events indexed, 8 unchanged"
+            if job.script == "build-activity-index.py"
+            else ""
+        )
+        return module.Result(
+            job.script,
+            stdout=outputs.get(job.script, ""),
+            stderr=stderr,
+        )
 
     report = module.coordinate("codex", vault, b"", runner=runner)
     assert "2 (re)indexed" in report
     assert "13 unverified memories" in report
     assert "110 wiki files" not in report
     assert "20 events" not in report
+    assert "8/8 sources" not in report
 
 
 def test_freshness_skips_maintenance_but_keeps_copilot_capture(tmp_path):

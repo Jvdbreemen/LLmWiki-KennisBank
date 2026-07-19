@@ -94,7 +94,13 @@ def relevant_report(result: Result) -> str:
     if result.error:
         return f"{result.script}: {result.error}"
 
-    relevant = bool(err) or result.returncode != 0
+    actionable_err = bool(re.search(
+        r"\b(?:error|failed|failure|warning|warn|fout|mislukt|traceback|"
+        r"timed out)\b",
+        err,
+        re.IGNORECASE,
+    ))
+    relevant = actionable_err or result.returncode != 0
     if result.script == "build-embed-index.py":
         relevant = relevant or _changed_count(out, r"(\d+)\s+\(re\)embedded") > 0
         relevant = relevant or _changed_count(out, r"(\d+)\s+failed") > 0
@@ -114,7 +120,7 @@ def relevant_report(result: Result) -> str:
 
     if not relevant:
         return ""
-    parts = [part for part in (out, err) if part]
+    parts = [part for part in (out, err if actionable_err else "") if part]
     if result.returncode:
         parts.append(f"exited with status {result.returncode}")
     details = "\n".join(parts)
