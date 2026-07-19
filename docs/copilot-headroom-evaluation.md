@@ -20,10 +20,11 @@ log/config import adapter now.** KennisBank's `kennisbank-copilot` wrapper stays
 a standalone trivial exec (ADR-0003 D4). Headroom remains **inspiration only**.
 
 Coexistence is a separate, weaker claim and it holds: if a user chooses to run
-Copilot *under* Headroom's launcher, KennisBank's MCP server, hooks, and
-instructions still work, because they live in Copilot's own config which Headroom
-does not remove. That is possible but not something KennisBank builds, requires,
-or depends on.
+Copilot *under* Headroom's launcher, KennisBank's MCP server, personal skills,
+and instructions still work because they live in Copilot's own config which
+Headroom does not remove. KennisBank no longer installs Copilot lifecycle hooks;
+see ADR-005. Coexistence is possible but not something KennisBank builds,
+requires, or depends on.
 
 ## What Headroom actually is
 
@@ -122,10 +123,11 @@ decisions.
 
 An import adapter would therefore ingest savings/compression metrics with **zero
 retrieval value** for KennisBank. This is a **purpose mismatch at the schema
-level**, not a matter of effort or polish. KennisBank already captures the
-session-knowledge it needs from Copilot's own artifacts (ADR-0003 D5: hooks +
-`--share` transcripts + `~/.copilot/session-state/*.jsonl`), which is the layer
-Headroom does not keep.
+level**, not a matter of effort or polish. KennisBank can capture the
+session-knowledge it needs explicitly through `/sessielog`, `--share`
+transcripts, and imports from `~/.copilot/session-state/*.jsonl`, which is the
+layer Headroom does not keep. ADR-005 supersedes ADR-0003's lifecycle-hook
+capture route.
 
 ## Rationale
 
@@ -187,5 +189,6 @@ fetches), matching ADR-0003's own References:
   built; grounded in Headroom's schema.
 - **ADR-0003 D6** — the config-mutation contract borrowed from Headroom's
   *interfaces* (inspiration, not interoperability, no runtime dependency).
-- **ADR-0003 D5** — where KennisBank *does* get Copilot session-knowledge (hooks +
-  transcripts + session-state), the layer Headroom does not persist.
+- **ADR-0003 D5**, as superseded by **ADR-005** — where KennisBank gets Copilot
+  session-knowledge (explicit session skills, transcripts, and session-state),
+  the layer Headroom does not persist.

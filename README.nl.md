@@ -57,7 +57,10 @@ capture ──> consolidate ──> retrieve ──> measure
 
 - **Capture**: sessie-logs, transcript-archivering, en een autonome geheugen-sweep die kandidaat-herinneringen extraheert, typeert, en beoordeelt na elke sessie.
 - **Consolidate**: `/wiki` compileert sessies tot wiki-artikelen met herkomst per bewering; nieuwe feiten verzoenen zich met oude op schrijftijd (add, supersede, of drop) met een bi-temporeel geldigheidsmodel.
-- **Retrieve**: hooks injecteren relevante wiki-artikelen en herinneringen in elke prompt, in elk project: hybride semantisch + trefwoord-zoeken, gerangschikt op relevantie x recentheid x belang, uitgebreid met de best-verbonden graaf-buur.
+- **Ophalen**: Claude-hooks injecteren relevante wiki-artikelen en herinneringen
+  automatisch; Codex en Copilot gebruiken expliciete skills en MCP. Alle routes
+  gebruiken hybride semantisch + trefwoord-zoeken, gerangschikt op relevantie x
+  recentheid x belang en uitgebreid met de best-verbonden graaf-buur.
 - **Measure**: een recall@k eval-harnas en een drempel-kalibratie-harnas maken elke retrieval-wijziging testbaar in plaats van op-gevoel.
 - **Learn**: gebruikstelemetrie volgt welke geïnjecteerde kennis daadwerkelijk werd gebruikt, geeft warme documenten een boost en houdt recent gebruikte artikelen uit de stale-lijst.
 
@@ -67,14 +70,17 @@ Geheugensystemen van leveranciers (Mem0, Zep, Letta, Cognee) zijn krachtig maar 
 
 De ontwerpvoorkeur is overal dezelfde: **deterministisch waar mogelijk, LLM alleen waar het oordeelsvermogen toevoegt, fail-open overal**. Een dood model blokkeert nooit een sessie, verliest nooit een transcript, en verwijdert nooit geverifieerde kennis.
 
-## Functie-highlights (v0.16.2)
+## Functie-highlights (v0.17.0)
 
-### Nieuw in v0.16.2
+### Nieuw in v0.17
 
 - **Geen hookregels in Codex en Copilot.** Hun KennisBank-integraties zijn
   hookloos en gebruiken native commandskills plus MCP.
 - **Native sessieworkflows.** Copilot biedt `/sessiestart` en `/sessielog`;
   Codex biedt `$sessiestart` en `$sessielog` plus `/prompts:*`-compatibiliteit.
+- **Betrouwbare commandodiscovery.** Gegenereerde skillmetadata is geldige,
+  Engelstalige YAML voor alle ondersteunde coding-agents, inclusief Copilots
+  strengere frontmatter-parser.
 
 ### Nieuw in v0.15
 - **Meertalige temporele recall.** `/watdeedik`, `/timeline`, en `/weeklog`
@@ -130,8 +136,9 @@ De ontwerpvoorkeur is overal dezelfde: **deterministisch waar mogelijk, LLM alle
   agent-integraties, en blokkeert voltooiing wanneer validatie faalt.
 - **Multi-agent van opzet.** Kies `claude`, `codex`, `opencode`, of `all`.
   Claude Code krijgt native commando's en hooks; Codex krijgt gedeelde skills,
-  `/prompts:*`-aliassen, hooks, MCP, en `AGENTS.md`; OpenCode krijgt commando's,
-  gedeelde skills, MCP, globale regels, en een lokale plugin.
+  `/prompts:*`-aliassen, MCP, en `AGENTS.md`; OpenCode krijgt commando's,
+  gedeelde skills, MCP, globale regels, en een lokale plugin. Huidige releases
+  houden Codex bewust vrij van lifecycle-hooks.
 - **Geverifieerde local-first modellen.** Setup valideert de geselecteerde
   backend voordat het terugkeert. Ollama blijft de standaard voor lokale
   geheugen-extractie en -beoordeling, inclusief smoke-tests voor de
