@@ -24,10 +24,11 @@ class HooksManifestTest(unittest.TestCase):
                 self.assertIn(need, self.m.LEGACY_SESSION_START_SCRIPTS)
             else:
                 self.assertIn(need, scripts)
-        self.assertEqual(
-            [s for event, s, _ in self.m.hooks() if event == "SessionStart"],
-            ["kb-session-start.py"],
-        )
+        session_start = [s for event, s, _ in self.m.hooks() if event == "SessionStart"]
+        self.assertIn("kb-session-start.py", session_start)
+        self.assertIn("kb-session-end-recover.py", session_start)
+        # no legacy per-index scripts leak back into SessionStart
+        self.assertTrue(set(session_start).isdisjoint(self.m.LEGACY_SESSION_START_SCRIPTS))
 
     def test_presearch_has_matcher(self):
         for event, script, matcher in self.m.hooks():

@@ -23,6 +23,8 @@ from _vaultpath import vault_root  # noqa: E402
 
 
 STATE_NAME = "kb-session-end-state.json"
+LOG_NAME = "kb-session-end.log"
+LOG_MAX_BYTES = 256 * 1024
 
 
 @dataclass(frozen=True)
@@ -38,6 +40,7 @@ class Result:
     returncode: int = 0
     stderr: str = ""
     error: str = ""
+    duration: float = 0.0
 
 
 def _vault() -> Path:
@@ -45,6 +48,7 @@ def _vault() -> Path:
 
 
 def run_child(job: Job, scripts: Path, payload: bytes) -> Result:
+    started = time.monotonic()
     try:
         proc = subprocess.run(
             [sys.executable, str(scripts / job.script), *job.args],
@@ -58,11 +62,20 @@ def run_child(job: Job, scripts: Path, payload: bytes) -> Result:
             script=job.script,
             returncode=proc.returncode,
             stderr=proc.stderr.decode("utf-8", errors="replace").strip(),
+            duration=time.monotonic() - started,
         )
     except subprocess.TimeoutExpired:
-        return Result(job.script, error=f"timed out after {job.timeout}s")
+        return Result(
+            job.script,
+            error=f"timed out after {job.timeout}s",
+            duration=time.monotonic() - started,
+        )
     except (OSError, subprocess.SubprocessError) as exc:
-        return Result(job.script, error=f"could not run: {exc}")
+        return Result(
+            job.script,
+            error=f"could not run: {exc}",
+            duration=time.monotonic() - started,
+        )
 
 
 def run_parallel(
@@ -91,23 +104,81 @@ def _issue(result: Result) -> str:
     return ""
 
 
-def _write_state(vault: Path, client: str, issues: list[str]) -> None:
+def _log(vault: Path, message: str) -> None:
+    """Append one diagnostic line. Never raises: shutdown must not depend on it.
+
+    A cancelled hook writes no completion state, so without this log a killed run
+    leaves no trace at all and cannot be diagnosed afterwards.
+    """
+    try:
+        path = vault / ".claude" / LOG_NAME
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            if path.stat().st_size > LOG_MAX_BYTES:
+                tail = path.read_text(encoding="utf-8", errors="replace").splitlines()[-500:]
+                path.write_text("\n".join(tail) + "\n", encoding="utf-8")
+        except OSError:
+            pass
+        stamp = time.strftime("%Y-%m-%dT%H:%M:%S")
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(f"{stamp} pid={os.getpid()} {message}\n")
+    except Exception:
+        pass
+
+
+def _transcript_path(payload: bytes) -> str:
+    """Best-effort transcript path from the hook payload, for later recovery."""
+    try:
+        data = json.loads(payload.decode("utf-8", errors="replace") or "{}")
+    except (ValueError, AttributeError):
+        return ""
+    if not isinstance(data, dict):
+        return ""
+    value = data.get("transcript_path") or ""
+    return value if isinstance(value, str) else ""
+
+
+def _write_state(
+    vault: Path,
+    client: str,
+    issues: list[str] | None = None,
+    *,
+    started_at: float | None = None,
+    transcript_path: str = "",
+) -> None:
+    """Write the run state.
+
+    Called twice: once with issues=None before any work (so a run that is
+    cancelled mid-flight leaves a 'running' record), and once on completion.
+    """
     path = vault / ".claude" / STATE_NAME
     temp = path.with_suffix(path.suffix + f".{os.getpid()}.tmp")
     try:
+        now = time.time()
+        if issues is None:
+            state = {
+                "status": "running",
+                "started_at": now,
+                "client": client,
+                "pid": os.getpid(),
+                # Kept so a killed run can still be recovered at the next session
+                # start: the payload is gone by then, the path is not.
+                "transcript_path": transcript_path,
+            }
+        else:
+            state = {
+                "status": "completed",
+                "completed_at": now,
+                "client": client,
+                "ok": not issues,
+                "issues": issues,
+            }
+            if started_at is not None:
+                state["started_at"] = started_at
+                state["duration_s"] = round(now - started_at, 3)
         path.parent.mkdir(parents=True, exist_ok=True)
         temp.write_text(
-            json.dumps(
-                {
-                    "completed_at": time.time(),
-                    "client": client,
-                    "ok": not issues,
-                    "issues": issues,
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
-            + "\n",
+            json.dumps(state, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
         os.replace(temp, path)
@@ -137,10 +208,29 @@ def coordinate(
         capture = (Job("archive-transcript.py"),)
         after = (Job("kb-usage-scan.py"),)
 
+    started_at = time.time()
+    budget = max((job.timeout for job in capture), default=0) + max(
+        (job.timeout for job in after), default=0
+    )
+    _write_state(vault, client, None, transcript_path=_transcript_path(payload))
+    _log(vault, f"start client={client} worst_case_budget={budget}s")
+
     results = run_parallel(capture, scripts, payload, runner)
     results.extend(run_parallel(after, scripts, payload, runner))
+
+    for result in results:
+        outcome = result.error or (
+            f"exit={result.returncode}" if result.returncode else "ok"
+        )
+        _log(vault, f"job {result.script} {result.duration:.2f}s {outcome}")
+
     issues = [issue for result in results if (issue := _issue(result))]
-    _write_state(vault, client, issues)
+    _write_state(vault, client, issues, started_at=started_at)
+    _log(
+        vault,
+        f"done client={client} {time.time() - started_at:.2f}s "
+        f"ok={not issues} issues={len(issues)}",
+    )
     return issues
 
 

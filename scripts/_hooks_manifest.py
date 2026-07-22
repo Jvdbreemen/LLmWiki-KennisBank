@@ -11,6 +11,7 @@ from __future__ import annotations
 # van de gebruiker (bv. caveman) staan hier NIET in en blijven ongemoeid.
 HOOKS = [
     ("SessionStart",     "kb-session-start.py",   None),
+    ("SessionStart",     "kb-session-end-recover.py", None),
     ("UserPromptSubmit", "kb-retrieve.py",        None),
     ("SessionEnd",       "kb-session-end.py",     None),
     ("PreToolUse",       "kb-presearch.py",       "WebSearch|WebFetch"),
