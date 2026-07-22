@@ -1,6 +1,28 @@
 Schrijf een sessie-log voor de huidige agent-sessie naar de KennisBank vault,
 en compileer daarna direct de wiki-kandidaten uit deze sessie.
 
+## Uitvoerstijl (VERPLICHT — bepaalt hoeveel je toont)
+
+Werk STIL. Dit command draait veel mechanische stappen; die horen niet als
+lopend commentaar in de chat.
+
+- Geen per-stap narratie. Zeg niet "Nu doe ik X" tussen elke tool. Voer de
+  stappen uit zonder toelichting ertussen.
+- Onderdruk ruis van shell-commando's: leid verbose stdout door
+  `2>&1 | tail -n 3`. Lees de volledige output alleen bij een niet-nul exit code.
+- Draai de graphify daily-batch (Stap 2 item 5, `/graphify --update`) in een
+  subagent als je client dat ondersteunt (bv. de Agent-tool in Claude Code):
+  al het interne gepruttel (detect, cache, merge, cluster, cost) blijft dan uit
+  het hoofd-transcript, dat alleen de eindsamenvatting terugkrijgt. Ondersteunt
+  je client geen subagents, leid de graphify-output dan door `| tail` en toon
+  alleen de eindsamenvatting. De extractie-subagents die graphify zelf spawnt
+  tellen nog steeds mee voor de cost.json-patch — vraag die tokens op uit het
+  subagent-resultaat.
+- Breek de stilte alleen bij een fout: meld die meteen met de foutregel, en
+  stop niet stil door.
+- De stilte geldt voor de TUSSENSTAPPEN. De Bevestiging onderaan blijft
+  volledig/verbose zoals gespecificeerd — kort de stappen in, niet de conclusie.
+
 ## Vault-root bepalen (VERPLICHT — lees dit eerst)
 
 Bepaal de vault-root ÉÉN keer aan het begin van dit command en gebruik die overal:
