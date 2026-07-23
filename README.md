@@ -68,7 +68,15 @@ Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: 
 
 The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
 
-## Feature highlights (v0.18.0)
+## Feature highlights (v0.18.1)
+
+### New in v0.18.1
+
+- **Deterministic prompt-hook runtime budget.** Interactive retrieval now has a
+  separate 2-second hard ceiling, so a legacy or accidentally high
+  `KB_RETRIEVE_TIMEOUT` cannot hold UserPromptSubmit until the client kills it.
+  Longer waits require explicitly raising both the requested timeout and
+  `KB_PROMPT_HOOK_MAX_EMBED_TIMEOUT`.
 
 ### New in v0.18.0
 

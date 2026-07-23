@@ -71,7 +71,15 @@ Geheugensystemen van leveranciers (Mem0, Zep, Letta, Cognee) zijn krachtig maar 
 
 De ontwerpvoorkeur is overal dezelfde: **deterministisch waar mogelijk, LLM alleen waar het oordeelsvermogen toevoegt, fail-open overal**. Een dood model blokkeert nooit een sessie, verliest nooit een transcript, en verwijdert nooit geverifieerde kennis.
 
-## Functie-highlights (v0.18.0)
+## Functie-highlights (v0.18.1)
+
+### Nieuw in v0.18.1
+
+- **Deterministisch runtimebudget voor de prompt-hook.** Interactieve retrieval
+  heeft nu een apart hard plafond van 2 seconden, zodat een oude of per ongeluk
+  hoge `KB_RETRIEVE_TIMEOUT` de UserPromptSubmit-hook niet kan vasthouden tot de
+  client hem afbreekt. Langere wachttijden vereisen dat zowel de gevraagde
+  timeout als `KB_PROMPT_HOOK_MAX_EMBED_TIMEOUT` expliciet wordt verhoogd.
 
 ### Nieuw in v0.18.0
 

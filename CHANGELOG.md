@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.1] - 2026-07-24
+
+### Fixed
+
+- **Hard runtime ceiling for UserPromptSubmit retrieval.** The single-embed and
+  warm-up path introduced in v0.18.0 still trusted `KB_RETRIEVE_TIMEOUT`
+  directly, so a legacy or accidentally high value could consume the client
+  hook budget. Interactive prompt embedding now defaults to 2 seconds and is
+  clamped by the separate `KB_PROMPT_HOOK_MAX_EMBED_TIMEOUT` ceiling. Running
+  longer requires explicitly raising both values. Timeout-budget tests clear
+  inherited developer and CI environment variables so this contract remains
+  deterministic.
+
 ## [0.18.0] - 2026-07-24
 
 ### Added
@@ -565,7 +578,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.18.0...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.18.1...HEAD
+[0.18.1]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.18.0...v0.18.1
 [0.18.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.17.1...v0.18.0
 [0.17.1]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.17.0...v0.17.1
 [0.17.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.16.3...v0.17.0
