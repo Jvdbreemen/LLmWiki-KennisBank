@@ -55,11 +55,35 @@ MAINTENANCE = (
 NOTIFICATIONS = (
     Job("memory-notify.py", timeout=30),
     Job("distill-notify.py", timeout=30),
+    # Waarschuwt als de git-repo in de sessie-cwd achter zijn upstream loopt.
+    # cwd-aware + fail-open: stil buiten een repo of als alles up-to-date is.
+    # Erft de 300s freshness-gate van de coordinator, dus geen fetch-spam.
+    Job("git-upstream-check.py", timeout=15),
 )
 
 
 def _vault() -> Path:
     return vault_root()
+
+
+def _prewarm_embed_model(vault: Path) -> None:
+    """Fire a detached warm of the embedding model at session start so the first
+    prompt's retrieval hook (kb-retrieve) is hot.
+
+    The incremental index build does NOT load the model when nothing changed, so
+    without this the first prompt of an otherwise-'fresh' session pays the full
+    cold-load (tens of seconds for an 8GB model) and the retrieval hook times
+    out. Non-blocking, fail-open, sentinel-guarded (see _embeddings.warm_async).
+    Fires from main(), not coordinate(), so it is independent of the freshness
+    gate and never runs inside the unit tests that drive coordinate() directly."""
+    try:
+        scripts = vault / ".claude" / "scripts"
+        if str(scripts) not in sys.path:
+            sys.path.insert(0, str(scripts))
+        import _embeddings as emb
+        emb.warm_async()
+    except Exception:
+        pass
 
 
 def _changed_count(text: str, pattern: str) -> int:
@@ -301,7 +325,9 @@ def main(argv: list[str] | None = None) -> int:
             payload = sys.stdin.buffer.read()
         except OSError:
             payload = b""
-        report = coordinate(args.client, _vault(), payload)
+        vault = _vault()
+        _prewarm_embed_model(vault)
+        report = coordinate(args.client, vault, payload)
         _emit(args.client, report)
     except Exception:
         # Session startup and agent operation must never depend on KennisBank.

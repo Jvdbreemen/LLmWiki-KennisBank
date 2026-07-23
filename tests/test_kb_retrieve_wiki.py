@@ -63,8 +63,9 @@ class WikiBlockTest(unittest.TestCase):
             {"path": "/v/02-wiki/art.md", "layer": "wiki", "title": "Art",
              "created": "2026-06-01", "score": 0.5, "snippet": "hybride treffer"}])
         self.m.kb_recall.wiki_hits = wiki_hits
-        text, qvec = self.m._wiki_block("een relevante vraag over het artikel",
-                                        self.emb, self.vault_root, self._cfg())
+        qvec = self.emb.embed("een relevante vraag over het artikel")
+        text = self.m._wiki_block("een relevante vraag over het artikel",
+                                  self.emb, self.vault_root, self._cfg(), qvec)
         self.assertIn("hybride treffer", text)
         self.assertIsNotNone(qvec)
         wiki_hits.assert_called()
@@ -77,8 +78,9 @@ class WikiBlockTest(unittest.TestCase):
              "created": "2026-06-01", "score": 0.5, "snippet": "exacte-term-treffer"}])
         self.m.kb_recall.has_fts_match = has_fts
         self.m.kb_recall.wiki_hits = wiki_hits
-        text, _ = self.m._wiki_block("FunctieNaamXYZ aanroep",
-                                     self.emb, self.vault_root, self._cfg())
+        qvec = self.emb.embed("FunctieNaamXYZ aanroep")
+        text = self.m._wiki_block("FunctieNaamXYZ aanroep",
+                                  self.emb, self.vault_root, self._cfg(), qvec)
         self.assertIn("exacte-term-treffer", text)
         has_fts.assert_called()   # FTS-gate is echt geraadpleegd
         wiki_hits.assert_called()  # en het hits-pad is echt gelopen
@@ -87,8 +89,9 @@ class WikiBlockTest(unittest.TestCase):
         self.emb.cosine = lambda a, b: 0.1
         has_fts = Mock(side_effect=lambda q, layer="wiki": False)
         self.m.kb_recall.has_fts_match = has_fts
-        text, _ = self.m._wiki_block("totaal iets anders zonder match",
-                                     self.emb, self.vault_root, self._cfg())
+        qvec = self.emb.embed("totaal iets anders zonder match")
+        text = self.m._wiki_block("totaal iets anders zonder match",
+                                  self.emb, self.vault_root, self._cfg(), qvec)
         self.assertEqual(text, "")
         has_fts.assert_called()  # de FTS-gate is echt geraadpleegd (geen stille skip)
 
@@ -96,8 +99,9 @@ class WikiBlockTest(unittest.TestCase):
         self.emb.cosine = lambda a, b: 0.9  # gate slaagt
         wiki_hits = Mock(side_effect=lambda qv, query_text="", k=3, expand=False: [])  # index leeg
         self.m.kb_recall.wiki_hits = wiki_hits
-        text, _ = self.m._wiki_block("relevante vraag over het artikel",
-                                     self.emb, self.vault_root, self._cfg())
+        qvec = self.emb.embed("relevante vraag over het artikel")
+        text = self.m._wiki_block("relevante vraag over het artikel",
+                                  self.emb, self.vault_root, self._cfg(), qvec)
         # fallback naar cosine-cache-selectie: het wiki-artikel staat er
         self.assertIn("[[art]]", text)
         wiki_hits.assert_called()  # hybride is echt geprobeerd voordat de fallback liep
