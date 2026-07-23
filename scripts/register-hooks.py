@@ -54,6 +54,7 @@ def build_command(
     coordinator = {
         "kb-session-start.py": "claude",
         "kb-session-end.py": "claude",
+        "kb-session-end-recover.py": "claude",
     }.get(Path(script_path).name)
     if coordinator:
         return f'{command} "{script_path}" --client {coordinator}'
