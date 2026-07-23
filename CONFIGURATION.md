@@ -205,7 +205,13 @@ override the config file; both override the built-in defaults.
 - **Effect**: embeds the user's prompt and injects the top matching wiki articles (above a threshold) as `additionalContext`. Registered as a global `UserPromptSubmit` hook so the wiki is consulted in every session, in any project. Fail-open: any error, or a trivial/short/slash-command prompt, injects nothing.
 - **`KB_RETRIEVE_TOP_N`** (config `retrieve_top_n`, default `3`): max articles injected.
 - **`KB_RETRIEVE_THRESHOLD`** (config `retrieve_threshold`, default `0.60`): minimum cosine to inject. Model-specific; empirical on `qwen3-embedding:8b`: true match 0.73-0.80, noise <= 0.51. Re-tune after a model switch.
-- **`KB_RETRIEVE_TIMEOUT`** (default `20`s): embed-call timeout.
+- **`KB_RETRIEVE_TIMEOUT`** (config `retrieve_timeout`, default `2`s): requested
+  embed-call timeout. Cold or unavailable models fail open instead of holding
+  the prompt until the client kills the hook.
+- **`KB_PROMPT_HOOK_MAX_EMBED_TIMEOUT`** (config
+  `prompt_hook_max_embed_timeout`, default `2`s): hard ceiling applied to the
+  requested timeout. Raise this explicitly only when the client hook budget has
+  matching headroom; otherwise a legacy/high `KB_RETRIEVE_TIMEOUT` is clamped.
 
 ### Index builder (`scripts/build-embed-index.py`, coordinated SessionStart)
 
