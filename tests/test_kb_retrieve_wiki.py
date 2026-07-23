@@ -3,12 +3,14 @@ we injecteren qvec/cosine/hits via monkeypatch op de helpers."""
 from __future__ import annotations
 
 import importlib.util
+import io
+import json
 import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
 
@@ -34,7 +36,14 @@ class WikiBlockTest(unittest.TestCase):
         from _vaultpath import vault_root
         self.emb, self.vault_root = emb, vault_root
         # fake emb: één wiki-kandidaat in de cache, embed geeft qvec
-        self._orig = (emb.load_cache, emb.embed, emb.cosine, emb.doc_text, emb.embed_id)
+        self._orig = (
+            emb.load_cache,
+            emb.embed,
+            emb.cosine,
+            emb.doc_text,
+            emb.embed_id,
+            emb.warm_async,
+        )
         wpath = str(self.vault / "02-wiki" / "art.md")
         emb.embed_id = lambda: "ollama:test"
         emb.load_cache = lambda: {wpath: {"id": "ollama:test", "embedding": [0.1, 0.2], "dim": 2}}
@@ -43,8 +52,14 @@ class WikiBlockTest(unittest.TestCase):
 
     def tearDown(self):
         import shutil
-        (self.emb.load_cache, self.emb.embed, self.emb.cosine,
-         self.emb.doc_text, self.emb.embed_id) = self._orig
+        (
+            self.emb.load_cache,
+            self.emb.embed,
+            self.emb.cosine,
+            self.emb.doc_text,
+            self.emb.embed_id,
+            self.emb.warm_async,
+        ) = self._orig
         if self._saved is None:
             os.environ.pop("KENNISBANK_VAULT", None)
         else:
@@ -53,6 +68,41 @@ class WikiBlockTest(unittest.TestCase):
 
     def _cfg(self):
         return {}
+
+    def _prompt_env(self, **overrides):
+        env = {"KENNISBANK_VAULT": str(self.vault)}
+        env.update(overrides)
+        return patch.dict(os.environ, env, clear=True)
+
+    def test_prompt_embed_timeout_clamps_legacy_high_value(self):
+        with self._prompt_env():
+            self.assertEqual(
+                self.m._prompt_embed_timeout({"retrieve_timeout": 20.0}),
+                2.0,
+            )
+
+    def test_prompt_embed_timeout_requires_explicit_ceiling_opt_in(self):
+        with self._prompt_env(
+            KB_RETRIEVE_TIMEOUT="4",
+            KB_PROMPT_HOOK_MAX_EMBED_TIMEOUT="4",
+        ):
+            self.assertEqual(self.m._prompt_embed_timeout({}), 4.0)
+
+    def test_main_bounds_single_embed_and_warms_on_miss(self):
+        self.emb.embed = Mock(return_value=None)
+        self.emb.warm_async = Mock()
+        prompt = "een relevante vraag over het artikel"
+
+        with self._prompt_env():
+            with patch.object(
+                sys,
+                "stdin",
+                io.StringIO(json.dumps({"prompt": prompt})),
+            ):
+                self.m.main()
+
+        self.emb.embed.assert_called_once_with(prompt, timeout=2.0)
+        self.emb.warm_async.assert_called_once_with()
 
     def test_cosine_relevant_injects_hybrid(self):
         self.emb.cosine = lambda a, b: 0.9  # boven drempel -> gate slaagt

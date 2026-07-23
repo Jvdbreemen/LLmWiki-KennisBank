@@ -23,9 +23,16 @@ Requires KENNISBANK_VAULT in the environment (set in the global settings env).
 """
 import importlib.util as _ilu
 import json
+import math
 import os
 import sys
 from pathlib import Path
+
+# The Claude hook ceiling is deliberately much larger, but the interactive
+# embedding request must leave ample time for local ranking, JSON emission, and
+# process shutdown. A cold or unavailable model is a cache miss, not a reason
+# to hold the user's prompt.
+_DEFAULT_PROMPT_EMBED_TIMEOUT = 2.0
 
 # kb-recall als module-globaal zodat tests het kunnen patchen (idem kb-presearch).
 kb_recall = None
@@ -66,6 +73,33 @@ def _num(env: str, cfg: dict, key: str, default):
         return type(default)(str(raw).strip().replace(",", "."))
     except ValueError:
         return default
+
+
+def _prompt_embed_timeout(cfg: dict) -> float:
+    """Return the bounded timeout for the interactive embedding request.
+
+    ``KB_RETRIEVE_TIMEOUT`` remains the requested timeout for compatibility,
+    but cannot exceed the prompt-hook ceiling by accident. Raising
+    ``KB_PROMPT_HOOK_MAX_EMBED_TIMEOUT`` (or its config equivalent) is the
+    explicit opt-in for a slower interactive path.
+    """
+    requested = float(_num(
+        "KB_RETRIEVE_TIMEOUT",
+        cfg,
+        "retrieve_timeout",
+        _DEFAULT_PROMPT_EMBED_TIMEOUT,
+    ))
+    ceiling = float(_num(
+        "KB_PROMPT_HOOK_MAX_EMBED_TIMEOUT",
+        cfg,
+        "prompt_hook_max_embed_timeout",
+        _DEFAULT_PROMPT_EMBED_TIMEOUT,
+    ))
+    if not math.isfinite(requested):
+        requested = _DEFAULT_PROMPT_EMBED_TIMEOUT
+    if not math.isfinite(ceiling):
+        ceiling = _DEFAULT_PROMPT_EMBED_TIMEOUT
+    return min(max(requested, 0.1), max(ceiling, 0.1))
 
 
 def _wiki_block(prompt, emb, vault_root, cfg, qvec):
@@ -225,7 +259,7 @@ def main() -> None:
     # timeout. Bij een cold model komt qvec niet op tijd terug -> we injecteren
     # niets deze prompt (fail-soft: een miss, geen breuk) en vuren een detached
     # warm zodat de VOLGENDE prompt hot is. Nooit blokkeren, nooit 2x embedden.
-    timeout = _num("KB_RETRIEVE_TIMEOUT", cfg, "retrieve_timeout", 5.0)
+    timeout = _prompt_embed_timeout(cfg)
     qvec = emb.embed(prompt, timeout=timeout)
     if qvec is None:
         try:
