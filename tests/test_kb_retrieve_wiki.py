@@ -69,19 +69,22 @@ class WikiBlockTest(unittest.TestCase):
     def _cfg(self):
         return {}
 
+    def _prompt_env(self, **overrides):
+        env = {"KENNISBANK_VAULT": str(self.vault)}
+        env.update(overrides)
+        return patch.dict(os.environ, env, clear=True)
+
     def test_prompt_embed_timeout_clamps_legacy_high_value(self):
-        self.assertEqual(
-            self.m._prompt_embed_timeout({"retrieve_timeout": 20.0}),
-            2.0,
-        )
+        with self._prompt_env():
+            self.assertEqual(
+                self.m._prompt_embed_timeout({"retrieve_timeout": 20.0}),
+                2.0,
+            )
 
     def test_prompt_embed_timeout_requires_explicit_ceiling_opt_in(self):
-        with patch.dict(
-            os.environ,
-            {
-                "KB_RETRIEVE_TIMEOUT": "4",
-                "KB_PROMPT_HOOK_MAX_EMBED_TIMEOUT": "4",
-            },
+        with self._prompt_env(
+            KB_RETRIEVE_TIMEOUT="4",
+            KB_PROMPT_HOOK_MAX_EMBED_TIMEOUT="4",
         ):
             self.assertEqual(self.m._prompt_embed_timeout({}), 4.0)
 
@@ -90,8 +93,13 @@ class WikiBlockTest(unittest.TestCase):
         self.emb.warm_async = Mock()
         prompt = "een relevante vraag over het artikel"
 
-        with patch.object(sys, "stdin", io.StringIO(json.dumps({"prompt": prompt}))):
-            self.m.main()
+        with self._prompt_env():
+            with patch.object(
+                sys,
+                "stdin",
+                io.StringIO(json.dumps({"prompt": prompt})),
+            ):
+                self.m.main()
 
         self.emb.embed.assert_called_once_with(prompt, timeout=2.0)
         self.emb.warm_async.assert_called_once_with()
