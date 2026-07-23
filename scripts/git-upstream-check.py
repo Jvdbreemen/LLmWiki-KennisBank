@@ -60,10 +60,17 @@ def main() -> None:
     # 1) Current branch vs its own upstream.
     branch = _git("rev-parse", "--abbrev-ref", "HEAD")
     cur_upstream = _git("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}")
+    main_upstream = None
+    if branch != "main":
+        main_upstream = _git("rev-parse", "--abbrev-ref", "--symbolic-full-name", "main@{upstream}")
 
-    # Fetch the relevant remote once so counts are fresh. Derive remote from the
-    # branch upstream if present, else fall back to origin.
-    remote = cur_upstream.split("/", 1)[0] if cur_upstream and "/" in cur_upstream else "origin"
+    # No configured upstream anywhere -> stay silent (and avoid a potentially slow fetch).
+    upstream_ref = cur_upstream or main_upstream
+    if not upstream_ref:
+        return
+
+    # Fetch the relevant remote once so counts are fresh.
+    remote = upstream_ref.split("/", 1)[0] if "/" in upstream_ref else "origin"
     _git("fetch", "--quiet", "--no-tags", remote, timeout=FETCH_TIMEOUT)
 
     if branch and branch != "HEAD" and cur_upstream:
@@ -73,16 +80,13 @@ def main() -> None:
 
     # 2) main vs its upstream (the drift that bit us). Skip if main IS the branch
     #    (already covered above) or main has no upstream.
-    if branch != "main":
-        main_upstream = _git("rev-parse", "--abbrev-ref", "--symbolic-full-name", "main@{upstream}")
-        if main_upstream:
-            b = _behind("main", main_upstream)
-            if b is not None and b >= BEHIND_THRESHOLD:
-                lines.append(
-                    f"- `main` staat {b} commit(s) achter `{main_upstream}` "
-                    f"(sync: `git fetch {main_upstream.split('/',1)[0]} && "
-                    f"git update-ref refs/heads/main {main_upstream}`)"
-                )
+    if main_upstream:
+        b = _behind("main", main_upstream)
+        if b is not None and b >= BEHIND_THRESHOLD:
+            lines.append(
+                f"- `main` staat {b} commit(s) achter `{main_upstream}` "
+                f"(sync: `git switch main && git pull --ff-only`)"
+            )
 
     if lines:
         print("Git-upstream check — repo loopt achter:")
