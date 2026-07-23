@@ -4,7 +4,7 @@ title: Bound UserPromptSubmit retrieval to a fail-open runtime budget
 status: Done
 assignee: []
 created_date: '2026-07-23 21:30'
-updated_date: '2026-07-23 22:13'
+updated_date: '2026-07-23 22:21'
 labels:
   - hooks
   - retrieval
@@ -43,6 +43,8 @@ Root cause reproduced on the live Kluis hook: a cold/unavailable Ollama embed wa
 PR #49 review follow-up: isolate KB_RETRIEVE_TIMEOUT and KB_PROMPT_HOOK_MAX_EMBED_TIMEOUT in timeout-budget tests so developer/CI environment variables cannot change their assertions.
 
 PR #49 review follow-up verified under hostile inherited timeout values (KB_RETRIEVE_TIMEOUT=17 and KB_PROMPT_HOOK_MAX_EMBED_TIMEOUT=19): 31 passed, 1 skipped. Timeout-budget tests now clear the inherited environment and opt in only to values under test.
+
+Rebased onto main commit 2ce05b0 / PR #48. Kept its single-embed and detached warm-up architecture, and adapted this fix to add the missing explicit 2-second interactive ceiling. Post-rebase focused verification: 39 passed, 1 skipped under inherited KB_RETRIEVE_TIMEOUT=17 and KB_PROMPT_HOOK_MAX_EMBED_TIMEOUT=19. A full-suite run exceeded the 180-second local command budget before producing a final result.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
