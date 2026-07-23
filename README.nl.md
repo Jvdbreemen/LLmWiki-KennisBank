@@ -71,7 +71,19 @@ Geheugensystemen van leveranciers (Mem0, Zep, Letta, Cognee) zijn krachtig maar 
 
 De ontwerpvoorkeur is overal dezelfde: **deterministisch waar mogelijk, LLM alleen waar het oordeelsvermogen toevoegt, fail-open overal**. Een dood model blokkeert nooit een sessie, verliest nooit een transcript, en verwijdert nooit geverifieerde kennis.
 
-## Functie-highlights (v0.17.1)
+## Functie-highlights (v0.18.0)
+
+### Nieuw in v0.18.0
+
+- **Sub-seconde retrieval op de eerste prompt.** De `kb-retrieve`-hook timet niet
+  meer af op een cold embedmodel: hij embed één keer per prompt, begrenst de
+  hot-path-embed tot sub-seconde, en self-healt door het model bij session-start
+  voor te warmen en bij een miss een detached warm te vuren. Volledig lokaal en
+  fail-open.
+- **Upstream-drift-waarschuwing.** Een session-start-notificatie waarschuwt als
+  je git-repo achter zijn upstream loopt (huidige branch en/of `main`).
+  cwd-aware en stil als alles up-to-date is; alle clients krijgen 'm uit de ene
+  coordinator.
 
 ### Nieuw in v0.17.1
 

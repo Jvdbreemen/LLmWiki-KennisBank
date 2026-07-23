@@ -68,7 +68,18 @@ Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: 
 
 The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
 
-## Feature highlights (v0.17.1)
+## Feature highlights (v0.18.0)
+
+### New in v0.18.0
+
+- **Sub-second retrieval on the first prompt.** The `kb-retrieve` hook no longer
+  times out on a cold embedding model: it embeds once per prompt, bounds the
+  hot-path embed to a sub-second default, and self-heals by pre-warming the
+  model at session start and firing a detached warm on a miss. Fully local and
+  fail-open.
+- **Upstream-drift warning.** A session-start notification warns when your git
+  repository has fallen behind its upstream (current branch and/or `main`).
+  cwd-aware and silent when clean; all clients get it from the one coordinator.
 
 ### New in v0.17.1
 

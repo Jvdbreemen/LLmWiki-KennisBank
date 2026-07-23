@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-07-24
+
+### Added
+
+- **Upstream-drift warning at session start.** A new `git-upstream-check`
+  notification job, folded into the SessionStart coordinator, warns when the
+  git repository in the session working directory has fallen behind its
+  upstream (current branch and/or `main`). It is cwd-aware and fail-open —
+  silent outside a git repo or when everything is up to date — and inherits the
+  coordinator's freshness gate, so it never spams `git fetch`. All clients
+  (Claude Code, Codex, Copilot) get it for free from the single registered
+  coordinator.
+- **Embedding model pre-warm.** The coordinator fires a detached, sentinel-
+  guarded warm of the embedding model at session start, independent of the
+  index-build freshness gate. The incremental index build does not load the
+  model when nothing changed, so without this the first prompt of an otherwise
+  "fresh" session paid the full cold-load.
+
+### Fixed
+
+- **Cold-load timeout on the prompt hot path.** The `kb-retrieve`
+  UserPromptSubmit hook could time out on the first prompt of a session: the
+  embedding model (~8GB) is cold, and the hook could embed twice (wiki miss →
+  memory re-embed), stacking two long waits past the harness timeout and
+  discarding the injected context. The hook now embeds exactly once per prompt
+  (the query vector is computed in `main()` and passed to both the wiki and
+  memory blocks), bounds the hot-path embed to a sub-second default timeout
+  (`KB_RETRIEVE_TIMEOUT`, default 5s), and on a miss injects nothing while
+  firing a detached warm so the next prompt is hot. Fully local and fail-open.
+
 ## [0.17.1] - 2026-07-19
 
 ### Added
@@ -535,7 +565,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.17.1...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.18.0...HEAD
+[0.18.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.17.1...v0.18.0
 [0.17.1]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.17.0...v0.17.1
 [0.17.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.16.3...v0.17.0
 [0.16.3]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.16.2...v0.16.3
