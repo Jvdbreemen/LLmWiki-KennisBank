@@ -194,12 +194,13 @@ class KbRetrieveIntegrationTest(unittest.TestCase):
         self.emb.load_cache = lambda: cache
         try:
             # ECHTE query-embed + cosine-selectie tegen de cache -> retrieval.
-            text, qvec = self.mod._wiki_block(
-                "Hoe stel ik de MQTT-broker in voor de OpenTherm gateway?",
-                self.emb, self.vault_root, {})
+            # qvec wordt nu eenmalig door de caller berekend en doorgegeven.
+            query = "Hoe stel ik de MQTT-broker in voor de OpenTherm gateway?"
+            qvec = self.emb.embed(query)
+            self.assertIsNotNone(qvec)
+            text = self.mod._wiki_block(query, self.emb, self.vault_root, {}, qvec)
         finally:
             self.emb.load_cache = orig_load
-        self.assertIsNotNone(qvec)
         self.assertIn("[[art]]", text)
 
 
