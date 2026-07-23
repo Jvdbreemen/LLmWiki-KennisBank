@@ -204,11 +204,6 @@ def warm_async(min_interval: float = 60.0) -> None:
                 return
         except Exception:
             pass
-        try:
-            marker.parent.mkdir(parents=True, exist_ok=True)
-            marker.write_text("", encoding="utf-8")
-        except Exception:
-            pass
         import subprocess
         kwargs = {
             "stdout": subprocess.DEVNULL,
@@ -222,6 +217,11 @@ def warm_async(min_interval: float = 60.0) -> None:
         else:
             kwargs["start_new_session"] = True
         subprocess.Popen([sys.executable, os.path.abspath(__file__), "--warm"], **kwargs)
+        try:
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            marker.write_text("", encoding="utf-8")
+        except Exception:
+            pass
     except Exception:
         pass
 
