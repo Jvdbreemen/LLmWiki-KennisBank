@@ -1,10 +1,10 @@
 ---
 id: TASK-41
 title: Release KennisBank v0.18.1 prompt-hook runtime budget
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-23 22:28'
-updated_date: '2026-07-23 22:30'
+updated_date: '2026-07-23 22:37'
 labels:
   - release
   - hooks
@@ -28,8 +28,8 @@ Publish a patch release containing the UserPromptSubmit hard runtime ceiling fro
 <!-- AC:BEGIN -->
 - [x] #1 PR #49 is merged into main with its required CI check green.
 - [x] #2 CHANGELOG.md, README.md, and README.nl.md describe v0.18.1 without overstating changes already shipped in v0.18.0.
-- [ ] #3 The release commit passes repository CI on main.
-- [ ] #4 Annotated tag v0.18.1 and a non-draft, non-prerelease GitHub release point to the verified main commit.
+- [x] #3 The release commit passes repository CI on main.
+- [x] #4 Annotated tag v0.18.1 and a non-draft, non-prerelease GitHub release point to the verified main commit.
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -44,4 +44,12 @@ Merge PR #49; update patch-release metadata on a release branch; verify locally 
 PR #49 merged as 3e94fa0 after its required GitHub CI job passed. Release metadata is being prepared from origin/main on release/v0.18.1.
 
 Release notes distinguish the v0.18.1 hard ceiling from v0.18.0 single-embed/pre-warm behavior. Focused release regression slice passed: 39 passed, 1 skipped with hostile inherited timeout values.
+
+Release PR #50 merged as 65c4859 and the upstream main CI run 30050339562 passed for that exact commit. Annotated tag v0.18.1 was created and pushed only afterward; its peeled remote target is 65c4859. GitHub release v0.18.1 is public, non-draft, and non-prerelease.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Released KennisBank v0.18.1 from verified upstream main commit 65c4859 with an annotated tag and public GitHub release. The patch adds the explicit two-second UserPromptSubmit embedding ceiling and hermetic timeout tests on top of v0.18.0 warm-up behavior.
+<!-- SECTION:FINAL_SUMMARY:END -->
