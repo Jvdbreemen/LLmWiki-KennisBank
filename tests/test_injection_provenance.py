@@ -198,8 +198,9 @@ class WikiBlockUntaggedTest(unittest.TestCase):
         wiki_key = str(vault / "02-wiki" / "foo.md")
         fake_emb = _FakeEmb(wiki_key)
         self.mod.kb_recall = _FakeRecall()
-        text, qvec = self.mod._wiki_block(
-            "een prompt over foo en bar in de wiki", fake_emb, lambda: vault, {})
+        prompt = "een prompt over foo en bar in de wiki"
+        qvec = fake_emb.embed(prompt)
+        text = self.mod._wiki_block(prompt, fake_emb, lambda: vault, {}, qvec)
         self.assertIn("[[foo]]", text)
         self.assertNotIn("(bron:", text)
         self.assertNotIn("onbevestigd", text)

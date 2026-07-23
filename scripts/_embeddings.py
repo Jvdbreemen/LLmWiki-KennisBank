@@ -168,6 +168,64 @@ def embed(text: str, timeout: float = 30.0):
     return None
 
 
+# --- model warm-up (kills cold-load latency on the hot path) -----------------
+#
+# The interactive retrieval hook must never block on a cold model load. A big
+# local model (e.g. qwen3-embedding:8b, ~8GB) can take tens of seconds to load
+# into VRAM after eviction/idle; the incremental index build at SessionStart
+# does NOT load it when nothing changed, so the first prompt otherwise pays the
+# full cold-load. These helpers let a caller fire a detached load so the NEXT
+# prompt is hot, without ever waiting.
+
+def _warm_marker() -> Path:
+    return CACHE_FILE.parent / ".embed-warm.marker"
+
+
+def warm(timeout: float = 120.0) -> bool:
+    """Load/refresh the model with one throwaway embed. Blocks up to timeout.
+    Returns True if a vector came back. Meant for detached/off-path use."""
+    return embed("warm", timeout=timeout) is not None
+
+
+def warm_async(min_interval: float = 60.0) -> None:
+    """Fire-and-forget: load the embedding model in a DETACHED child so the hot
+    path never waits on a cold load. Sentinel-guarded — skips if a warm was
+    kicked within min_interval seconds, so a down Ollama can't cause a child
+    pileup (one prompt per minute at worst). Silent and fail-open throughout.
+
+    The child re-runs this module with --warm; it inherits the parent env so
+    vault_root() (evaluated at import for CACHE_FILE) resolves. Callers on the
+    hot path must ensure KENNISBANK_VAULT is set before invoking this."""
+    try:
+        import time as _time
+        marker = _warm_marker()
+        try:
+            if marker.exists() and (_time.time() - marker.stat().st_mtime) < min_interval:
+                return
+        except Exception:
+            pass
+        import subprocess
+        kwargs = {
+            "stdout": subprocess.DEVNULL,
+            "stderr": subprocess.DEVNULL,
+            "stdin": subprocess.DEVNULL,
+            "env": os.environ.copy(),
+        }
+        if os.name == "nt":
+            # DETACHED_PROCESS | CREATE_NO_WINDOW: outlive the hook, no console flash.
+            kwargs["creationflags"] = 0x00000008 | 0x08000000
+        else:
+            kwargs["start_new_session"] = True
+        subprocess.Popen([sys.executable, os.path.abspath(__file__), "--warm"], **kwargs)
+        try:
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            marker.write_text("", encoding="utf-8")
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
 # --- shared embedding cache (path -> {hash, id, dim, embedding}) -------------
 
 def load_cache() -> dict:
@@ -216,3 +274,13 @@ def get_cached(path, cache: dict, recompute: bool = True):
     if vec:
         cache[key] = {"hash": h, "id": eid, "dim": len(vec), "embedding": vec}
     return vec
+
+
+if __name__ == "__main__":
+    # Detached warm entrypoint (see warm_async). Loads the model, then exits.
+    # Never raises: this runs unattended and must not spew.
+    if "--warm" in sys.argv:
+        try:
+            warm()
+        except Exception:
+            pass

@@ -68,13 +68,16 @@ def _num(env: str, cfg: dict, key: str, default):
         return default
 
 
-def _wiki_block(prompt, emb, vault_root, cfg):
-    """Hybride wiki-injectie. Gate = cosine-relevant OF FTS-keyword-match.
-    Selectie via kb_recall.wiki_hits (hybride); fallback naar de cosine-cache.
-    Geeft (wiki_tekst_of_leeg, qvec_of_None)."""
+def _wiki_block(prompt, emb, vault_root, cfg, qvec):
+    """Hybride wiki-injectie voor een reeds berekende query-embedding qvec.
+    Gate = cosine-relevant OF FTS-keyword-match. Selectie via kb_recall.wiki_hits
+    (hybride); fallback naar de cosine-cache. Geeft wiki-tekst of "".
+
+    qvec wordt eenmalig in main() berekend en aan zowel dit blok als het memory-
+    blok doorgegeven: op de hot path embedden we nooit twee keer."""
     cache = emb.load_cache()
     if not cache:
-        return "", None
+        return ""
     eid = emb.embed_id()
     wiki_prefix = str(vault_root() / "02-wiki")
     candidates = [
@@ -82,11 +85,7 @@ def _wiki_block(prompt, emb, vault_root, cfg):
         if k.startswith(wiki_prefix) and v.get("id") == eid and v.get("embedding")
     ]
     if not candidates:
-        return "", None
-    timeout = _num("KB_RETRIEVE_TIMEOUT", cfg, "retrieve_timeout", 20.0)
-    qvec = emb.embed(prompt, timeout=timeout)
-    if not qvec:
-        return "", None
+        return ""
     top_n = int(_num("KB_RETRIEVE_TOP_N", cfg, "retrieve_top_n", 3))
     threshold = _num("KB_RETRIEVE_THRESHOLD", cfg, "retrieve_threshold", 0.60)
 
@@ -109,7 +108,7 @@ def _wiki_block(prompt, emb, vault_root, cfg):
             fts_relevant = False
 
     if not (cosine_relevant or fts_relevant):
-        return "", qvec
+        return ""
 
     # Selectie: hybride via kb-index; fallback naar cosine-cache-top-N.
     # Graafbuur-expansie (één hop langs wikilinks) staat default aan;
@@ -131,12 +130,12 @@ def _wiki_block(prompt, emb, vault_root, cfg):
         # fallback: oude cosine-cache-selectie (alleen treffers >= drempel)
         relevant = [(s, k) for s, k in scored if s >= threshold][:top_n]
         if not relevant:
-            return "", qvec
+            return ""
         for s, k in relevant:
             p = Path(k)
             snippet = emb.doc_text(p, cap=280).replace("\n", " ").strip()
             lines.append(f"- [[{p.stem}]] ({s:.2f}): {snippet}")
-    return "\n".join(lines), qvec
+    return "\n".join(lines)
 
 
 def _provenance_tag(path: str) -> str:
@@ -222,7 +221,20 @@ def main() -> None:
         except Exception:
             cfg = {}
 
-    wiki_text, qvec = _wiki_block(prompt, emb, vault_root, cfg)
+    # Eén embed voor de hele hook. Hot path (noord-ster #1): sub-seconde, korte
+    # timeout. Bij een cold model komt qvec niet op tijd terug -> we injecteren
+    # niets deze prompt (fail-soft: een miss, geen breuk) en vuren een detached
+    # warm zodat de VOLGENDE prompt hot is. Nooit blokkeren, nooit 2x embedden.
+    timeout = _num("KB_RETRIEVE_TIMEOUT", cfg, "retrieve_timeout", 5.0)
+    qvec = emb.embed(prompt, timeout=timeout)
+    if qvec is None:
+        try:
+            emb.warm_async()
+        except Exception:
+            pass
+        return
+
+    wiki_text = _wiki_block(prompt, emb, vault_root, cfg, qvec)
 
     mem_text = ""
     try:
@@ -231,11 +243,7 @@ def main() -> None:
     except Exception:
         memory_on = True
     if memory_on:
-        if qvec is None:
-            timeout = _num("KB_RETRIEVE_TIMEOUT", cfg, "retrieve_timeout", 20.0)
-            qvec = emb.embed(prompt, timeout=timeout)
-        if qvec:
-            mem_text = _memory_block(qvec, prompt, cfg)
+        mem_text = _memory_block(qvec, prompt, cfg)
 
     parts = [t for t in (wiki_text, mem_text) if t]
     if parts:

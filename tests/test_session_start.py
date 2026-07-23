@@ -142,3 +142,31 @@ def test_timeout_and_nonzero_exit_are_actionable_but_fail_open(tmp_path, monkeyp
 
     monkeypatch.setattr(module, "coordinate", lambda *_args, **_kwargs: 1 / 0)
     assert module.main(["--client", "codex"]) == 0
+
+
+def test_git_upstream_check_is_a_notification_job():
+    module = _load()
+    scripts = {job.script for job in module.NOTIFICATIONS}
+    assert "git-upstream-check.py" in scripts
+
+
+def test_git_upstream_warning_surfaces_and_clean_is_silent():
+    module = _load()
+    warn = module.Result(
+        "git-upstream-check.py",
+        stdout="Git-upstream check — repo loopt achter:\n- `main` staat 3 commit(s) achter",
+    )
+    assert "loopt achter" in module.relevant_report(warn)
+    # Clean (geen output, exit 0) mag NOOIT ruis in het session-report geven.
+    clean = module.Result("git-upstream-check.py", stdout="")
+    assert module.relevant_report(clean) == ""
+
+
+def test_prewarm_fires_from_main_not_coordinate(tmp_path, monkeypatch):
+    module = _load()
+    calls = {"n": 0}
+    monkeypatch.setattr(module, "_prewarm_embed_model", lambda _v: calls.__setitem__("n", calls["n"] + 1))
+    monkeypatch.setattr(module, "_vault", lambda: tmp_path)
+    monkeypatch.setattr(module, "coordinate", lambda *_a, **_k: "")
+    module.main(["--client", "claude"])
+    assert calls["n"] == 1
