@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-07-24
+
+### Added
+
+- **Transcript-stripper for `/destilleer`.** Archived Claude Code transcripts
+  can be huge (observed up to ~12 MB), far larger than a single context, while
+  the imported raw-session logs are deliberately thin stubs. The new
+  `strip-transcript.py` reduces a transcript to plain user and assistant text —
+  dropping thinking, tool_use, tool_result and subagent turns, ~10-25x smaller —
+  so large sessions become digestible by a fan-out of subagents. The mechanical
+  jsonl-to-text logic moved to a shared `_transcript.py` reused by
+  `import-cc-history.py`; output goes to stdout/scratch, never the vault, so the
+  raw-session stubs stay the index.
+
+### Changed
+
+- **`/destilleer` and `/wiki` command guidance.** `/destilleer` now states that
+  raw-session logs are stubs (compile the transcript, not the stub), documents
+  the strip-plus-subagent-fan-out workflow for large or numerous transcripts,
+  and notes the heavy overlap with an in-session `/sessielog` (expect low
+  net-new, avoid duplicate articles). `/wiki` step 4.5 adds a `kb-lint --json`
+  recipe to prove a freshly written article is provenance-clean without forcing
+  a global exit 0 against pre-existing dangling articles.
+
 ## [0.18.1] - 2026-07-24
 
 ### Fixed
@@ -578,7 +602,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.18.1...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.19.0...HEAD
+[0.19.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.18.1...v0.19.0
 [0.18.1]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.18.0...v0.18.1
 [0.18.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.17.1...v0.18.0
 [0.17.1]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.17.0...v0.17.1
