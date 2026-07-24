@@ -71,7 +71,17 @@ Geheugensystemen van leveranciers (Mem0, Zep, Letta, Cognee) zijn krachtig maar 
 
 De ontwerpvoorkeur is overal dezelfde: **deterministisch waar mogelijk, LLM alleen waar het oordeelsvermogen toevoegt, fail-open overal**. Een dood model blokkeert nooit een sessie, verliest nooit een transcript, en verwijdert nooit geverifieerde kennis.
 
-## Functie-highlights (v0.18.1)
+## Functie-highlights (v0.19.0)
+
+### Nieuw in v0.19.0
+
+- **Grote sessies destilleren zonder de context te verzuipen.** `/destilleer`
+  kan nu een groot transcript reduceren tot platte conversatietekst met de
+  nieuwe `strip-transcript.py` (thinking, tool-calls en subagent-turns eruit,
+  ~10-25x kleiner) en het werk over subagents verdelen. De command-docs maken
+  het onderscheid stub-versus-transcript expliciet en benoemen de overlap met
+  `/sessielog`, en `/wiki` krijgt een `kb-lint --json`-recept om de herkomst van
+  een nieuw artikel schoon te bewijzen.
 
 ### Nieuw in v0.18.1
 
