@@ -94,6 +94,20 @@ Patroonherkenning over sessies heen — destilleer herbruikbare kennis als wiki-
    - Exit 1 → operationele fout (geen `02-wiki/`): kon niet controleren, meld het.
    - Exit 0 → schoon of alleen advisory (`path-only`): afronden mag.
 
+   **Onderscheid jouw artikelen van pre-existing schuld.** `--strict` is
+   vault-globaal en neemt geen bestand-argumenten; een exit 2 door OUDERE dangling
+   artikelen (bijvoorbeeld een aparte provenance-taak) mag jouw run niet gijzelen.
+   Bewijs dat je zojuist geschreven of herschreven artikelen schoon zijn met de
+   JSON-modus en check dat ze niet in `warnings` voorkomen:
+   ```
+   python3 $VAULT/.claude/scripts/kb-lint.py --json
+   ```
+   Staan alleen pre-existing artikelen als hard (`missing`/`dangling`) in de lijst
+   en die van jou niet, dan is je run herkomst-schoon: rond af en MELD de
+   pre-existing schuld (verwijs naar de betreffende taak) in plaats van globale
+   exit 0 te forceren. Staat JOUW artikel als hard in de lijst, dan geldt de harde
+   stop hierboven: fix eerst.
+
    `path-only`-waarschuwingen (herkomst bestaat wel, maar als pad-tekst i.p.v.
    wikilink) blijven advisory: los ze op voor de zojuist geraakte artikelen,
    maar ze blokkeren niet. Waarschuwingen over oudere artikelen mag je laten
