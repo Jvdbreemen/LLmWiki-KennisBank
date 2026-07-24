@@ -37,36 +37,10 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _vaultpath import vault_root  # noqa: E402
 from _common import _today_iso, _utcnow_iso, print_summary, slugify  # noqa: E402
+from _transcript import extract_text  # noqa: E402
 
 CC_PROJECTS_DIR_DEFAULT = Path.home() / ".claude" / "projects"
 VAULT_DEFAULT = vault_root()
-
-
-def extract_text(content) -> str:
-    """Reduceer message.content (string of list-of-blocks) tot platte tekst."""
-    if content is None:
-        return ""
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        parts = []
-        for block in content:
-            if not isinstance(block, dict):
-                continue
-            btype = block.get("type")
-            if btype == "text":
-                parts.append(block.get("text", ""))
-            elif btype == "tool_result":
-                tr = block.get("content", "")
-                if isinstance(tr, str):
-                    parts.append(tr)
-                elif isinstance(tr, list):
-                    for sub in tr:
-                        if isinstance(sub, dict) and sub.get("type") == "text":
-                            parts.append(sub.get("text", ""))
-            # ignore thinking, tool_use, image
-        return "\n".join(p for p in parts if p)
-    return ""
 
 
 def parse_session(jsonl_path: Path) -> dict | None:
