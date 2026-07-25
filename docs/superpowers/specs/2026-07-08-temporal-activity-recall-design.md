@@ -57,9 +57,10 @@ canonical ActivityEvent extraction
 <vault>/.claude/kb-activity.db
   activity_events
   source_watermarks
-  rollup_cache
   (activity_entities / activity_topics / activity_artifacts / activity_fts
-   waren hier ook voorzien, maar zijn nooit gelezen -- zie TASK-52)
+   waren hier ook voorzien, maar zijn nooit gelezen -- zie TASK-52.
+   rollup_cache bestond wel en werd gelezen, maar kostte meer dan hij
+   opleverde en keyde op te weinig velden -- zie TASK-50.)
         |
         v
 shared Python API

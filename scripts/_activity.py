@@ -526,11 +526,17 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
         "source_path TEXT PRIMARY KEY, mtime_ns INTEGER NOT NULL, size INTEGER NOT NULL, "
         "sha256 TEXT NOT NULL, indexed_at TEXT NOT NULL)"
     )
-    # Write-only tabellen uit een eerdere opzet: ze werden bij elke bouw gevuld
-    # en door geen enkele query gelezen (topic-filtering doet een substring-
-    # vergelijking op search_blob, in Python). activity_fts was de duurste: de
-    # DELETE gaat over een UNINDEXED kolom, dus een full scan per event, twee
-    # keer per event -- kwadratisch op een volledige rebuild.
+    # Tabellen die niet langer bestaan. Twee verschillende redenen:
+    #
+    # - activity_entities/_topics/_artifacts/_fts waren WRITE-ONLY: bij elke bouw
+    #   gevuld, door geen enkele query gelezen (topic-filtering doet een
+    #   substring-vergelijking op search_blob, in Python). activity_fts was de
+    #   duurste: de DELETE gaat over een UNINDEXED kolom, dus een full scan per
+    #   event, twee keer per event -- kwadratisch op een volledige rebuild.
+    # - rollup_cache werd juist WEL gelezen. Die is om een andere reden weg: hij
+    #   was netto verlies (0,88 ms bespaard, 34 ms per hit gekost) en zijn
+    #   sleutel miste de event-limiet en het projectfilter, waardoor een smalle
+    #   bevraging een bredere kon vergiftigen. Zie TASK-50.
     #
     # Expliciet droppen, niet alleen de CREATE weghalen: de incrementele bouw
     # hergebruikt het bestaande bestand (alleen --full unlinkt), dus zonder deze
