@@ -107,6 +107,80 @@ class LayerStarvationRegressionTest(unittest.TestCase):
             "(pool te klein — pool-fix ontbreekt?)")
 
 
+class RelevanceFloorTest(unittest.TestCase):
+    """De hot path injecteerde onvoorwaardelijk de top-k.
+
+    RRF-scores zijn rangnummer-artefacten en zeggen niets over inhoudelijke
+    gelijkenis, dus de drempel hoort op de cosinus te liggen. Die komt gratis
+    uit de L2-afstand die de KNN al teruggeeft, mits genormaliseerd opgeslagen.
+
+    Fixture met TEGENGESTELDE vectoren: de bestaande near/far-fixture heeft
+    cosinus 0.84 en zou elke drempel onder 0.84 overleven -- een test die ook
+    zonder de fix slaagt toetst niets.
+    """
+
+    def setUp(self):
+        self.conn = _kbindex.connect(":memory:")
+        _kbindex.ensure_schema(self.conn, dim=DIM, embed_id="ollama:test")
+        _kbindex.set_unit_norm(self.conn, True)
+        _kbindex.upsert(self.conn, path="aligned.md", layer="wiki", status="current",
+                        body="zebrafish morphology", vector=[1.0, 0.0, 0.0, 0.0],
+                        file_hash="h1", created="2026-07-01")
+        _kbindex.upsert(self.conn, path="orthogonal.md", layer="wiki", status="current",
+                        body="quilting patterns", vector=[0.0, 0.0, 0.0, 1.0],
+                        file_hash="h2", created="2026-07-02")
+
+    def tearDown(self):
+        self.conn.close()
+
+    def test_cosine_is_reported_per_hit(self):
+        res = _kbindex.search(self.conn, query_vector=[1.0, 0.0, 0.0, 0.0], k=5)
+        by_path = {r["path"]: r for r in res}
+        self.assertAlmostEqual(by_path["aligned.md"]["cos"], 1.0, places=5)
+        self.assertAlmostEqual(by_path["orthogonal.md"]["cos"], 0.0, places=5)
+
+    def test_floor_drops_the_irrelevant_hit(self):
+        res = _kbindex.search(self.conn, query_vector=[1.0, 0.0, 0.0, 0.0],
+                              k=5, min_cos=0.60)
+        self.assertEqual([r["path"] for r in res], ["aligned.md"],
+                         "een orthogonaal document overleefde de relevantiedrempel")
+
+    def test_no_floor_without_the_unit_norm_flag(self):
+        """Index van vóór de normalisatie: gedrag moet ongewijzigd blijven."""
+        conn = _kbindex.connect(":memory:")
+        _kbindex.ensure_schema(conn, dim=DIM, embed_id="ollama:test")
+        for path, vec in (("a.md", [1.0, 0.0, 0.0, 0.0]), ("b.md", [0.0, 0.0, 0.0, 1.0])):
+            _kbindex.upsert(conn, path=path, layer="wiki", status="current",
+                            body="tekst", vector=vec, file_hash=path, created="2026-07-01")
+        res = _kbindex.search(conn, query_vector=[1.0, 0.0, 0.0, 0.0], k=5, min_cos=0.60)
+        conn.close()
+        self.assertEqual(len(res), 2, "zonder unit_norm-vlag mag er niet gedrempeld worden")
+
+    def test_fts_hit_survives_the_floor(self):
+        """Een letterlijke trefwoordtreffer is een eigenstandig signaal."""
+        res = _kbindex.search(self.conn, query_vector=[1.0, 0.0, 0.0, 0.0],
+                              query_text="quilting patterns", k=5, min_cos=0.60)
+        self.assertIn("orthogonal.md", [r["path"] for r in res])
+        hit = next(r for r in res if r["path"] == "orthogonal.md")
+        self.assertTrue(hit["fts"])
+
+    def test_filter_runs_before_the_k_cut(self):
+        """Bij k=1 mag een afgewezen treffer geen plek innemen."""
+        res = _kbindex.search(self.conn, query_vector=[0.0, 0.0, 0.0, 1.0],
+                              k=1, min_cos=0.60)
+        self.assertEqual([r["path"] for r in res], ["orthogonal.md"])
+
+    def test_punctuation_in_the_query_does_not_kill_the_fts_half(self):
+        """De rauwe prompt gooide op `?`, `/` en `+`; dat werd stil ingeslikt."""
+        expr = _kbindex.fts_expr("hoe werkt /wiki + de hook?")
+        self.assertNotIn("/", expr)
+        self.assertNotIn("?", expr)
+        res = _kbindex.search(self.conn, query_vector=[1.0, 0.0, 0.0, 0.0],
+                              query_text="quilting? / patterns +", k=5)
+        self.assertTrue(any(r["fts"] for r in res),
+                        "FTS-helft viel weg op een prompt met leestekens")
+
+
 class Vec0PoolCeilingTest(unittest.TestCase):
     """sqlite-vec weigert een KNN met k > 4096 ("k value in knn query too large").
 
@@ -123,7 +197,11 @@ class Vec0PoolCeilingTest(unittest.TestCase):
         _kbindex.ensure_schema(conn, dim=DIM, embed_id="ollama:test")
         # 4097 docs -> pool zou zonder plafond op `total` uitkomen en de
         # vec0-limiet met 1 overschrijden.
-        rows = [(f"doc_{i:05d}.md", [1.0 - i * 1e-5, 0.0, 0.0, 0.0]) for i in range(4097)]
+        #
+        # Varieer de RICHTING, niet de lengte: vectoren worden genormaliseerd
+        # opgeslagen, dus `[1-i*eps, 0, 0, 0]` collapst voor elke i naar
+        # dezelfde eenheidsvector en maakt de volgorde willekeurig.
+        rows = [(f"doc_{i:05d}.md", [1.0, i * 1e-4, 0.0, 0.0]) for i in range(4097)]
         for path, vec in rows:
             _kbindex.upsert(conn, path=path, layer="wiki", status="current",
                             body="corpus doc", vector=vec,

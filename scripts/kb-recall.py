@@ -58,7 +58,8 @@ def _open_ro(db_path: Path):
 
 
 def recall_hits(query_vector, query_text: str = "", k: int = 3,
-                layers=("wiki", "memory"), expand: bool = False) -> list:
+                layers=("wiki", "memory"), expand: bool = False,
+                min_cos: float = 0.0) -> list:
     """Recall-hits over de opgegeven lagen (status=current), fail-soft -> [].
     Live-status-hercheck ALLEEN voor de memory-laag (wiki is gecureerd).
 
@@ -79,7 +80,8 @@ def recall_hits(query_vector, query_text: str = "", k: int = 3,
         if not _kbindex.is_valid_for(conn, emb.embed_id()):
             return []
         rows = _kbindex.search(conn, query_vector=query_vector, query_text=query_text,
-                               k=k, layers=tuple(layers), statuses=("current",))
+                               k=k, layers=tuple(layers), statuses=("current",),
+                               min_cos=min_cos)
         out = []
         for r in rows:
             layer = r.get("layer", "")
@@ -90,6 +92,7 @@ def recall_hits(query_vector, query_text: str = "", k: int = 3,
             snippet = emb.doc_text(Path(r["path"]), cap=280).replace("\n", " ").strip()
             out.append({"path": r["path"], "layer": layer, "title": r.get("title", ""),
                         "created": r.get("created", ""), "score": r.get("score", 0.0),
+                        "cos": r.get("cos"), "fts": r.get("fts", False),
                         "snippet": snippet})
         try:
             import _usage
@@ -121,9 +124,17 @@ def recall_hits(query_vector, query_text: str = "", k: int = 3,
             pass
 
 
-def memory_hits(query_vector, query_text: str = "", k: int = 3) -> list:
+# Memories zijn kort en atomair; hun cosinus tegen een prompt ligt structureel
+# lager dan die van een wiki-artikel. Daarom een EIGEN drempel, geen overerving
+# van retrieve_threshold -- dat zou het memory-blok stilzwijgend dichtzetten.
+MEMORY_MIN_COS = 0.60
+
+
+def memory_hits(query_vector, query_text: str = "", k: int = 3,
+                min_cos: float = MEMORY_MIN_COS) -> list:
     """Dunne wrapper: alleen de memory-laag (backward-compat)."""
-    return recall_hits(query_vector, query_text=query_text, k=k, layers=("memory",))
+    return recall_hits(query_vector, query_text=query_text, k=k, layers=("memory",),
+                       min_cos=min_cos)
 
 
 def has_fts_match(query_text: str, layer: str = "wiki") -> bool:
@@ -131,10 +142,9 @@ def has_fts_match(query_text: str, layer: str = "wiki") -> bool:
 
     Tokeniseert op woorden >= 4 tekens (ge-OR'd) zodat stopwoorden en losse
     leestekens geen vals signaal of FTS5-syntaxfout geven."""
-    tokens = [t for t in _re.findall(r"[\w]{4,}", (query_text or "").lower())]
-    if not tokens:
+    match_expr = _kbindex.fts_expr(query_text)
+    if not match_expr:
         return False
-    match_expr = " OR ".join(tokens)
     conn = _open_ro(_kbindex.index_path())
     if conn is None:
         return False
@@ -154,7 +164,7 @@ def has_fts_match(query_text: str, layer: str = "wiki") -> bool:
 
 
 def wiki_hits(query_vector, query_text: str = "", k: int = 3,
-              expand: bool = False) -> list:
+              expand: bool = False, min_cos: float = 0.0) -> list:
     """Dunne wrapper: alleen de wiki-laag (hybride, optioneel met graafbuur)."""
     return recall_hits(query_vector, query_text=query_text, k=k,
-                       layers=("wiki",), expand=expand)
+                       layers=("wiki",), expand=expand, min_cos=min_cos)
