@@ -32,12 +32,12 @@ Merk op: het uitvoerlogboek onder de superpowers-map is bewust uitgesloten via e
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Alle taakbestanden en de onderzoeksdocumentatie die Backlog.md heeft geschreven staan in git
-- [ ] #2 Geen twee taakbestanden delen nog een ID, ook niet over de takenmap en het archief heen
-- [ ] #3 Verwijzingen naar hernummerde taken elders in de repo zijn meegewijzigd
-- [ ] #4 Het duplicaat in het archief dat door ander gereedschap is aangemaakt, is verwijderd
-- [ ] #5 De milestones die door taken worden genoemd bestaan als milestone-bestand
-- [ ] #6 Er is een test die faalt zodra twee taakbestanden hetzelfde ID claimen
-- [ ] #7 Bij sessiestart verschijnt een waarschuwing wanneer er niet-gecommitte backlogbestanden zijn; die controle draait ook wanneer er geen upstream is geconfigureerd
-- [ ] #8 De volledige testsuite draait groen
+- [x] #1 Alle taakbestanden en de onderzoeksdocumentatie die Backlog.md heeft geschreven staan in git
+- [x] #2 Geen twee taakbestanden delen nog een ID, ook niet over de takenmap en het archief heen
+- [x] #3 Verwijzingen naar hernummerde taken elders in de repo zijn meegewijzigd
+- [x] #4 Het duplicaat in het archief dat door ander gereedschap is aangemaakt, is verwijderd
+- [x] #5 De milestones die door taken worden genoemd bestaan als milestone-bestand
+- [x] #6 Er is een test die faalt zodra twee taakbestanden hetzelfde ID claimen
+- [x] #7 Bij sessiestart verschijnt een waarschuwing wanneer er niet-gecommitte backlogbestanden zijn; die controle draait ook wanneer er geen upstream is geconfigureerd
+- [x] #8 De volledige testsuite draait groen
 <!-- AC:END -->

@@ -34,13 +34,13 @@ Twee bestaande sessiestart-tests leggen de blokkerende volgorde vast en moeten m
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 De indexbouwers draaien niet langer blokkerend in de sessiestart-coördinator
-- [ ] #2 Er is één achtergrondproces achter een lock dat alle bouwers plus de geheugensweep draait, zodat er nooit twee processen tegelijk dezelfde index schrijven
-- [ ] #3 De bestaande sweep-launcher start geen eigen indexbouw meer
-- [ ] #4 Het blokkerende deel van de sessiestart blijft ruim onder het gedeclareerde plafond van elke client
-- [ ] #5 Faalrapportage gebruikt het bestaande onderscheid tussen relevante en routinematige uitvoer; voortgang op de foutstroom leidt niet tot een valse melding
-- [ ] #6 De vervaltijd van het lock ligt strikt boven de som van de per-bouwer-timeouts
-- [ ] #7 Een tweede sessie die start terwijl de worker draait, start geen tweede worker
-- [ ] #8 De sessiestart-tests die de oude blokkerende volgorde vastlegden zijn meegewijzigd
-- [ ] #9 De volledige testsuite draait groen
+- [x] #1 De indexbouwers draaien niet langer blokkerend in de sessiestart-coördinator
+- [x] #2 Er is één achtergrondproces achter een lock dat alle bouwers plus de geheugensweep draait, zodat er nooit twee processen tegelijk dezelfde index schrijven
+- [x] #3 De bestaande sweep-launcher start geen eigen indexbouw meer
+- [x] #4 Het blokkerende deel van de sessiestart blijft ruim onder het gedeclareerde plafond van elke client
+- [x] #5 Faalrapportage gebruikt het bestaande onderscheid tussen relevante en routinematige uitvoer; voortgang op de foutstroom leidt niet tot een valse melding
+- [x] #6 De vervaltijd van het lock ligt strikt boven de som van de per-bouwer-timeouts
+- [x] #7 Een tweede sessie die start terwijl de worker draait, start geen tweede worker
+- [x] #8 De sessiestart-tests die de oude blokkerende volgorde vastlegden zijn meegewijzigd
+- [x] #9 De volledige testsuite draait groen
 <!-- AC:END -->

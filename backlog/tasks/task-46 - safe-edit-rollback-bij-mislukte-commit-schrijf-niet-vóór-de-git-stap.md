@@ -28,11 +28,11 @@ Aandachtspunten voor de implementatie: bewaar de oorspronkelijke inhoud als byte
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Bij een mislukte `git add` of `git commit` wordt het doelbestand teruggezet naar de exacte byte-inhoud van vóór de aanroep
-- [ ] #2 Een bij deze aanroep nieuw aangemaakt bestand wordt bij rollback verwijderd, niet leeg achtergelaten
-- [ ] #3 Na een rollback is het doelbestand niet meer staged (de index is teruggedraaid voor dat pad)
-- [ ] #4 De JSON-uitvoer bij een faalpad bevat een expliciete indicatie dat er is teruggerold, en de faalreden bevat zowel stderr als stdout van de git-aanroep
-- [ ] #5 `tests/test_safe_edit.py` dekt: (a) exit 4 met teruggezette byte-identieke inhoud, (b) verwijderd nieuw bestand, (c) een volgende edit slaagt weer zodra de faaloorzaak weg is
-- [ ] #6 Alle bestaande tests in `tests/test_safe_edit.py` blijven groen
-- [ ] #7 De volledige testsuite draait groen
+- [x] #1 Bij een mislukte `git add` of `git commit` wordt het doelbestand teruggezet naar de exacte byte-inhoud van vóór de aanroep
+- [x] #2 Een bij deze aanroep nieuw aangemaakt bestand wordt bij rollback verwijderd, niet leeg achtergelaten
+- [x] #3 Na een rollback is het doelbestand niet meer staged (de index is teruggedraaid voor dat pad)
+- [x] #4 De JSON-uitvoer bij een faalpad bevat een expliciete indicatie dat er is teruggerold, en de faalreden bevat zowel stderr als stdout van de git-aanroep
+- [x] #5 `tests/test_safe_edit.py` dekt: (a) exit 4 met teruggezette byte-identieke inhoud, (b) verwijderd nieuw bestand, (c) een volgende edit slaagt weer zodra de faaloorzaak weg is
+- [x] #6 Alle bestaande tests in `tests/test_safe_edit.py` blijven groen
+- [x] #7 De volledige testsuite draait groen
 <!-- AC:END -->

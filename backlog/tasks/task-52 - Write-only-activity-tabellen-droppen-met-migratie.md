@@ -35,13 +35,13 @@ De kolom voor de datum zonder tijd in de eventtabel is eveneens bewezen dood, ma
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 De vier write-only tabellen worden niet meer aangemaakt en niet meer gevuld
-- [ ] #2 De schema-initialisatie verwijdert de tabellen op bestaande databases, zodat er geen weesrijen achterblijven
-- [ ] #3 De schemaversie is ongewijzigd, zodat gedeployde vaults geen waarschuwing krijgen
-- [ ] #4 Een test bewijst dat een incrementele bouw op een database die de oude tabellen bevat, ze verwijdert
-- [ ] #5 Een test bewijst dat een verse vault een volledige indexbouw doorloopt zonder fouten
-- [ ] #6 Het onderwerpfilter en de zoekfunctionaliteit gedragen zich onveranderd; bestaande tests daarvoor blijven groen
-- [ ] #7 De documentatie die deze tabellen beschrijft is bijgewerkt
-- [ ] #8 Er is vastgesteld en gerapporteerd of de Atlas-sidecar een van de vier tabellen leest; onder atlas/ is niets gewijzigd
-- [ ] #9 De volledige testsuite draait groen
+- [x] #1 De vier write-only tabellen worden niet meer aangemaakt en niet meer gevuld
+- [x] #2 De schema-initialisatie verwijdert de tabellen op bestaande databases, zodat er geen weesrijen achterblijven
+- [x] #3 De schemaversie is ongewijzigd, zodat gedeployde vaults geen waarschuwing krijgen
+- [x] #4 Een test bewijst dat een incrementele bouw op een database die de oude tabellen bevat, ze verwijdert
+- [x] #5 Een test bewijst dat een verse vault een volledige indexbouw doorloopt zonder fouten
+- [x] #6 Het onderwerpfilter en de zoekfunctionaliteit gedragen zich onveranderd; bestaande tests daarvoor blijven groen
+- [x] #7 De documentatie die deze tabellen beschrijft is bijgewerkt
+- [x] #8 Er is vastgesteld en gerapporteerd of de Atlas-sidecar een van de vier tabellen leest; onder atlas/ is niets gewijzigd
+- [x] #9 De volledige testsuite draait groen
 <!-- AC:END -->
