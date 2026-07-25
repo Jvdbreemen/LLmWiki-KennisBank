@@ -215,7 +215,7 @@ override the config file; both override the built-in defaults.
 
 ### Index builder (`scripts/build-embed-index.py`, coordinated SessionStart)
 
-- **Effect**: warms/refreshes the wiki embedding cache once per session, off the per-prompt path, and warms the local model. Incremental (only changed files or a model switch trigger real embed calls); prunes vanished files; clears the graphify `.needs-rebuild` flag. Run by `kb-session-start.py`.
+- **Effect**: warms/refreshes the wiki embedding cache once per session, off the per-prompt path, and warms the local model. Incremental (only changed files or a model switch trigger real embed calls); prunes vanished files. Run by `kb-session-start.py`. It does **not** touch the graphify `.needs-rebuild` flag: that signal must survive until the graph is actually rebuilt.
 
 ### Geheugen-index (`scripts/build-kb-index.py`, coordinated SessionStart)
 
@@ -600,7 +600,7 @@ The five env vars below control the behavior of the vault-onderhoud scripts
 
 - **Default**: `$HOME/KennisBank/graphify-out/.needs-rebuild`
 - **Where set**: `commands/sessielog.md` Step 3.
-- **Read by**: external graphify skill (when run, it should consume and clear this flag).
+- **Read by**: `commands/sessiestart.md` (staleness line) and the Atlas sidecar. The external graphify skill does **not** know about this flag — it does its own change detection — so clearing it after a rebuild is a manual step.
 - **Effect**: signals that wiki content changed and the graph is out of date. The flag is written as plain text containing changed file paths.
 - **To change**: edit Step 3 of `commands/sessielog.md`.
 
@@ -719,7 +719,7 @@ De achtergrond-automatieken zijn individueel aan/uit te zetten via
   worden één beknopt rapport. Een client kan nog één generieke lifecycle-regel
   tonen; die wordt door de client zelf gerenderd.
 - **Defaults bij ontbreken**: ontbreekt het bestand of een key, dan geldt de default-kolom hierboven. `setup` en `upgrade` schrijven expliciete waarden.
-- **Interactie**: met `embed_index` uit wordt `graphify-out/.needs-rebuild` niet bij SessionStart geleegd; dat is benign, de flag wordt door de graphify-rebuild zelf geleegd.
+- **Interactie**: geen. `embed_index` raakt `graphify-out/.needs-rebuild` niet meer; die vlag blijft staan tot je hem na een graaf-rebuild zelf verwijdert (`rm`, niet leegmaken — zie TROUBLESHOOTING 7.2).
 
 ---
 

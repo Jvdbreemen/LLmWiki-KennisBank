@@ -337,7 +337,7 @@ Install the skill if missing. Then in a Claude Code session at `$HOME/KennisBank
 
 **Cause**: `/sessielog` writes the flag to signal that fresh content exists. Nothing in this repo runs graphify automatically.
 
-**Fix**: Periodically run `/graphify`, then clear:
+**Fix**: Periodically run `/graphify`, then remove the flag. Use `rm`, not truncation — the Atlas sidecar tests for the file's existence, so an emptied-but-present flag makes it report "stale" forever:
 ```bash
 rm "$HOME/KennisBank/graphify-out/.needs-rebuild"
 ```

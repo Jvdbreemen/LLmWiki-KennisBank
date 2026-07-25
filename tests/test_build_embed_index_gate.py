@@ -46,6 +46,25 @@ class EmbedIndexGateTest(unittest.TestCase):
         self.assertTrue(self.rebuild.exists(),
                         "main() mag de flag niet legen als embed_index uit staat")
 
+    def test_embed_run_never_touches_rebuild_flag(self):
+        """De vlag hoort de embed-run te overleven, ook als die gewoon draait.
+
+        Voorheen wiste main() hem onvoorwaardelijk, gegate op de ongerelateerde
+        embed_index-toggle. Beide lezers (`/sessiestart` en de Atlas-sidecar)
+        meldden daardoor altijd "niet stale" -- het staleness-signaal bestond in
+        de praktijk niet. Deze test verving een test die precies het omgekeerde
+        vastlegde.
+        """
+        before = self.rebuild.read_bytes()
+        mod = load_script("build-embed-index.py")
+        # Geen echte embed-backend nodig: get_cached faalt fail-soft en telt als
+        # 'failed'. Het gaat hier alleen om wat main() met de vlag doet.
+        mod.main()
+        self.assertTrue(self.rebuild.exists(),
+                        "embed-run heeft de graphify-rebuild-vlag gewist")
+        self.assertEqual(self.rebuild.read_bytes(), before,
+                         "embed-run heeft de vlag aangepast")
+
 
 if __name__ == "__main__":
     unittest.main()
