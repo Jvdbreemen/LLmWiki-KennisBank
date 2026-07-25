@@ -202,15 +202,6 @@ def _backup(path: Path, dry_run: bool) -> "str | None":
     return _posix(bak)
 
 
-def restore_backup(path: Path) -> bool:
-    """Roll back the last backup, if any. Returns True if restored."""
-    bak = path.with_name(path.name + BACKUP_SUFFIX)
-    if bak.is_file():
-        shutil.copy2(bak, path)
-        return True
-    return False
-
-
 def _result(path: Path, action: str, backed_up: "str | None" = None,
             detail: str = "") -> dict:
     return {

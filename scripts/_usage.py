@@ -2,8 +2,8 @@
 """_usage.py - usage-telemetrie voor de retrieval-feedbackloop.
 
 Registreert welke documenten de retrieval-hook injecteert en welke daarvan in
-de sessie daadwerkelijk gebruikt worden (aangehaald in assistant-tekst of
-geraakt door tool-calls). Dat gebruikssignaal voedt:
+de sessie daadwerkelijk gebruikt worden (geraakt door tool-calls; assistant-
+tekst telt bewust niet mee). Dat gebruikssignaal voedt:
 
 - de ranking (_rank.usage_factor: een warm document krijgt een boost);
 - de staleness-check (een recent gebruikt artikel is niet staal, hoe oud
