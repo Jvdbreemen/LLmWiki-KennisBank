@@ -4,7 +4,7 @@ title: Doc-correcties en tweetalige feitpariteitslint
 status: Done
 assignee: []
 created_date: '2026-07-25 05:07'
-updated_date: '2026-07-25 07:50'
+updated_date: '2026-07-25 08:26'
 labels:
   - docs
   - tech-debt
@@ -33,14 +33,32 @@ Scope de lint subtractief (alle markdown minus changelog, ADR's, backlog en atla
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 De TROUBLESHOOTING-passage draagt niet langer op om padconstanten per script te wijzigen, maar verwijst naar de omgevingsvariabele en de resolver
-- [ ] #2 De vijf onjuiste hook-claims in AGENTS.md beschrijven wat de code doet: hooks worden geïnstalleerd en validatie eist ze
-- [ ] #3 Beide README-varianten en het CHANGELOG beschrijven de embed-timeout naar waarheid, en noemen het juiste aantal MCP-primitieven
-- [ ] #4 Het verzonnen doctor-transcript in POST-INSTALL.md is vervangen door echt gevangen uitvoer
-- [ ] #5 De proza-claim over de Ollama-omgevingsvariabele is gecorrigeerd; de shell-voorbeelden blijven staan
-- [ ] #6 Er is een lint die voor elk markdown-paar met een .nl-variant de verzameling backticked identifiers, paden en variabelen vergelijkt en bij verschil faalt
-- [ ] #7 Er is een lint die code-afgeleide feiten controleert: het aantal MCP-primitieven en de embed-timeout, plus gedocumenteerde omgevingsvariabelen die nergens gelezen worden
-- [ ] #8 De lint bepaalt zijn bestandenlijst subtractief, niet via een handonderhouden opsomming
-- [ ] #9 De lint verbiedt de concrete claim en niet het losse woord, zodat de noordster-formuleringen in de principes- en waardendocumenten blijven staan
-- [ ] #10 De volledige testsuite draait groen
+- [x] #1 De TROUBLESHOOTING-passage draagt niet langer op om padconstanten per script te wijzigen, maar verwijst naar de omgevingsvariabele en de resolver
+- [x] #2 De vijf onjuiste hook-claims in AGENTS.md beschrijven wat de code doet: hooks worden geïnstalleerd en validatie eist ze
+- [x] #3 Beide README-varianten en het CHANGELOG beschrijven de embed-timeout naar waarheid, en noemen het juiste aantal MCP-primitieven
+- [x] #4 Het verzonnen doctor-transcript in POST-INSTALL.md is vervangen door echt gevangen uitvoer
+- [x] #5 De proza-claim over de Ollama-omgevingsvariabele is gecorrigeerd; de shell-voorbeelden blijven staan
+- [x] #6 Er is een lint die voor elk markdown-paar met een .nl-variant de verzameling backticked identifiers, paden en variabelen vergelijkt en bij verschil faalt
+- [x] #7 Er is een lint die code-afgeleide feiten controleert: het aantal MCP-primitieven en de embed-timeout, plus gedocumenteerde omgevingsvariabelen die nergens gelezen worden
+- [x] #8 De lint bepaalt zijn bestandenlijst subtractief, niet via een handonderhouden opsomming
+- [x] #9 De lint verbiedt de concrete claim en niet het losse woord, zodat de noordster-formuleringen in de principes- en waardendocumenten blijven staan
+- [x] #10 De volledige testsuite draait groen
 <!-- AC:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: Claude (loop-iteratie 1)
+created: 2026-07-25 08:26
+---
+AC#4 gesloten (2026-07-25). Bij v0.20.0 liet ik dit open met de redenering dat echt gevangen doctor-uitvoer een vault vereist die niet van mij is. Dat klopte niet: setup.sh bouwt een volledige vault in een wegwerpmap, en dat is echte uitvoer zonder persoonlijke paden.
+
+Gevangen via een temp-HOME met `bash setup.sh --yes --agents claude --skip-model-check`, daarna `doctor.sh`, met het temp-pad ge-sed naar $HOME. Werkelijke uitvoer: 137 regels, footer `Summary / [PASS] 113 / [WARN] 1 / [FAIL] 0 / [INFO] 14`. Het verzonnen transcript beweerde `[ok]`-regels en `Done. 0 errors, 2 warnings.` -- doctor.sh emit geen van beide en heeft dat nooit gedaan.
+
+De vervangende sectie legt ook de vier tiers uit, want die betekenen verschillende dingen en dat stond nergens.
+
+BIJVANGST ALS BEWIJS: de verse install rapporteert `[PASS] temporal locales: 74 maandwoorden, 50 dagwoorden`. Dat is onafhankelijke bevestiging dat de locale-deployfix uit TASK-45 end-to-end werkt -- vóór die fix zou die tabel op een schone installatie leeg zijn geweest.
+
+Nieuwe guard in tests/test_docs_consistency.py: documentatie die doctor-uitvoer citeert mag geen markers gebruiken die het script niet emit. Geverifieerd rood tegen de oude tekst, groen erna.
+---
+<!-- COMMENTS:END -->
