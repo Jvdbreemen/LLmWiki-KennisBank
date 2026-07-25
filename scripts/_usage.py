@@ -199,6 +199,30 @@ def last_used_of(stem: str) -> str:
         return ""
 
 
+def stats_for(stems) -> dict:
+    """{stem: {"last_used": str, "noise": int, "injected": int}} in EEN verbinding.
+
+    last_used_of() en noise_of() openen elk een eigen verbinding per stem. Op de
+    hot path worden ze per treffer aangeroepen tijdens het herwegen, wat bij zes
+    treffers al twaalf opens kost. Deze batch-variant doet er een.
+
+    Onbekende stems ontbreken in het resultaat; de aanroeper vult defaults in.
+    """
+    stems = [s for s in stems if s]
+    if not stems:
+        return {}
+    try:
+        placeholders = ",".join("?" for _ in stems)
+        with closing(_connect()) as conn, conn:
+            rows = conn.execute(
+                f"SELECT stem, last_used, noise, injected FROM usage "
+                f"WHERE stem IN ({placeholders})", tuple(stems)).fetchall()
+        return {r[0]: {"last_used": r[1] or "", "noise": r[2] or 0, "injected": r[3] or 0}
+                for r in rows}
+    except Exception:
+        return {}
+
+
 def all_last_used() -> dict:
     """{stem: last_used_iso} voor alle ooit-gebruikte documenten."""
     try:

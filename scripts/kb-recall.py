@@ -96,8 +96,12 @@ def recall_hits(query_vector, query_text: str = "", k: int = 3,
                         "snippet": snippet})
         try:
             import _usage
-            _lu = _usage.last_used_of
-            _nf = _usage.noise_of
+            # Eén batch-query voor alle kandidaten in plaats van twee opens per
+            # treffer tijdens het herwegen.
+            _stats = _usage.stats_for(Path(r["path"]).stem for r in out)
+            _lu = lambda stem: _stats.get(stem, {}).get("last_used", "")
+            _nf = lambda stem: (_stats.get(stem, {}).get("noise", 0),
+                                _stats.get(stem, {}).get("injected", 0))
         except Exception:
             _lu = None
             _nf = None
@@ -135,6 +139,31 @@ def memory_hits(query_vector, query_text: str = "", k: int = 3,
     """Dunne wrapper: alleen de memory-laag (backward-compat)."""
     return recall_hits(query_vector, query_text=query_text, k=k, layers=("memory",),
                        min_cos=min_cos)
+
+
+def index_is_gated() -> bool:
+    """True als de index zelf een relevantiedrempel kan afdwingen.
+
+    Vereist een geldige index voor het live embedmodel EN de unit_norm-vlag:
+    zonder genormaliseerde vectoren klopt de afstand-naar-cosinus-omrekening
+    niet en past search() geen drempel toe. De aanroeper kan dan niet op de
+    index vertrouwen als poort en moet de oude cosine-cache-weg nemen.
+
+    Eén read-only sqlite-open; ordes goedkoper dan de JSON-cache parsen.
+    """
+    conn = _open_ro(_kbindex.index_path())
+    if conn is None:
+        return False
+    try:
+        return (_kbindex.is_valid_for(conn, emb.embed_id())
+                and _kbindex.meta_get(conn, "unit_norm") == "1")
+    except Exception:
+        return False
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 
 def has_fts_match(query_text: str, layer: str = "wiki") -> bool:
