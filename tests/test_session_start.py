@@ -78,11 +78,40 @@ def test_coordinator_aggregates_only_actionable_results(tmp_path):
         )
 
     report = module.coordinate("codex", vault, b"", runner=runner)
-    assert "2 (re)indexed" in report
+    # De indexbouwers draaien sinds TASK-63 losgekoppeld via index-launch.py, dus
+    # hun uitvoer komt niet meer langs de coordinator. Alleen notificaties met
+    # een echte boodschap horen nog in het rapport.
     assert "13 unverified memories" in report
+    assert "2 (re)indexed" not in report
     assert "110 wiki files" not in report
     assert "20 events" not in report
     assert "8/8 sources" not in report
+
+
+def test_maintenance_is_detached_and_not_blocking(tmp_path):
+    """De coordinator mag geen indexbouwer meer zelf draaien.
+
+    Blokkerend was dat ~210s (Claude/Codex) en ~300s (Copilot) worst case --
+    die laatste boven de timeout die de Copilot-integratie zelf declareert.
+    """
+    module = _load()
+    vault = tmp_path / "Kluis"
+    (vault / ".claude" / "scripts").mkdir(parents=True)
+
+    seen = []
+
+    def runner(job, scripts, payload):
+        seen.append(job.script)
+        return module.Result(job.script)
+
+    module.coordinate("codex", vault, b"", runner=runner)
+    for builder in ("build-embed-index.py", "build-kb-index.py",
+                    "build-activity-index.py"):
+        assert builder not in seen, f"{builder} draait nog blokkerend"
+    assert "index-launch.py" in seen
+    # De launcher moet snel terugkeren; het zware werk zit in zijn worker.
+    launcher = next(j for j in module.MAINTENANCE if j.script == "index-launch.py")
+    assert launcher.timeout <= 30
 
 
 def test_freshness_skips_maintenance_but_keeps_copilot_capture(tmp_path):
