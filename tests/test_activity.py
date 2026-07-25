@@ -196,5 +196,43 @@ class ActivityIndexTest(ActivityFixtureMixin, unittest.TestCase):
         self.assertGreaterEqual(len(data["events"]), 1)
 
 
+class UsageSourceExtractorTest(unittest.TestCase):
+    """Guard rond `iter_usage_events` -- de vijfde bron, en een valstrik.
+
+    Hij stond visueel middenin een blok van vijf `iter_*_events`-functies waarvan
+    de andere vier nul aanroepers hadden. Deze leeft wel: `_events_for_source`
+    routeert `.claude/kb-usage.db` ernaartoe. Een opruiming die "de hele familie"
+    weghaalt sloopt hem, en tot deze test dekte niets dat pad.
+    """
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="kb-usage-src-"))
+        self.vault = self.tmp / "Kluis"
+        db = self.vault / ".claude" / "kb-usage.db"
+        db.parent.mkdir(parents=True, exist_ok=True)
+        import sqlite3
+        conn = sqlite3.connect(db)
+        conn.execute("CREATE TABLE usage (stem TEXT PRIMARY KEY, path TEXT, used_at TEXT)")
+        conn.execute("INSERT INTO usage VALUES (?,?,?)",
+                     ("hook-gedreven-retrieval", "02-wiki/hook-gedreven-retrieval.md",
+                      "2026-07-03T10:00:00"))
+        conn.commit()
+        conn.close()
+        self.db = db
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_usage_db_is_routed_to_the_usage_extractor(self):
+        events = _activity._events_for_source(self.vault, self.db)
+        self.assertTrue(events, "kb-usage.db leverde geen events op")
+        self.assertEqual({e.source_kind for e in events}, {"usage"})
+        self.assertTrue(any("hook-gedreven-retrieval" in e.summary for e in events))
+
+    def test_usage_db_is_listed_as_a_source(self):
+        self.assertIn(self.db.resolve(),
+                      [p.resolve() for p in _activity._source_files(self.vault)])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -410,183 +410,6 @@ def _event(
     )
 
 
-def iter_session_events(vault: Path) -> Iterable[ActivityEvent]:
-    root = vault / "01-raw" / "sessies"
-    if not root.is_dir():
-        return
-    for path in sorted(root.glob("*.md")):
-        try:
-            text = _read_text(path)
-        except OSError:
-            continue
-        fm, body = parse_frontmatter(text)
-        fallback, unknown = _dt_from_filename(path)
-        event_dt, time_unknown = _parse_dt(
-            fm.get("date") or fm.get("created") or fm.get("event_time"),
-            default=fallback,
-        )
-        unknown = unknown and time_unknown
-        captured = _file_dt(path)
-        title = str(fm.get("title") or _title_from_markdown(body, path.stem))
-        summary = _first_summary(body)
-        project = str(fm.get("project") or fm.get("repo") or "")
-        yield _event(
-            vault=vault,
-            path=path,
-            source_kind="raw_session",
-            activity_kind="session",
-            title=title,
-            summary=summary,
-            event_time=event_dt,
-            captured_at=captured,
-            unknown_time=unknown,
-            confidence=0.82 if not unknown else 0.45,
-            project=project,
-            repo=project,
-        )
-        for idx, line in enumerate(body.splitlines(), start=1):
-            stripped = _norm_ws(line, 500)
-            if not stripped or not SIGNAL_RE.search(stripped):
-                continue
-            kind = classify_activity(stripped, fallback="session_signal")
-            yield _event(
-                vault=vault,
-                path=path,
-                source_kind="raw_session",
-                activity_kind=kind,
-                title=stripped[:100],
-                summary=stripped,
-                event_time=event_dt,
-                captured_at=captured,
-                unknown_time=unknown,
-                line_no=idx,
-                confidence=0.78 if not unknown else 0.42,
-                project=project,
-                repo=project,
-            )
-
-
-def iter_transcript_events(vault: Path) -> Iterable[ActivityEvent]:
-    root = vault / "01-raw" / "transcripts"
-    if not root.is_dir():
-        return
-    for path in sorted(root.glob("*.jsonl")):
-        captured = _file_dt(path)
-        fallback, unknown = _dt_from_filename(path)
-        emitted = 0
-        try:
-            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
-        except OSError:
-            continue
-        for idx, raw in enumerate(lines, start=1):
-            if emitted >= 80:
-                break
-            try:
-                obj = json.loads(raw)
-            except Exception:
-                continue
-            ts = obj.get("timestamp") or obj.get("created_at") or obj.get("time")
-            event_dt, time_unknown = _parse_dt(ts, default=fallback)
-            message = obj.get("message") or obj.get("text") or obj.get("content") or ""
-            if isinstance(message, dict):
-                message = json.dumps(message, ensure_ascii=False)
-            if isinstance(message, list):
-                message = " ".join(str(x) for x in message)
-            message = _norm_ws(str(message), 900)
-            if not message:
-                continue
-            role = str(obj.get("role") or obj.get("type") or "transcript")
-            if not SIGNAL_RE.search(message) and role.lower() not in {"tool_use", "assistant", "user"}:
-                continue
-            emitted += 1
-            kind = classify_activity(message, fallback="tool_use" if "tool" in role.lower() else "transcript_message")
-            yield _event(
-                vault=vault,
-                path=path,
-                source_kind="transcript",
-                activity_kind=kind,
-                title=message[:100],
-                summary=message,
-                event_time=event_dt,
-                captured_at=captured,
-                unknown_time=unknown and time_unknown,
-                line_no=idx,
-                confidence=0.72 if not (unknown and time_unknown) else 0.4,
-                actor=role,
-                agent=str(obj.get("agent") or ""),
-            )
-
-
-def iter_memory_events(vault: Path) -> Iterable[ActivityEvent]:
-    root = vault / "09-memory"
-    if not root.is_dir():
-        return
-    for path in sorted(root.rglob("*.md")):
-        if "/archive/" in path.as_posix().lower():
-            continue
-        try:
-            text = _read_text(path)
-        except OSError:
-            continue
-        fm, body = parse_frontmatter(text)
-        fallback, unknown = _dt_from_filename(path)
-        event_dt, time_unknown = _parse_dt(
-            fm.get("valid_from") or fm.get("created") or fm.get("captured_at"),
-            default=fallback,
-        )
-        captured, _ = _parse_dt(fm.get("captured_at") or fm.get("created"), default=_file_dt(path))
-        title = str(fm.get("title") or _title_from_markdown(body, path.stem))
-        memory_type = str(fm.get("memory_type") or fm.get("type") or "memory")
-        status = str(fm.get("status") or "")
-        summary = _first_summary(body) or title
-        yield _event(
-            vault=vault,
-            path=path,
-            source_kind="memory",
-            activity_kind="memory_capture",
-            title=title,
-            summary=f"{memory_type} {status} {summary}".strip(),
-            event_time=event_dt,
-            captured_at=captured,
-            unknown_time=unknown and time_unknown,
-            confidence=0.8 if not (unknown and time_unknown) else 0.45,
-            actor=str(fm.get("actor") or "agent"),
-            agent=str(fm.get("agent") or ""),
-            project=str(fm.get("project") or ""),
-            repo=str(fm.get("repo") or ""),
-        )
-
-
-def iter_wiki_events(vault: Path) -> Iterable[ActivityEvent]:
-    root = vault / "02-wiki"
-    if not root.is_dir():
-        return
-    for path in sorted(root.rglob("*.md")):
-        try:
-            text = _read_text(path)
-        except OSError:
-            continue
-        fm, body = parse_frontmatter(text)
-        fallback = _file_dt(path)
-        event_dt, unknown = _parse_dt(fm.get("updated") or fm.get("created") or fm.get("date"), default=fallback)
-        title = str(fm.get("title") or _title_from_markdown(body, path.stem))
-        summary = _first_summary(body) or title
-        yield _event(
-            vault=vault,
-            path=path,
-            source_kind="wiki",
-            activity_kind="wiki_update",
-            title=title,
-            summary=summary,
-            event_time=event_dt,
-            captured_at=fallback,
-            unknown_time=unknown,
-            confidence=0.68 if not unknown else 0.4,
-            project=str(fm.get("project") or ""),
-            repo=str(fm.get("repo") or ""),
-        )
-
-
 def iter_usage_events(vault: Path) -> Iterable[ActivityEvent]:
     db = vault / ".claude" / "kb-usage.db"
     if not db.is_file():
@@ -630,14 +453,6 @@ def iter_usage_events(vault: Path) -> Iterable[ActivityEvent]:
         return
     finally:
         conn.close()
-
-
-def iter_activity_events(vault: Path) -> Iterable[ActivityEvent]:
-    yield from iter_session_events(vault)
-    yield from iter_transcript_events(vault)
-    yield from iter_memory_events(vault)
-    yield from iter_wiki_events(vault)
-    yield from iter_usage_events(vault)
 
 
 def _source_files(vault: Path) -> list[Path]:
@@ -695,8 +510,6 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
     )
     conn.execute("CREATE INDEX IF NOT EXISTS idx_activity_event_time ON activity_events(event_time)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_activity_captured_at ON activity_events(captured_at)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_activity_kind ON activity_events(activity_kind)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_activity_project ON activity_events(project)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_activity_source ON activity_events(source_path)")
     conn.execute(
         "CREATE TABLE IF NOT EXISTS activity_entities ("
