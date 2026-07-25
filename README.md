@@ -68,7 +68,27 @@ Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: 
 
 The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
 
-## Feature highlights (v0.20.0)
+## Feature highlights (v0.21.0)
+
+### New in v0.21.0
+
+- **Retrieval has a relevance floor.** The hook used to inject the top-k
+  unconditionally, so a prompt with nothing relevant still received the three
+  least-bad documents, and the memory block had no gate at all. The threshold now
+  sits on the cosine, taken free from the distance the vector index already
+  returns. Your index rebuilds once on the first session after upgrading.
+- **SessionStart stopped blocking.** It ran the three index builders inline —
+  roughly 210 s worst case, and 300 s for Copilot, above the timeout that client
+  declares for itself. Maintenance now runs in a detached worker behind a lock,
+  which also ends two processes writing the same index concurrently.
+- **The embedding cache left the hot path.** Every non-trivial prompt parsed tens
+  of megabytes of JSON and scored the whole corpus in pure Python, to decide
+  something the index already knows. It is now only the fallback for a broken
+  index.
+- **`/kennisbank-release`.** Releasing has been manual since v0.16.0. The skill
+  captures the procedure, including the two steps that went wrong by hand last
+  time, and a test now couples the changelog version to both README headings so a
+  half-finished bump fails instead of shipping.
 
 ### New in v0.20.0
 
