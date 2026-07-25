@@ -115,7 +115,9 @@ Or remove the project-level directory if you never intended it.
 
 **Symptom**: `Embedding mislukt via /api/embeddings. Controleer OLLAMA_HOST, ollama serve en OLLAMA_EMBED_MODEL.`
 
-**Cause**: The script calls the Ollama HTTP API at `${OLLAMA_HOST:-http://localhost:11434}/api/embeddings` and requests the model `${OLLAMA_EMBED_MODEL:-qwen3-embedding:8b}` (the multilingual default; set `OLLAMA_EMBED_MODEL=nomic-embed-text` for the lighter English-only fallback). Either Ollama is not installed, the daemon is not running, `OLLAMA_HOST` points at the wrong server, or the configured model is not pulled. See section 8.
+**Cause**: The script calls the Ollama HTTP API at `{endpoint}/api/embeddings` and requests the model `${OLLAMA_EMBED_MODEL:-qwen3-embedding:8b}` (the multilingual default; set `OLLAMA_EMBED_MODEL=nomic-embed-text` for the lighter English-only fallback). Either Ollama is not installed, the daemon is not running, the endpoint points at the wrong server, or the configured model is not pulled. See section 8.
+
+**Note on `OLLAMA_HOST`**: KennisBank itself does **not** read that variable — the endpoint comes from `<vault>/.claude/kennisbank-embed.json` or `KB_EMBED_ENDPOINT` (default `http://localhost:11434`). `OLLAMA_HOST` is read by the `ollama` CLI, so exporting it in the commands below is correct and useful; it just is not what the embedding code consults. If you moved Ollama to another host, set `KB_EMBED_ENDPOINT` as well.
 
 **Fix**:
 ```bash
@@ -298,14 +300,15 @@ bash setup.sh
 
 **Symptom**: You want the vault under `$HOME/Documents/` or a synced folder.
 
-**Cause**: The path is hardcoded in `setup.sh` and in every script via `Path.home() / "KennisBank"`.
+**Cause**: `$HOME/KennisBank` is only the *default*. Every script resolves the vault through `scripts/_vaultpath.py` (`vault_root()`), which honours `KENNISBANK_VAULT` first.
 
-**Fix**: Use a symlink (simplest):
+**Fix**: Point `KENNISBANK_VAULT` at the new location and rerun setup:
 ```bash
-mv "$HOME/KennisBank" "$HOME/Documents/KennisBank"
-ln -s "$HOME/Documents/KennisBank" "$HOME/KennisBank"
+mv "$HOME/KennisBank" "$HOME/Documents/Kluis"
+export KENNISBANK_VAULT="$HOME/Documents/Kluis"
+bash setup.sh --yes --agents all
 ```
-Or edit `VAULT` in `setup.sh` and the path constants in each script and command file.
+Do **not** edit path constants inside the scripts. That is exactly the regression ADR-0002 prevents: a deploy copy with a hardcoded path stops honouring `KENNISBANK_VAULT` and breaks on the next upgrade.
 
 ### 6.4 $HOME/Claude/research collides with existing files
 
