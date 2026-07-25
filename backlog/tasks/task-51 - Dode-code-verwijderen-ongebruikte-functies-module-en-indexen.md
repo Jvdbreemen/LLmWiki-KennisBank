@@ -1,9 +1,10 @@
 ---
 id: TASK-51
 title: 'Dode code verwijderen: ongebruikte functies, module en indexen'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-07-25 03:34'
+updated_date: '2026-07-25 07:50'
 labels:
   - tech-debt
   - cleanup

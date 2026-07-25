@@ -1,10 +1,10 @@
 ---
 id: TASK-50
 title: 'Indexkosten: cachecontentie, fingerprint-fastpath en rollup-sleutelcorrectheid'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-07-25 03:34'
-updated_date: '2026-07-25 04:06'
+updated_date: '2026-07-25 07:50'
 labels:
   - bug
   - performance

@@ -1,9 +1,10 @@
 ---
 id: TASK-54
 title: 'Backlog-integriteit: ID-botsingen, niet-gecommitte taken en lege milestones'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-07-25 03:35'
+updated_date: '2026-07-25 07:50'
 labels:
   - governance
   - backlog

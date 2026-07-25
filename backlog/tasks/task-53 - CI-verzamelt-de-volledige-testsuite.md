@@ -1,10 +1,10 @@
 ---
 id: TASK-53
 title: CI verzamelt de volledige testsuite
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-07-25 03:35'
-updated_date: '2026-07-25 05:06'
+updated_date: '2026-07-25 07:50'
 labels:
   - ci
   - tests

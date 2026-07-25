@@ -3,10 +3,10 @@ id: TASK-45
 title: >-
   Hot-path noodstop: vec0-KNN-plafond, lege-vocabulaire-sentinel en
   locale-deploy
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-25 03:32'
-updated_date: '2026-07-25 03:46'
+updated_date: '2026-07-25 07:50'
 labels:
   - bug
   - hot-path

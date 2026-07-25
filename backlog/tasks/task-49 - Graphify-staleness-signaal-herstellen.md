@@ -1,9 +1,10 @@
 ---
 id: TASK-49
 title: Graphify staleness-signaal herstellen
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-07-25 03:33'
+updated_date: '2026-07-25 07:50'
 labels:
   - bug
   - graphify
