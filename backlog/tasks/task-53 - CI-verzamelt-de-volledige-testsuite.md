@@ -4,6 +4,7 @@ title: CI verzamelt de volledige testsuite
 status: To Do
 assignee: []
 created_date: '2026-07-25 03:35'
+updated_date: '2026-07-25 05:06'
 labels:
   - ci
   - tests
@@ -38,3 +39,18 @@ Voeg in beide gevallen een meta-guard toe die voorkomt dat dit terugkeert. Die g
 - [ ] #7 De gekozen aanpak en de reden staan in de taaknotities
 - [ ] #8 De volledige testsuite draait groen in CI
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Gekozen: pytest als dev-dependency (beslissing gebruiker, 2026-07-25), niet omzetten naar unittest-stijl. Reden: de ~18 nooit-gedraaide tests moeten vandaag draaien, en de deploy-kant blijft stdlib-only -- pytest raakt alleen CI en de ontwikkelmachine. Vastgelegd in requirements-dev.txt, dat requirements.txt include't; de runtime-requirements zijn ongewijzigd.
+
+GEMETEN (Windows-ontwikkelmachine, 2026-07-25):
+- unittest discover: 763 tests, OK (2 skipped), 1194 s
+- pytest: 781 tests, 1 failed -> nu 782 groen, 2 skipped, 1197 s
+Verschil = 18 tests in zes bestanden die nooit hebben gedraaid. De analyse sprak van vijf bestanden en 21 tests; het zijn er zes en 21 functies, waarvan 18 netto extra collectie.
+
+De ene falende test was `test_product_surfaces_have_no_removed_client_reference`: docs/research/cross-client-hooks-plugin-architecture.md noemt Cursor als KANDIDAAT voor de toekomstige adapter-boom. Opgelost door docs/research/ uit de sweep te halen -- research is verkennend materiaal, geen productoppervlak -- niet door de assertie te verzwakken.
+
+BIJVANGST: CI stond op timeout-minutes: 15 met een comment die '~5-8 min' beweerde. De suite duurt ~20 min. Die job zou op de klok gesneuveld zijn zodra hij de volledige collectie draaide. Verhoogd naar 30 met de gemeten cijfers in het comment.
+<!-- SECTION:NOTES:END -->
