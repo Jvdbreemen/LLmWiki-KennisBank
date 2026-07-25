@@ -474,13 +474,23 @@ def _source_files(vault: Path) -> list[Path]:
     return sorted(set(files))
 
 
-def _fingerprint(path: Path) -> tuple[int, int, str]:
+def _stat_fingerprint(path: Path) -> tuple[int, int]:
+    """Goedkope vingerafdruk: geen bestand lezen."""
     st = path.stat()
+    return int(st.st_mtime_ns), int(st.st_size)
+
+
+def _sha256(path: Path) -> str:
     h = hashlib.sha256()
     with path.open("rb") as fh:
         for chunk in iter(lambda: fh.read(1024 * 256), b""):
             h.update(chunk)
-    return int(st.st_mtime_ns), int(st.st_size), h.hexdigest()
+    return h.hexdigest()
+
+
+def _fingerprint(path: Path) -> tuple[int, int, str]:
+    mtime_ns, size = _stat_fingerprint(path)
+    return mtime_ns, size, _sha256(path)
 
 
 def connect_activity_db(vault: Path | None = None, *, readonly: bool = False) -> sqlite3.Connection:
@@ -516,12 +526,6 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
         "source_path TEXT PRIMARY KEY, mtime_ns INTEGER NOT NULL, size INTEGER NOT NULL, "
         "sha256 TEXT NOT NULL, indexed_at TEXT NOT NULL)"
     )
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS rollup_cache ("
-        "cache_key TEXT PRIMARY KEY, start TEXT NOT NULL, end_exclusive TEXT NOT NULL, "
-        "topic TEXT NOT NULL, source_signature TEXT NOT NULL, body_json TEXT NOT NULL, "
-        "created_at TEXT NOT NULL)"
-    )
     # Write-only tabellen uit een eerdere opzet: ze werden bij elke bouw gevuld
     # en door geen enkele query gelezen (topic-filtering doet een substring-
     # vergelijking op search_blob, in Python). activity_fts was de duurste: de
@@ -533,7 +537,7 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
     # DROP blijven de rijen eeuwig wees in elke bestaande installatie.
     # SCHEMA_VERSION bewust NIET gebumpt: doctor.sh en de statusrapportage zetten
     # dan elke gedeployde vault op WARN tot de gebruiker handmatig --full draait.
-    for _legacy in ("activity_entities", "activity_topics", "activity_artifacts"):
+    for _legacy in ("activity_entities", "activity_topics", "activity_artifacts", "rollup_cache"):
         conn.execute(f"DROP TABLE IF EXISTS {_legacy}")
     conn.execute("DROP TABLE IF EXISTS activity_fts")
     conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', ?)", (SCHEMA_VERSION,))
@@ -808,14 +812,31 @@ def build_activity_index(
 
         for idx, source in enumerate(sources, start=1):
             rel = _rel(root, source)
-            mtime_ns, size, sha = _fingerprint(source)
             old = conn.execute(
                 "SELECT mtime_ns, size, sha256 FROM source_watermarks WHERE source_path=?",
                 (rel,),
             ).fetchone()
-            unchanged = old and int(old["mtime_ns"]) == mtime_ns and int(old["size"]) == size and old["sha256"] == sha
+            # Fastpath: eerst stat, pas hashen als (mtime, grootte) afwijkt. De
+            # hash draaide voorheen over ELK bronbestand voordat er iets werd
+            # vergeleken -- gemeten 1,67 s warm en 51,75 s koud over 2220
+            # bestanden / 376 MB, voor een bouw die meestal niets te doen heeft.
+            mtime_ns, size = _stat_fingerprint(source)
+            sha = None
+            if old is not None and int(old["mtime_ns"]) == mtime_ns and int(old["size"]) == size:
+                sha = old["sha256"]          # identiek volgens stat: niet lezen
+            else:
+                sha = _sha256(source)
+            unchanged = old is not None and old["sha256"] == sha
             if unchanged and not full:
                 stats["skipped_sources"] += 1
+                # Alleen de mtime is verschoven (touch, herschreven met dezelfde
+                # inhoud, kopie). Watermerk verversen, anders hasht de volgende
+                # bouw dit bestand opnieuw.
+                if int(old["mtime_ns"]) != mtime_ns or int(old["size"]) != size:
+                    conn.execute(
+                        "UPDATE source_watermarks SET mtime_ns=?, size=? WHERE source_path=?",
+                        (mtime_ns, size, rel),
+                    )
             else:
                 stats["changed_sources"] += 1
                 ids = [r[0] for r in conn.execute("SELECT id FROM activity_events WHERE source_path=?", (rel,)).fetchall()]
@@ -841,7 +862,6 @@ def build_activity_index(
                     flush=True,
                 )
                 last_report = now
-        conn.execute("DELETE FROM rollup_cache WHERE source_signature != ?", (_source_signature(conn),))
         conn.commit()
         stats["elapsed_seconds"] = round(time.monotonic() - start, 3)
         stats["total_events"] = conn.execute("SELECT count(*) FROM activity_events").fetchone()[0]
@@ -1812,51 +1832,14 @@ def _summary_counts(events: list[dict]) -> dict[str, int]:
     return counts
 
 
-def _source_signature_for_period(vault: Path, start: str, end: str, topic: str) -> str:
-    try:
-        conn = connect_activity_db(vault, readonly=True)
-        rows = conn.execute(
-            "SELECT id, event_time, source_ref FROM activity_events WHERE event_time >= ? AND event_time < ? ORDER BY id",
-            (start, end),
-        ).fetchall()
-        conn.close()
-    except sqlite3.Error:
-        rows = []
-    return hashlib.sha256(json.dumps([tuple(r) for r in rows] + [topic], sort_keys=True).encode("utf-8")).hexdigest()
-
-
-def _rollup_cache_get(vault: Path, key: str, signature: str) -> dict | None:
-    try:
-        conn = connect_activity_db(vault, readonly=True)
-        row = conn.execute("SELECT body_json FROM rollup_cache WHERE cache_key=? AND source_signature=?", (key, signature)).fetchone()
-        conn.close()
-        return json.loads(row[0]) if row else None
-    except Exception:
-        return None
-
-
-def _rollup_cache_put(vault: Path, key: str, period: TemporalRange, topic: str, signature: str, body: dict) -> None:
-    try:
-        conn = connect_activity_db(vault)
-        ensure_schema(conn)
-        conn.execute(
-            "INSERT OR REPLACE INTO rollup_cache(cache_key, start, end_exclusive, topic, source_signature, body_json, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (key, period.start, period.end_exclusive, topic, signature, json.dumps(body, ensure_ascii=False), _dt_iso(datetime.now(LOCAL_TZ))),
-        )
-        conn.commit()
-        conn.close()
-    except Exception:
-        pass
-
-
 def deterministic_rollup(vault: Path, period: TemporalRange, events: list[dict], topic: str = "") -> dict:
-    signature = _source_signature_for_period(vault, period.start, period.end_exclusive, topic)
-    key = stable_id("rollup", period.start, period.end_exclusive, topic)
-    cached = _rollup_cache_get(vault, key, signature)
-    if cached:
-        cached["cache"] = "hit"
-        return cached
+    # Geen cache meer. De vorige opzet was netto verlies: gemeten bespaarde hij
+    # 0,88 ms body-berekening en kostte hij 34 ms per hit (30 ms daarvan een
+    # tweede SQLite-connectie). Erger, de sleutel bevatte de event-limiet noch
+    # het projectfilter, dus een weeklog met een lage limiet besmette een
+    # daaropvolgende what_did_i_do over dezelfde periode met een te kleine body.
+    # Weggehaald in plaats van gerepareerd: een verwijderde cache kan niet
+    # opnieuw verkeerd invalideren.
     decisions = [e for e in events if e.get("activity_kind") == "decision" or e.get("decisions")]
     releases = [e for e in events if e.get("activity_kind") in {"release", "commit", "task_change"}]
     open_loops = [
@@ -1879,9 +1862,8 @@ def deterministic_rollup(vault: Path, period: TemporalRange, events: list[dict],
         "open_loops": open_loops[:12],
         "source_refs": _dedupe(e.get("source_ref", "") for e in events)[:50],
         "generated": "deterministic",
-        "cache": "miss",
+        "cache": "none",
     }
-    _rollup_cache_put(vault, key, period, topic, signature, body)
     return body
 
 

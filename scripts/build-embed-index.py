@@ -49,8 +49,10 @@ def main() -> None:
     # Prune cache entries for wiki files that no longer exist.
     existing = {str(p) for p in WIKI.glob("**/*.md")}
     wiki_prefix = str(WIKI)
+    pruned = 0
     for k in [k for k in cache if k.startswith(wiki_prefix) and k not in existing]:
         del cache[k]
+        pruned += 1
 
     embedded = 0
     failed = 0
@@ -64,7 +66,10 @@ def main() -> None:
         elif after.get("hash") != before.get("hash") or after.get("id") != before.get("id"):
             embedded += 1
 
-    emb.save_cache(cache)
+    # Alleen schrijven als er echt iets veranderd is: de cache is tientallen MB
+    # en json.dumps erover kostte ~2,5 s per sessie, ook als er niets te doen was.
+    if embedded or pruned:
+        emb.save_cache(cache)
 
     # Best-effort clear of the rebuild flag (graphify-out/.needs-rebuild).
     try:

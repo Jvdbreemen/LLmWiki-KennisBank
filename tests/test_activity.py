@@ -155,7 +155,7 @@ class ActivityIndexTest(ActivityFixtureMixin, unittest.TestCase):
         self.assertEqual(len(r["events"]), 1)
         self.assertIn("Codex", r["events"][0]["title"] + r["events"][0]["summary"])
 
-    def test_weeklog_rollup_has_sources_and_cache(self):
+    def test_weeklog_rollup_is_deterministic_and_self_consistent(self):
         vault = self.make_vault()
         _activity.build_activity_index(vault, full=True, verbose=False)
         now = datetime(2026, 7, 8, 12, 0, tzinfo=_activity.LOCAL_TZ)
@@ -163,7 +163,29 @@ class ActivityIndexTest(ActivityFixtureMixin, unittest.TestCase):
         second = _activity.weeklog("vorige week", vault=vault, now=now)
         self.assertGreaterEqual(first["rollup"]["event_count"], 1)
         self.assertTrue(first["rollup"]["source_refs"])
-        self.assertEqual(second["rollup"]["cache"], "hit")
+        # Het gerapporteerde aantal moet bij de meegeleverde events horen. De
+        # oude cache-sleutel bevatte de event-limiet niet, waardoor een weeklog
+        # met een lage limiet een daaropvolgende bevraging over dezelfde periode
+        # een te kleine body gaf -- en dus een te laag event_count.
+        self.assertEqual(first["rollup"]["event_count"], len(first["events"]))
+        self.assertEqual(second["rollup"], first["rollup"],
+                         "twee identieke bevragingen moeten hetzelfde opleveren")
+
+    def test_a_narrow_query_does_not_poison_a_wider_one(self):
+        """Regressie: kruisbesmetting tussen twee periodes met dezelfde grenzen.
+
+        Met de cache erin vulde de eerste (smalle) bevraging de sleutel, en
+        kreeg de tweede (brede) diezelfde te kleine body terug.
+        """
+        vault = self.make_vault()
+        _activity.build_activity_index(vault, full=True, verbose=False)
+        now = datetime(2026, 7, 8, 12, 0, tzinfo=_activity.LOCAL_TZ)
+        narrow = _activity.weeklog("vorige week", vault=vault, now=now, max_events=1)
+        wide = _activity.weeklog("vorige week", vault=vault, now=now)
+        self.assertEqual(narrow["rollup"]["event_count"], len(narrow["events"]))
+        self.assertEqual(wide["rollup"]["event_count"], len(wide["events"]))
+        self.assertGreaterEqual(wide["rollup"]["event_count"],
+                                narrow["rollup"]["event_count"])
 
     def test_eval_harness_negative_and_positive_controls(self):
         vault = self.make_vault()
@@ -232,6 +254,59 @@ class UsageSourceExtractorTest(unittest.TestCase):
     def test_usage_db_is_listed_as_a_source(self):
         self.assertIn(self.db.resolve(),
                       [p.resolve() for p in _activity._source_files(self.vault)])
+
+
+class FingerprintFastpathTest(ActivityFixtureMixin, unittest.TestCase):
+    """De sha256 draaide over ELK bronbestand vóór de watermerkvergelijking.
+
+    Gemeten op de vault van de auteur: 2220 bestanden, 376 MB, 1,67 s warm en
+    51,75 s koud -- voor een bouw die meestal niets te doen heeft.
+    """
+
+    def _count_hashes(self, fn, *args, **kwargs):
+        calls = []
+        real = _activity._sha256
+
+        def counting(path):
+            calls.append(path)
+            return real(path)
+
+        _activity._sha256 = counting
+        try:
+            fn(*args, **kwargs)
+        finally:
+            _activity._sha256 = real
+        return calls
+
+    def test_clean_incremental_build_hashes_nothing(self):
+        vault = self.make_vault()
+        _activity.build_activity_index(vault, full=True, verbose=False)
+        calls = self._count_hashes(_activity.build_activity_index, vault, verbose=False)
+        self.assertEqual(calls, [],
+                         f"onveranderde bronnen werden alsnog gehasht: {calls}")
+
+    def test_touched_but_identical_source_is_not_reparsed(self):
+        vault = self.make_vault()
+        _activity.build_activity_index(vault, full=True, verbose=False)
+        src = next((vault / "01-raw" / "sessies").glob("*.md"))
+        import os as _os
+        st = src.stat()
+        _os.utime(src, ns=(st.st_atime_ns, st.st_mtime_ns + 10_000_000_000))
+
+        stats = _activity.build_activity_index(vault, verbose=False)
+        self.assertEqual(stats["changed_sources"], 0,
+                         "identieke inhoud met nieuwe mtime werd opnieuw geparsed")
+        # Watermerk moet zijn bijgewerkt, anders hasht elke volgende bouw opnieuw.
+        calls = self._count_hashes(_activity.build_activity_index, vault, verbose=False)
+        self.assertEqual(calls, [], "watermerk niet ververst na een touch")
+
+    def test_full_rebuild_still_reindexes_everything(self):
+        vault = self.make_vault()
+        first = _activity.build_activity_index(vault, full=True, verbose=False)
+        second = _activity.build_activity_index(vault, full=True, verbose=False)
+        self.assertEqual(second["skipped_sources"], 0,
+                         "--full mag niets overslaan; fastpath lekt")
+        self.assertEqual(second["changed_sources"], first["changed_sources"])
 
 
 class LegacyTableMigrationTest(unittest.TestCase):
