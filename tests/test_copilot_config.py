@@ -244,9 +244,11 @@ class CopilotConfigTest(unittest.TestCase):
         data = json.loads(mcp_path.read_text(encoding="utf-8"))
         self.assertIn("kennisbank", data["mcpServers"])
 
-    # --- backup + rollback --------------------------------------------------
+    # --- backup ---------------------------------------------------------------
+    # Rollback loopt via remove(); restore_backup() was test-only en is verwijderd.
+    # Deze test blijft de enige dekking van _backup() zelf (zes aanroepplaatsen).
 
-    def test_backup_created_and_restore(self):
+    def test_backup_created_before_mutating_user_file(self):
         ins = self.home / "copilot-instructions.md"
         ins.parent.mkdir(parents=True)
         ins.write_text("original user content\n", encoding="utf-8")
@@ -254,8 +256,6 @@ class CopilotConfigTest(unittest.TestCase):
         bak = ins.with_name(ins.name + self.m.BACKUP_SUFFIX)
         self.assertTrue(bak.is_file(), "a backup must exist after mutating a file")
         self.assertEqual(bak.read_text(encoding="utf-8"), "original user content\n")
-        self.assertTrue(self.m.restore_backup(ins))
-        self.assertEqual(ins.read_text(encoding="utf-8"), "original user content\n")
 
     def test_remove_reverses_install_preserving_user_data(self):
         # user MCP server + user hook event that must survive removal.

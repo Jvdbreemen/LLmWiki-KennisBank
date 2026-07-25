@@ -7,6 +7,134 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-07-25
+
+A maintenance release from a full codebase analysis. Three of the fixes are
+silent-failure bugs on core paths: they produced no log, no exit code and no
+doctor signal, so nothing surfaced them until the code was read end to end.
+Every fix here landed with a test that was confirmed red against the unpatched
+source first.
+
+### Fixed
+
+- **Memory recall died silently above ~1024 documents.** `_kbindex.search` sized
+  its candidate pool from the corpus and capped it at 5000, but sqlite-vec
+  rejects a KNN query with `k > 4096`. That `OperationalError` fell outside the
+  FTS-only `try`, propagated to `kb-recall.recall_hits` and turned recall into an
+  empty list — no warning anywhere. Verified directly against the extension:
+  `k=4096` succeeds, `k=4097` raises. The pool is now capped at the extension's
+  limit, keeping the corpus term that prevents layer starvation.
+- **Every temporal question resolved to the same wrong range.**
+  `_activity._alt([])` returned an empty string, which embeds as `\b(?:)\b` and
+  matches the empty string at every word boundary, so every parser branch fired
+  at confidence 0.95 — including for explicit ISO dates. It now returns a
+  never-matching sentinel, so layer 1 misses and the next layer gets its turn.
+- **`activity-locales.json` never reached a vault.** `setup.sh` deployed only
+  `scripts/*.py` and `scripts/*.sh`, and `_activity` resolves the file next to
+  itself with no repo-relative fallback, so every clean install ran with an empty
+  layer-1 vocabulary. Combined with the bug above that was wrong rather than
+  degraded. CI never caught it because CI runs from the repo root. `doctor.sh`
+  now probes the *loaded* vocabulary rather than the file's presence.
+- **A failed commit blocked the entire `/wiki` write path.** `safe-edit.py`
+  writes the article before `git add`/`commit` — unavoidable, git only sees what
+  is on disk — but had no rollback. A failing pre-commit hook left the article
+  overwritten and staged, and because the tree was then dirty every later call
+  refused with exit 3, while both callers forbid `--force`. The original bytes
+  are now restored on any post-write failure, and a file created by that call is
+  removed rather than left empty.
+- **The dirty-tree guard's self-exception never fired on Windows.** The target
+  path was built with the OS separator while `git status --porcelain` always
+  emits forward slashes, so a tree where only the target was dirty — the normal
+  case for a second pass over the same article — was refused. Non-ASCII paths
+  were also mishandled: git quotes them unless `core.quotepath=false`, and the
+  output was decoded with the platform default codec.
+- **The graphify staleness flag was wiped on every session start.**
+  `build-embed-index.py` deleted `.needs-rebuild` unconditionally, gated on the
+  unrelated `embed_index` toggle, so both readers always reported "not stale" and
+  the signal did not exist in practice. A test pinned that behaviour as intended
+  and was replaced.
+- **The rollup cache returned answers for the wrong query.** Its key carried
+  neither the event limit nor the project filter, so a `weeklog` with a low
+  `max_events` poisoned a subsequent `what_did_i_do` over the same period — the
+  regression test reported 1 event where there were 37. Its invalidation was
+  broken too, comparing two disjoint hash namespaces, so it was wiped on every
+  index build. Removed rather than repaired: measured, it saved 0.88 ms and cost
+  34 ms per hit.
+- **Shipped artefacts hardcoded the vault path.** `CLAUDE.md.template` and the
+  autoresearch skill used `~/KennisBank` while `setup.sh` honours
+  `KENNISBANK_VAULT`, so on a differently-named vault the deployed `CLAUDE.md`
+  pointed at a directory that does not exist. This is ADR-0002.
+- **Upgrade backups landed in the directory the host scans.** Skill backups were
+  written as `<name>.pre-<tag>.bak` inside `~/.claude/skills/`, where they load
+  as additional triggerable skills carrying the same description as the real one.
+
+### Changed
+
+- **CI collects the whole test suite.** `unittest discover` does not collect bare
+  module-level `test_*` functions; six files are written that way and their tests
+  had never run — 763 collected against 782. One of them was the documentation
+  guard, which is the root cause of the stale doc claims corrected below: the
+  gate existed, but nobody ever walked past it. `pytest` is now a development
+  dependency in `requirements-dev.txt`; runtime requirements are unchanged and a
+  deployed vault stays stdlib-only. The job timeout was 15 minutes with a comment
+  claiming 5-8; the suite takes about 20, so it is now 30.
+- **MCP output contract.** `deterministic_rollup` reports `"cache": "none"`
+  instead of `"hit"`/`"miss"`, since there is no longer a cache to hit.
+- **Index maintenance got cheaper.** Source fingerprints are taken lazily — stat
+  first, read only when mtime or size differ (measured 1.67 s warm and 51.75 s
+  cold over 2220 files, for a build that usually has nothing to do). The
+  embedding cache is written through a process-unique temp file and only when
+  something actually changed, and `build-kb-index` returns before the embedding
+  probe when there is no work.
+
+### Removed
+
+- **Four write-only tables.** `activity_entities`, `activity_topics`,
+  `activity_artifacts` and the FTS5 table `activity_fts` were populated on every
+  index build and read by no query — CREATE, DELETE and INSERT, not one SELECT.
+  About 23.7 MB of 57.7 MB on the author's vault, but the real cost was latency:
+  the FTS delete targets an UNINDEXED column and full-scans, 45 ms per event
+  against 0.26 ms, twice per event. `ensure_schema` drops them on existing
+  databases; the schema version is deliberately unchanged so no deployed vault
+  flips to a warning.
+- **Verified-dead code**, each re-checked by an agent tasked with proving it
+  still reachable: `kb-usage-scan.assistant_text`, the `iter_activity_events`
+  aggregator with four extractors, `scripts/eval-wiki-recall.py`,
+  `_copilot.restore_backup`, the `_llm` api-key-environment branch, and two
+  indexes the query planner never chose. Net −283 lines.
+
+### Documentation
+
+- **`TROUBLESHOOTING.md` told readers to break the vault resolver.** It claimed
+  the path is hardcoded "in every script" and instructed editing path constants
+  per script — exactly the regression ADR-0002 prevents. Untouched since
+  2026-05-08, while `KENNISBANK_VAULT` landed 2026-06-14.
+- **`AGENTS.md` described a superseded contract.** It still called Codex and
+  Copilot hookless per ADR-005 and claimed validation expects no lifecycle hooks,
+  while the code requires each hook exactly once. That file presents itself as
+  the agent-facing deployment contract, so an agent following it would
+  fail-validate a correct install.
+- Both READMEs promised sub-second retrieval where the ceiling is 2.0 s and
+  applies only to the embed call, and named three MCP primitives where there are
+  six tools plus a resource. `OLLAMA_HOST` was documented as the endpoint
+  KennisBank reads; it is not — the `ollama` CLI reads it, so the shell examples
+  are correct and only the prose was wrong.
+- **A guard against the drift itself.** Documentation here drifts by one
+  mechanism: it is updated per enumeration, and whatever is not on the list
+  stays. A new lint compares backticked identifiers between each language pair
+  and checks code-derived facts. It found two live gaps on its first run.
+
+### Governance
+
+- Four task IDs were claimed by two files each. The tracked file keeps its
+  number; the archived or untracked one is renumbered. Nothing was deleted: the
+  analysis had claimed one archived task was a duplicate created by another tool,
+  and that turned out to be false.
+- Eight backlog files the tool had written were never committed, including the
+  deliverable of a task already marked Done. A session-start check now warns
+  about uncommitted backlog files, and a test enforces unique IDs, filename
+  agreement, known statuses and existing milestones.
+
 ## [0.19.0] - 2026-07-24
 
 ### Added
@@ -70,7 +198,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   memory re-embed), stacking two long waits past the harness timeout and
   discarding the injected context. The hook now embeds exactly once per prompt
   (the query vector is computed in `main()` and passed to both the wiki and
-  memory blocks), bounds the hot-path embed to a sub-second default timeout
+  memory blocks), bounds the hot-path embed to a default timeout
   (`KB_RETRIEVE_TIMEOUT`, default 5s), and on a miss injects nothing while
   firing a detached warm so the next prompt is hot. Fully local and fail-open.
 
@@ -602,7 +730,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.19.0...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.20.0...HEAD
+[0.20.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.18.1...v0.19.0
 [0.18.1]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.18.0...v0.18.1
 [0.18.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.17.1...v0.18.0

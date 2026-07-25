@@ -3,9 +3,9 @@
 
 Runs OFF the per-prompt latency path: invoked once per session from a
 SessionStart hook (and runnable standalone). Embeds every wiki article whose
-file hash or embed_id() has changed, prunes vanished files, and clears the
-graphify .needs-rebuild flag. Steady-state (cache warm) is just hash checks and
-near-instant; only new/changed files or a model switch trigger real embed calls.
+file hash or embed_id() has changed and prunes vanished files. Steady-state
+(cache warm) is just hash checks and near-instant; only new/changed files or a
+model switch trigger real embed calls.
 
 It also warms the local embedding model: the first embed loads it, so by the
 time the user types a real prompt the per-prompt retrieval hook is fast.
@@ -25,14 +25,13 @@ from _vaultpath import vault_root  # noqa: E402
 
 VAULT = vault_root()
 WIKI = VAULT / "02-wiki"
-REBUILD_FLAG = VAULT / "graphify-out" / ".needs-rebuild"
 SKIP = {"index.md", "log.md"}
 
 
 def main() -> None:
     # Toggle-gate: ververs de embed-index alleen als embed_index aanstaat.
     # Fail-open: kan de toggle niet gelezen worden, val terug op de default
-    # (True = aan). De gate zit vóór de .needs-rebuild-clear en elke embed-call.
+    # (True = aan). De gate zit vóór elke embed-call.
     try:
         import _settings
         if not _settings.get("embed_index", True):
@@ -49,8 +48,10 @@ def main() -> None:
     # Prune cache entries for wiki files that no longer exist.
     existing = {str(p) for p in WIKI.glob("**/*.md")}
     wiki_prefix = str(WIKI)
+    pruned = 0
     for k in [k for k in cache if k.startswith(wiki_prefix) and k not in existing]:
         del cache[k]
+        pruned += 1
 
     embedded = 0
     failed = 0
@@ -64,14 +65,15 @@ def main() -> None:
         elif after.get("hash") != before.get("hash") or after.get("id") != before.get("id"):
             embedded += 1
 
-    emb.save_cache(cache)
+    # Alleen schrijven als er echt iets veranderd is: de cache is tientallen MB
+    # en json.dumps erover kostte ~2,5 s per sessie, ook als er niets te doen was.
+    if embedded or pruned:
+        emb.save_cache(cache)
 
-    # Best-effort clear of the rebuild flag (graphify-out/.needs-rebuild).
-    try:
-        if REBUILD_FLAG.exists():
-            REBUILD_FLAG.unlink()
-    except Exception:
-        pass
+    # NB: de graphify .needs-rebuild-vlag wordt hier bewust NIET geleegd. Dat
+    # gebeurde voorheen onvoorwaardelijk bij elke SessionStart, gegate op de
+    # ongerelateerde embed_index-toggle, waardoor beide lezers altijd "niet
+    # stale" meldden. De vlag hoort te blijven staan tot de graaf herbouwd is.
 
     print(f"embed-index: {len(files)} wiki files, {embedded} (re)embedded, "
           f"{failed} failed, backend={emb.embed_id()}")

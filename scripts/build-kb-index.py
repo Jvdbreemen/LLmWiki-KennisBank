@@ -53,6 +53,29 @@ def _collect():
 def main(rebuild: bool = False) -> None:
     eid = emb.embed_id()
     idx = _kbindex.index_path()
+
+    # Niets te doen? Dan ook geen embed-probe. Die draaide onvoorwaardelijk vóór
+    # de incrementele check, dus elke sessiestart betaalde een netwerkcall voor
+    # een bouw die meestal niets doet. Alles hieronder is puur lokaal.
+    if not rebuild and idx.exists():
+        probe_conn = _kbindex.connect()
+        try:
+            has_meta = probe_conn.execute(
+                "SELECT name FROM sqlite_master WHERE name='meta'").fetchone()
+            if has_meta and _kbindex.is_valid_for(probe_conn, eid):
+                items = _collect()
+                seen = {str(f) for f, _, _ in items}
+                work = any(_kbindex.indexed_hash(probe_conn, str(f)) != emb.file_hash(f)
+                           for f, _, _ in items)
+                stale = probe_conn.execute(
+                    "SELECT count(*) FROM docs").fetchone()[0] != len(seen)
+                if not work and not stale:
+                    print(f"kb-index: {len(seen)} files, 0 (re)indexed, "
+                          f"{len(seen)} ongewijzigd, 0 verwijderd, 0 failed, backend={eid}")
+                    return
+        finally:
+            probe_conn.close()
+
     # dim van het live model; faal-zacht als het model onbereikbaar is
     # Probe EERST: bij mislukking de bestaande index NIET wissen.
     probe = emb.embed("dimensie-probe")
@@ -93,7 +116,10 @@ def main(rebuild: bool = False) -> None:
                         title=title, created=created)
         indexed += 1
     removed = _kbindex.prune(conn, keep_paths=seen)
-    emb.save_cache(cache)
+    # De cache muteert alleen op het niet-overgeslagen pad; zonder nieuw
+    # ingedexte bestanden is wegschrijven pure I/O.
+    if indexed:
+        emb.save_cache(cache)
     conn.close()
     print(f"kb-index: {len(seen)} files, {indexed} (re)indexed, {skipped} ongewijzigd, "
           f"{removed} verwijderd, {failed} failed, backend={eid}")

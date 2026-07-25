@@ -118,6 +118,27 @@ else
   else
     report_pass "vault CLAUDE.md" "placeholders replaced"
   fi
+  # Hardcoded vaultpad (ADR-0002). setup.sh overschrijft CLAUDE.md bewust nooit,
+  # dus een vault die met een oud sjabloon is opgezet houdt de fout paden. Toets
+  # op het letterlijke pad, niet op "VAULT != default": in elke deploytest zijn
+  # die identiek en zou de check nooit vuren.
+  if grep -q '~/KennisBank/' "$VAULT_CLAUDE_MD" 2>/dev/null; then
+    report_warn "vault CLAUDE.md" \
+      "bevat hardcoded ~/KennisBank/-paden; vervang door \"\${KENNISBANK_VAULT:-\$HOME/KennisBank}\" (ADR-0002)"
+  fi
+fi
+
+# 3b. Skill-backups van eerdere upgrades. Een <naam>.pre-<tag>.bak in de map die
+# de client scant, laadt als een tweede skill met dezelfde description -- de
+# agent kan dan de verouderde versie kiezen.
+if [ -d "$SKILLS_DIR" ]; then
+  STALE_SKILL_BAKS="$(find "$SKILLS_DIR" -maxdepth 1 -name '*.bak' 2>/dev/null | wc -l | tr -d ' \r')"
+  if [ "${STALE_SKILL_BAKS:-0}" -gt 0 ] 2>/dev/null; then
+    report_warn "skill backups" \
+      "$STALE_SKILL_BAKS .bak-item(s) in $SKILLS_DIR zijn triggerbaar; verplaats ze naar \$VAULT/.claude/skills.pre-legacy.bak/"
+  else
+    report_pass "skill backups" "geen .bak-skills in $SKILLS_DIR"
+  fi
 fi
 
 # 4. Templates present.
@@ -375,6 +396,39 @@ except Exception:
   fi
 else
   report_warn "activity index" "kb-activity.py ontbreekt of python3 niet beschikbaar"
+fi
+
+# 11c-bis. Graphify-graaf. De map wordt door setup.sh aangemaakt en hierboven al
+# gecontroleerd; het gaat om het BESTAND. De producent is een externe skill, dus
+# afwezigheid is geen fout -- maar wel het verschil tussen drie werkende en drie
+# lege Atlas-lenzen, plus /brug en auto-crosslink.
+GRAPH_JSON="$VAULT/graphify-out/graph.json"
+REBUILD_FLAG="$VAULT/graphify-out/.needs-rebuild"
+if [ -f "$GRAPH_JSON" ]; then
+  if [ -s "$REBUILD_FLAG" ]; then
+    report_info "graphify graph" "aanwezig, maar .needs-rebuild is niet leeg; draai /graphify en verwijder daarna de vlag met rm"
+  else
+    report_pass "graphify graph" "$GRAPH_JSON"
+  fi
+else
+  report_info "graphify graph" "geen graph.json; /brug, auto-crosslink en de graaf-lenzen vallen stil terug (externe graphify-skill vereist)"
+fi
+
+# 11d. Temporele locale-vocabulaire. Toetst de GELADEN tabel, niet de
+# aanwezigheid van het bestand: een aanwezig-maar-onleesbaar activity-locales.json
+# faalt stil open en laat de datumparser met een lege Laag 1 achter.
+if command -v python3 >/dev/null 2>&1 && [ -f "$SCRIPTS_DIR/_activity.py" ]; then
+  LOCALE_N="$(python3 -c 'import sys
+sys.path.insert(0, sys.argv[1])
+import _activity as m
+print(len(m.MONTHS), len(m.WEEKDAYS))' "$SCRIPTS_DIR" 2>/dev/null | tr -d '\r')"
+  LOCALE_MONTHS="$(printf '%s' "$LOCALE_N" | cut -d' ' -f1)"
+  LOCALE_DAYS="$(printf '%s' "$LOCALE_N" | cut -d' ' -f2)"
+  case "$LOCALE_MONTHS" in
+    ''|*[!0-9]*) report_warn "temporal locales" "kon de locale-tabel niet laden; run: bash setup.sh" ;;
+    0) report_warn "temporal locales" "lege vocabulaire (activity-locales.json niet gedeployed?); run: bash setup.sh" ;;
+    *) report_pass "temporal locales" "$LOCALE_MONTHS maandwoorden, $LOCALE_DAYS dagwoorden" ;;
+  esac
 fi
 
 # 12. Ollama and the embedding model (optional).

@@ -48,8 +48,9 @@ MEMORY=$(ls ~/.claude/projects/*/memory/MEMORY.md 2>/dev/null | head -1)
 
 **Layer 2 — KennisBank wiki** (always):
 ```bash
-cat ~/KennisBank/02-wiki/index.md 2>/dev/null | head -100
-grep -ril "[keyword]" ~/KennisBank/02-wiki/ 2>/dev/null | head -10
+VAULT="${KENNISBANK_VAULT:-$HOME/KennisBank}"
+cat "$VAULT/02-wiki/index.md" 2>/dev/null | head -100
+grep -ril "[keyword]" "$VAULT/02-wiki/" 2>/dev/null | head -10
 ```
 
 **Layer 3 — Earlier research** (when relevant):
@@ -61,7 +62,7 @@ Note what is already known. Research fills the gaps, not the whole picture.
 
 ## graphify (optional)
 
-If you use the graphify skill to build a knowledge graph over this vault, the output lands in `~/KennisBank/graphify-out/graph.json`. The `auto-crosslink.py` script reads from it to add backlinks to wiki articles. Without graphify, crosslinking is skipped silently.
+If you use the graphify skill to build a knowledge graph over this vault, the output lands in `$KENNISBANK_VAULT/graphify-out/graph.json` (defaulting to `~/KennisBank` when that variable is unset). The `auto-crosslink.py` script reads from it to add backlinks to wiki articles. Without graphify, crosslinking is skipped silently.
 
 To build the graph: run `/graphify` in a session (requires the graphify skill to be installed in `~/.claude/skills/`).
 
@@ -77,7 +78,7 @@ LEARNINGS_FILE=~/Claude/learnings.md
 This is a text convention, not parsed config: only the path on the uncommented line
 is read. It complements the automatic memory layer (`09-memory/`, which captures and
 recalls lessons on its own) with a human-curated record. Prefer a path inside the
-vault (e.g. `~/KennisBank/06-claude/learnings.md`) if you want the file graphed and
+vault (e.g. `$KENNISBANK_VAULT/06-claude/learnings.md`) if you want the file graphed and
 backed up together with the vault.
 
 ## Language

@@ -7,10 +7,14 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    # Hang-vangnet: de suite draait normaal in ~5-8 min. Een test die op een
-    # echte netwerk-call blijft hangen (zie tests/__init__.py) faalt zo snel
-    # i.p.v. de runner-limiet vol te draaien.
-    timeout-minutes: 15
+    # Hang-vangnet, geen prestatiedoel. Gemeten op een Windows-ontwikkelmachine:
+    # 781 tests in ~20 min (unittest 763 in ~20 min). De eerdere waarde van 15
+    # met een comment die "~5-8 min" beweerde was achterhaald en zou de job op
+    # de klok laten sneuvelen. Linux-runners zijn doorgaans sneller voor deze
+    # subprocess-zware suite; de marge is bewust ruim. Een test die op een echte
+    # netwerk-call blijft hangen (zie tests/__init__.py) faalt hierdoor nog
+    # steeds sneller dan de runner-limiet.
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -21,7 +25,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-dev.txt
 
       - name: Compile all Python scripts
         run: python3 -m py_compile scripts/*.py
@@ -29,8 +33,12 @@ jobs:
       - name: Shell syntax check
         run: bash -n setup.sh scripts/doctor.sh
 
-      - name: Run unittest suite under coverage
-        run: python3 -m coverage run -m unittest discover -s tests -v
+      # pytest, niet `unittest discover`: dat laatste verzamelt losse
+      # test_*-functies op moduleniveau niet, waardoor 21 tests in zes bestanden
+      # nooit hebben gedraaid -- inclusief de doc-guard in
+      # tests/test_integration_documentation.py. Zie TASK-53.
+      - name: Run test suite under coverage
+        run: python3 -m coverage run -m pytest tests -q
 
       - name: Coverage report (gate + job summary)
         if: always()

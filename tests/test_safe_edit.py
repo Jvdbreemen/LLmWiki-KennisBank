@@ -330,5 +330,144 @@ class TestCLI(unittest.TestCase):
             import shutil; shutil.rmtree(str(d), ignore_errors=True)
 
 
+class TestCommitFailureRollback(unittest.TestCase):
+    """De write gaat vooraf aan `git add`/`commit`.
+
+    Faalt de commit (pre-commit hook, onschrijfbare index, lockfile), dan stond
+    het artikel overschreven én staged achter zonder rollback -- en weigerde
+    elke volgende aanroep zonder --force wegens vuile boom, terwijl
+    commands/wiki.md en commands/reconcile.md --force verbieden. Eén mislukte
+    commit blokkeerde daarmee het hele /wiki-schrijfpad.
+    """
+
+    # Hergebruik de harness van TestCLI zonder ervan te erven: erven zou al
+    # zijn tests een tweede keer laten draaien.
+    SCRIPT = TestCLI.SCRIPT
+    make_repo = TestCLI.make_repo
+    _run = TestCLI._run
+    _commit_count = TestCLI._commit_count
+
+    def _break_commit(self, d):
+        hook = d / ".git" / "hooks" / "pre-commit"
+        hook.parent.mkdir(parents=True, exist_ok=True)
+        hook.write_text("#!/bin/sh\necho 'hook says no'\nexit 1\n", encoding="utf-8")
+        hook.chmod(0o755)
+        return hook
+
+    def test_failed_commit_restores_exact_bytes(self):
+        d, art = self.make_repo()
+        try:
+            original = art.read_bytes()
+            self._break_commit(d)
+            result = self._run(d, art, "# A\n\nbody line fixed\n")
+            self.assertEqual(result.returncode, 4, result.stdout + result.stderr)
+            report = json.loads(result.stdout.strip().splitlines()[-1])
+            self.assertEqual(report["action"], "error")
+            self.assertEqual(report["reason"], "git-commit-failed")
+            self.assertTrue(report["rolled_back"])
+            # stdout van de hook moet in detail staan: stderr is hier leeg.
+            self.assertIn("hook says no", report["detail"])
+            self.assertEqual(art.read_bytes(), original,
+                             "artikel niet byte-identiek teruggezet")
+        finally:
+            import shutil; shutil.rmtree(str(d), ignore_errors=True)
+
+    def test_failed_commit_removes_a_newly_created_file(self):
+        d, art = self.make_repo()
+        try:
+            self._break_commit(d)
+            new_file = d / "02-wiki" / "brand-new.md"
+            cmd = [sys.executable, str(self.SCRIPT), str(new_file), "--new", "-"]
+            result = subprocess.run(cmd, input="# New\n\nsmall body\n",
+                                    text=True, capture_output=True)
+            self.assertEqual(result.returncode, 4, result.stdout + result.stderr)
+            self.assertFalse(new_file.exists(),
+                             "nieuw bestand bleef achter na mislukte commit")
+        finally:
+            import shutil; shutil.rmtree(str(d), ignore_errors=True)
+
+    def test_write_path_recovers_once_the_cause_is_gone(self):
+        d, art = self.make_repo()
+        try:
+            hook = self._break_commit(d)
+            first = self._run(d, art, "# A\n\nbody line fixed\n")
+            self.assertEqual(first.returncode, 4, first.stdout + first.stderr)
+            hook.unlink()
+            before_count = self._commit_count(d)
+            second = self._run(d, art, "# A\n\nbody line fixed\n")
+            self.assertEqual(second.returncode, 0,
+                             "vervolgbewerking geblokkeerd door achtergebleven "
+                             "vuile boom: " + second.stdout + second.stderr)
+            self.assertEqual(self._commit_count(d), before_count + 1)
+        finally:
+            import shutil; shutil.rmtree(str(d), ignore_errors=True)
+
+
+class TestDirtyGuardPathHandling(unittest.TestCase):
+    """De dirty-guard laat het doelbestand zelf vuil zijn -- behalve op Windows.
+
+    Het doelpad werd met de OS-scheidingsteken opgebouwd (`02-wiki\\a.md`)
+    terwijl `git status --porcelain` altijd forward slashes emit, dus de
+    zelf-uitzondering matchte nooit en een boom waarin alleen het doel vuil is
+    werd geweigerd met exit 3. Daarnaast quote git niet-ASCII paden tenzij
+    core.quotepath=false, en ging de uitvoer door de platform-default codec.
+    """
+
+    SCRIPT = TestCLI.SCRIPT
+    _run = TestCLI._run
+    _commit_count = TestCLI._commit_count
+
+    def make_repo(self, name="a.md"):
+        d = Path(tempfile.mkdtemp(prefix="kb-se-path-"))
+        subprocess.run(["git", "init", "-q", str(d)], check=True)
+        subprocess.run(["git", "-C", str(d), "config", "user.email", "t@t.t"], check=True)
+        subprocess.run(["git", "-C", str(d), "config", "user.name", "t"], check=True)
+        art = d / "02-wiki" / name
+        art.parent.mkdir(parents=True, exist_ok=True)
+        art.write_text("# A\n\nbody line\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(d), "add", "-A"], check=True)
+        subprocess.run(["git", "-C", str(d), "commit", "-qm", "seed"], check=True)
+        return d, art
+
+    def test_only_target_dirty_is_allowed(self):
+        d, art = self.make_repo()
+        try:
+            art.write_text("# A\n\nbody line uncommitted\n", encoding="utf-8")
+            result = self._run(d, art, "# A\n\nbody line fixed\n")
+            self.assertEqual(result.returncode, 0,
+                             "alleen het doelbestand is vuil, dat hoort te mogen: "
+                             + result.stdout + result.stderr)
+        finally:
+            import shutil; shutil.rmtree(str(d), ignore_errors=True)
+
+    def test_only_target_dirty_is_allowed_with_a_nonascii_name(self):
+        d, art = self.make_repo(name="ideeen-met-trema-ë.md")
+        try:
+            art.write_text("# A\n\nbody line uncommitted\n", encoding="utf-8")
+            result = self._run(d, art, "# A\n\nbody line fixed\n")
+            self.assertEqual(result.returncode, 0,
+                             result.stdout + result.stderr)
+        finally:
+            import shutil; shutil.rmtree(str(d), ignore_errors=True)
+
+    def test_dirty_nonascii_other_file_refuses_with_parseable_json(self):
+        d, art = self.make_repo()
+        try:
+            # Cyrillisch: buiten cp1252, dus dit trof de encoding-fout.
+            other = d / "02-wiki" / "заметка.md"
+            other.write_text("nieuw en ongecommit\n", encoding="utf-8")
+            result = self._run(d, art, "# A\n\nbody line fixed\n")
+            self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+            self.assertTrue(result.stdout.strip(),
+                            "lege stdout: UnicodeEncodeError i.p.v. een rapport")
+            report = json.loads(result.stdout.strip().splitlines()[-1])
+            self.assertEqual(report["reason"], "dirty-tree")
+            self.assertTrue(any("заметка" in line
+                                for line in report["dirty"]),
+                            f"niet-ASCII pad ontbreekt of is gequote: {report['dirty']}")
+        finally:
+            import shutil; shutil.rmtree(str(d), ignore_errors=True)
+
+
 if __name__ == "__main__":
     unittest.main()

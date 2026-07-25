@@ -410,183 +410,6 @@ def _event(
     )
 
 
-def iter_session_events(vault: Path) -> Iterable[ActivityEvent]:
-    root = vault / "01-raw" / "sessies"
-    if not root.is_dir():
-        return
-    for path in sorted(root.glob("*.md")):
-        try:
-            text = _read_text(path)
-        except OSError:
-            continue
-        fm, body = parse_frontmatter(text)
-        fallback, unknown = _dt_from_filename(path)
-        event_dt, time_unknown = _parse_dt(
-            fm.get("date") or fm.get("created") or fm.get("event_time"),
-            default=fallback,
-        )
-        unknown = unknown and time_unknown
-        captured = _file_dt(path)
-        title = str(fm.get("title") or _title_from_markdown(body, path.stem))
-        summary = _first_summary(body)
-        project = str(fm.get("project") or fm.get("repo") or "")
-        yield _event(
-            vault=vault,
-            path=path,
-            source_kind="raw_session",
-            activity_kind="session",
-            title=title,
-            summary=summary,
-            event_time=event_dt,
-            captured_at=captured,
-            unknown_time=unknown,
-            confidence=0.82 if not unknown else 0.45,
-            project=project,
-            repo=project,
-        )
-        for idx, line in enumerate(body.splitlines(), start=1):
-            stripped = _norm_ws(line, 500)
-            if not stripped or not SIGNAL_RE.search(stripped):
-                continue
-            kind = classify_activity(stripped, fallback="session_signal")
-            yield _event(
-                vault=vault,
-                path=path,
-                source_kind="raw_session",
-                activity_kind=kind,
-                title=stripped[:100],
-                summary=stripped,
-                event_time=event_dt,
-                captured_at=captured,
-                unknown_time=unknown,
-                line_no=idx,
-                confidence=0.78 if not unknown else 0.42,
-                project=project,
-                repo=project,
-            )
-
-
-def iter_transcript_events(vault: Path) -> Iterable[ActivityEvent]:
-    root = vault / "01-raw" / "transcripts"
-    if not root.is_dir():
-        return
-    for path in sorted(root.glob("*.jsonl")):
-        captured = _file_dt(path)
-        fallback, unknown = _dt_from_filename(path)
-        emitted = 0
-        try:
-            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
-        except OSError:
-            continue
-        for idx, raw in enumerate(lines, start=1):
-            if emitted >= 80:
-                break
-            try:
-                obj = json.loads(raw)
-            except Exception:
-                continue
-            ts = obj.get("timestamp") or obj.get("created_at") or obj.get("time")
-            event_dt, time_unknown = _parse_dt(ts, default=fallback)
-            message = obj.get("message") or obj.get("text") or obj.get("content") or ""
-            if isinstance(message, dict):
-                message = json.dumps(message, ensure_ascii=False)
-            if isinstance(message, list):
-                message = " ".join(str(x) for x in message)
-            message = _norm_ws(str(message), 900)
-            if not message:
-                continue
-            role = str(obj.get("role") or obj.get("type") or "transcript")
-            if not SIGNAL_RE.search(message) and role.lower() not in {"tool_use", "assistant", "user"}:
-                continue
-            emitted += 1
-            kind = classify_activity(message, fallback="tool_use" if "tool" in role.lower() else "transcript_message")
-            yield _event(
-                vault=vault,
-                path=path,
-                source_kind="transcript",
-                activity_kind=kind,
-                title=message[:100],
-                summary=message,
-                event_time=event_dt,
-                captured_at=captured,
-                unknown_time=unknown and time_unknown,
-                line_no=idx,
-                confidence=0.72 if not (unknown and time_unknown) else 0.4,
-                actor=role,
-                agent=str(obj.get("agent") or ""),
-            )
-
-
-def iter_memory_events(vault: Path) -> Iterable[ActivityEvent]:
-    root = vault / "09-memory"
-    if not root.is_dir():
-        return
-    for path in sorted(root.rglob("*.md")):
-        if "/archive/" in path.as_posix().lower():
-            continue
-        try:
-            text = _read_text(path)
-        except OSError:
-            continue
-        fm, body = parse_frontmatter(text)
-        fallback, unknown = _dt_from_filename(path)
-        event_dt, time_unknown = _parse_dt(
-            fm.get("valid_from") or fm.get("created") or fm.get("captured_at"),
-            default=fallback,
-        )
-        captured, _ = _parse_dt(fm.get("captured_at") or fm.get("created"), default=_file_dt(path))
-        title = str(fm.get("title") or _title_from_markdown(body, path.stem))
-        memory_type = str(fm.get("memory_type") or fm.get("type") or "memory")
-        status = str(fm.get("status") or "")
-        summary = _first_summary(body) or title
-        yield _event(
-            vault=vault,
-            path=path,
-            source_kind="memory",
-            activity_kind="memory_capture",
-            title=title,
-            summary=f"{memory_type} {status} {summary}".strip(),
-            event_time=event_dt,
-            captured_at=captured,
-            unknown_time=unknown and time_unknown,
-            confidence=0.8 if not (unknown and time_unknown) else 0.45,
-            actor=str(fm.get("actor") or "agent"),
-            agent=str(fm.get("agent") or ""),
-            project=str(fm.get("project") or ""),
-            repo=str(fm.get("repo") or ""),
-        )
-
-
-def iter_wiki_events(vault: Path) -> Iterable[ActivityEvent]:
-    root = vault / "02-wiki"
-    if not root.is_dir():
-        return
-    for path in sorted(root.rglob("*.md")):
-        try:
-            text = _read_text(path)
-        except OSError:
-            continue
-        fm, body = parse_frontmatter(text)
-        fallback = _file_dt(path)
-        event_dt, unknown = _parse_dt(fm.get("updated") or fm.get("created") or fm.get("date"), default=fallback)
-        title = str(fm.get("title") or _title_from_markdown(body, path.stem))
-        summary = _first_summary(body) or title
-        yield _event(
-            vault=vault,
-            path=path,
-            source_kind="wiki",
-            activity_kind="wiki_update",
-            title=title,
-            summary=summary,
-            event_time=event_dt,
-            captured_at=fallback,
-            unknown_time=unknown,
-            confidence=0.68 if not unknown else 0.4,
-            project=str(fm.get("project") or ""),
-            repo=str(fm.get("repo") or ""),
-        )
-
-
 def iter_usage_events(vault: Path) -> Iterable[ActivityEvent]:
     db = vault / ".claude" / "kb-usage.db"
     if not db.is_file():
@@ -632,14 +455,6 @@ def iter_usage_events(vault: Path) -> Iterable[ActivityEvent]:
         conn.close()
 
 
-def iter_activity_events(vault: Path) -> Iterable[ActivityEvent]:
-    yield from iter_session_events(vault)
-    yield from iter_transcript_events(vault)
-    yield from iter_memory_events(vault)
-    yield from iter_wiki_events(vault)
-    yield from iter_usage_events(vault)
-
-
 def _source_files(vault: Path) -> list[Path]:
     roots = [
         vault / "01-raw" / "sessies",
@@ -659,13 +474,23 @@ def _source_files(vault: Path) -> list[Path]:
     return sorted(set(files))
 
 
-def _fingerprint(path: Path) -> tuple[int, int, str]:
+def _stat_fingerprint(path: Path) -> tuple[int, int]:
+    """Goedkope vingerafdruk: geen bestand lezen."""
     st = path.stat()
+    return int(st.st_mtime_ns), int(st.st_size)
+
+
+def _sha256(path: Path) -> str:
     h = hashlib.sha256()
     with path.open("rb") as fh:
         for chunk in iter(lambda: fh.read(1024 * 256), b""):
             h.update(chunk)
-    return int(st.st_mtime_ns), int(st.st_size), h.hexdigest()
+    return h.hexdigest()
+
+
+def _fingerprint(path: Path) -> tuple[int, int, str]:
+    mtime_ns, size = _stat_fingerprint(path)
+    return mtime_ns, size, _sha256(path)
 
 
 def connect_activity_db(vault: Path | None = None, *, readonly: bool = False) -> sqlite3.Connection:
@@ -695,45 +520,32 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
     )
     conn.execute("CREATE INDEX IF NOT EXISTS idx_activity_event_time ON activity_events(event_time)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_activity_captured_at ON activity_events(captured_at)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_activity_kind ON activity_events(activity_kind)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_activity_project ON activity_events(project)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_activity_source ON activity_events(source_path)")
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS activity_entities ("
-        "event_id TEXT NOT NULL, entity TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'entity', "
-        "PRIMARY KEY(event_id, entity, kind))"
-    )
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS activity_topics ("
-        "event_id TEXT NOT NULL, topic TEXT NOT NULL, match_route TEXT NOT NULL DEFAULT 'explicit', "
-        "PRIMARY KEY(event_id, topic, match_route))"
-    )
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS activity_artifacts ("
-        "event_id TEXT NOT NULL, artifact TEXT NOT NULL, PRIMARY KEY(event_id, artifact))"
-    )
     conn.execute(
         "CREATE TABLE IF NOT EXISTS source_watermarks ("
         "source_path TEXT PRIMARY KEY, mtime_ns INTEGER NOT NULL, size INTEGER NOT NULL, "
         "sha256 TEXT NOT NULL, indexed_at TEXT NOT NULL)"
     )
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS rollup_cache ("
-        "cache_key TEXT PRIMARY KEY, start TEXT NOT NULL, end_exclusive TEXT NOT NULL, "
-        "topic TEXT NOT NULL, source_signature TEXT NOT NULL, body_json TEXT NOT NULL, "
-        "created_at TEXT NOT NULL)"
-    )
-    conn.execute("CREATE VIRTUAL TABLE IF NOT EXISTS activity_fts USING fts5(id UNINDEXED, title, summary, entities, topics)")
+    # Write-only tabellen uit een eerdere opzet: ze werden bij elke bouw gevuld
+    # en door geen enkele query gelezen (topic-filtering doet een substring-
+    # vergelijking op search_blob, in Python). activity_fts was de duurste: de
+    # DELETE gaat over een UNINDEXED kolom, dus een full scan per event, twee
+    # keer per event -- kwadratisch op een volledige rebuild.
+    #
+    # Expliciet droppen, niet alleen de CREATE weghalen: de incrementele bouw
+    # hergebruikt het bestaande bestand (alleen --full unlinkt), dus zonder deze
+    # DROP blijven de rijen eeuwig wees in elke bestaande installatie.
+    # SCHEMA_VERSION bewust NIET gebumpt: doctor.sh en de statusrapportage zetten
+    # dan elke gedeployde vault op WARN tot de gebruiker handmatig --full draait.
+    for _legacy in ("activity_entities", "activity_topics", "activity_artifacts", "rollup_cache"):
+        conn.execute(f"DROP TABLE IF EXISTS {_legacy}")
+    conn.execute("DROP TABLE IF EXISTS activity_fts")
     conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', ?)", (SCHEMA_VERSION,))
     conn.commit()
 
 
 def _delete_event(conn: sqlite3.Connection, event_id: str) -> None:
     conn.execute("DELETE FROM activity_events WHERE id=?", (event_id,))
-    conn.execute("DELETE FROM activity_fts WHERE id=?", (event_id,))
-    conn.execute("DELETE FROM activity_entities WHERE event_id=?", (event_id,))
-    conn.execute("DELETE FROM activity_topics WHERE event_id=?", (event_id,))
-    conn.execute("DELETE FROM activity_artifacts WHERE event_id=?", (event_id,))
 
 
 def upsert_event(conn: sqlite3.Connection, event: ActivityEvent) -> None:
@@ -768,31 +580,8 @@ def upsert_event(conn: sqlite3.Connection, event: ActivityEvent) -> None:
         f"INSERT INTO activity_events({', '.join(cols)}) VALUES ({', '.join('?' for _ in cols)})",
         tuple(row[c] for c in cols),
     )
-    conn.execute(
-        "INSERT INTO activity_fts(id, title, summary, entities, topics) VALUES (?, ?, ?, ?, ?)",
-        (
-            event.id,
-            event.title,
-            event.summary,
-            " ".join(event.entities),
-            " ".join(event.topic_tags),
-        ),
-    )
-    for entity in event.entities:
-        conn.execute(
-            "INSERT OR IGNORE INTO activity_entities(event_id, entity, kind) VALUES (?, ?, ?)",
-            (event.id, entity, "entity"),
-        )
-    for topic in event.topic_tags:
-        conn.execute(
-            "INSERT OR IGNORE INTO activity_topics(event_id, topic, match_route) VALUES (?, ?, ?)",
-            (event.id, topic, "explicit"),
-        )
-    for artifact in event.artifacts:
-        conn.execute(
-            "INSERT OR IGNORE INTO activity_artifacts(event_id, artifact) VALUES (?, ?)",
-            (event.id, artifact),
-        )
+    # Entiteiten, topics en artefacten zitten al in activity_events als JSON-
+    # kolommen en in search_blob; de losse tabellen werden nooit gelezen.
 
 
 def _events_for_source(vault: Path, source: Path) -> list[ActivityEvent]:
@@ -1023,14 +812,31 @@ def build_activity_index(
 
         for idx, source in enumerate(sources, start=1):
             rel = _rel(root, source)
-            mtime_ns, size, sha = _fingerprint(source)
             old = conn.execute(
                 "SELECT mtime_ns, size, sha256 FROM source_watermarks WHERE source_path=?",
                 (rel,),
             ).fetchone()
-            unchanged = old and int(old["mtime_ns"]) == mtime_ns and int(old["size"]) == size and old["sha256"] == sha
+            # Fastpath: eerst stat, pas hashen als (mtime, grootte) afwijkt. De
+            # hash draaide voorheen over ELK bronbestand voordat er iets werd
+            # vergeleken -- gemeten 1,67 s warm en 51,75 s koud over 2220
+            # bestanden / 376 MB, voor een bouw die meestal niets te doen heeft.
+            mtime_ns, size = _stat_fingerprint(source)
+            sha = None
+            if old is not None and int(old["mtime_ns"]) == mtime_ns and int(old["size"]) == size:
+                sha = old["sha256"]          # identiek volgens stat: niet lezen
+            else:
+                sha = _sha256(source)
+            unchanged = old is not None and old["sha256"] == sha
             if unchanged and not full:
                 stats["skipped_sources"] += 1
+                # Alleen de mtime is verschoven (touch, herschreven met dezelfde
+                # inhoud, kopie). Watermerk verversen, anders hasht de volgende
+                # bouw dit bestand opnieuw.
+                if int(old["mtime_ns"]) != mtime_ns or int(old["size"]) != size:
+                    conn.execute(
+                        "UPDATE source_watermarks SET mtime_ns=?, size=? WHERE source_path=?",
+                        (mtime_ns, size, rel),
+                    )
             else:
                 stats["changed_sources"] += 1
                 ids = [r[0] for r in conn.execute("SELECT id FROM activity_events WHERE source_path=?", (rel,)).fetchall()]
@@ -1056,7 +862,6 @@ def build_activity_index(
                     flush=True,
                 )
                 last_report = now
-        conn.execute("DELETE FROM rollup_cache WHERE source_signature != ?", (_source_signature(conn),))
         conn.commit()
         stats["elapsed_seconds"] = round(time.monotonic() - start, 3)
         stats["total_events"] = conn.execute("SELECT count(*) FROM activity_events").fetchone()[0]
@@ -1122,6 +927,11 @@ def _alt(words: Iterable[str]) -> str:
     """Build a regex alternation, longest first so full forms beat their own
     abbreviations/prefixes; ties broken alphabetically for determinism."""
     uniq = sorted({w for w in words if w}, key=lambda w: (-len(w), w))
+    if not uniq:
+        # Een lege alternatie compileert tot (?:) en matcht de LEGE STRING op
+        # elke woordgrens -> elke tak van de parser vuurt en levert een
+        # zelfverzekerd fout bereik. Faal liever stil naar de volgende laag.
+        return "(?!)"
     return "|".join(re.escape(w) for w in uniq)
 
 
@@ -2022,51 +1832,14 @@ def _summary_counts(events: list[dict]) -> dict[str, int]:
     return counts
 
 
-def _source_signature_for_period(vault: Path, start: str, end: str, topic: str) -> str:
-    try:
-        conn = connect_activity_db(vault, readonly=True)
-        rows = conn.execute(
-            "SELECT id, event_time, source_ref FROM activity_events WHERE event_time >= ? AND event_time < ? ORDER BY id",
-            (start, end),
-        ).fetchall()
-        conn.close()
-    except sqlite3.Error:
-        rows = []
-    return hashlib.sha256(json.dumps([tuple(r) for r in rows] + [topic], sort_keys=True).encode("utf-8")).hexdigest()
-
-
-def _rollup_cache_get(vault: Path, key: str, signature: str) -> dict | None:
-    try:
-        conn = connect_activity_db(vault, readonly=True)
-        row = conn.execute("SELECT body_json FROM rollup_cache WHERE cache_key=? AND source_signature=?", (key, signature)).fetchone()
-        conn.close()
-        return json.loads(row[0]) if row else None
-    except Exception:
-        return None
-
-
-def _rollup_cache_put(vault: Path, key: str, period: TemporalRange, topic: str, signature: str, body: dict) -> None:
-    try:
-        conn = connect_activity_db(vault)
-        ensure_schema(conn)
-        conn.execute(
-            "INSERT OR REPLACE INTO rollup_cache(cache_key, start, end_exclusive, topic, source_signature, body_json, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (key, period.start, period.end_exclusive, topic, signature, json.dumps(body, ensure_ascii=False), _dt_iso(datetime.now(LOCAL_TZ))),
-        )
-        conn.commit()
-        conn.close()
-    except Exception:
-        pass
-
-
 def deterministic_rollup(vault: Path, period: TemporalRange, events: list[dict], topic: str = "") -> dict:
-    signature = _source_signature_for_period(vault, period.start, period.end_exclusive, topic)
-    key = stable_id("rollup", period.start, period.end_exclusive, topic)
-    cached = _rollup_cache_get(vault, key, signature)
-    if cached:
-        cached["cache"] = "hit"
-        return cached
+    # Geen cache meer. De vorige opzet was netto verlies: gemeten bespaarde hij
+    # 0,88 ms body-berekening en kostte hij 34 ms per hit (30 ms daarvan een
+    # tweede SQLite-connectie). Erger, de sleutel bevatte de event-limiet noch
+    # het projectfilter, dus een weeklog met een lage limiet besmette een
+    # daaropvolgende what_did_i_do over dezelfde periode met een te kleine body.
+    # Weggehaald in plaats van gerepareerd: een verwijderde cache kan niet
+    # opnieuw verkeerd invalideren.
     decisions = [e for e in events if e.get("activity_kind") == "decision" or e.get("decisions")]
     releases = [e for e in events if e.get("activity_kind") in {"release", "commit", "task_change"}]
     open_loops = [
@@ -2089,9 +1862,8 @@ def deterministic_rollup(vault: Path, period: TemporalRange, events: list[dict],
         "open_loops": open_loops[:12],
         "source_refs": _dedupe(e.get("source_ref", "") for e in events)[:50],
         "generated": "deterministic",
-        "cache": "miss",
+        "cache": "none",
     }
-    _rollup_cache_put(vault, key, period, topic, signature, body)
     return body
 
 

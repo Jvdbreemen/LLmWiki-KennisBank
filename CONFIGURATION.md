@@ -215,7 +215,7 @@ override the config file; both override the built-in defaults.
 
 ### Index builder (`scripts/build-embed-index.py`, coordinated SessionStart)
 
-- **Effect**: warms/refreshes the wiki embedding cache once per session, off the per-prompt path, and warms the local model. Incremental (only changed files or a model switch trigger real embed calls); prunes vanished files; clears the graphify `.needs-rebuild` flag. Run by `kb-session-start.py`.
+- **Effect**: warms/refreshes the wiki embedding cache once per session, off the per-prompt path, and warms the local model. Incremental (only changed files or a model switch trigger real embed calls); prunes vanished files. Run by `kb-session-start.py`. It does **not** touch the graphify `.needs-rebuild` flag: that signal must survive until the graph is actually rebuilt.
 
 ### Geheugen-index (`scripts/build-kb-index.py`, coordinated SessionStart)
 
@@ -230,9 +230,12 @@ override the config file; both override the built-in defaults.
 - **Design**: see
   `docs/superpowers/specs/2026-07-08-temporal-activity-recall-design.md` for the
   research comparison and schema rationale.
-- **Storage**: local SQLite only. Tables include `activity_events`,
-  `activity_entities`, `activity_topics`, `activity_artifacts`,
-  `source_watermarks`, `rollup_cache`, and FTS5 table `activity_fts`.
+- **Storage**: local SQLite only. Tables: `activity_events` (entities, topics
+  and artifacts live in its JSON columns and in `search_blob`),
+  `source_watermarks` and `rollup_cache`. Earlier versions also carried
+  `activity_entities`, `activity_topics`, `activity_artifacts` and an FTS5 table
+  `activity_fts`; nothing ever read them, so they are dropped on the next index
+  build. Topic matching runs as a substring comparison over `search_blob`.
 - **Time model**: `event_time` is when the work happened; `captured_at` is when
   the source was captured/modified. Local vault dates use `Europe/Amsterdam`.
 - **Parser (3 layers)**: date and period parsing is resolved in three layers,
@@ -597,7 +600,7 @@ The five env vars below control the behavior of the vault-onderhoud scripts
 
 - **Default**: `$HOME/KennisBank/graphify-out/.needs-rebuild`
 - **Where set**: `commands/sessielog.md` Step 3.
-- **Read by**: external graphify skill (when run, it should consume and clear this flag).
+- **Read by**: `commands/sessiestart.md` (staleness line) and the Atlas sidecar. The external graphify skill does **not** know about this flag — it does its own change detection — so clearing it after a rebuild is a manual step.
 - **Effect**: signals that wiki content changed and the graph is out of date. The flag is written as plain text containing changed file paths.
 - **To change**: edit Step 3 of `commands/sessielog.md`.
 
@@ -716,7 +719,7 @@ De achtergrond-automatieken zijn individueel aan/uit te zetten via
   worden één beknopt rapport. Een client kan nog één generieke lifecycle-regel
   tonen; die wordt door de client zelf gerenderd.
 - **Defaults bij ontbreken**: ontbreekt het bestand of een key, dan geldt de default-kolom hierboven. `setup` en `upgrade` schrijven expliciete waarden.
-- **Interactie**: met `embed_index` uit wordt `graphify-out/.needs-rebuild` niet bij SessionStart geleegd; dat is benign, de flag wordt door de graphify-rebuild zelf geleegd.
+- **Interactie**: geen. `embed_index` raakt `graphify-out/.needs-rebuild` niet meer; die vlag blijft staan tot je hem na een graaf-rebuild zelf verwijdert (`rm`, niet leegmaken — zie TROUBLESHOOTING 7.2).
 
 ---
 

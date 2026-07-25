@@ -120,7 +120,7 @@ Interactive setup asks which agent environments to install unless `--yes` or
 Use `--skip-model-check` only for CI/offline tests or when the user explicitly
 accepts that model validation is skipped.
 
-### Copilot integration (opt-in, hookless by construction)
+### Copilot integration (opt-in, hook-driven since ADR-006)
 
 `--agents copilot` targets the standalone `@github/copilot` CLI (invoked
 `copilot`, v1.0.70+), not the `gh copilot` extension or VS Code agent mode. It is
@@ -233,7 +233,9 @@ python3 "<vault>/.claude/scripts/agent-status.py" --vault "<vault>"
 
 Expected: a `kennisbank` server visible to Copilot (login-free), and
 `_copilot.py validate` reporting `OK`. `agent-status.py` is the multi-agent
-rollup. Validation also expects no KennisBank lifecycle hooks. When Copilot is
+rollup. Validation requires each KennisBank lifecycle hook to appear exactly
+once in `~/.copilot/hooks/kennisbank.json`; every command ends in `; exit 0`
+because exit code 2 means DENY for this client. When Copilot is
 not selected, `doctor.sh` reports
 `copilot integration: not configured` as INFO (0 FAIL) — that is expected, not a
 blocker.

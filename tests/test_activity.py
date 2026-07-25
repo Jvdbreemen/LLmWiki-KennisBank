@@ -155,7 +155,7 @@ class ActivityIndexTest(ActivityFixtureMixin, unittest.TestCase):
         self.assertEqual(len(r["events"]), 1)
         self.assertIn("Codex", r["events"][0]["title"] + r["events"][0]["summary"])
 
-    def test_weeklog_rollup_has_sources_and_cache(self):
+    def test_weeklog_rollup_is_deterministic_and_self_consistent(self):
         vault = self.make_vault()
         _activity.build_activity_index(vault, full=True, verbose=False)
         now = datetime(2026, 7, 8, 12, 0, tzinfo=_activity.LOCAL_TZ)
@@ -163,7 +163,29 @@ class ActivityIndexTest(ActivityFixtureMixin, unittest.TestCase):
         second = _activity.weeklog("vorige week", vault=vault, now=now)
         self.assertGreaterEqual(first["rollup"]["event_count"], 1)
         self.assertTrue(first["rollup"]["source_refs"])
-        self.assertEqual(second["rollup"]["cache"], "hit")
+        # Het gerapporteerde aantal moet bij de meegeleverde events horen. De
+        # oude cache-sleutel bevatte de event-limiet niet, waardoor een weeklog
+        # met een lage limiet een daaropvolgende bevraging over dezelfde periode
+        # een te kleine body gaf -- en dus een te laag event_count.
+        self.assertEqual(first["rollup"]["event_count"], len(first["events"]))
+        self.assertEqual(second["rollup"], first["rollup"],
+                         "twee identieke bevragingen moeten hetzelfde opleveren")
+
+    def test_a_narrow_query_does_not_poison_a_wider_one(self):
+        """Regressie: kruisbesmetting tussen twee periodes met dezelfde grenzen.
+
+        Met de cache erin vulde de eerste (smalle) bevraging de sleutel, en
+        kreeg de tweede (brede) diezelfde te kleine body terug.
+        """
+        vault = self.make_vault()
+        _activity.build_activity_index(vault, full=True, verbose=False)
+        now = datetime(2026, 7, 8, 12, 0, tzinfo=_activity.LOCAL_TZ)
+        narrow = _activity.weeklog("vorige week", vault=vault, now=now, max_events=1)
+        wide = _activity.weeklog("vorige week", vault=vault, now=now)
+        self.assertEqual(narrow["rollup"]["event_count"], len(narrow["events"]))
+        self.assertEqual(wide["rollup"]["event_count"], len(wide["events"]))
+        self.assertGreaterEqual(wide["rollup"]["event_count"],
+                                narrow["rollup"]["event_count"])
 
     def test_eval_harness_negative_and_positive_controls(self):
         vault = self.make_vault()
@@ -194,6 +216,150 @@ class ActivityIndexTest(ActivityFixtureMixin, unittest.TestCase):
         )
         data = json.loads(out.stdout)
         self.assertGreaterEqual(len(data["events"]), 1)
+
+
+class UsageSourceExtractorTest(unittest.TestCase):
+    """Guard rond `iter_usage_events` -- de vijfde bron, en een valstrik.
+
+    Hij stond visueel middenin een blok van vijf `iter_*_events`-functies waarvan
+    de andere vier nul aanroepers hadden. Deze leeft wel: `_events_for_source`
+    routeert `.claude/kb-usage.db` ernaartoe. Een opruiming die "de hele familie"
+    weghaalt sloopt hem, en tot deze test dekte niets dat pad.
+    """
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="kb-usage-src-"))
+        self.vault = self.tmp / "Kluis"
+        db = self.vault / ".claude" / "kb-usage.db"
+        db.parent.mkdir(parents=True, exist_ok=True)
+        import sqlite3
+        conn = sqlite3.connect(db)
+        conn.execute("CREATE TABLE usage (stem TEXT PRIMARY KEY, path TEXT, used_at TEXT)")
+        conn.execute("INSERT INTO usage VALUES (?,?,?)",
+                     ("hook-gedreven-retrieval", "02-wiki/hook-gedreven-retrieval.md",
+                      "2026-07-03T10:00:00"))
+        conn.commit()
+        conn.close()
+        self.db = db
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_usage_db_is_routed_to_the_usage_extractor(self):
+        events = _activity._events_for_source(self.vault, self.db)
+        self.assertTrue(events, "kb-usage.db leverde geen events op")
+        self.assertEqual({e.source_kind for e in events}, {"usage"})
+        self.assertTrue(any("hook-gedreven-retrieval" in e.summary for e in events))
+
+    def test_usage_db_is_listed_as_a_source(self):
+        self.assertIn(self.db.resolve(),
+                      [p.resolve() for p in _activity._source_files(self.vault)])
+
+
+class FingerprintFastpathTest(ActivityFixtureMixin, unittest.TestCase):
+    """De sha256 draaide over ELK bronbestand vóór de watermerkvergelijking.
+
+    Gemeten op de vault van de auteur: 2220 bestanden, 376 MB, 1,67 s warm en
+    51,75 s koud -- voor een bouw die meestal niets te doen heeft.
+    """
+
+    def _count_hashes(self, fn, *args, **kwargs):
+        calls = []
+        real = _activity._sha256
+
+        def counting(path):
+            calls.append(path)
+            return real(path)
+
+        _activity._sha256 = counting
+        try:
+            fn(*args, **kwargs)
+        finally:
+            _activity._sha256 = real
+        return calls
+
+    def test_clean_incremental_build_hashes_nothing(self):
+        vault = self.make_vault()
+        _activity.build_activity_index(vault, full=True, verbose=False)
+        calls = self._count_hashes(_activity.build_activity_index, vault, verbose=False)
+        self.assertEqual(calls, [],
+                         f"onveranderde bronnen werden alsnog gehasht: {calls}")
+
+    def test_touched_but_identical_source_is_not_reparsed(self):
+        vault = self.make_vault()
+        _activity.build_activity_index(vault, full=True, verbose=False)
+        src = next((vault / "01-raw" / "sessies").glob("*.md"))
+        import os as _os
+        st = src.stat()
+        _os.utime(src, ns=(st.st_atime_ns, st.st_mtime_ns + 10_000_000_000))
+
+        stats = _activity.build_activity_index(vault, verbose=False)
+        self.assertEqual(stats["changed_sources"], 0,
+                         "identieke inhoud met nieuwe mtime werd opnieuw geparsed")
+        # Watermerk moet zijn bijgewerkt, anders hasht elke volgende bouw opnieuw.
+        calls = self._count_hashes(_activity.build_activity_index, vault, verbose=False)
+        self.assertEqual(calls, [], "watermerk niet ververst na een touch")
+
+    def test_full_rebuild_still_reindexes_everything(self):
+        vault = self.make_vault()
+        first = _activity.build_activity_index(vault, full=True, verbose=False)
+        second = _activity.build_activity_index(vault, full=True, verbose=False)
+        self.assertEqual(second["skipped_sources"], 0,
+                         "--full mag niets overslaan; fastpath lekt")
+        self.assertEqual(second["changed_sources"], first["changed_sources"])
+
+
+class LegacyTableMigrationTest(unittest.TestCase):
+    """De vier write-only tabellen moeten ook uit BESTAANDE databases verdwijnen.
+
+    De incrementele bouw hergebruikt het databasebestand; alleen --full unlinkt.
+    Zonder een expliciete DROP in ensure_schema blijven de rijen dus eeuwig wees
+    in elke gedeployde vault -- 23,7 MB van 57,7 MB op de vault van de auteur.
+    """
+
+    LEGACY = ("activity_entities", "activity_topics", "activity_artifacts", "activity_fts")
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="kb-legacy-"))
+        self.db = self.tmp / "kb-activity.db"
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _tables(self, conn):
+        return {r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type IN ('table','view')")}
+
+    def test_existing_database_loses_the_legacy_tables(self):
+        import sqlite3
+        conn = sqlite3.connect(self.db)
+        conn.execute("CREATE TABLE activity_entities (event_id TEXT, entity TEXT, kind TEXT)")
+        conn.execute("CREATE TABLE activity_topics (event_id TEXT, topic TEXT, match_route TEXT)")
+        conn.execute("CREATE TABLE activity_artifacts (event_id TEXT, artifact TEXT)")
+        conn.execute("CREATE VIRTUAL TABLE activity_fts USING fts5(id UNINDEXED, title, summary, entities, topics)")
+        conn.execute("INSERT INTO activity_topics VALUES ('e1','kennisbank','explicit')")
+        conn.commit()
+        self.assertTrue(set(self.LEGACY) <= self._tables(conn), "fixture niet opgezet")
+
+        _activity.ensure_schema(conn)
+
+        remaining = self._tables(conn) & set(self.LEGACY)
+        self.assertEqual(remaining, set(),
+                         f"legacy-tabellen blijven achter in een bestaande db: {remaining}")
+        conn.close()
+
+    def test_schema_version_is_not_bumped(self):
+        # Een bump zet doctor.sh en de statusrapportage op WARN voor elke
+        # gedeployde vault tot de gebruiker handmatig --full draait.
+        self.assertEqual(_activity.SCHEMA_VERSION, "1")
+
+    def test_fresh_database_has_no_legacy_tables(self):
+        import sqlite3
+        conn = sqlite3.connect(self.db)
+        _activity.ensure_schema(conn)
+        self.assertEqual(self._tables(conn) & set(self.LEGACY), set())
+        self.assertIn("activity_events", self._tables(conn))
+        conn.close()
 
 
 if __name__ == "__main__":

@@ -51,9 +51,6 @@ def api_key_env_for(provider: str) -> str:
     if env and env.strip():
         return env.strip()
     cfg = _config()
-    models = cfg.get("api_key_envs")
-    if isinstance(models, dict) and models.get(provider):
-        return str(models[provider])
     if cfg.get("api_key_env"):
         return str(cfg["api_key_env"])
     if provider == "openrouter":

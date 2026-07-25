@@ -1,5 +1,5 @@
 ---
-id: TASK-35
+id: TASK-56
 title: Coordinate KennisBank session lifecycle across clients
 status: In Progress
 assignee:
