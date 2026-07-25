@@ -93,9 +93,9 @@ De ontwerpvoorkeur is overal dezelfde: **deterministisch waar mogelijk, LLM alle
 
 ### Nieuw in v0.18.0
 
-- **Sub-seconde retrieval op de eerste prompt.** De `kb-retrieve`-hook timet niet
+- **Geen cold-model-timeout op de eerste prompt.** De `kb-retrieve`-hook timet niet
   meer af op een cold embedmodel: hij embed één keer per prompt, begrenst de
-  hot-path-embed tot sub-seconde, en self-healt door het model bij session-start
+  hot-path-embed met een expliciete timeout (2,0s), en self-healt door het model bij session-start
   voor te warmen en bij een miss een detached warm te vuren. Volledig lokaal en
   fail-open.
 - **Upstream-drift-waarschuwing.** Een session-start-notificatie waarschuwt als
@@ -287,7 +287,7 @@ Lees na installatie [POST-INSTALL.md](POST-INSTALL.md) voor de eerste-sessie-wal
 Claude Code, Codex en Copilot krijgen elk één SessionStart-coördinator en één
 exit-coördinator plus hun prompt/tool-hooks. De tabel noemt coordinator-children
 als jobs, niet als los geregistreerde handlers. OpenCode gebruikt MCP plus een
-globale plugin.
+globale plugin onder `~/.config/opencode/plugins/`.
 
 | Hook | Script | Wat het doet |
 |------|--------|--------------|
@@ -403,7 +403,7 @@ lokale LibreOffice-/ImageMagick-tooling vereisen, zoals LiteParse rapporteert.
 
 ## KennisBank gebruiken vanuit andere agents (Codex, OpenCode, Copilot, ChatGPT)
 
-De kluis is niet alleen voor Claude Code. `scripts/kb-mcp.py` is een lokale **MCP-server** die drie primitieven blootstelt - `recall` (zoek geheugen + wiki), `capture` (sla een nieuwe herinnering op), en een `instructions`-resource (een duwtje om te trekken vóór je extern zoekt). MCP is het ene protocol dat elke moderne agent al spreekt, dus elke client die **op deze machine** draait kan de kluis gebruiken.
+De kluis is niet alleen voor Claude Code. `scripts/kb-mcp.py` is een lokale **MCP-server** die zeven primitieven blootstelt: zes tools - `recall` (zoek geheugen + wiki), `capture` (sla een nieuwe herinnering op), en de temporele set `what_did_i_do`, `timeline`, `weeklog`, `topic_timeline` - plus een `instructions`-resource (een duwtje om te trekken vóór je extern zoekt). MCP is het ene protocol dat elke moderne agent al spreekt, dus elke client die **op deze machine** draait kan de kluis gebruiken.
 
 **De harde grens: alleen lokaal.** De MCP-server bindt niets aan het netwerk
 (stdio-transport); de kluis verlaat nooit je machine. Claude Code, Codex,
@@ -420,6 +420,8 @@ het internet te tunnelen - het is de handmatige brug hieronder.
   temporele commando's en de handgeschreven KennisBank-skills
 - `~/.codex/prompts/*.md`-aliassen, aangeroepen als `/prompts:sessielog`, `/prompts:sessiestart`, `/prompts:kennisbank-upgrade`, enz.
 - `~/.codex/AGENTS.md` met het actieve kluispad
+- `~/.codex/hooks.json` met één SessionStart- en één exit-coördinator plus
+  fail-open prompt/tool-hooks
 - `~/.codex/config.toml` MCP-server `kennisbank`
 
 Gebruik `$sessiestart` en `$sessielog` als native Codex-skills. Codex biedt geen

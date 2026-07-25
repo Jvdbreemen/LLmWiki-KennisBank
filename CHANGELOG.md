@@ -70,7 +70,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   memory re-embed), stacking two long waits past the harness timeout and
   discarding the injected context. The hook now embeds exactly once per prompt
   (the query vector is computed in `main()` and passed to both the wiki and
-  memory blocks), bounds the hot-path embed to a sub-second default timeout
+  memory blocks), bounds the hot-path embed to a default timeout
   (`KB_RETRIEVE_TIMEOUT`, default 5s), and on a miss injects nothing while
   firing a detached warm so the next prompt is hot. Fully local and fail-open.
 

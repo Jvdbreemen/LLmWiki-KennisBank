@@ -90,9 +90,9 @@ The design bias throughout: **deterministic where possible, LLM only where it ad
 
 ### New in v0.18.0
 
-- **Sub-second retrieval on the first prompt.** The `kb-retrieve` hook no longer
+- **No cold-model timeout on the first prompt.** The `kb-retrieve` hook no longer
   times out on a cold embedding model: it embeds once per prompt, bounds the
-  hot-path embed to a sub-second default, and self-heals by pre-warming the
+  hot-path embed to an explicit timeout (2.0s), and self-heals by pre-warming the
   model at session start and firing a detached warm on a miss. Fully local and
   fail-open.
 - **Upstream-drift warning.** A session-start notification warns when your git
@@ -393,7 +393,7 @@ reports.
 
 ## Using KennisBank from other agents (Codex, OpenCode, Copilot, ChatGPT)
 
-The vault is not Claude-Code-only. `scripts/kb-mcp.py` is a local **MCP server** exposing three primitives - `recall` (search memory + wiki), `capture` (save a new memory), and an `instructions` resource (a nudge to pull before searching externally). MCP is the one protocol every modern agent already speaks, so any client running **on this machine** can use the vault.
+The vault is not Claude-Code-only. `scripts/kb-mcp.py` is a local **MCP server** exposing seven primitives: six tools - `recall` (search memory + wiki), `capture` (save a new memory), and the temporal set `what_did_i_do`, `timeline`, `weeklog`, `topic_timeline` - plus an `instructions` resource (a nudge to pull before searching externally). MCP is the one protocol every modern agent already speaks, so any client running **on this machine** can use the vault.
 
 **The hard boundary: local only.** The MCP server binds nothing to the network
 (stdio transport); the vault never leaves your machine. Claude Code, Codex,
