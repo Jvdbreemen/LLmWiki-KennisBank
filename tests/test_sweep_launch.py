@@ -50,14 +50,18 @@ class SweepLaunchTest(unittest.TestCase):
         self.m.main()
         self.assertEqual(spawned, [])  # niets gespawnd als gated off
 
-    def test_main_spawns_when_enabled(self):
+    def test_main_spawns_only_the_sweep(self):
+        """De index wordt hier NIET meer gespawnd.
+
+        Twee losgekoppelde processen die allebei kb-index.db schrijven, zonder
+        dat iets de "sweep eerst, dan index"-ordening afdwong -- die ordening
+        stond alleen in een comment. index-launch.py draait beide sequentieel
+        achter één lock; zie TASK-63.
+        """
         spawned = []
         self.m._spawn_detached = lambda script, *a: spawned.append(Path(script).name)
         self.m.main()
-        # sweep eerst, dan index
-        self.assertIn("memory-sweep.py", spawned)
-        self.assertIn("build-kb-index.py", spawned)
-        self.assertLess(spawned.index("memory-sweep.py"), spawned.index("build-kb-index.py"))
+        self.assertEqual(spawned, ["memory-sweep.py"])
 
     def test_stale_lock_is_reclaimed(self):
         """IMPORTANT 2: een stale lock (backdated mtime) moet door acquire_lock worden hergebruikt."""

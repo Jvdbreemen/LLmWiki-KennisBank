@@ -46,11 +46,13 @@ class Result:
     error: str = ""
 
 
+# Indexonderhoud draait NIET meer blokkerend. index-launch.py neemt een lock,
+# spawnt een losgekoppelde worker die de bouwers plus de geheugensweep
+# sequentieel afwerkt, en keert direct terug. Daarmee valt het blokkerende deel
+# van SessionStart terug van ~210s (Claude/Codex) en ~300s (Copilot) naar de
+# paar seconden die de launcher zelf kost. Zie TASK-63.
 MAINTENANCE = (
-    Job("build-embed-index.py"),
-    Job("build-kb-index.py"),
-    Job("build-activity-index.py"),
-    Job("sweep-launch.py", timeout=30),
+    Job("index-launch.py", timeout=15),
 )
 NOTIFICATIONS = (
     Job("memory-notify.py", timeout=30),
@@ -136,7 +138,8 @@ def relevant_report(result: Result) -> str:
     elif result.script == "build-activity-index.py":
         relevant = relevant or _changed_count(out, r"(\d+)\s+changed") > 0
         relevant = relevant or _changed_count(out, r"(\d+)\s+failed") > 0
-    elif result.script in {"import-copilot.py", "kb-copilot-capture.py", "sweep-launch.py"}:
+    elif result.script in {"import-copilot.py", "kb-copilot-capture.py",
+                           "sweep-launch.py", "index-launch.py"}:
         # These are side-effect jobs; successful routine output is not context.
         relevant = relevant or result.returncode != 0
     else:
