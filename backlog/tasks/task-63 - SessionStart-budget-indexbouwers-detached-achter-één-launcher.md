@@ -1,9 +1,10 @@
 ---
 id: TASK-63
 title: 'SessionStart-budget: indexbouwers detached achter één launcher'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-07-25 05:54'
+updated_date: '2026-07-25 07:35'
 labels:
   - performance
   - hooks

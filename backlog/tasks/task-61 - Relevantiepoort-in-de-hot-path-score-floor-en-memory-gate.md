@@ -1,9 +1,10 @@
 ---
 id: TASK-61
 title: 'Relevantiepoort in de hot path: score-floor en memory-gate'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-07-25 05:54'
+updated_date: '2026-07-25 07:35'
 labels:
   - hot-path
   - retrieval
