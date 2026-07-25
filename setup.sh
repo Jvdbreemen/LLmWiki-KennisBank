@@ -180,8 +180,10 @@ mkdir -p "$VAULT/graphify-out"
 # Research output dir
 mkdir -p "$RESEARCH"
 
-# Scripts (Python helpers + shell tools like doctor.sh)
-for f in scripts/*.py scripts/*.sh; do
+# Scripts (Python helpers, shell tools like doctor.sh, en data-bestanden zoals
+# activity-locales.json -- zonder die JSON draait de datumparser met een lege
+# vocabulaire en collapst elke temporele vraag naar hetzelfde bereik).
+for f in scripts/*.py scripts/*.sh scripts/*.json; do
   copy_force "$f" "$VAULT/.claude/scripts/$(basename "$f")"
 done
 chmod +x "$VAULT/.claude/scripts/"*.py "$VAULT/.claude/scripts/"*.sh

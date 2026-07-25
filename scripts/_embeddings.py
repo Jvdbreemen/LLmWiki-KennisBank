@@ -236,10 +236,23 @@ def load_cache() -> dict:
 
 
 def save_cache(cache: dict) -> None:
+    """Atomisch wegschrijven via een procesuniek tijdelijk bestand.
+
+    SessionStart start meerdere indexbouwers die alledrie kunnen schrijven. Met
+    een gedeeld tmp-pad schreven twee processen door elkaar heen en won de
+    laatste -- een lost update. Bewust GEEN merge van de twee caches: een merge
+    kan geen verwijdering uitdrukken en zou de prune-stap in build-embed-index
+    permanent tot een no-op maken. Aanroepers schrijven alleen als er
+    daadwerkelijk iets is toegevoegd of gesnoeid.
+    """
     CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    tmp = CACHE_FILE.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(cache, indent=2, ensure_ascii=False), encoding="utf-8")
-    tmp.replace(CACHE_FILE)
+    tmp = CACHE_FILE.with_name(f"{CACHE_FILE.name}.{os.getpid()}.tmp")
+    try:
+        tmp.write_text(json.dumps(cache, indent=2, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, CACHE_FILE)
+    finally:
+        if tmp.exists():
+            tmp.unlink(missing_ok=True)
 
 
 def file_hash(path) -> str:

@@ -111,12 +111,20 @@ def unified(old: str, new: str, path: str) -> str:
 # ---------------------------------------------------------------------------
 
 def _git(*args, cwd=None):
-    """Run a git sub-command and return CompletedProcess."""
+    """Run a git sub-command and return CompletedProcess.
+
+    `core.quotepath=false` houdt niet-ASCII paden ongequote, en de expliciete
+    UTF-8-decodering voorkomt dat git-uitvoer door de platform-default codec
+    gaat (cp1252 op een Nederlandse Windows-installatie), waar een pad als
+    `ideeen.md` met trema stukloopt.
+    """
     import subprocess
     return subprocess.run(
-        ["git"] + list(args),
+        ["git", "-c", "core.quotepath=false"] + list(args),
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         cwd=str(cwd) if cwd else None,
     )
 
@@ -127,8 +135,40 @@ def _short_sha(repo_root: Path) -> str:
 
 
 def _emit(report: dict):
-    """Print report as JSON for machine readability. JSON output is always on."""
-    print(json.dumps(report, ensure_ascii=False))
+    """Print report as JSON for machine readability. JSON output is always on.
+
+    ensure_ascii=True: stdout gaat op Windows door de console-codepage, en een
+    pad buiten cp1252 gaf daar een UnicodeEncodeError met lege stdout -- voor de
+    aanroeper niet te onderscheiden van een crash. \\uXXXX-escapes zijn geldige
+    JSON en decoderen aan de leeskant vanzelf terug.
+    """
+    print(json.dumps(report, ensure_ascii=True))
+
+
+def _restore(target: Path, old_bytes, repo_root) -> bool:
+    """Zet het doelbestand terug naar de staat van vóór de write.
+
+    De write gaat vooraf aan `git add`/`commit`; faalt een van die twee, dan is
+    het artikel al overschreven. Zonder deze rollback blijft de boom vuil en
+    weigert elke volgende aanroep zonder --force (commands/wiki.md verbiedt
+    --force), waardoor één mislukte commit het hele schrijfpad blokkeert.
+
+    Bytes, niet tekst: een tekst-roundtrip herschrijft LF naar CRLF op schijf.
+    """
+    ok = True
+    try:
+        if old_bytes is None:
+            # Bestond niet vóór deze aanroep -> weghalen, niet leeg achterlaten.
+            target.unlink(missing_ok=True)
+        else:
+            target.write_bytes(old_bytes)
+    except OSError:
+        ok = False
+    if repo_root is not None:
+        # Best effort: unstage. Faalt in een repo zonder commits (geen HEAD);
+        # dat is geen reden om de bestandsrollback als mislukt te melden.
+        _git("-C", str(repo_root), "reset", "-q", "HEAD", "--", str(target))
+    return ok
 
 
 def _parse_porcelain_path(line: str) -> str:
@@ -213,7 +253,7 @@ def main(argv=None):
             print(
                 json.dumps(
                     {"action": "refused", "reason": "not-a-git-repo"},
-                    ensure_ascii=False,
+                    ensure_ascii=True,
                 )
             )
             sys.exit(3)
@@ -232,13 +272,17 @@ def main(argv=None):
         ]
         # target_rel uses .resolve()d repo_root so is_relative_to works on macOS.
         target_rel = target.relative_to(repo_root) if target.is_relative_to(repo_root) else target
-        target_rel_str = str(target_rel)
+        # as_posix(): git emit altijd forward slashes, ook op Windows. Met
+        # str() bouwde dit `02-wiki\a.md` en matchte de zelf-uitzondering nooit,
+        # zodat een boom waarin alleen het doelbestand vuil is werd geweigerd.
+        target_rel_str = target_rel.as_posix()
+        target_abs_str = target.as_posix()
 
         non_target_dirty = []
         for l in dirty_lines:
             parsed_path = _parse_porcelain_path(l)
             # Exact equality: a.md.bak != a.md even though a.md is a substring.
-            if parsed_path != target_rel_str and parsed_path != str(target):
+            if parsed_path != target_rel_str and parsed_path != target_abs_str:
                 non_target_dirty.append(l)
 
         if non_target_dirty:
@@ -249,7 +293,7 @@ def main(argv=None):
                         "reason": "dirty-tree",
                         "dirty": non_target_dirty,
                     },
-                    ensure_ascii=False,
+                    ensure_ascii=True,
                 )
             )
             sys.exit(3)
@@ -290,28 +334,36 @@ def main(argv=None):
         _emit(report)
         sys.exit(2)
 
-    # Apply: write file, git add, git commit.
+    # Apply: write file, git add, git commit. De write gaat noodzakelijkerwijs
+    # vooraf aan de git-stappen (git ziet alleen wat op schijf staat), dus elk
+    # faalpad daarna moet de write terugdraaien -- zie _restore().
     target.parent.mkdir(parents=True, exist_ok=True)
+    old_bytes = target.read_bytes() if target_exists else None
     target.write_text(proposed, encoding="utf-8")
+
+    def _fail(reason: str, result):
+        # stdout meenemen: een falende pre-commit hook schrijft zijn reden daar,
+        # en laat stderr leeg.
+        detail = "\n".join(
+            part for part in (result.stderr.strip(), result.stdout.strip()) if part
+        )
+        rolled_back = _restore(target, old_bytes, repo_root)
+        _emit({
+            "action": "error",
+            "reason": reason,
+            "detail": detail,
+            "rolled_back": rolled_back,
+        })
+        sys.exit(4)
 
     if repo_root is not None:
         add_result = _git("-C", str(repo_root), "add", str(target))
         if add_result.returncode != 0:
-            _emit({
-                "action": "error",
-                "reason": "git-add-failed",
-                "detail": add_result.stderr.strip(),
-            })
-            sys.exit(4)
+            _fail("git-add-failed", add_result)
 
         commit_result = _git("-C", str(repo_root), "commit", "-m", commit_msg)
         if commit_result.returncode != 0:
-            _emit({
-                "action": "error",
-                "reason": "git-commit-failed",
-                "detail": commit_result.stderr.strip(),
-            })
-            sys.exit(4)
+            _fail("git-commit-failed", commit_result)
 
         sha = _short_sha(repo_root)
     else:

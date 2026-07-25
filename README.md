@@ -68,7 +68,28 @@ Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: 
 
 The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
 
-## Feature highlights (v0.19.0)
+## Feature highlights (v0.20.0)
+
+### New in v0.20.0
+
+- **Three silent-failure bugs on core paths.** Memory recall returned an empty
+  list once a vault passed ~1024 documents (sqlite-vec rejects a KNN with
+  `k > 4096`, and the error fell outside the guarded block). Every temporal
+  question resolved to the same wrong range at high confidence, because an empty
+  regex alternation matches the empty string. And `activity-locales.json` was
+  never deployed to a vault at all, so a clean install ran with an empty
+  vocabulary. None of the three logged anything.
+- **`safe-edit` can no longer strand the wiki write path.** It writes before the
+  git step, so a failing commit used to leave the article overwritten and the
+  tree dirty — after which every later call refused, while `/wiki` and
+  `/reconcile` both forbid `--force`. The original bytes are now restored.
+- **CI runs the whole suite.** `unittest discover` skipped 19 tests written as
+  module-level functions, including the documentation guard that had never once
+  executed — the reason stale doc claims survived. A new lint checks bilingual
+  fact parity and code-derived claims, and found two real gaps immediately.
+- **Lighter index maintenance.** Four write-only tables dropped (~23.7 MB and a
+  full scan per event), source hashing made lazy, and the rollup cache removed
+  after it was measured returning answers for the wrong query.
 
 ### New in v0.19.0
 
@@ -90,9 +111,9 @@ The design bias throughout: **deterministic where possible, LLM only where it ad
 
 ### New in v0.18.0
 
-- **Sub-second retrieval on the first prompt.** The `kb-retrieve` hook no longer
+- **No cold-model timeout on the first prompt.** The `kb-retrieve` hook no longer
   times out on a cold embedding model: it embeds once per prompt, bounds the
-  hot-path embed to a sub-second default, and self-heals by pre-warming the
+  hot-path embed to an explicit timeout (2.0s), and self-heals by pre-warming the
   model at session start and firing a detached warm on a miss. Fully local and
   fail-open.
 - **Upstream-drift warning.** A session-start notification warns when your git
@@ -393,7 +414,7 @@ reports.
 
 ## Using KennisBank from other agents (Codex, OpenCode, Copilot, ChatGPT)
 
-The vault is not Claude-Code-only. `scripts/kb-mcp.py` is a local **MCP server** exposing three primitives - `recall` (search memory + wiki), `capture` (save a new memory), and an `instructions` resource (a nudge to pull before searching externally). MCP is the one protocol every modern agent already speaks, so any client running **on this machine** can use the vault.
+The vault is not Claude-Code-only. `scripts/kb-mcp.py` is a local **MCP server** exposing seven primitives: six tools - `recall` (search memory + wiki), `capture` (save a new memory), and the temporal set `what_did_i_do`, `timeline`, `weeklog`, `topic_timeline` - plus an `instructions` resource (a nudge to pull before searching externally). MCP is the one protocol every modern agent already speaks, so any client running **on this machine** can use the vault.
 
 **The hard boundary: local only.** The MCP server binds nothing to the network
 (stdio transport); the vault never leaves your machine. Claude Code, Codex,

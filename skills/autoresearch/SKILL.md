@@ -28,8 +28,9 @@ Lees relevante memory-bestanden als de index er op wijst.
 
 **Laag 2 — KennisBank wiki** (altijd uitvoeren):
 ```bash
-cat ~/KennisBank/02-wiki/index.md 2>/dev/null | head -100
-grep -ril "[kernwoord]" ~/KennisBank/02-wiki/ 2>/dev/null | head -10
+VAULT="${KENNISBANK_VAULT:-$HOME/KennisBank}"
+cat "$VAULT/02-wiki/index.md" 2>/dev/null | head -100
+grep -ril "[kernwoord]" "$VAULT/02-wiki/" 2>/dev/null | head -10
 ```
 Lees gevonden wiki-artikelen (max 3) die direct relevant zijn.
 

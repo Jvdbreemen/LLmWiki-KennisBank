@@ -71,7 +71,7 @@ Als > 0: suggereer `/intake`.
 
 ## Stap 7: Graphify-flag
 ```bash
-[ -f $VAULT/graphify-out/.needs-rebuild ] && echo "stale" || echo "ok"
+[ -s "$VAULT/graphify-out/.needs-rebuild" ] && echo "stale" || echo "ok"
 ```
 Als stale: meld "wiki-graph is stale, overweeg `/graphify` rebuild".
 
