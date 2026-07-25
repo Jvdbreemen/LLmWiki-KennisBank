@@ -39,17 +39,17 @@ Randvoorwaarden: pre-flight clean-state + CI-groen check op main vóór tag; wer
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Skill /kennisbank-release bestaat in skills/kennisbank-release/SKILL.md en is via de manifest/deploy vindbaar
-- [ ] #2 Automatiseert: versie-voorstel, CHANGELOG-sectie + compare-links, README/README.nl highlight-bump
-- [ ] #3 Pre-flight: clean-state + CI-groen op main; weigert taggen op ongemergede branch
-- [ ] #4 Draait focused tests + docs-check en stopt bij rood
-- [ ] #5 Commit release-docs, push main, annotated tag, push tag, gh release create met changelog als notes
-- [ ] #6 Biedt na afloop de vault-upgrade aan (/kennisbank-upgrade vanaf de nieuwe tag)
-- [ ] #7 Ondersteunt --dry-run: toont geplande versie/changelog/acties zonder writes of push
-- [ ] #8 Wacht op de Copilot-review van de PR en verwerk die vóór merge en vóór tag; de review-comments zitten niet in `gh pr view` maar in `gh api repos/OWNER/REPO/pulls/N/comments`
-- [ ] #9 Verifieert na de merge dat origin/main de commits feitelijk bevat, en tagt op die SHA — nooit op een branch-tip in de aanname dat de merge geland is
-- [ ] #10 Schrijft release-notes met expliçiete UTF-8-encoding en een absoluut pad; verifieert daarna dat de gepubliceerde body niet leeg is (`gh release view --json body`)
-- [ ] #11 Kiest merge-commit boven squash wanneer de branch bewust één commit per taak heeft en losse reverts waarde hebben
+- [x] #1 Skill /kennisbank-release bestaat in skills/kennisbank-release/SKILL.md en is via de manifest/deploy vindbaar
+- [x] #2 Automatiseert: versie-voorstel, CHANGELOG-sectie + compare-links, README/README.nl highlight-bump
+- [x] #3 Pre-flight: clean-state + CI-groen op main; weigert taggen op ongemergede branch
+- [x] #4 Draait focused tests + docs-check en stopt bij rood
+- [x] #5 Commit release-docs, push main, annotated tag, push tag, gh release create met changelog als notes
+- [x] #6 Biedt na afloop de vault-upgrade aan (/kennisbank-upgrade vanaf de nieuwe tag)
+- [x] #7 Ondersteunt --dry-run: toont geplande versie/changelog/acties zonder writes of push
+- [x] #8 Wacht op de Copilot-review van de PR en verwerk die vóór merge en vóór tag; de review-comments zitten niet in `gh pr view` maar in `gh api repos/OWNER/REPO/pulls/N/comments`
+- [x] #9 Verifieert na de merge dat origin/main de commits feitelijk bevat, en tagt op die SHA — nooit op een branch-tip in de aanname dat de merge geland is
+- [x] #10 Schrijft release-notes met expliçiete UTF-8-encoding en een absoluut pad; verifieert daarna dat de gepubliceerde body niet leeg is (`gh release view --json body`)
+- [x] #11 Kiest merge-commit boven squash wanneer de branch bewust één commit per taak heeft en losse reverts waarde hebben
 <!-- AC:END -->
 
 ## Comments

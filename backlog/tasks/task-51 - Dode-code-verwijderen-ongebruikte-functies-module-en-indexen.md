@@ -33,11 +33,11 @@ Bij het trimmen van de test voor de copilot-backup: alleen de assertie op de res
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 De zes genoemde symbolen en de module zijn verwijderd, in één samenhangende wijziging
-- [ ] #2 `iter_usage_events` bestaat nog en de per-bron-extractie werkt onveranderd; een test dekt die aanroeppad expliciet
-- [ ] #3 De twee ongebruikte indexen zijn uit de schemadefinitie verwijderd zonder de schemaversie te bumpen
-- [ ] #4 Docstrings die naar verwijderde functionaliteit verwijzen zijn gecorrigeerd naar wat de code doet
-- [ ] #5 De test voor de copilot-backup dekt nog steeds de backup-functie zelf; alleen de assertie op de verwijderde restore is weg
-- [ ] #6 CHANGELOG en backlog-historie zijn niet herschreven
-- [ ] #7 De volledige testsuite draait groen
+- [x] #1 De zes genoemde symbolen en de module zijn verwijderd, in één samenhangende wijziging
+- [x] #2 `iter_usage_events` bestaat nog en de per-bron-extractie werkt onveranderd; een test dekt die aanroeppad expliciet
+- [x] #3 De twee ongebruikte indexen zijn uit de schemadefinitie verwijderd zonder de schemaversie te bumpen
+- [x] #4 Docstrings die naar verwijderde functionaliteit verwijzen zijn gecorrigeerd naar wat de code doet
+- [x] #5 De test voor de copilot-backup dekt nog steeds de backup-functie zelf; alleen de assertie op de verwijderde restore is weg
+- [x] #6 CHANGELOG en backlog-historie zijn niet herschreven
+- [x] #7 De volledige testsuite draait groen
 <!-- AC:END -->

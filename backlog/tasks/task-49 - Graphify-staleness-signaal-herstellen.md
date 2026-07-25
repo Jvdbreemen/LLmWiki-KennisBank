@@ -30,11 +30,11 @@ Let bij de lezerskant op het verschil tussen "bestand bestaat" en "bestand is ni
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 `build-embed-index.py` raakt de graphify-rebuild-vlag niet meer aan
-- [ ] #2 `tests/test_build_embed_index_gate.py` assert dat een embed-run de vlag ongemoeid laat; deze test is vandaag rood
-- [ ] #3 De lezer in `commands/sessiestart.md` test op een niet-lege vlag in plaats van op louter bestaan
-- [ ] #4 `doctor.sh` rapporteert de aan- of afwezigheid van `graph.json` zelf, niet alleen van de map
-- [ ] #5 De drie onjuiste doc-claims over graphify in CONFIGURATION.md en TROUBLESHOOTING.md zijn gecorrigeerd naar wat de code doet
-- [ ] #6 De testwijziging mockt de embedding-cache, zodat de test niet de echte cache van tientallen megabytes parseert
-- [ ] #7 De volledige testsuite draait groen
+- [x] #1 `build-embed-index.py` raakt de graphify-rebuild-vlag niet meer aan
+- [x] #2 `tests/test_build_embed_index_gate.py` assert dat een embed-run de vlag ongemoeid laat; deze test is vandaag rood
+- [x] #3 De lezer in `commands/sessiestart.md` test op een niet-lege vlag in plaats van op louter bestaan
+- [x] #4 `doctor.sh` rapporteert de aan- of afwezigheid van `graph.json` zelf, niet alleen van de map
+- [x] #5 De drie onjuiste doc-claims over graphify in CONFIGURATION.md en TROUBLESHOOTING.md zijn gecorrigeerd naar wat de code doet
+- [x] #6 De testwijziging mockt de embedding-cache, zodat de test niet de echte cache van tientallen megabytes parseert
+- [x] #7 De volledige testsuite draait groen
 <!-- AC:END -->

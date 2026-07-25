@@ -26,12 +26,12 @@ Deze taak hangt af van de rollback-taak en mag daar niet vóór landen: zonder r
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 De vergelijking tussen het doelpad en de porcelain-uitvoer gebruikt aan beide kanten forward slashes
-- [ ] #2 De git-aanroepen draaien met `core.quotepath=false` zodat niet-ASCII paden ongequote terugkomen
-- [ ] #3 Subprocess-uitvoer wordt expliciet als UTF-8 gedecodeerd met een vervangingsstrategie, niet met de platform-default codec
-- [ ] #4 De JSON-uitvoer is ASCII-veilig, zodat een niet-cp1252 pad geen UnicodeEncodeError met lege stdout oplevert
-- [ ] #5 Test: een repo waarin alleen het doelbestand vuil is, levert exit 0 in plaats van exit 3 (vandaag rood)
-- [ ] #6 Test: hetzelfde met een niet-ASCII bestandsnaam levert exit 0
-- [ ] #7 Test: een vuil NIET-doelbestand met een niet-cp1252 teken levert exit 3 en een stdout die als JSON parseert
-- [ ] #8 De volledige testsuite draait groen
+- [x] #1 De vergelijking tussen het doelpad en de porcelain-uitvoer gebruikt aan beide kanten forward slashes
+- [x] #2 De git-aanroepen draaien met `core.quotepath=false` zodat niet-ASCII paden ongequote terugkomen
+- [x] #3 Subprocess-uitvoer wordt expliciet als UTF-8 gedecodeerd met een vervangingsstrategie, niet met de platform-default codec
+- [x] #4 De JSON-uitvoer is ASCII-veilig, zodat een niet-cp1252 pad geen UnicodeEncodeError met lege stdout oplevert
+- [x] #5 Test: een repo waarin alleen het doelbestand vuil is, levert exit 0 in plaats van exit 3 (vandaag rood)
+- [x] #6 Test: hetzelfde met een niet-ASCII bestandsnaam levert exit 0
+- [x] #7 Test: een vuil NIET-doelbestand met een niet-cp1252 teken levert exit 3 en een stdout die als JSON parseert
+- [x] #8 De volledige testsuite draait groen
 <!-- AC:END -->

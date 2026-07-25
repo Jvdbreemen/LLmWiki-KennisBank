@@ -30,14 +30,14 @@ VERIFICATIE: dit verandert de ranking voor elke prompt. De eval-harnas moet v√≥√
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 De zoekfunctie geeft per treffer een vergelijkbare relevantiescore terug plus een indicatie of de FTS-kant hem vond
-- [ ] #2 De relevantiescore komt uit de afstand die de KNN al teruggeeft, zonder extra database-functie op de hot path
-- [ ] #3 De normalisatie-aanname wordt bij het bouwen van de index gecontroleerd en als vlag vastgelegd; ontbreekt de vlag dan wordt er geen drempel toegepast en blijft het gedrag ongewijzigd
-- [ ] #4 Zowel het wiki- als het memory-blok past een drempel toe voordat er afgekapt wordt op k, niet erna
-- [ ] #5 De memory-drempel is een eigen expliciete waarde en erft niet van de wiki-drempel
-- [ ] #6 Gate en ranking gebruiken dezelfde FTS-expressie, en een prompt met leestekens levert geen stil ingeslikte fout meer op
-- [ ] #7 Test met tegengesteld gerichte vectoren, niet met vectoren die toevallig boven de drempel liggen; een test die ook zonder de fix slaagt telt niet
-- [ ] #8 Test: bij k=1 met de beste gefuseerde treffer onder de drempel en de tweede erboven komt de tweede terug
-- [ ] #9 De relevantiescore staat in de teruggegeven hits zodat de eval-harnas hem kan meten
-- [ ] #10 De volledige testsuite draait groen
+- [x] #1 De zoekfunctie geeft per treffer een vergelijkbare relevantiescore terug plus een indicatie of de FTS-kant hem vond
+- [x] #2 De relevantiescore komt uit de afstand die de KNN al teruggeeft, zonder extra database-functie op de hot path
+- [x] #3 De normalisatie-aanname wordt bij het bouwen van de index gecontroleerd en als vlag vastgelegd; ontbreekt de vlag dan wordt er geen drempel toegepast en blijft het gedrag ongewijzigd
+- [x] #4 Zowel het wiki- als het memory-blok past een drempel toe voordat er afgekapt wordt op k, niet erna
+- [x] #5 De memory-drempel is een eigen expliciete waarde en erft niet van de wiki-drempel
+- [x] #6 Gate en ranking gebruiken dezelfde FTS-expressie, en een prompt met leestekens levert geen stil ingeslikte fout meer op
+- [x] #7 Test met tegengesteld gerichte vectoren, niet met vectoren die toevallig boven de drempel liggen; een test die ook zonder de fix slaagt telt niet
+- [x] #8 Test: bij k=1 met de beste gefuseerde treffer onder de drempel en de tweede erboven komt de tweede terug
+- [x] #9 De relevantiescore staat in de teruggegeven hits zodat de eval-harnas hem kan meten
+- [x] #10 De volledige testsuite draait groen
 <!-- AC:END -->
