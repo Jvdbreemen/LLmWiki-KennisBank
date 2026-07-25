@@ -17,7 +17,7 @@ dagelijkse graphify-gate).
 Lees per toggle de waarde via de helper. Gebruik de canonieke keys en hun default:
 
 ```bash
-for key in auto_archive distill_notify embed_index daily_graphify memory_capture memory_recall usage_telemetry; do
+for key in auto_archive distill_notify embed_index daily_graphify memory_capture memory_recall usage_telemetry activity_llm_fallback; do
   val=$(python3 "$VAULT/.claude/scripts/_settings.py" get "$key")
   echo "$key=$val"
 done
@@ -37,6 +37,7 @@ doet:
 - **memory_capture** - extractie+judge van memories naar `09-memory/` + onderhoud. Uit = geen memory-opslag.
 - **memory_recall** - injecteer memories in de context via hook + lokale MCP. Uit = geen memory-retrieval bij sessiestart.
 - **usage_telemetry** - registreer welke geinjecteerde kennis daadwerkelijk gebruikt wordt (kb-usage.db; voedt ranking-boost en stale-warm-skip). Uit = geen gebruiksmeting.
+- **activity_llm_fallback** (default UIT) - laat een lokale LLM een datum/periode duiden die de deterministische lagen niet herkennen (laag 3 van de temporele parser). Aan = tragere maar bredere taaldekking; uit = alleen de locale-tabellen en dateparser.
 
 Vraag de gewenste staat tekstueel uit (NIET via `AskUserQuestion`: die tool
 staat maximaal 4 opties per vraag toe, en er zijn 7 toggles; een enkele

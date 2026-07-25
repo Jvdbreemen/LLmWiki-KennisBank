@@ -480,7 +480,7 @@ The five env vars below control the behavior of the vault-onderhoud scripts
 - **Defaults**: halfwaardetijden `HALF_LIFE_DAYS` (voorkeur 180, feit/procedure 365, beslissing 730 dagen), `RECENCY_FLOOR 0.6`, importance-factor 0.9-1.1 (neutraal 3 = ×1.0).
 - **Where set**: `scripts/_rank.py` (module-constanten).
 - **Effect**: memory-hits worden herwogen op relevance × recency × importance; wiki blijft ongewogen. De één-hop graafbuur-expansie voegt de meest-verwezen wikilink-buur van de wiki-hits toe als extra `(buur)`-entry in de hook-injectie.
-- **Uitzetten expansie**: env `KB_RETRIEVE_EXPAND=0` of `"retrieve_expand": 0` in `kennisbank-settings.json`.
+- **Uitzetten expansie**: env `KB_RETRIEVE_EXPAND=0` of `"retrieve_expand": 0` in `<vault>/.claude/kennisbank-embed.json` — dat is het bestand dat `kb-retrieve.py` leest, niet `kennisbank-settings.json`.
 - **To change**: pas de constanten aan en hermeet met `kb-eval.py` (voor en na; een daling is een regressie).
 
 ### Recall-eval (`scripts/kb-eval.py`)
