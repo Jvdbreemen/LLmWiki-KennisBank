@@ -266,8 +266,13 @@ fi
 
 # 11b. MCP runtime, required when Codex/OpenCode/Copilot KennisBank MCP is configured.
 MCP_CONFIGURED=0
-CODEX_CONFIG="$HOME/.codex/config.toml"
-OPENCODE_CONFIG="$HOME/.config/opencode/opencode.json"
+# Honoreer de agent-home-variabelen, net als COPILOT_HOME hieronder. Zonder dit
+# keek doctor altijd in $HOME en gaf een groene uitslag over een MCP-runtime die
+# ergens anders staat en dus nergens gevalideerd is.
+CODEX_HOME_DIR="${CODEX_HOME:-$HOME/.codex}"
+OPENCODE_DIR="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
+CODEX_CONFIG="$CODEX_HOME_DIR/config.toml"
+OPENCODE_CONFIG="$OPENCODE_DIR/opencode.json"
 COPILOT_HOME_DIR="${COPILOT_HOME:-$HOME/.copilot}"
 COPILOT_MCP_CONFIG="$COPILOT_HOME_DIR/mcp-config.json"
 if [ -f "$CODEX_CONFIG" ] && grep -q "\[mcp_servers\.kennisbank\]" "$CODEX_CONFIG" 2>/dev/null; then

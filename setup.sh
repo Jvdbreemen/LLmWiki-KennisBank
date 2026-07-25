@@ -312,6 +312,7 @@ else
   ask_toggle distill_notify "melden bij start dat transcripts wachten (distill_notify)" 1
   ask_toggle embed_index    "wiki-embeddings verversen bij start (embed_index)" 1
   ask_toggle daily_graphify "1x/dag graph automatisch bijwerken (daily_graphify)" 1
+  ask_toggle activity_llm_fallback "lokale LLM als laatste redmiddel voor datumherkenning (activity_llm_fallback)" 0
   echo "  settings: keuze opgeslagen in $SETTINGS_FILE"
 fi
 

@@ -115,11 +115,16 @@ def _home() -> Path:
 
 
 def _codex_home() -> Path:
-    return _norm_path(os.environ.get("CODEX_HOME", _home() / ".codex"))
+    # .strip() en de lege-check: os.environ.get met een default springt NIET in
+    # bij een leeg gezette variabele, en _norm_path("") wordt Path(".") -- dan
+    # schrijft setup de config in de werkmap. _copilot.py heeft deze guard al.
+    raw = os.environ.get("CODEX_HOME", "").strip()
+    return _norm_path(raw) if raw else _home() / ".codex"
 
 
 def _opencode_home() -> Path:
-    return _norm_path(os.environ.get("OPENCODE_CONFIG_DIR", _home() / ".config" / "opencode"))
+    raw = os.environ.get("OPENCODE_CONFIG_DIR", "").strip()
+    return _norm_path(raw) if raw else _home() / ".config" / "opencode"
 
 
 def _read_text(path: Path) -> str:

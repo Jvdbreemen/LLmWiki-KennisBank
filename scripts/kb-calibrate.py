@@ -44,10 +44,13 @@ LABELS = ("duplicate", "related", "unrelated")
 DEFAULT_SET = "06-claude/kb-calibrate-set.json"
 
 #: Huidige knoppen en welke scheiding ze nodig hebben, ter referentie in het
-#: rapport. Waarden zijn de defaults in de code/config.
+#: rapport. Waarden zijn de defaults in de code/config -- en moeten dat blijven:
+#: tests/test_kb_calibrate.py pint ze aan de bron. Deze lijst stond op 0.83 voor
+#: de rewrite-knop terwijl find-similar.py sindsdien op 0.62 staat, waardoor het
+#: rapport [OK] meldde waar [HERIJK] hoorde te staan.
 CURRENT_KNOBS = [
     ("dedup (is_duplicate, _sweeputil)",   0.92, "duplicate"),
-    ("rewrite (find-similar)",             0.83, "duplicate"),
+    ("rewrite (find-similar)",             0.62, "related"),
     ("reconcile-band ondergrens (_reconcile)", 0.75, "related"),
     ("conflict (KB_CONFLICT_SIM)",         0.62, "related"),
     ("retrieve (retrieve_threshold)",      0.60, "related"),
