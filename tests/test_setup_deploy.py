@@ -226,6 +226,12 @@ class SetupDeployTest(unittest.TestCase):
                 self.assertTrue((commands / name).is_file(), f"{name} not installed")
             for name in ("_activity.py", "build-activity-index.py", "kb-activity.py", "kb-activity-eval.py"):
                 self.assertTrue((scripts / name).is_file(), f"{name} not deployed")
+            # Data-bestand, geen .py/.sh: viel buiten de deploy-glob. Zonder dit
+            # bestand draait de datumparser met een lege Laag-1-vocabulaire.
+            locales = scripts / "activity-locales.json"
+            self.assertTrue(locales.is_file(), f"activity-locales.json not deployed at {locales}")
+            self.assertGreater(len(json.loads(locales.read_text(encoding="utf-8"))), 0,
+                               "deployed locale table is empty")
             self.assertTrue((vault / ".claude" / "kb-activity.db").is_file(), "activity index not built by setup")
         finally:
             shutil.rmtree(tmp, ignore_errors=True)

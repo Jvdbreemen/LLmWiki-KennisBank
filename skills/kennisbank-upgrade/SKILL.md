@@ -20,7 +20,7 @@ Upgrade a deployed vault to the latest **release tag** (never bare main).
 ## Deploy map (referentie — stap 9 voert dit uit via `setup.sh`)
 | Repo source | Deploy destination |
 |---|---|
-| `scripts/*.py`, `scripts/*.sh` | `$VAULT/.claude/scripts/` |
+| `scripts/*.py`, `scripts/*.sh`, `scripts/*.json` | `$VAULT/.claude/scripts/` |
 | `templates/*.md` | `$VAULT/04-templates/` |
 | `commands/*.md`, `commands/*/*.md` | `$HOME/.claude/commands/` |
 | `skills/*/SKILL.md` (each skill dir) | `$HOME/.claude/skills/<name>/` |

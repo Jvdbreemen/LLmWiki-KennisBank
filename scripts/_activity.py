@@ -1122,6 +1122,11 @@ def _alt(words: Iterable[str]) -> str:
     """Build a regex alternation, longest first so full forms beat their own
     abbreviations/prefixes; ties broken alphabetically for determinism."""
     uniq = sorted({w for w in words if w}, key=lambda w: (-len(w), w))
+    if not uniq:
+        # Een lege alternatie compileert tot (?:) en matcht de LEGE STRING op
+        # elke woordgrens -> elke tak van de parser vuurt en levert een
+        # zelfverzekerd fout bereik. Faal liever stil naar de volgende laag.
+        return "(?!)"
     return "|".join(re.escape(w) for w in uniq)
 
 
