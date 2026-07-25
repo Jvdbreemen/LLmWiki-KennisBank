@@ -115,7 +115,7 @@ Or remove the project-level directory if you never intended it.
 
 **Symptom**: `Embedding mislukt via /api/embeddings. Controleer OLLAMA_HOST, ollama serve en OLLAMA_EMBED_MODEL.`
 
-**Cause**: The script calls the Ollama HTTP API at `{endpoint}/api/embeddings` and requests the model `${OLLAMA_EMBED_MODEL:-qwen3-embedding:8b}` (the multilingual default; set `OLLAMA_EMBED_MODEL=nomic-embed-text` for the lighter English-only fallback). Either Ollama is not installed, the daemon is not running, the endpoint points at the wrong server, or the configured model is not pulled. See section 8.
+**Cause**: The script calls the Ollama HTTP API at `${KB_EMBED_ENDPOINT:-http://localhost:11434}/api/embeddings` and requests the model `${OLLAMA_EMBED_MODEL:-qwen3-embedding:8b}` (the multilingual default; set `OLLAMA_EMBED_MODEL=nomic-embed-text` for the lighter English-only fallback). Either Ollama is not installed, the daemon is not running, the endpoint points at the wrong server, or the configured model is not pulled. See section 8.
 
 **Note on `OLLAMA_HOST`**: KennisBank itself does **not** read that variable — the endpoint comes from `<vault>/.claude/kennisbank-embed.json` or `KB_EMBED_ENDPOINT` (default `http://localhost:11434`). `OLLAMA_HOST` is read by the `ollama` CLI, so exporting it in the commands below is correct and useful; it just is not what the embedding code consults. If you moved Ollama to another host, set `KB_EMBED_ENDPOINT` as well.
 
