@@ -380,18 +380,22 @@ def _ensure_codex_hooks(path: Path, vault: Path) -> None:
                 kept_groups.append(updated)
         hooks["Stop"] = kept_groups
 
+    # Plafonds komen uit _hooks_manifest.TIMEOUTS: één bron voor alle clients.
+    _t = _hooks_manifest.timeout
     desired = {
         "SessionStart": [
-            ("kb-session-start.py", "startup|resume|clear|compact", 240),
+            ("kb-session-start.py", "startup|resume|clear|compact",
+             _t("kb-session-start.py")),
         ],
         "UserPromptSubmit": [
-            ("kb-retrieve.py", None, 30),
+            ("kb-retrieve.py", None, _t("kb-retrieve.py")),
         ],
         "Stop": [
-            ("kb-session-end.py", None, 90),
+            ("kb-session-end.py", None, _t("kb-session-end.py")),
         ],
         "PreToolUse": [
-            ("kb-presearch.py", "web|web_search|WebSearch|WebFetch", 30),
+            ("kb-presearch.py", "web|web_search|WebSearch|WebFetch",
+             _t("kb-presearch.py")),
         ],
     }
     for event, specs in desired.items():
