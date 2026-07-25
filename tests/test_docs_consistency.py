@@ -118,6 +118,32 @@ class CodeDerivedFactTest(unittest.TestCase):
         self.assertEqual(offenders, [],
                          f"documenten beloven een sub-seconde hot-path-embed: {offenders}")
 
+    def test_documented_tool_output_uses_real_markers(self):
+        """Geciteerde tool-uitvoer moet uit de tool komen, niet verzonnen zijn.
+
+        POST-INSTALL.md drukte een doctor-transcript af met `[ok]`-regels en een
+        footer `Done. 0 errors, 2 warnings.` -- doctor.sh emit die niet en heeft
+        ze nooit geëmit. Een lezer die zijn eigen uitvoer ernaast legt kan niet
+        zien of iets misgaat.
+        """
+        doctor = (SCRIPTS / "doctor.sh").read_text(encoding="utf-8")
+        real_tiers = {t for t in ("[PASS]", "[WARN]", "[FAIL]", "[INFO]")
+                      if t in doctor}
+        self.assertEqual(len(real_tiers), 4, "doctor.sh emit niet meer vier tiers")
+
+        offenders = []
+        for path in _markdown_files():
+            text = path.read_text(encoding="utf-8")
+            if "doctor.sh" not in text:
+                continue
+            for invented in ("[ok]", "[warn]", "[error]", "Done. 0 errors"):
+                if invented in text:
+                    offenders.append(f"{path.relative_to(REPO_ROOT)}: {invented!r}")
+        self.assertEqual(
+            offenders, [],
+            "documentatie citeert doctor-uitvoer die het script niet emit; "
+            "gebruik echt gevangen output:\n  " + "\n  ".join(offenders))
+
     def test_documented_env_vars_are_read_somewhere(self):
         """Een gedocumenteerde env-var die geen enkele regel code leest is een leugen.
 
