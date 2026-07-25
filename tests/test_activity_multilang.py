@@ -130,6 +130,24 @@ class MultilingualTemporalTest(unittest.TestCase):
         finally:
             urllib.request.urlopen = saved
 
+    def test_empty_vocabulary_never_matches(self):
+        """Een lege locale-tabel mag Laag 1 laten missen, niet fout laten vuren.
+
+        `"|".join([])` levert "" op; ingebed als `\\b(?:)\\b` matcht dat de lege
+        string op elke woordgrens, waardoor elke parser-tak vuurt en een
+        zelfverzekerd fout bereik oplevert (confidence 0.95). Zonder gedeployde
+        activity-locales.json was dat het gedrag op elke schone installatie.
+        """
+        import re
+        empty = _activity._alt([])
+        self.assertNotEqual(empty, "")
+        for probe in ("gisteren", "yesterday", "2026-07-09", ""):
+            with self.subTest(probe=probe):
+                self.assertIsNone(re.search(r"\b(?:" + empty + r")\b", probe))
+        # niet-lege invoer blijft ongewijzigd werken
+        self.assertIsNotNone(
+            re.search(r"\b(?:" + _activity._alt(["gisteren"]) + r")\b", "gisteren"))
+
     def test_range_from_iso_rejects_out_of_range(self):
         """A model answer far outside the reference date is rejected."""
         from datetime import date

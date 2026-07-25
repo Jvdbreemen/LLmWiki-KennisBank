@@ -377,6 +377,23 @@ else
   report_warn "activity index" "kb-activity.py ontbreekt of python3 niet beschikbaar"
 fi
 
+# 11d. Temporele locale-vocabulaire. Toetst de GELADEN tabel, niet de
+# aanwezigheid van het bestand: een aanwezig-maar-onleesbaar activity-locales.json
+# faalt stil open en laat de datumparser met een lege Laag 1 achter.
+if command -v python3 >/dev/null 2>&1 && [ -f "$SCRIPTS_DIR/_activity.py" ]; then
+  LOCALE_N="$(python3 -c 'import sys
+sys.path.insert(0, sys.argv[1])
+import _activity as m
+print(len(m.MONTHS), len(m.WEEKDAYS))' "$SCRIPTS_DIR" 2>/dev/null | tr -d '\r')"
+  LOCALE_MONTHS="$(printf '%s' "$LOCALE_N" | cut -d' ' -f1)"
+  LOCALE_DAYS="$(printf '%s' "$LOCALE_N" | cut -d' ' -f2)"
+  case "$LOCALE_MONTHS" in
+    ''|*[!0-9]*) report_warn "temporal locales" "kon de locale-tabel niet laden; run: bash setup.sh" ;;
+    0) report_warn "temporal locales" "lege vocabulaire (activity-locales.json niet gedeployed?); run: bash setup.sh" ;;
+    *) report_pass "temporal locales" "$LOCALE_MONTHS maandwoorden, $LOCALE_DAYS dagwoorden" ;;
+  esac
+fi
+
 # 12. Ollama and the embedding model (optional).
 # Default is qwen3-embedding:8b (multilingual); nomic-embed-text is the
 # lighter English-only fallback. Respect OLLAMA_EMBED_MODEL if the user set it.

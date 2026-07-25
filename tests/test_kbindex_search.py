@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 import sys
 import tempfile
 import unittest
@@ -104,6 +105,39 @@ class LayerStarvationRegressionTest(unittest.TestCase):
             "mem_key.md", paths,
             "memory doc was starved out of the candidate pool by closer wiki docs "
             "(pool te klein — pool-fix ontbreekt?)")
+
+
+class Vec0PoolCeilingTest(unittest.TestCase):
+    """sqlite-vec weigert een KNN met k > 4096 ("k value in knn query too large").
+
+    De pool schaalt mee met het aantal docs, dus een groeiende vault liep die
+    limiet vanzelf voorbij. De OperationalError viel buiten de FTS-try in
+    search(), propageerde naar kb-recall en zette recall stil op [].
+    """
+
+    def test_pool_ceiling_matches_vec0_limit(self):
+        self.assertEqual(_kbindex.VEC0_MAX_K, 4096)
+
+    def test_search_survives_a_corpus_above_the_vec0_limit(self):
+        conn = _kbindex.connect(":memory:")
+        _kbindex.ensure_schema(conn, dim=DIM, embed_id="ollama:test")
+        # 4097 docs -> pool zou zonder plafond op `total` uitkomen en de
+        # vec0-limiet met 1 overschrijden.
+        rows = [(f"doc_{i:05d}.md", [1.0 - i * 1e-5, 0.0, 0.0, 0.0]) for i in range(4097)]
+        for path, vec in rows:
+            _kbindex.upsert(conn, path=path, layer="wiki", status="current",
+                            body="corpus doc", vector=vec,
+                            file_hash=path, created="2026-07-25")
+        self.assertEqual(
+            conn.execute("SELECT count(*) FROM docs").fetchone()[0], 4097)
+        try:
+            res = _kbindex.search(conn, query_vector=[1.0, 0.0, 0.0, 0.0], k=3)
+        except sqlite3.OperationalError as exc:  # pragma: no cover - regressiepad
+            self.fail(f"search() gooit boven de vec0-limiet: {exc}")
+        finally:
+            conn.close()
+        self.assertEqual(len(res), 3)
+        self.assertEqual(res[0]["path"], "doc_00000.md")
 
 
 if __name__ == "__main__":

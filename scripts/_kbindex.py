@@ -23,6 +23,10 @@ os.environ.setdefault("KENNISBANK_VAULT", str(Path(__file__).resolve().parents[2
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _vaultpath import vault_root  # noqa: E402
 
+# Harde bovengrens van sqlite-vec: een vec0 KNN-query met k > 4096 gooit
+# "OperationalError: k too large". Zie search().
+VEC0_MAX_K = 4096
+
 
 def index_path() -> Path:
     return vault_root() / ".claude" / "kb-index.db"
@@ -126,7 +130,10 @@ def _rrf(rank_lists, k_const: int = 60) -> dict:
 def search(conn: sqlite3.Connection, *, query_vector, query_text: str = "",
            k: int = 8, layers=None, statuses=("current",)) -> list:
     total = conn.execute("SELECT count(*) FROM docs").fetchone()[0]
-    pool = min(max(k * 4, 20, total), 5000)
+    # vec0 accepteert maximaal k=4096; daarboven gooit de MATCH-query een
+    # OperationalError die buiten de FTS-try valt en recall stil op [] zet.
+    # De total-term blijft: die voorkomt layer-starvation (TASK-10).
+    pool = min(max(k * 4, 20, total), VEC0_MAX_K)
     vec_ranking = [r[0] for r in conn.execute(
         "SELECT doc_id FROM vec_docs WHERE embedding MATCH ? ORDER BY distance LIMIT ?",
         (_serialize(query_vector), pool)).fetchall()]
