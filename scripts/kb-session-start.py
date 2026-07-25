@@ -21,11 +21,15 @@ from pathlib import Path
 from typing import Callable
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _hooks_manifest  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402
 
 
 FRESHNESS_SECONDS = 300
-LOCK_STALE_SECONDS = 600
+# Afgeleid van het gedeclareerde plafond in plaats van een los getal: een
+# afgebroken cyclus herstelt zo binnen één plafond in plaats van binnen een
+# waarde die niemand meer met het budget verbindt.
+LOCK_STALE_SECONDS = _hooks_manifest.timeout("kb-session-start.py")
 STATE_NAME = "kb-session-start-state.json"
 LOCK_NAME = ".kb-session-start.lock"
 
@@ -214,7 +218,10 @@ def acquire_lock(path: Path, now: float | None = None) -> bool:
     except FileExistsError:
         try:
             age = current - path.stat().st_mtime
-            if age <= LOCK_STALE_SECONDS:
+            # age < 0 = mtime in de toekomst (klokverzetting, of een bestand van
+            # een machine met scheve klok). Zonder die clausule verloopt zo'n
+            # lock nooit en ligt het onderhoud permanent stil.
+            if 0 <= age <= LOCK_STALE_SECONDS:
                 return False
             path.unlink()
             fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
