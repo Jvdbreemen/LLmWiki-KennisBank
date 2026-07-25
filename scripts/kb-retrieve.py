@@ -151,7 +151,10 @@ def _wiki_block(prompt, emb, vault_root, cfg, qvec):
     hits = []
     if kb_recall is not None:
         try:
-            hits = kb_recall.wiki_hits(qvec, query_text=prompt, k=top_n, expand=expand)
+            # Zelfde drempel als de poort hierboven: wat de gate niet zou
+            # openen, hoort ook niet als losse treffer geinjecteerd te worden.
+            hits = kb_recall.wiki_hits(qvec, query_text=prompt, k=top_n,
+                                       expand=expand, min_cos=threshold)
         except Exception:
             hits = []
     lines = ["KennisBank-wiki (semantisch gematcht op je prompt; raadpleeg bij twijfel):"]

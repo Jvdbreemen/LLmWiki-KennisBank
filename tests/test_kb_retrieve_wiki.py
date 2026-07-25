@@ -109,7 +109,7 @@ class WikiBlockTest(unittest.TestCase):
         # Mock i.p.v. kale lambda: assert_called bewijst dat het hybride pad
         # DAADWERKELIJK is gelopen. Zonder die guard kan een signatuur-drift de
         # fail-soft except raken en stil naar de fallback vallen (false green).
-        wiki_hits = Mock(side_effect=lambda qv, query_text="", k=3, expand=False: [
+        wiki_hits = Mock(side_effect=lambda qv, query_text="", k=3, expand=False, min_cos=0.0: [
             {"path": "/v/02-wiki/art.md", "layer": "wiki", "title": "Art",
              "created": "2026-06-01", "score": 0.5, "snippet": "hybride treffer"}])
         self.m.kb_recall.wiki_hits = wiki_hits
@@ -123,7 +123,7 @@ class WikiBlockTest(unittest.TestCase):
     def test_fts_only_triggers_when_cosine_low(self):
         self.emb.cosine = lambda a, b: 0.1  # onder drempel -> alleen FTS kan triggeren
         has_fts = Mock(side_effect=lambda q, layer="wiki": True)
-        wiki_hits = Mock(side_effect=lambda qv, query_text="", k=3, expand=False: [
+        wiki_hits = Mock(side_effect=lambda qv, query_text="", k=3, expand=False, min_cos=0.0: [
             {"path": "/v/02-wiki/art.md", "layer": "wiki", "title": "Art",
              "created": "2026-06-01", "score": 0.5, "snippet": "exacte-term-treffer"}])
         self.m.kb_recall.has_fts_match = has_fts
@@ -147,7 +147,7 @@ class WikiBlockTest(unittest.TestCase):
 
     def test_fallback_to_cosine_when_hybrid_empty(self):
         self.emb.cosine = lambda a, b: 0.9  # gate slaagt
-        wiki_hits = Mock(side_effect=lambda qv, query_text="", k=3, expand=False: [])  # index leeg
+        wiki_hits = Mock(side_effect=lambda qv, query_text="", k=3, expand=False, min_cos=0.0: [])  # index leeg
         self.m.kb_recall.wiki_hits = wiki_hits
         qvec = self.emb.embed("relevante vraag over het artikel")
         text = self.m._wiki_block("relevante vraag over het artikel",

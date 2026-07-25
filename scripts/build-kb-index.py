@@ -62,7 +62,9 @@ def main(rebuild: bool = False) -> None:
         try:
             has_meta = probe_conn.execute(
                 "SELECT name FROM sqlite_master WHERE name='meta'").fetchone()
-            if has_meta and _kbindex.is_valid_for(probe_conn, eid):
+            fresh_enough = (_kbindex.is_valid_for(probe_conn, eid)
+                            and _kbindex.meta_get(probe_conn, "unit_norm") == "1")
+            if has_meta and fresh_enough:
                 items = _collect()
                 seen = {str(f) for f, _, _ in items}
                 work = any(_kbindex.indexed_hash(probe_conn, str(f)) != emb.file_hash(f)
@@ -89,12 +91,18 @@ def main(rebuild: bool = False) -> None:
     # embed_id-mismatch => index ongeldig, verse start
     if idx != Path(":memory:") and conn.execute(
             "SELECT name FROM sqlite_master WHERE name='meta'").fetchone():
-        if not _kbindex.is_valid_for(conn, eid):
+        # Ook herbouwen wanneer de unit_norm-vlag ontbreekt: een index van vóór
+        # de normalisatie bevat ongenormaliseerde vectoren, waarvoor de
+        # afstand-naar-cosinus-omrekening niet klopt. Eenmalig, en goedkoop --
+        # de embeddings komen uit de cache, er wordt niets opnieuw geëmbed.
+        if (not _kbindex.is_valid_for(conn, eid)
+                or _kbindex.meta_get(conn, "unit_norm") != "1"):
             conn.close()
             if idx.exists():
                 idx.unlink()
             conn = _kbindex.connect()
     _kbindex.ensure_schema(conn, dim=dim, embed_id=eid)
+    _kbindex.set_unit_norm(conn, True)
 
     cache = emb.load_cache()
     seen = set()
