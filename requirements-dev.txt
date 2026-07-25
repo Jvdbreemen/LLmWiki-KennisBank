@@ -1,0 +1,9 @@
+# Ontwikkel- en CI-afhankelijkheden. NIET nodig voor een gedeployde vault: de
+# scripts in scripts/ draaien op de standaardbibliotheek plus requirements.txt.
+#
+# pytest staat hier omdat `unittest discover` losse test_*-functies op
+# moduleniveau niet verzamelt. Zes testbestanden zijn zo geschreven, samen 21
+# tests -- waaronder tests/test_integration_documentation.py, de doc-guard die
+# daardoor nog nooit had gedraaid. Zie TASK-53.
+-r requirements.txt
+pytest==8.3.4

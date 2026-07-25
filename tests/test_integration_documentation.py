@@ -25,13 +25,23 @@ def test_readmes_document_first_class_coordinated_integrations():
 
 
 def test_product_surfaces_have_no_removed_client_reference():
+    """Een verwijderde client mag niet blijven rondslingeren in productdocs.
+
+    docs/research/ valt hier bewust buiten. Dat is verkennend materiaal, geen
+    productoppervlak: cross-client-hooks-plugin-architecture.md weegt tien
+    clients tegen elkaar af als KANDIDAAT voor een toekomstige adapter-boom, en
+    dat afwegen moet een naam kunnen noemen zonder hem te beloven. De grens ligt
+    bij wat een gebruiker als beschrijving van het product leest.
+    """
     removed_client = "cur" + "sor"
+    research = REPO_ROOT / "docs" / "research"
     paths = [
         REPO_ROOT / "README.md",
         REPO_ROOT / "README.nl.md",
         REPO_ROOT / "CHANGELOG.md",
         REPO_ROOT / "CONFIGURATION.md",
-        *sorted((REPO_ROOT / "docs").rglob("*.md")),
+        *sorted(p for p in (REPO_ROOT / "docs").rglob("*.md")
+                if research not in p.parents),
         *sorted((REPO_ROOT / "scripts").glob("*.py")),
     ]
     for path in paths:
