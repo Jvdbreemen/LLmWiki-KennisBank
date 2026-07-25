@@ -17,6 +17,34 @@ HOOKS = [
     ("PreToolUse",       "kb-presearch.py",       "WebSearch|WebFetch"),
 ]
 
+# Timeout-plafond per hookscript, in seconden. EEN bron voor alle drie de
+# installatiewegen (register-hooks.py voor Claude, install-agent-envs.py voor
+# Codex, _copilot.py voor Copilot). Die declareerden elk hun eigen getal, en
+# voor Claude werd er helemaal niets geschreven -- geen enkel bestand legde vast
+# wat daar de default was, waardoor het budget niet te beredeneren viel.
+#
+# De sessiestart-waarde is ruim: sinds TASK-63 draait het indexonderhoud
+# losgekoppeld, dus het blokkerende deel is de launcher plus capture, import en
+# notificaties. Het plafond blijft bewust boven die worst case liggen -- lager
+# declareren dan wat er feitelijk kan draaien maakt de situatie slechter, niet
+# beter.
+TIMEOUTS = {
+    "kb-session-start.py": 240,
+    "kb-session-end.py": 90,
+    "kb-retrieve.py": 30,
+    "kb-presearch.py": 30,
+    "kb-session-end-recover.py": 30,
+    "kb-copilot-capture.py": 30,
+}
+
+DEFAULT_TIMEOUT = 30
+
+
+def timeout(script: str) -> int:
+    """Plafond voor een hookscript; DEFAULT_TIMEOUT voor onbekende scripts."""
+    return int(TIMEOUTS.get(script, DEFAULT_TIMEOUT))
+
+
 SILENT_HOOK_SCRIPTS = frozenset()
 
 LEGACY_SESSION_END_SCRIPTS = frozenset({

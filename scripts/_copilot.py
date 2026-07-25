@@ -328,17 +328,39 @@ _LEGACY_SESSION_END = frozenset({
 })
 
 
+def _hook_timeout(script: str) -> int:
+    """Plafond uit _hooks_manifest, LAZY geimporteerd.
+
+    Deze module heeft geen sys.path-aanpassing op moduleniveau, dus een import
+    bovenaan geeft ModuleNotFoundError zodra de tests _copilot los laden. Fail-
+    open naar de bestaande waarden: een ontbrekend manifest mag geen installatie
+    breken.
+    """
+    try:
+        import os as _os
+        import sys as _sys
+        here = _os.path.dirname(_os.path.abspath(__file__))
+        if here not in _sys.path:
+            _sys.path.insert(0, here)
+        import _hooks_manifest
+        return _hooks_manifest.timeout(script)
+    except Exception:
+        return {"kb-session-start.py": 240, "kb-session-end.py": 90}.get(script, 30)
+
+
 def _desired_hooks(vault: Path) -> dict:
     """Copilot hook map with one coordinated SessionStart entry."""
     cap = _CAPTURE_SCRIPT
     return {
         "sessionStart": [
-            ("kb-session-start.py", "--client copilot", 240),
+            ("kb-session-start.py", "--client copilot",
+             _hook_timeout("kb-session-start.py")),
         ],
-        "userPromptSubmitted": [(cap, "--event userPromptSubmitted", 30)],
-        "preToolUse": [(cap, "--event preToolUse", 30)],
-        "postToolUse": [(cap, "--event postToolUse", 30)],
-        "sessionEnd": [("kb-session-end.py", "--client copilot", 90)],
+        "userPromptSubmitted": [(cap, "--event userPromptSubmitted", _hook_timeout(cap))],
+        "preToolUse": [(cap, "--event preToolUse", _hook_timeout(cap))],
+        "postToolUse": [(cap, "--event postToolUse", _hook_timeout(cap))],
+        "sessionEnd": [("kb-session-end.py", "--client copilot",
+                        _hook_timeout("kb-session-end.py"))],
     }
 
 

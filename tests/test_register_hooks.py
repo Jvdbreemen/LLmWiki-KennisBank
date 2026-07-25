@@ -1,11 +1,14 @@
 import importlib.util
 import json
 import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
+if str(SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS))
 
 
 def _load():
@@ -161,6 +164,87 @@ class RegisterHooksTest(unittest.TestCase):
         cmd = s["hooks"]["SessionStart"][0]["hooks"][0]["command"]
         self.assertEqual(cmd, 'python3 "/nieuw/.claude/scripts/kb-retrieve.py"',
                          "python3 prefix must be preserved on self-heal, path must be updated")
+
+    # --- gedeclareerde plafonds (TASK-64) ---
+
+    def _hooks_of(self, settings, event):
+        out = []
+        for group in settings.get("hooks", {}).get(event, []):
+            out.extend(group.get("hooks", []))
+        return out
+
+    def test_new_entry_declares_the_manifest_timeout(self):
+        import _hooks_manifest as man
+        s = {}
+        self.m.register_manifest(s, "/v")
+        entries = self._hooks_of(s, "UserPromptSubmit")
+        self.assertTrue(entries)
+        self.assertEqual(entries[0].get("timeout"), man.timeout("kb-retrieve.py"))
+
+    def test_existing_entry_without_timeout_is_self_healed(self):
+        """Een registratie van vóór deze wijziging mist het plafond.
+
+        Zonder aanvullen blijft het budget van bestaande installaties
+        ongedeclareerd, en dat was precies waarom de coordinator zijn eigen
+        plafond kon overschrijden.
+        """
+        import _hooks_manifest as man
+        s = {"hooks": {"UserPromptSubmit": [
+            {"hooks": [{"type": "command",
+                        "command": 'py -3 "/v/.claude/scripts/kb-retrieve.py"'}]}]}}
+        self.assertTrue(self.m.register_manifest(s, "/v"))
+        entries = self._hooks_of(s, "UserPromptSubmit")
+        self.assertEqual(entries[0].get("timeout"), man.timeout("kb-retrieve.py"))
+
+    def test_a_hand_set_timeout_is_preserved(self):
+        """De auteur had handmatig een timeout gezet; die mag niet verdwijnen."""
+        s = {"hooks": {"UserPromptSubmit": [
+            {"hooks": [{"type": "command", "timeout": 25,
+                        "command": 'py -3 "/v/.claude/scripts/kb-retrieve.py"'}]}]}}
+        self.m.register_manifest(s, "/v")
+        entries = self._hooks_of(s, "UserPromptSubmit")
+        self.assertEqual(entries[0].get("timeout"), 25,
+                         "handmatig gezet plafond werd overschreven")
+
+
+class LockStalenessTest(unittest.TestCase):
+    """De vervaltijd van het onderhoudslock hangt aan het gedeclareerde plafond."""
+
+    def test_lock_window_is_derived_from_the_declared_ceiling(self):
+        import _hooks_manifest as man
+        from tests._loader import load_script
+        kbss = load_script("kb-session-start.py")
+        # Niet geparametriseerd op de constante: de koppeling zelf is wat telt.
+        self.assertEqual(kbss.LOCK_STALE_SECONDS, man.timeout("kb-session-start.py"))
+
+    def test_a_killed_cycle_recovers_within_one_ceiling(self):
+        import tempfile
+        import time as _time
+        import _hooks_manifest as man
+        from tests._loader import load_script
+        kbss = load_script("kb-session-start.py")
+        with tempfile.TemporaryDirectory() as d:
+            lock = Path(d) / kbss.LOCK_NAME
+            lock.write_text("1", encoding="utf-8")
+            # Een cyclus die NU gekilld is, moet één plafond later herstellen.
+            later = _time.time() + man.timeout("kb-session-start.py") + 1
+            self.assertFalse(kbss.acquire_lock(lock, now=_time.time()),
+                             "een verse lock hoort te blokkeren")
+            self.assertTrue(kbss.acquire_lock(lock, now=later),
+                            "een afgebroken cyclus blijft langer dan één plafond geblokkeerd")
+
+    def test_a_future_mtime_does_not_block_forever(self):
+        """Klokverzetting mag het onderhoud niet permanent stilzetten."""
+        import tempfile
+        import time as _time
+        from tests._loader import load_script
+        kbss = load_script("kb-session-start.py")
+        with tempfile.TemporaryDirectory() as d:
+            lock = Path(d) / kbss.LOCK_NAME
+            lock.write_text("1", encoding="utf-8")
+            past = _time.time() - 10_000          # lock lijkt in de toekomst te liggen
+            self.assertTrue(kbss.acquire_lock(lock, now=past),
+                            "lock met toekomstige mtime blokkeert permanent")
 
 
 if __name__ == "__main__":
