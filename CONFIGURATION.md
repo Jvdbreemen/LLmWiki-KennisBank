@@ -230,9 +230,12 @@ override the config file; both override the built-in defaults.
 - **Design**: see
   `docs/superpowers/specs/2026-07-08-temporal-activity-recall-design.md` for the
   research comparison and schema rationale.
-- **Storage**: local SQLite only. Tables include `activity_events`,
-  `activity_entities`, `activity_topics`, `activity_artifacts`,
-  `source_watermarks`, `rollup_cache`, and FTS5 table `activity_fts`.
+- **Storage**: local SQLite only. Tables: `activity_events` (entities, topics
+  and artifacts live in its JSON columns and in `search_blob`),
+  `source_watermarks` and `rollup_cache`. Earlier versions also carried
+  `activity_entities`, `activity_topics`, `activity_artifacts` and an FTS5 table
+  `activity_fts`; nothing ever read them, so they are dropped on the next index
+  build. Topic matching runs as a substring comparison over `search_blob`.
 - **Time model**: `event_time` is when the work happened; `captured_at` is when
   the source was captured/modified. Local vault dates use `Europe/Amsterdam`.
 - **Parser (3 layers)**: date and period parsing is resolved in three layers,

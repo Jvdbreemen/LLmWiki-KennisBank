@@ -512,20 +512,6 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_activity_captured_at ON activity_events(captured_at)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_activity_source ON activity_events(source_path)")
     conn.execute(
-        "CREATE TABLE IF NOT EXISTS activity_entities ("
-        "event_id TEXT NOT NULL, entity TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'entity', "
-        "PRIMARY KEY(event_id, entity, kind))"
-    )
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS activity_topics ("
-        "event_id TEXT NOT NULL, topic TEXT NOT NULL, match_route TEXT NOT NULL DEFAULT 'explicit', "
-        "PRIMARY KEY(event_id, topic, match_route))"
-    )
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS activity_artifacts ("
-        "event_id TEXT NOT NULL, artifact TEXT NOT NULL, PRIMARY KEY(event_id, artifact))"
-    )
-    conn.execute(
         "CREATE TABLE IF NOT EXISTS source_watermarks ("
         "source_path TEXT PRIMARY KEY, mtime_ns INTEGER NOT NULL, size INTEGER NOT NULL, "
         "sha256 TEXT NOT NULL, indexed_at TEXT NOT NULL)"
@@ -536,17 +522,26 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
         "topic TEXT NOT NULL, source_signature TEXT NOT NULL, body_json TEXT NOT NULL, "
         "created_at TEXT NOT NULL)"
     )
-    conn.execute("CREATE VIRTUAL TABLE IF NOT EXISTS activity_fts USING fts5(id UNINDEXED, title, summary, entities, topics)")
+    # Write-only tabellen uit een eerdere opzet: ze werden bij elke bouw gevuld
+    # en door geen enkele query gelezen (topic-filtering doet een substring-
+    # vergelijking op search_blob, in Python). activity_fts was de duurste: de
+    # DELETE gaat over een UNINDEXED kolom, dus een full scan per event, twee
+    # keer per event -- kwadratisch op een volledige rebuild.
+    #
+    # Expliciet droppen, niet alleen de CREATE weghalen: de incrementele bouw
+    # hergebruikt het bestaande bestand (alleen --full unlinkt), dus zonder deze
+    # DROP blijven de rijen eeuwig wees in elke bestaande installatie.
+    # SCHEMA_VERSION bewust NIET gebumpt: doctor.sh en de statusrapportage zetten
+    # dan elke gedeployde vault op WARN tot de gebruiker handmatig --full draait.
+    for _legacy in ("activity_entities", "activity_topics", "activity_artifacts"):
+        conn.execute(f"DROP TABLE IF EXISTS {_legacy}")
+    conn.execute("DROP TABLE IF EXISTS activity_fts")
     conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', ?)", (SCHEMA_VERSION,))
     conn.commit()
 
 
 def _delete_event(conn: sqlite3.Connection, event_id: str) -> None:
     conn.execute("DELETE FROM activity_events WHERE id=?", (event_id,))
-    conn.execute("DELETE FROM activity_fts WHERE id=?", (event_id,))
-    conn.execute("DELETE FROM activity_entities WHERE event_id=?", (event_id,))
-    conn.execute("DELETE FROM activity_topics WHERE event_id=?", (event_id,))
-    conn.execute("DELETE FROM activity_artifacts WHERE event_id=?", (event_id,))
 
 
 def upsert_event(conn: sqlite3.Connection, event: ActivityEvent) -> None:
@@ -581,31 +576,8 @@ def upsert_event(conn: sqlite3.Connection, event: ActivityEvent) -> None:
         f"INSERT INTO activity_events({', '.join(cols)}) VALUES ({', '.join('?' for _ in cols)})",
         tuple(row[c] for c in cols),
     )
-    conn.execute(
-        "INSERT INTO activity_fts(id, title, summary, entities, topics) VALUES (?, ?, ?, ?, ?)",
-        (
-            event.id,
-            event.title,
-            event.summary,
-            " ".join(event.entities),
-            " ".join(event.topic_tags),
-        ),
-    )
-    for entity in event.entities:
-        conn.execute(
-            "INSERT OR IGNORE INTO activity_entities(event_id, entity, kind) VALUES (?, ?, ?)",
-            (event.id, entity, "entity"),
-        )
-    for topic in event.topic_tags:
-        conn.execute(
-            "INSERT OR IGNORE INTO activity_topics(event_id, topic, match_route) VALUES (?, ?, ?)",
-            (event.id, topic, "explicit"),
-        )
-    for artifact in event.artifacts:
-        conn.execute(
-            "INSERT OR IGNORE INTO activity_artifacts(event_id, artifact) VALUES (?, ?)",
-            (event.id, artifact),
-        )
+    # Entiteiten, topics en artefacten zitten al in activity_events als JSON-
+    # kolommen en in search_blob; de losse tabellen werden nooit gelezen.
 
 
 def _events_for_source(vault: Path, source: Path) -> list[ActivityEvent]:

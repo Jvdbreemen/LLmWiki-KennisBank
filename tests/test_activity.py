@@ -234,5 +234,58 @@ class UsageSourceExtractorTest(unittest.TestCase):
                       [p.resolve() for p in _activity._source_files(self.vault)])
 
 
+class LegacyTableMigrationTest(unittest.TestCase):
+    """De vier write-only tabellen moeten ook uit BESTAANDE databases verdwijnen.
+
+    De incrementele bouw hergebruikt het databasebestand; alleen --full unlinkt.
+    Zonder een expliciete DROP in ensure_schema blijven de rijen dus eeuwig wees
+    in elke gedeployde vault -- 23,7 MB van 57,7 MB op de vault van de auteur.
+    """
+
+    LEGACY = ("activity_entities", "activity_topics", "activity_artifacts", "activity_fts")
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="kb-legacy-"))
+        self.db = self.tmp / "kb-activity.db"
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _tables(self, conn):
+        return {r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type IN ('table','view')")}
+
+    def test_existing_database_loses_the_legacy_tables(self):
+        import sqlite3
+        conn = sqlite3.connect(self.db)
+        conn.execute("CREATE TABLE activity_entities (event_id TEXT, entity TEXT, kind TEXT)")
+        conn.execute("CREATE TABLE activity_topics (event_id TEXT, topic TEXT, match_route TEXT)")
+        conn.execute("CREATE TABLE activity_artifacts (event_id TEXT, artifact TEXT)")
+        conn.execute("CREATE VIRTUAL TABLE activity_fts USING fts5(id UNINDEXED, title, summary, entities, topics)")
+        conn.execute("INSERT INTO activity_topics VALUES ('e1','kennisbank','explicit')")
+        conn.commit()
+        self.assertTrue(set(self.LEGACY) <= self._tables(conn), "fixture niet opgezet")
+
+        _activity.ensure_schema(conn)
+
+        remaining = self._tables(conn) & set(self.LEGACY)
+        self.assertEqual(remaining, set(),
+                         f"legacy-tabellen blijven achter in een bestaande db: {remaining}")
+        conn.close()
+
+    def test_schema_version_is_not_bumped(self):
+        # Een bump zet doctor.sh en de statusrapportage op WARN voor elke
+        # gedeployde vault tot de gebruiker handmatig --full draait.
+        self.assertEqual(_activity.SCHEMA_VERSION, "1")
+
+    def test_fresh_database_has_no_legacy_tables(self):
+        import sqlite3
+        conn = sqlite3.connect(self.db)
+        _activity.ensure_schema(conn)
+        self.assertEqual(self._tables(conn) & set(self.LEGACY), set())
+        self.assertIn("activity_events", self._tables(conn))
+        conn.close()
+
+
 if __name__ == "__main__":
     unittest.main()
