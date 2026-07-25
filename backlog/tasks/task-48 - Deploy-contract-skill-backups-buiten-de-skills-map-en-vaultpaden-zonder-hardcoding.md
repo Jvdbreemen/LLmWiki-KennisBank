@@ -3,9 +3,10 @@ id: TASK-48
 title: >-
   Deploy-contract: skill-backups buiten de skills-map en vaultpaden zonder
   hardcoding
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-07-25 03:33'
+updated_date: '2026-07-25 07:50'
 labels:
   - bug
   - deploy

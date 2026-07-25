@@ -1,9 +1,10 @@
 ---
 id: TASK-60
 title: Release KennisBank v0.20.0
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-25 05:20'
+updated_date: '2026-07-25 07:50'
 labels:
   - release
 dependencies: []
