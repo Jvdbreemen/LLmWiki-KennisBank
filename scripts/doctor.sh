@@ -398,6 +398,22 @@ else
   report_warn "activity index" "kb-activity.py ontbreekt of python3 niet beschikbaar"
 fi
 
+# 11c-bis. Graphify-graaf. De map wordt door setup.sh aangemaakt en hierboven al
+# gecontroleerd; het gaat om het BESTAND. De producent is een externe skill, dus
+# afwezigheid is geen fout -- maar wel het verschil tussen drie werkende en drie
+# lege Atlas-lenzen, plus /brug en auto-crosslink.
+GRAPH_JSON="$VAULT/graphify-out/graph.json"
+REBUILD_FLAG="$VAULT/graphify-out/.needs-rebuild"
+if [ -f "$GRAPH_JSON" ]; then
+  if [ -s "$REBUILD_FLAG" ]; then
+    report_info "graphify graph" "aanwezig, maar .needs-rebuild is niet leeg; draai /graphify en verwijder daarna de vlag met rm"
+  else
+    report_pass "graphify graph" "$GRAPH_JSON"
+  fi
+else
+  report_info "graphify graph" "geen graph.json; /brug, auto-crosslink en de graaf-lenzen vallen stil terug (externe graphify-skill vereist)"
+fi
+
 # 11d. Temporele locale-vocabulaire. Toetst de GELADEN tabel, niet de
 # aanwezigheid van het bestand: een aanwezig-maar-onleesbaar activity-locales.json
 # faalt stil open en laat de datumparser met een lege Laag 1 achter.
