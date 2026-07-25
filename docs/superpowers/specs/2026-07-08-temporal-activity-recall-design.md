@@ -56,12 +56,10 @@ canonical ActivityEvent extraction
         v
 <vault>/.claude/kb-activity.db
   activity_events
-  activity_entities
-  activity_topics
-  activity_artifacts
   source_watermarks
   rollup_cache
-  activity_fts
+  (activity_entities / activity_topics / activity_artifacts / activity_fts
+   waren hier ook voorzien, maar zijn nooit gelezen -- zie TASK-52)
         |
         v
 shared Python API
