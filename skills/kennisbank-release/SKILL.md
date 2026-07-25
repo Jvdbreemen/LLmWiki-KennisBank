@@ -31,11 +31,23 @@ step below exists because a manual release got it wrong at least once.
 ## Step 0 — refuse to run in the wrong place
 
 Confirm the working directory is a clone of this repository (`git remote -v`
-contains `LLmWiki-KennisBank`) and that the tree is clean. A deployed vault copy
-has scripts but no git history; releasing from there is meaningless.
+contains `LLmWiki-KennisBank`) and that there are no uncommitted changes to
+**tracked** files. A deployed vault copy has scripts but no git history;
+releasing from there is meaningless.
+
+Untracked files do not block a release. `git status --porcelain` reports build
+detritus such as `.playwright-mcp/`, and treating that as a dirty tree stops a
+release for something that has nothing to do with it. Check
+`git status --porcelain --untracked-files=no` instead.
 
 Confirm the remotes: `origin` is the upstream (Jvdbreemen), `fork` is the user's
 own (rvdbreemen). Push branches to `fork`, open pull requests against `origin`.
+
+## Step 0b — create the backlog task
+
+CLAUDE.md requires a task before execution, and a release is execution. Create it
+with `mcp__backlog__task_create`, set it to `In Progress`, and record the version
+and the tasks it carries. Step 10 closes it.
 
 ## Step 1 — propose the version
 
@@ -77,12 +89,29 @@ just the English paragraph and left the Dutch on superseded text for weeks.
 
 ## Step 4 — gate
 
+Two runs, not one, because they answer different questions.
+
+**Before steps 2 and 3**, once, on the code being released:
+
 ```bash
 python3 -m pytest tests -q
 ```
 
-Steps 2 and 3 are one unit with this step: do not run the suite between them, or
-the documentation-consistency lint fails by construction on a half-updated tree.
+**After steps 2 and 3**, only the tests that read those files:
+
+```bash
+python3 -m pytest \
+  tests/test_release_metadata.py tests/test_docs_consistency.py \
+  tests/test_integration_documentation.py tests/test_command_structure.py \
+  tests/test_skill_frontmatter.py tests/test_suite_collection.py -q
+```
+
+The full suite takes about twenty minutes locally; the documentation subset takes
+seconds. Re-running everything after a pure documentation edit is ceremony, and
+CI re-runs the whole thing on the pull request regardless.
+
+Steps 2 and 3 remain one unit: do not run the documentation subset between them,
+or the consistency lint fails by construction on a half-updated tree.
 
 Stop on any failure. Report the failing test; do not continue.
 
