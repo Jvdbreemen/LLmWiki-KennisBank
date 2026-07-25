@@ -109,6 +109,35 @@ def _wiki_block(prompt, emb, vault_root, cfg, qvec):
 
     qvec wordt eenmalig in main() berekend en aan zowel dit blok als het memory-
     blok doorgegeven: op de hot path embedden we nooit twee keer."""
+    top_n = int(_num("KB_RETRIEVE_TOP_N", cfg, "retrieve_top_n", 3))
+    threshold = _num("KB_RETRIEVE_THRESHOLD", cfg, "retrieve_threshold", 0.60)
+    expand = bool(int(_num("KB_RETRIEVE_EXPAND", cfg, "retrieve_expand", 1)))
+
+    # Snelle weg: de index doet zelf de poort (min_cos) en de selectie. Alleen
+    # wanneer de index dat ECHT kan -- geldig voor het live model en met
+    # genormaliseerde vectoren. Op een index van vóór die wijziging negeert
+    # search() de drempel, en zou dit blok onvoorwaardelijk gaan injecteren:
+    # slechter dan het cache-pad hieronder. Eén sqlite-open, geen JSON van
+    # tientallen megabytes.
+    if kb_recall is not None:
+        try:
+            if kb_recall.index_is_gated():
+                hits = kb_recall.wiki_hits(qvec, query_text=prompt, k=top_n,
+                                           expand=expand, min_cos=threshold)
+                if not hits:
+                    return ""
+                lines = ["KennisBank-wiki (semantisch gematcht op je prompt; raadpleeg bij twijfel):"]
+                for h in hits:
+                    stem = Path(h.get("path", "")).stem
+                    label = " (buur)" if h.get("neighbor") else f" ({h.get('score', 0.0):.2f})"
+                    lines.append(f"- [[{stem}]]{label}: {h.get('snippet', '')}")
+                return "\n".join(lines)
+        except Exception:
+            pass  # val terug op het cache-pad hieronder
+
+    # Terugvalweg: ontbrekende, ongeldige of nog niet genormaliseerde index.
+    # Parseert de volledige embedding-cache (tientallen MB) en scoort in pure
+    # Python -- traag, maar het houdt een vault met kapotte index werkend.
     cache = emb.load_cache()
     if not cache:
         return ""
@@ -120,9 +149,6 @@ def _wiki_block(prompt, emb, vault_root, cfg, qvec):
     ]
     if not candidates:
         return ""
-    top_n = int(_num("KB_RETRIEVE_TOP_N", cfg, "retrieve_top_n", 3))
-    threshold = _num("KB_RETRIEVE_THRESHOLD", cfg, "retrieve_threshold", 0.60)
-
     # cosine-signaal (ongewijzigde semantische gate) + de cosine-cache-fallback-lijst
     scored = []
     for k, v in candidates:
@@ -147,7 +173,6 @@ def _wiki_block(prompt, emb, vault_root, cfg, qvec):
     # Selectie: hybride via kb-index; fallback naar cosine-cache-top-N.
     # Graafbuur-expansie (één hop langs wikilinks) staat default aan;
     # uitschakelen met KB_RETRIEVE_EXPAND=0 of "retrieve_expand": 0 in config.
-    expand = bool(int(_num("KB_RETRIEVE_EXPAND", cfg, "retrieve_expand", 1)))
     hits = []
     if kb_recall is not None:
         try:
