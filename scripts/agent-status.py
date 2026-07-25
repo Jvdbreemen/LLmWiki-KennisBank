@@ -42,7 +42,8 @@ def _status_claude() -> dict:
 
 
 def _status_codex() -> dict:
-    cfg = _copilot._norm_path(os.environ.get("CODEX_HOME", _home() / ".codex")) / "config.toml"
+    _cx = os.environ.get("CODEX_HOME", "").strip()
+    cfg = (_copilot._norm_path(_cx) if _cx else _home() / ".codex") / "config.toml"
     txt = _read(cfg)
     mcp = "[mcp_servers.kennisbank]" in txt
     return {"agent": "codex", "configured": mcp, "mcp": mcp,
@@ -51,7 +52,8 @@ def _status_codex() -> dict:
 
 def _status_opencode() -> dict:
     cfg = _copilot._norm_path(
-        os.environ.get("OPENCODE_CONFIG_DIR", _home() / ".config" / "opencode")) / "opencode.json"
+        os.environ.get("OPENCODE_CONFIG_DIR", "").strip()
+        or str(_home() / ".config" / "opencode")) / "opencode.json"
     txt = _read(cfg)
     mcp = '"kennisbank"' in txt and '"mcp"' in txt
     return {"agent": "opencode", "configured": mcp, "mcp": mcp,
