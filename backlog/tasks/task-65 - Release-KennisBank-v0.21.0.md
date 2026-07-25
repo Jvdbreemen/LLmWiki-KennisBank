@@ -1,9 +1,10 @@
 ---
 id: TASK-65
 title: Release KennisBank v0.21.0
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-25 07:07'
+updated_date: '2026-07-25 08:20'
 labels:
   - release
 dependencies: []
@@ -37,3 +38,23 @@ Openstaand na deze release: de relevantiedrempel van 0,60 is niet gemeten. `kb-e
 - [ ] #8 Elke wrijving in de release-skill is in deze release zelf gecorrigeerd
 - [ ] #9 TASK-58 en TASK-61 t/m 64 staan op Done
 <!-- AC:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: Claude (v0.21.0-release)
+created: 2026-07-25 08:20
+---
+Release v0.21.0 gepubliceerd op 9e9092d (2026-07-25). Tag geverifieerd gelijk aan origin/main vóór publicatie; release-body 4622 bytes, geen draft.
+
+EERSTE GEBRUIK VAN DE RELEASE-SKILL. Vier wrijvingen gevonden en in dezelfde release gecorrigeerd:
+1. 'clean tree' was strikt genoeg dat untracked build-rommel (.playwright-mcp/) een release blokkeerde. Nu: geen ongecommitte wijzigingen aan GETRACKTE bestanden, via --untracked-files=no.
+2. De gate eiste de volledige suite (~20 min) ná een pure documentatie-edit. Nu twee runs met verschillende vragen: volledig op de code vóór stap 2-3, daarna alleen de zes tests die die bestanden lezen (seconden). CI draait alles toch opnieuw.
+3. De skill maakte geen Backlog-taak aan, terwijl CLAUDE.md dat vóór uitvoer eist. Toegevoegd als stap 0b.
+4. Een regel-continuatie in een codeblok was platgeslagen; kopieren gaf een kapot commando. Hersteld en geverifieerd met bash -n.
+
+OPENSTAAND GAT, bewust gemerged na expliciete afweging met de gebruiker: de Copilot-re-review op fix-commit 367cb9c kon niet draaien wegens quota-limiet ('Copilot was unable to review this pull request because the user who requested the review has reached their quota limit'). Die commit draagt dus CI-groen plus een gereproduceerde-en-daarna-geverifieerde import-check, maar geen tweede paar ogen. De oorspronkelijke review dekte de PR-inhoud en gaf één opmerking, die terecht was: mijn comment claimde een worst case van 1500s waar 4 jobs x 300s = 1200s. De test rekende het dynamisch uit en trapte er niet in; alleen de comment loog.
+
+NOG TE METEN: de relevantiedrempel van 0,60 is ongemeten. Draai kb-eval nadat de eerste sessie de index heeft herbouwd. Bijstellen kan zonder herbouw via KB_RETRIEVE_THRESHOLD en memory_threshold.
+---
+<!-- COMMENTS:END -->

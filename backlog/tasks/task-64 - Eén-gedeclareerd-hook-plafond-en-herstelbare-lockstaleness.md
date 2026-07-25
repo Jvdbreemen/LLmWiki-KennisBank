@@ -1,9 +1,10 @@
 ---
 id: TASK-64
 title: Eén gedeclareerd hook-plafond en herstelbare lockstaleness
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-07-25 05:55'
+updated_date: '2026-07-25 07:35'
 labels:
   - hooks
   - structureel

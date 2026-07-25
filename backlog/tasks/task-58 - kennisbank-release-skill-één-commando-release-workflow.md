@@ -1,10 +1,10 @@
 ---
 id: TASK-58
 title: 'kennisbank-release skill: één-commando release-workflow'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-07-23 22:16'
-updated_date: '2026-07-25 05:56'
+updated_date: '2026-07-25 07:35'
 labels:
   - skill
   - release
