@@ -17,8 +17,12 @@ Emitted stdout becomes SessionStart context. Keep it compact.
 """
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
+
+# XY-statusveld van `git status --porcelain`, gevolgd door whitespace.
+_STATUS_PREFIX = re.compile(r"^\s*[A-Z?!ADMRCU ]{1,2}\s+")
 
 # git fetch can hang on a dead network; keep the whole check well under the
 # session-start budget. Threshold: warn once the gap reaches this many commits.
@@ -50,12 +54,54 @@ def _behind(local: str, upstream: str) -> int | None:
     return int(n)
 
 
+def _emit(lines: list[str]) -> None:
+    if lines:
+        print("Git-check — repo vraagt aandacht:")
+        print("\n".join(lines))
+
+
+def _uncommitted_backlog() -> list[str]:
+    """Taakbestanden die Backlog.md schreef maar die niemand heeft gecommit.
+
+    backlog/config.yml zet `auto_commit: false` en .gitignore sluit backlog/ niet
+    uit, dus het gereedschap schrijft bestanden die vervolgens buiten git blijven
+    -- inclusief taken met status Done wier resultaat in geen enkele commit
+    bestaat. Een CI-test kan dit per definitie niet zien: die draait op wat al
+    gecommit is. Vandaar hier.
+
+    `:(top)backlog` maakt de pathspec repo-relatief, zodat de check ook werkt
+    wanneer de sessie in een submap start.
+    """
+    out = _git("-c", "core.quotepath=false", "status", "--porcelain", "--", ":(top)backlog")
+    if not out:
+        return []
+    paths = []
+    for line in out.splitlines():
+        if not line.strip():
+            continue
+        # Niet op een vaste offset knippen: _git() strip't de hele output, dus
+        # de leidende spatie van een " D"-status is bij de eerste regel al weg.
+        raw = _STATUS_PREFIX.sub("", line, count=1).strip()
+        if " -> " in raw:            # hernoemd: "oud -> nieuw", neem het nieuwe
+            raw = raw.split(" -> ", 1)[1].strip()
+        if raw.startswith('"') and raw.endswith('"'):
+            raw = raw[1:-1]          # git quote paden met bijzondere tekens
+        paths.append(raw)
+    if not paths:
+        return []
+    shown = ", ".join(p.rsplit("/", 1)[-1] for p in paths[:3])
+    more = f" (+{len(paths) - 3})" if len(paths) > 3 else ""
+    return [f"- {len(paths)} niet-gecommit backlog-bestand(en): {shown}{more}"]
+
+
 def main() -> None:
     # In a repo at all? (also silences non-repo cwds)
     if _git("rev-parse", "--is-inside-work-tree") != "true":
         return
 
-    lines: list[str] = []
+    # Backlog-integriteit eerst: deze moet ook melden wanneer er geen upstream
+    # is geconfigureerd, en staat daarom vóór de early returns hieronder.
+    lines: list[str] = _uncommitted_backlog()
 
     # 1) Current branch vs its own upstream.
     branch = _git("rev-parse", "--abbrev-ref", "HEAD")
@@ -67,6 +113,7 @@ def main() -> None:
     # No configured upstream anywhere -> stay silent (and avoid a potentially slow fetch).
     upstream_ref = cur_upstream or main_upstream
     if not upstream_ref:
+        _emit(lines)
         return
 
     # Fetch the relevant remote once so counts are fresh.
@@ -88,9 +135,7 @@ def main() -> None:
                 f"(sync: `git switch main && git pull --ff-only`)"
             )
 
-    if lines:
-        print("Git-upstream check — repo loopt achter:")
-        print("\n".join(lines))
+    _emit(lines)
 
 
 if __name__ == "__main__":
