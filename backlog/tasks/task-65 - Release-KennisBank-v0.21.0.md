@@ -4,7 +4,7 @@ title: Release KennisBank v0.21.0
 status: Done
 assignee: []
 created_date: '2026-07-25 07:07'
-updated_date: '2026-07-25 08:20'
+updated_date: '2026-07-25 08:34'
 labels:
   - release
 dependencies: []
@@ -28,15 +28,15 @@ Openstaand na deze release: de relevantiedrempel van 0,60 is niet gemeten. `kb-e
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 De volledige testsuite is groen op de code die uitgebracht wordt, vóór de documentatie-edits
-- [ ] #2 CHANGELOG heeft een 0.21.0-sectie met bijgewerkte compare-links, en beide README-varianten noemen dezelfde versie
-- [ ] #3 De documentatie-subset is groen na de README- en changelog-edits
-- [ ] #4 Er is een pull request naar upstream met een beschrijving die de dragende wijzigingen benoemt
-- [ ] #5 De Copilot-review is opgehaald via de api-route en elke opmerking is getoetst aan code of meting vóór de merge
-- [ ] #6 Na de merge is vastgesteld dat origin/main de commits feitelijk bevat, en de tag staat op die SHA
-- [ ] #7 De gepubliceerde release-notes zijn niet leeg, geverifieerd via gh release view
-- [ ] #8 Elke wrijving in de release-skill is in deze release zelf gecorrigeerd
-- [ ] #9 TASK-58 en TASK-61 t/m 64 staan op Done
+- [x] #1 De volledige testsuite is groen op de code die uitgebracht wordt, vóór de documentatie-edits
+- [x] #2 CHANGELOG heeft een 0.21.0-sectie met bijgewerkte compare-links, en beide README-varianten noemen dezelfde versie
+- [x] #3 De documentatie-subset is groen na de README- en changelog-edits
+- [x] #4 Er is een pull request naar upstream met een beschrijving die de dragende wijzigingen benoemt
+- [x] #5 De Copilot-review is opgehaald via de api-route en elke opmerking is getoetst aan code of meting vóór de merge
+- [x] #6 Na de merge is vastgesteld dat origin/main de commits feitelijk bevat, en de tag staat op die SHA
+- [x] #7 De gepubliceerde release-notes zijn niet leeg, geverifieerd via gh release view
+- [x] #8 Elke wrijving in de release-skill is in deze release zelf gecorrigeerd
+- [x] #9 TASK-58 en TASK-61 t/m 64 staan op Done
 <!-- AC:END -->
 
 ## Comments
@@ -56,5 +56,13 @@ EERSTE GEBRUIK VAN DE RELEASE-SKILL. Vier wrijvingen gevonden en in dezelfde rel
 OPENSTAAND GAT, bewust gemerged na expliciete afweging met de gebruiker: de Copilot-re-review op fix-commit 367cb9c kon niet draaien wegens quota-limiet ('Copilot was unable to review this pull request because the user who requested the review has reached their quota limit'). Die commit draagt dus CI-groen plus een gereproduceerde-en-daarna-geverifieerde import-check, maar geen tweede paar ogen. De oorspronkelijke review dekte de PR-inhoud en gaf één opmerking, die terecht was: mijn comment claimde een worst case van 1500s waar 4 jobs x 300s = 1200s. De test rekende het dynamisch uit en trapte er niet in; alleen de comment loog.
 
 NOG TE METEN: de relevantiedrempel van 0,60 is ongemeten. Draai kb-eval nadat de eerste sessie de index heeft herbouwd. Bijstellen kan zonder herbouw via KB_RETRIEVE_THRESHOLD en memory_threshold.
+---
+
+author: Claude (loop-iteratie 2)
+created: 2026-07-25 08:34
+---
+ACs afgevinkt met bewijs (2026-07-25). #1 volledige suite 822 passed / 2 skipped vóór de doc-edits. #2 CHANGELOG-sectie 0.21.0 plus compare-links en beide README-koppen, na de merge geverifieerd op origin/main met vaste-string-greps (mijn eerste verificatie gebruikte grep -E en gaf een vals negatief op de haakjes in 'Feature highlights (v0.21.0)'). #3 doc-subset 55 groen in 4 s. #4 PR #56. #5 review opgehaald via de api-route, één opmerking, getoetst aan de code en terecht bevonden -- mijn comment claimde 1500 s waar 4 jobs x 300 s = 1200 s is -- en gefixt vóór de merge. #6 tag 9e9092d, geverifieerd gelijk aan origin/main vóór het publiceren. #7 release-body 4622 bytes, geen draft. #8 vier wrijvingen in de skill gevonden en in dezelfde release gecorrigeerd. #9 TASK-58 en 61 t/m 64 staan op Done.
+
+AC#5 is gehaald zoals geformuleerd: hij eist dat de review is opgehaald en elke opmerking getoetst vóór de merge, niet dat er een tweede review op de fix-commit zit. Dat laatste is er niet -- quota-limiet -- en staat als openstaand gat in comment #1. Ik vink #5 af op wat er staat, en laat het gat expliciet genoteerd in plaats van het weg te schrijven.
 ---
 <!-- COMMENTS:END -->

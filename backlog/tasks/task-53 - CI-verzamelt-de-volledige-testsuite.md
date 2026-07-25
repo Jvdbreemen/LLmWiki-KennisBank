@@ -30,14 +30,14 @@ Voeg in beide gevallen een meta-guard toe die voorkomt dat dit terugkeert. Die g
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 De CI-stap verzamelt en draait alle testbestanden in de tests-map; het aantal verzamelde tests komt overeen met wat een volledige verzameling oplevert
-- [ ] #2 De testafhankelijkheid staat, indien toegevoegd, in een aparte ontwikkelafhankelijkhedenlijst en niet in de runtime-requirements
-- [ ] #3 De vandaag falende test is opgelost of expliciet en beargumenteerd overgeslagen
-- [ ] #4 Er is een meta-guard die de testbronnen parseert en eist dat er geen testfuncties op moduleniveau staan
-- [ ] #5 De meta-guard is vandaag rood op de bestaande bestanden die dit probleem hebben
-- [ ] #6 De dekkingsdrempel in CI blijft gehandhaafd
-- [ ] #7 De gekozen aanpak en de reden staan in de taaknotities
-- [ ] #8 De volledige testsuite draait groen in CI
+- [x] #1 De CI-stap verzamelt en draait alle testbestanden in de tests-map; het aantal verzamelde tests komt overeen met wat een volledige verzameling oplevert
+- [x] #2 De testafhankelijkheid staat, indien toegevoegd, in een aparte ontwikkelafhankelijkhedenlijst en niet in de runtime-requirements
+- [x] #3 De vandaag falende test is opgelost of expliciet en beargumenteerd overgeslagen
+- [x] #4 Er is een meta-guard die de testbronnen parseert en eist dat er geen testfuncties op moduleniveau staan
+- [x] #5 De meta-guard is vandaag rood op de bestaande bestanden die dit probleem hebben
+- [x] #6 De dekkingsdrempel in CI blijft gehandhaafd
+- [x] #7 De gekozen aanpak en de reden staan in de taaknotities
+- [x] #8 De volledige testsuite draait groen in CI
 <!-- AC:END -->
 
 ## Implementation Notes
