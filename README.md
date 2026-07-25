@@ -68,7 +68,28 @@ Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: 
 
 The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
 
-## Feature highlights (v0.19.0)
+## Feature highlights (v0.20.0)
+
+### New in v0.20.0
+
+- **Three silent-failure bugs on core paths.** Memory recall returned an empty
+  list once a vault passed ~1024 documents (sqlite-vec rejects a KNN with
+  `k > 4096`, and the error fell outside the guarded block). Every temporal
+  question resolved to the same wrong range at high confidence, because an empty
+  regex alternation matches the empty string. And `activity-locales.json` was
+  never deployed to a vault at all, so a clean install ran with an empty
+  vocabulary. None of the three logged anything.
+- **`safe-edit` can no longer strand the wiki write path.** It writes before the
+  git step, so a failing commit used to leave the article overwritten and the
+  tree dirty — after which every later call refused, while `/wiki` and
+  `/reconcile` both forbid `--force`. The original bytes are now restored.
+- **CI runs the whole suite.** `unittest discover` skipped 19 tests written as
+  module-level functions, including the documentation guard that had never once
+  executed — the reason stale doc claims survived. A new lint checks bilingual
+  fact parity and code-derived claims, and found two real gaps immediately.
+- **Lighter index maintenance.** Four write-only tables dropped (~23.7 MB and a
+  full scan per event), source hashing made lazy, and the rollup cache removed
+  after it was measured returning answers for the wrong query.
 
 ### New in v0.19.0
 

@@ -71,7 +71,30 @@ Geheugensystemen van leveranciers (Mem0, Zep, Letta, Cognee) zijn krachtig maar 
 
 De ontwerpvoorkeur is overal dezelfde: **deterministisch waar mogelijk, LLM alleen waar het oordeelsvermogen toevoegt, fail-open overal**. Een dood model blokkeert nooit een sessie, verliest nooit een transcript, en verwijdert nooit geverifieerde kennis.
 
-## Functie-highlights (v0.19.0)
+## Functie-highlights (v0.20.0)
+
+### Nieuw in v0.20.0
+
+- **Drie stille faalmodi op kernpaden.** Memory-recall gaf een lege lijst zodra
+  een kluis boven ~1024 documenten kwam (sqlite-vec weigert een KNN met
+  `k > 4096`, en die fout viel buiten het afgeschermde blok). Elke temporele
+  vraag kwam op hetzelfde foute bereik uit met hoge confidence, doordat een lege
+  regex-alternatie de lege string matcht. En `activity-locales.json` werd
+  helemaal nooit naar een kluis gedeployed, dus een schone installatie draaide
+  met een lege vocabulaire. Geen van de drie logde iets.
+- **`safe-edit` kan het wiki-schrijfpad niet meer blokkeren.** Hij schrijft vóór
+  de git-stap, dus een mislukte commit liet het artikel overschreven en de boom
+  vuil achter — waarna elke volgende aanroep weigerde, terwijl `/wiki` en
+  `/reconcile` `--force` verbieden. De oorspronkelijke bytes worden nu
+  teruggezet.
+- **CI draait de volledige suite.** `unittest discover` sloeg 19 tests over die
+  als module-level functies geschreven zijn, waaronder de documentatie-guard die
+  nog nooit had gedraaid — de reden dat verouderde doc-claims bleven staan. Een
+  nieuwe lint bewaakt tweetalige feitpariteit en code-afgeleide claims, en vond
+  meteen twee echte gaten.
+- **Goedkoper indexonderhoud.** Vier write-only tabellen weg (~23,7 MB en een
+  full scan per event), bron-hashing lui gemaakt, en de rollup-cache verwijderd
+  nadat gemeten was dat hij antwoorden voor de verkeerde query teruggaf.
 
 ### Nieuw in v0.19.0
 
