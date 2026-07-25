@@ -403,5 +403,71 @@ class TestCommitFailureRollback(unittest.TestCase):
             import shutil; shutil.rmtree(str(d), ignore_errors=True)
 
 
+class TestDirtyGuardPathHandling(unittest.TestCase):
+    """De dirty-guard laat het doelbestand zelf vuil zijn -- behalve op Windows.
+
+    Het doelpad werd met de OS-scheidingsteken opgebouwd (`02-wiki\\a.md`)
+    terwijl `git status --porcelain` altijd forward slashes emit, dus de
+    zelf-uitzondering matchte nooit en een boom waarin alleen het doel vuil is
+    werd geweigerd met exit 3. Daarnaast quote git niet-ASCII paden tenzij
+    core.quotepath=false, en ging de uitvoer door de platform-default codec.
+    """
+
+    SCRIPT = TestCLI.SCRIPT
+    _run = TestCLI._run
+    _commit_count = TestCLI._commit_count
+
+    def make_repo(self, name="a.md"):
+        d = Path(tempfile.mkdtemp(prefix="kb-se-path-"))
+        subprocess.run(["git", "init", "-q", str(d)], check=True)
+        subprocess.run(["git", "-C", str(d), "config", "user.email", "t@t.t"], check=True)
+        subprocess.run(["git", "-C", str(d), "config", "user.name", "t"], check=True)
+        art = d / "02-wiki" / name
+        art.parent.mkdir(parents=True, exist_ok=True)
+        art.write_text("# A\n\nbody line\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(d), "add", "-A"], check=True)
+        subprocess.run(["git", "-C", str(d), "commit", "-qm", "seed"], check=True)
+        return d, art
+
+    def test_only_target_dirty_is_allowed(self):
+        d, art = self.make_repo()
+        try:
+            art.write_text("# A\n\nbody line uncommitted\n", encoding="utf-8")
+            result = self._run(d, art, "# A\n\nbody line fixed\n")
+            self.assertEqual(result.returncode, 0,
+                             "alleen het doelbestand is vuil, dat hoort te mogen: "
+                             + result.stdout + result.stderr)
+        finally:
+            import shutil; shutil.rmtree(str(d), ignore_errors=True)
+
+    def test_only_target_dirty_is_allowed_with_a_nonascii_name(self):
+        d, art = self.make_repo(name="ideeen-met-trema-ë.md")
+        try:
+            art.write_text("# A\n\nbody line uncommitted\n", encoding="utf-8")
+            result = self._run(d, art, "# A\n\nbody line fixed\n")
+            self.assertEqual(result.returncode, 0,
+                             result.stdout + result.stderr)
+        finally:
+            import shutil; shutil.rmtree(str(d), ignore_errors=True)
+
+    def test_dirty_nonascii_other_file_refuses_with_parseable_json(self):
+        d, art = self.make_repo()
+        try:
+            # Cyrillisch: buiten cp1252, dus dit trof de encoding-fout.
+            other = d / "02-wiki" / "заметка.md"
+            other.write_text("nieuw en ongecommit\n", encoding="utf-8")
+            result = self._run(d, art, "# A\n\nbody line fixed\n")
+            self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+            self.assertTrue(result.stdout.strip(),
+                            "lege stdout: UnicodeEncodeError i.p.v. een rapport")
+            report = json.loads(result.stdout.strip().splitlines()[-1])
+            self.assertEqual(report["reason"], "dirty-tree")
+            self.assertTrue(any("заметка" in line
+                                for line in report["dirty"]),
+                            f"niet-ASCII pad ontbreekt of is gequote: {report['dirty']}")
+        finally:
+            import shutil; shutil.rmtree(str(d), ignore_errors=True)
+
+
 if __name__ == "__main__":
     unittest.main()

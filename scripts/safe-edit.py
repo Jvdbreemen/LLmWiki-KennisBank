@@ -111,12 +111,20 @@ def unified(old: str, new: str, path: str) -> str:
 # ---------------------------------------------------------------------------
 
 def _git(*args, cwd=None):
-    """Run a git sub-command and return CompletedProcess."""
+    """Run a git sub-command and return CompletedProcess.
+
+    `core.quotepath=false` houdt niet-ASCII paden ongequote, en de expliciete
+    UTF-8-decodering voorkomt dat git-uitvoer door de platform-default codec
+    gaat (cp1252 op een Nederlandse Windows-installatie), waar een pad als
+    `ideeen.md` met trema stukloopt.
+    """
     import subprocess
     return subprocess.run(
-        ["git"] + list(args),
+        ["git", "-c", "core.quotepath=false"] + list(args),
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         cwd=str(cwd) if cwd else None,
     )
 
@@ -127,8 +135,14 @@ def _short_sha(repo_root: Path) -> str:
 
 
 def _emit(report: dict):
-    """Print report as JSON for machine readability. JSON output is always on."""
-    print(json.dumps(report, ensure_ascii=False))
+    """Print report as JSON for machine readability. JSON output is always on.
+
+    ensure_ascii=True: stdout gaat op Windows door de console-codepage, en een
+    pad buiten cp1252 gaf daar een UnicodeEncodeError met lege stdout -- voor de
+    aanroeper niet te onderscheiden van een crash. \\uXXXX-escapes zijn geldige
+    JSON en decoderen aan de leeskant vanzelf terug.
+    """
+    print(json.dumps(report, ensure_ascii=True))
 
 
 def _restore(target: Path, old_bytes, repo_root) -> bool:
@@ -239,7 +253,7 @@ def main(argv=None):
             print(
                 json.dumps(
                     {"action": "refused", "reason": "not-a-git-repo"},
-                    ensure_ascii=False,
+                    ensure_ascii=True,
                 )
             )
             sys.exit(3)
@@ -258,13 +272,17 @@ def main(argv=None):
         ]
         # target_rel uses .resolve()d repo_root so is_relative_to works on macOS.
         target_rel = target.relative_to(repo_root) if target.is_relative_to(repo_root) else target
-        target_rel_str = str(target_rel)
+        # as_posix(): git emit altijd forward slashes, ook op Windows. Met
+        # str() bouwde dit `02-wiki\a.md` en matchte de zelf-uitzondering nooit,
+        # zodat een boom waarin alleen het doelbestand vuil is werd geweigerd.
+        target_rel_str = target_rel.as_posix()
+        target_abs_str = target.as_posix()
 
         non_target_dirty = []
         for l in dirty_lines:
             parsed_path = _parse_porcelain_path(l)
             # Exact equality: a.md.bak != a.md even though a.md is a substring.
-            if parsed_path != target_rel_str and parsed_path != str(target):
+            if parsed_path != target_rel_str and parsed_path != target_abs_str:
                 non_target_dirty.append(l)
 
         if non_target_dirty:
@@ -275,7 +293,7 @@ def main(argv=None):
                         "reason": "dirty-tree",
                         "dirty": non_target_dirty,
                     },
-                    ensure_ascii=False,
+                    ensure_ascii=True,
                 )
             )
             sys.exit(3)
