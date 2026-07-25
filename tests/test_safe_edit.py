@@ -330,5 +330,78 @@ class TestCLI(unittest.TestCase):
             import shutil; shutil.rmtree(str(d), ignore_errors=True)
 
 
+class TestCommitFailureRollback(unittest.TestCase):
+    """De write gaat vooraf aan `git add`/`commit`.
+
+    Faalt de commit (pre-commit hook, onschrijfbare index, lockfile), dan stond
+    het artikel overschreven én staged achter zonder rollback -- en weigerde
+    elke volgende aanroep zonder --force wegens vuile boom, terwijl
+    commands/wiki.md en commands/reconcile.md --force verbieden. Eén mislukte
+    commit blokkeerde daarmee het hele /wiki-schrijfpad.
+    """
+
+    # Hergebruik de harness van TestCLI zonder ervan te erven: erven zou al
+    # zijn tests een tweede keer laten draaien.
+    SCRIPT = TestCLI.SCRIPT
+    make_repo = TestCLI.make_repo
+    _run = TestCLI._run
+    _commit_count = TestCLI._commit_count
+
+    def _break_commit(self, d):
+        hook = d / ".git" / "hooks" / "pre-commit"
+        hook.parent.mkdir(parents=True, exist_ok=True)
+        hook.write_text("#!/bin/sh\necho 'hook says no'\nexit 1\n", encoding="utf-8")
+        hook.chmod(0o755)
+        return hook
+
+    def test_failed_commit_restores_exact_bytes(self):
+        d, art = self.make_repo()
+        try:
+            original = art.read_bytes()
+            self._break_commit(d)
+            result = self._run(d, art, "# A\n\nbody line fixed\n")
+            self.assertEqual(result.returncode, 4, result.stdout + result.stderr)
+            report = json.loads(result.stdout.strip().splitlines()[-1])
+            self.assertEqual(report["action"], "error")
+            self.assertEqual(report["reason"], "git-commit-failed")
+            self.assertTrue(report["rolled_back"])
+            # stdout van de hook moet in detail staan: stderr is hier leeg.
+            self.assertIn("hook says no", report["detail"])
+            self.assertEqual(art.read_bytes(), original,
+                             "artikel niet byte-identiek teruggezet")
+        finally:
+            import shutil; shutil.rmtree(str(d), ignore_errors=True)
+
+    def test_failed_commit_removes_a_newly_created_file(self):
+        d, art = self.make_repo()
+        try:
+            self._break_commit(d)
+            new_file = d / "02-wiki" / "brand-new.md"
+            cmd = [sys.executable, str(self.SCRIPT), str(new_file), "--new", "-"]
+            result = subprocess.run(cmd, input="# New\n\nsmall body\n",
+                                    text=True, capture_output=True)
+            self.assertEqual(result.returncode, 4, result.stdout + result.stderr)
+            self.assertFalse(new_file.exists(),
+                             "nieuw bestand bleef achter na mislukte commit")
+        finally:
+            import shutil; shutil.rmtree(str(d), ignore_errors=True)
+
+    def test_write_path_recovers_once_the_cause_is_gone(self):
+        d, art = self.make_repo()
+        try:
+            hook = self._break_commit(d)
+            first = self._run(d, art, "# A\n\nbody line fixed\n")
+            self.assertEqual(first.returncode, 4, first.stdout + first.stderr)
+            hook.unlink()
+            before_count = self._commit_count(d)
+            second = self._run(d, art, "# A\n\nbody line fixed\n")
+            self.assertEqual(second.returncode, 0,
+                             "vervolgbewerking geblokkeerd door achtergebleven "
+                             "vuile boom: " + second.stdout + second.stderr)
+            self.assertEqual(self._commit_count(d), before_count + 1)
+        finally:
+            import shutil; shutil.rmtree(str(d), ignore_errors=True)
+
+
 if __name__ == "__main__":
     unittest.main()
