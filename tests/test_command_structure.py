@@ -3,6 +3,7 @@ Structuurtest voor commands/*.md slash-command bestanden.
 Elke testmethode valideert één command-bestand op vereiste strings.
 """
 
+import re
 import unittest
 from pathlib import Path
 
@@ -199,6 +200,46 @@ class NoHardcodedVaultInCommandsTest(unittest.TestCase):
                 content,
                 f"{md.name} roept een script aan via een hardcoded ~/KennisBank-pad; gebruik de $VAULT-resolutie",
             )
+
+
+class NoHardcodedVaultInShippedShellTest(unittest.TestCase):
+    """ADR-0002: geen geshipt artefact mag een vaultpad hardcoden.
+
+    Breder dan de guard hierboven: dekt ook skills en CLAUDE.md.template, en
+    kijkt naar elk vaultpad, niet alleen naar script-aanroepen. Alleen
+    shell-fences worden gescand -- de anonimiserende `sed` in de contribute-skill
+    en prozaregels buiten codefences zijn geen schending.
+
+    De template is het scherpste geval: setup.sh kopieert hem verbatim naar de
+    vault terwijl $VAULT daar wel KENNISBANK_VAULT eert, dus op een vault met een
+    andere naam wees de gedeployde CLAUDE.md naar een niet-bestaande map.
+    """
+
+    FENCE = re.compile(r"^```(?:bash|sh|shell)\s*$(.*?)^```\s*$", re.M | re.S)
+    REPO_ROOT = Path(__file__).resolve().parents[1]
+
+    def _shipped_markdown(self):
+        for root in ("commands", "skills"):
+            yield from sorted((self.REPO_ROOT / root).rglob("*.md"))
+        yield self.REPO_ROOT / "CLAUDE.md.template"
+
+    def test_shell_fences_resolve_the_vault(self):
+        offenders = []
+        for md in self._shipped_markdown():
+            if not md.is_file():
+                continue
+            for block in self.FENCE.findall(md.read_text(encoding="utf-8")):
+                for line in block.splitlines():
+                    # Trailing slash = het pad wordt gebruikt. Zonder slash gaat
+                    # het om de conventie zelf (${KENNISBANK_VAULT:-$HOME/KennisBank})
+                    # of om normalisatie naar een generieke naam.
+                    if "~/KennisBank/" in line or "$HOME/KennisBank/" in line:
+                        offenders.append(
+                            f"{md.relative_to(self.REPO_ROOT)}: {line.strip()}")
+        self.assertEqual(
+            offenders, [],
+            "hardcoded vaultpad in een geshipte shell-fence (ADR-0002); gebruik "
+            'VAULT="${KENNISBANK_VAULT:-$HOME/KennisBank}":\n  ' + "\n  ".join(offenders))
 
 
 if __name__ == "__main__":
