@@ -72,22 +72,59 @@ Run the doctor script from inside the cloned repo. It checks every directory, ev
 bash scripts/doctor.sh
 ```
 
-Expected output (abbreviated):
+Expected output. This is real output from a fresh `--agents claude` install,
+abbreviated at the marked point — doctor emits one line per script and per
+command, around 137 in total:
 
 ```
-[ok] vault root: $HOME/KennisBank
-[ok] vault layout: 00-inbox 01-raw/sessies 02-wiki 03-projecten 04-templates 05-bronnen 06-claude 07-media 08-archive
-[ok] scripts: auto-crosslink.py intake-scan.py semantic-tiling.py stale-check.py
-[ok] templates: tpl-sessie-log.md tpl-wiki-artikel.md
-[ok] CLAUDE.md present
-[ok] commands installed: sessielog wiki intake stale sessiestart import
-[ok] autoresearch skill installed
-[warn] ollama qwen3-embedding:8b not found (semantic tiling will be skipped)
-[warn] graphify-out/graph.json not present (auto-crosslink will be skipped)
-Done. 0 errors, 2 warnings.
+LLmWiki-KennisBank doctor
+==========================
+
+[PASS] vault root: $HOME/KennisBank
+[PASS] vault subdir 00-inbox: $HOME/KennisBank/00-inbox
+[PASS] vault subdir 01-raw/sessies: $HOME/KennisBank/01-raw/sessies
+[WARN] vault CLAUDE.md: still contains placeholders: [YOUR NAME] [YOUR PROJECTS]
+[PASS] skill backups: geen .bak-skills in $HOME/.claude/skills
+[PASS] template tpl-sessie-log.md: $HOME/KennisBank/04-templates/tpl-sessie-log.md
+[PASS] script _activity.py: $HOME/KennisBank/.claude/scripts/_activity.py
+[INFO] script _common.py: … (not chmod +x, but invoked via python3 so harmless)
+
+… one line per remaining subdir, script, command and skill …
+
+[PASS] python3: version 3.12
+[PASS] liteparse: py -3 version 2.5.0
+[PASS] dateparser: py -3 version 1.4.1
+[INFO] kennisbank MCP runtime: not configured for Codex/OpenCode
+[INFO] copilot integration: not configured (optional; run setup.sh --agents copilot)
+[PASS] activity index: schema=1 events=0 sources=0 stale=0
+[INFO] graphify graph: geen graph.json; /brug, auto-crosslink en de graaf-lenzen vallen stil terug (externe graphify-skill vereist)
+[PASS] temporal locales: 74 maandwoorden, 50 dagwoorden
+[INFO] ollama qwen3-embedding:8b: installed
+[PASS] geheugen no-cloud: LLM-keten lokaal
+[PASS] hook UserPromptSubmit kb-retrieve.py: registered in $HOME/.claude/settings.json
+[INFO] kennisbank-schema-versie: 0.9.0
+[PASS] provenance-lint: 0 artikelen, alle herkomst herleidbaar
+
+Summary
+  [PASS] 113
+  [WARN] 1
+  [FAIL] 0
+  [INFO] 14
 ```
 
-Warnings are fine; they correspond to optional features. Errors mean a directory or file is missing and you should rerun `bash setup.sh`.
+Four tiers, and they mean different things:
+
+- **`[FAIL]`** — something required is missing or broken. Rerun `bash setup.sh`.
+- **`[WARN]`** — worth acting on but not blocking. The one above is the expected
+  state right after install: you have not personalised `CLAUDE.md` yet.
+- **`[INFO]`** — an optional feature is not configured, or a note. Not a problem.
+- **`[PASS]`** — verified present and correct.
+
+Two lines are worth reading on a fresh install. `temporal locales` reports the
+size of the *loaded* vocabulary rather than the presence of a file, so a nonzero
+count is proof the date parser can actually do its job. And `graphify graph`
+being INFO is normal: the graph producer is an external skill, so `/brug`,
+auto-crosslink and the graph views degrade quietly until you run it.
 
 Manual sanity check, in case you want to see for yourself:
 
