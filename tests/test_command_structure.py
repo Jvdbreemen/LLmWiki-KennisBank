@@ -215,7 +215,12 @@ class NoHardcodedVaultInShippedShellTest(unittest.TestCase):
     andere naam wees de gedeployde CLAUDE.md naar een niet-bestaande map.
     """
 
-    FENCE = re.compile(r"^```(?:bash|sh|shell)\s*$(.*?)^```\s*$", re.M | re.S)
+    # Ingesprongen fences tellen mee. Een op kolom 0 verankerde variant miste 23
+    # blokken in zes bestanden (o.a. commands/sessielog.md, commands/import.md),
+    # waardoor deze guard vals vertrouwen gaf: hij kon een hardcoded vaultpad in
+    # een genest codeblok niet zien.
+    FENCE = re.compile(
+        r"^[ \t]*```(?:bash|sh|shell)[^\n]*\n(.*?)^[ \t]*```[ \t]*$", re.M | re.S)
     REPO_ROOT = Path(__file__).resolve().parents[1]
 
     def _shipped_markdown(self):
