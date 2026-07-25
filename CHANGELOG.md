@@ -7,6 +7,81 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-07-25
+
+The four structural items the v0.20.0 analysis identified but deliberately left
+out, because each needed its own design pass. Two of them change behaviour you
+will notice: retrieval now has a relevance floor, and SessionStart no longer
+blocks on index maintenance.
+
+### Added
+
+- **A relevance floor on the retrieval hot path.** The hook injected the top-k
+  unconditionally: RRF fused the vector and keyword rankings and cut at k with no
+  lower bound, so a prompt with nothing relevant still received the three
+  least-bad documents. The memory block had no gate at all. The threshold now
+  sits on the cosine, which comes free from the distance vec0 already returns and
+  was discarding — computing it separately would cost 118 ms per call, twice per
+  prompt, on the path that is supposed to be sub-second.
+- **`/kennisbank-release`.** Releasing has been manual since v0.16.0. The skill
+  codifies the procedure, including the two steps that went wrong by hand at
+  v0.20.0: waiting for the Copilot review (its comments are invisible to
+  `gh pr view`) and verifying the merge is on `origin/main` before tagging that
+  SHA. A new test couples the changelog version, the compare links and both
+  README highlight headings, so a half-finished bump fails instead of shipping.
+
+### Changed
+
+- **Vectors are stored normalised.** The cosine-from-distance identity only holds
+  for unit vectors, and these embeddings arrive unnormalised — `_embeddings.cosine`
+  normalises at comparison time, which is why it went unnoticed. Merely checking
+  the assumption, as first designed, would have reported "not normalised" forever
+  and the floor would never have engaged. Normalising on the write path also makes
+  vec0's L2 ordering identical to cosine ordering, which is what a semantic search
+  wants regardless. **Your index rebuilds once** on the first session after
+  upgrading; embeddings come from the cache, so nothing is re-embedded.
+- **SessionStart no longer blocks on index maintenance.** It ran the three
+  builders inline: roughly 210 s worst case for Claude and Codex, 300 s for
+  Copilot — the latter above the timeout that integration declares for itself, so
+  the coordinator could exceed its own ceiling. `index-launch.py` now takes a lock,
+  spawns a detached worker and returns. A consequence worth knowing: the
+  coordinator no longer reports builder output, because the builders are no longer
+  its children.
+- **The embedding cache is off the hot path.** Every non-trivial prompt parsed
+  tens of megabytes of JSON and ran a pure-Python cosine loop over the whole
+  corpus, to decide something the index already knows. It is now the fallback for
+  a vault whose index is missing or broken, behind a one-open readiness probe.
+- **Hook timeouts are declared in one place.** They were scattered across three
+  installers, and for Claude nothing was written at all — no file recorded what
+  the default there even was. `register-hooks` only fills a timeout in when
+  absent, so a hand-set value survives.
+
+### Fixed
+
+- **Two processes wrote the same index concurrently.** `sweep-launch.py` spawned
+  the memory sweep and the index build both detached, under a comment reading
+  "sweep first, then the index" — but nothing enforced that order. The worker now
+  runs them sequentially behind one lock.
+- **A lock with a future mtime never expired.** `acquire_lock` treated a negative
+  age as "not stale", so a clock change would freeze maintenance permanently.
+- **FTS dropped out on prompts containing punctuation.** `search()` passed the
+  raw prompt to FTS5, which reads `?`, `/` and `+` as syntax; the resulting error
+  was swallowed, so the keyword half of the fusion silently vanished on exactly
+  those queries. Gate and ranking now share one expression builder.
+
+### Not verified here
+
+The floor changes ranking for every prompt, and `kb-eval` needs a real vault with
+a local embedding model — CI has neither. Hits now carry `cos` and `fts` so the
+harness can measure the threshold at all:
+
+```
+python3 scripts/kb-eval.py        # after the first session rebuilds the index
+```
+
+If 0.60 proves too strict, `KB_RETRIEVE_THRESHOLD` and `memory_threshold` lower
+it without a rebuild.
+
 ## [0.20.0] - 2026-07-25
 
 A maintenance release from a full codebase analysis. Three of the fixes are
@@ -730,7 +805,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.20.0...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.21.0...HEAD
+[0.21.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.18.1...v0.19.0
 [0.18.1]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.18.0...v0.18.1

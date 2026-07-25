@@ -109,7 +109,7 @@ class WikiBlockTest(unittest.TestCase):
         # Mock i.p.v. kale lambda: assert_called bewijst dat het hybride pad
         # DAADWERKELIJK is gelopen. Zonder die guard kan een signatuur-drift de
         # fail-soft except raken en stil naar de fallback vallen (false green).
-        wiki_hits = Mock(side_effect=lambda qv, query_text="", k=3, expand=False: [
+        wiki_hits = Mock(side_effect=lambda qv, query_text="", k=3, expand=False, min_cos=0.0: [
             {"path": "/v/02-wiki/art.md", "layer": "wiki", "title": "Art",
              "created": "2026-06-01", "score": 0.5, "snippet": "hybride treffer"}])
         self.m.kb_recall.wiki_hits = wiki_hits
@@ -123,7 +123,7 @@ class WikiBlockTest(unittest.TestCase):
     def test_fts_only_triggers_when_cosine_low(self):
         self.emb.cosine = lambda a, b: 0.1  # onder drempel -> alleen FTS kan triggeren
         has_fts = Mock(side_effect=lambda q, layer="wiki": True)
-        wiki_hits = Mock(side_effect=lambda qv, query_text="", k=3, expand=False: [
+        wiki_hits = Mock(side_effect=lambda qv, query_text="", k=3, expand=False, min_cos=0.0: [
             {"path": "/v/02-wiki/art.md", "layer": "wiki", "title": "Art",
              "created": "2026-06-01", "score": 0.5, "snippet": "exacte-term-treffer"}])
         self.m.kb_recall.has_fts_match = has_fts
@@ -147,7 +147,7 @@ class WikiBlockTest(unittest.TestCase):
 
     def test_fallback_to_cosine_when_hybrid_empty(self):
         self.emb.cosine = lambda a, b: 0.9  # gate slaagt
-        wiki_hits = Mock(side_effect=lambda qv, query_text="", k=3, expand=False: [])  # index leeg
+        wiki_hits = Mock(side_effect=lambda qv, query_text="", k=3, expand=False, min_cos=0.0: [])  # index leeg
         self.m.kb_recall.wiki_hits = wiki_hits
         qvec = self.emb.embed("relevante vraag over het artikel")
         text = self.m._wiki_block("relevante vraag over het artikel",
@@ -155,6 +155,58 @@ class WikiBlockTest(unittest.TestCase):
         # fallback naar cosine-cache-selectie: het wiki-artikel staat er
         self.assertIn("[[art]]", text)
         wiki_hits.assert_called()  # hybride is echt geprobeerd voordat de fallback liep
+
+    # --- JSON-cache van de hot path (TASK-62) ---
+
+    def test_wiki_block_never_touches_json_cache_when_index_is_gated(self):
+        """De cache van tientallen MB hoort niet op de hot path te staan.
+
+        Zodra de index zelf kan drempelen levert hij poort én selectie; de
+        JSON-cache is dan overbodig werk.
+        """
+        boom = Mock(side_effect=AssertionError("load_cache op de hot path aangeroepen"))
+        self.emb.load_cache = boom
+        self.m.kb_recall.index_is_gated = Mock(return_value=True)
+        self.m.kb_recall.wiki_hits = Mock(
+            side_effect=lambda qv, query_text="", k=3, expand=False, min_cos=0.0: [
+                {"path": "/v/02-wiki/art.md", "layer": "wiki", "title": "Art",
+                 "created": "2026-06-01", "score": 0.5, "snippet": "index-treffer"}])
+        qvec = [0.1, 0.2]
+        text = self.m._wiki_block("een vraag", self.emb, self.vault_root, self._cfg(), qvec)
+        self.assertIn("index-treffer", text)
+        boom.assert_not_called()
+
+    def test_wiki_block_works_without_a_json_cache_at_all(self):
+        """Een vault met werkende index maar zonder JSON-cache gaf een leeg blok."""
+        self.emb.load_cache = lambda: {}
+        self.m.kb_recall.index_is_gated = Mock(return_value=True)
+        self.m.kb_recall.wiki_hits = Mock(
+            side_effect=lambda qv, query_text="", k=3, expand=False, min_cos=0.0: [
+                {"path": "/v/02-wiki/art.md", "layer": "wiki", "title": "Art",
+                 "created": "2026-06-01", "score": 0.5, "snippet": "nog steeds gevonden"}])
+        text = self.m._wiki_block("een vraag", self.emb, self.vault_root, self._cfg(), [0.1, 0.2])
+        self.assertIn("nog steeds gevonden", text)
+
+    def test_ungated_index_still_uses_the_cache_gate(self):
+        """Index van vóór de normalisatie: de oude poort moet blijven werken.
+
+        Zonder deze terugval zou een niet-herbouwde index onvoorwaardelijk gaan
+        injecteren -- slechter dan het gedrag van vóór deze wijziging.
+        """
+        self.m.kb_recall.index_is_gated = Mock(return_value=False)
+        self.emb.cosine = lambda a, b: 0.1               # onder drempel
+        self.m.kb_recall.has_fts_match = Mock(return_value=False)
+        text = self.m._wiki_block("totaal iets anders", self.emb, self.vault_root,
+                                  self._cfg(), [0.1, 0.2])
+        self.assertEqual(text, "")
+
+    def test_gated_index_without_hits_injects_nothing(self):
+        self.m.kb_recall.index_is_gated = Mock(return_value=True)
+        self.m.kb_recall.wiki_hits = Mock(
+            side_effect=lambda qv, query_text="", k=3, expand=False, min_cos=0.0: [])
+        text = self.m._wiki_block("iets irrelevants", self.emb, self.vault_root,
+                                  self._cfg(), [0.1, 0.2])
+        self.assertEqual(text, "")
 
 
 if __name__ == "__main__":

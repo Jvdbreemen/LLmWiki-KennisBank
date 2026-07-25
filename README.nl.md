@@ -71,7 +71,29 @@ Geheugensystemen van leveranciers (Mem0, Zep, Letta, Cognee) zijn krachtig maar 
 
 De ontwerpvoorkeur is overal dezelfde: **deterministisch waar mogelijk, LLM alleen waar het oordeelsvermogen toevoegt, fail-open overal**. Een dood model blokkeert nooit een sessie, verliest nooit een transcript, en verwijdert nooit geverifieerde kennis.
 
-## Functie-highlights (v0.20.0)
+## Functie-highlights (v0.21.0)
+
+### Nieuw in v0.21.0
+
+- **Retrieval heeft een relevantiedrempel.** De hook injecteerde onvoorwaardelijk
+  de top-k, dus een prompt zonder iets relevants kreeg alsnog de drie
+  minst-slechte documenten, en het geheugenblok had helemaal geen poort. De
+  drempel ligt nu op de cosinus, gratis afgeleid uit de afstand die de
+  vectorindex toch al teruggeeft. Je index wordt bij de eerste sessie na de
+  upgrade eenmalig herbouwd.
+- **SessionStart blokkeert niet meer.** De drie indexbouwers draaiden inline —
+  ruwweg 210 s worst case, en 300 s voor Copilot, boven de timeout die die client
+  zelf declareert. Onderhoud draait nu in een losgekoppelde worker achter een
+  lock, wat meteen een einde maakt aan twee processen die tegelijk dezelfde index
+  schreven.
+- **De embedding-cache is van de hot path af.** Elke niet-triviale prompt parste
+  tientallen megabytes JSON en scoorde de hele corpus in pure Python, om iets te
+  bepalen wat de index allang weet. Hij is nu alleen nog de terugvalweg voor een
+  kapotte index.
+- **`/kennisbank-release`.** Releasen ging sinds v0.16.0 met de hand. De skill
+  legt de procedure vast, inclusief de twee stappen die vorige keer handmatig
+  misgingen, en een test koppelt nu de changelog-versie aan beide README-koppen,
+  zodat een halve bump rood wordt in plaats van geshipt.
 
 ### Nieuw in v0.20.0
 

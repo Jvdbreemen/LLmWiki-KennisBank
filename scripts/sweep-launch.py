@@ -100,9 +100,11 @@ def main() -> int:
     if not acquire_lock():
         return 0  # al een sweep bezig
     d = os.path.dirname(os.path.abspath(__file__))
-    # ordening: sweep (status-flips/schrijven) eerst, dan de index
+    # ALLEEN de sweep. De index wordt niet meer vanuit hier gespawnd: dat gaf
+    # twee losgekoppelde processen die allebei kb-index.db schrijven, zonder dat
+    # iets de "sweep eerst, dan de index"-ordening uit de comment afdwong.
+    # index-launch.py draait beide sequentieel achter een gedeelde lock.
     _spawn_detached(os.path.join(d, "memory-sweep.py"))
-    _spawn_detached(os.path.join(d, "build-kb-index.py"))
     # de lock wordt door de volgende run als 'stale' opgeruimd; sweep zelf is kort
     return 0
 

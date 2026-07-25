@@ -109,6 +109,7 @@ def ensure_hook(
     matcher=None,
     *,
     quiet: bool = False,
+    timeout: "int | None" = None,
 ) -> bool:
     """Zorg dat `event` `script_path` als command-hook draait. Idempotent.
 
@@ -150,16 +151,20 @@ def ensure_hook(
                 if matcher and group.get("matcher") != matcher:
                     group["matcher"] = matcher  # self-heal ontbrekende/stale matcher
                     changed = True
+                # Plafond alleen AANVULLEN, nooit overschrijven: een gebruiker
+                # die zelf een timeout heeft gezet houdt die. Een bestaande
+                # registratie zonder timeout wordt bij de volgende setup wel
+                # aangevuld, zodat het budget gedeclareerd raakt.
+                if timeout is not None and "timeout" not in h:
+                    h["timeout"] = int(timeout)
+                    changed = True
                 return changed
 
-    group: dict
-    if matcher:
-        group = {"matcher": matcher,
-                 "hooks": [{"type": "command", "command": build_command(
-                     script_path, quiet=quiet, event=event)}]}
-    else:
-        group = {"hooks": [{"type": "command", "command": build_command(
-            script_path, quiet=quiet, event=event)}]}
+    entry: dict = {"type": "command",
+                   "command": build_command(script_path, quiet=quiet, event=event)}
+    if timeout is not None:
+        entry["timeout"] = int(timeout)
+    group: dict = {"matcher": matcher, "hooks": [entry]} if matcher else {"hooks": [entry]}
     event_groups.append(group)
     return True
 
@@ -237,6 +242,7 @@ def register_manifest(settings: dict, vault_root: str) -> bool:
             path,
             matcher=matcher,
             quiet=script in man.SILENT_HOOK_SCRIPTS,
+            timeout=man.timeout(script),
         ):
             changed = True
     return changed

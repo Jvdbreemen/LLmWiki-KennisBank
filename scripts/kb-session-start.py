@@ -21,11 +21,15 @@ from pathlib import Path
 from typing import Callable
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _hooks_manifest  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402
 
 
 FRESHNESS_SECONDS = 300
-LOCK_STALE_SECONDS = 600
+# Afgeleid van het gedeclareerde plafond in plaats van een los getal: een
+# afgebroken cyclus herstelt zo binnen één plafond in plaats van binnen een
+# waarde die niemand meer met het budget verbindt.
+LOCK_STALE_SECONDS = _hooks_manifest.timeout("kb-session-start.py")
 STATE_NAME = "kb-session-start-state.json"
 LOCK_NAME = ".kb-session-start.lock"
 
@@ -46,11 +50,13 @@ class Result:
     error: str = ""
 
 
+# Indexonderhoud draait NIET meer blokkerend. index-launch.py neemt een lock,
+# spawnt een losgekoppelde worker die de bouwers plus de geheugensweep
+# sequentieel afwerkt, en keert direct terug. Daarmee valt het blokkerende deel
+# van SessionStart terug van ~210s (Claude/Codex) en ~300s (Copilot) naar de
+# paar seconden die de launcher zelf kost. Zie TASK-63.
 MAINTENANCE = (
-    Job("build-embed-index.py"),
-    Job("build-kb-index.py"),
-    Job("build-activity-index.py"),
-    Job("sweep-launch.py", timeout=30),
+    Job("index-launch.py", timeout=15),
 )
 NOTIFICATIONS = (
     Job("memory-notify.py", timeout=30),
@@ -136,7 +142,8 @@ def relevant_report(result: Result) -> str:
     elif result.script == "build-activity-index.py":
         relevant = relevant or _changed_count(out, r"(\d+)\s+changed") > 0
         relevant = relevant or _changed_count(out, r"(\d+)\s+failed") > 0
-    elif result.script in {"import-copilot.py", "kb-copilot-capture.py", "sweep-launch.py"}:
+    elif result.script in {"import-copilot.py", "kb-copilot-capture.py",
+                           "sweep-launch.py", "index-launch.py"}:
         # These are side-effect jobs; successful routine output is not context.
         relevant = relevant or result.returncode != 0
     else:
@@ -211,7 +218,10 @@ def acquire_lock(path: Path, now: float | None = None) -> bool:
     except FileExistsError:
         try:
             age = current - path.stat().st_mtime
-            if age <= LOCK_STALE_SECONDS:
+            # age < 0 = mtime in de toekomst (klokverzetting, of een bestand van
+            # een machine met scheve klok). Zonder die clausule verloopt zo'n
+            # lock nooit en ligt het onderhoud permanent stil.
+            if 0 <= age <= LOCK_STALE_SECONDS:
                 return False
             path.unlink()
             fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
