@@ -131,6 +131,32 @@ def _emit(report: dict):
     print(json.dumps(report, ensure_ascii=False))
 
 
+def _restore(target: Path, old_bytes, repo_root) -> bool:
+    """Zet het doelbestand terug naar de staat van vóór de write.
+
+    De write gaat vooraf aan `git add`/`commit`; faalt een van die twee, dan is
+    het artikel al overschreven. Zonder deze rollback blijft de boom vuil en
+    weigert elke volgende aanroep zonder --force (commands/wiki.md verbiedt
+    --force), waardoor één mislukte commit het hele schrijfpad blokkeert.
+
+    Bytes, niet tekst: een tekst-roundtrip herschrijft LF naar CRLF op schijf.
+    """
+    ok = True
+    try:
+        if old_bytes is None:
+            # Bestond niet vóór deze aanroep -> weghalen, niet leeg achterlaten.
+            target.unlink(missing_ok=True)
+        else:
+            target.write_bytes(old_bytes)
+    except OSError:
+        ok = False
+    if repo_root is not None:
+        # Best effort: unstage. Faalt in een repo zonder commits (geen HEAD);
+        # dat is geen reden om de bestandsrollback als mislukt te melden.
+        _git("-C", str(repo_root), "reset", "-q", "HEAD", "--", str(target))
+    return ok
+
+
 def _parse_porcelain_path(line: str) -> str:
     """Extract the (new) file path from a git status --porcelain line.
 
@@ -290,28 +316,36 @@ def main(argv=None):
         _emit(report)
         sys.exit(2)
 
-    # Apply: write file, git add, git commit.
+    # Apply: write file, git add, git commit. De write gaat noodzakelijkerwijs
+    # vooraf aan de git-stappen (git ziet alleen wat op schijf staat), dus elk
+    # faalpad daarna moet de write terugdraaien -- zie _restore().
     target.parent.mkdir(parents=True, exist_ok=True)
+    old_bytes = target.read_bytes() if target_exists else None
     target.write_text(proposed, encoding="utf-8")
+
+    def _fail(reason: str, result):
+        # stdout meenemen: een falende pre-commit hook schrijft zijn reden daar,
+        # en laat stderr leeg.
+        detail = "\n".join(
+            part for part in (result.stderr.strip(), result.stdout.strip()) if part
+        )
+        rolled_back = _restore(target, old_bytes, repo_root)
+        _emit({
+            "action": "error",
+            "reason": reason,
+            "detail": detail,
+            "rolled_back": rolled_back,
+        })
+        sys.exit(4)
 
     if repo_root is not None:
         add_result = _git("-C", str(repo_root), "add", str(target))
         if add_result.returncode != 0:
-            _emit({
-                "action": "error",
-                "reason": "git-add-failed",
-                "detail": add_result.stderr.strip(),
-            })
-            sys.exit(4)
+            _fail("git-add-failed", add_result)
 
         commit_result = _git("-C", str(repo_root), "commit", "-m", commit_msg)
         if commit_result.returncode != 0:
-            _emit({
-                "action": "error",
-                "reason": "git-commit-failed",
-                "detail": commit_result.stderr.strip(),
-            })
-            sys.exit(4)
+            _fail("git-commit-failed", commit_result)
 
         sha = _short_sha(repo_root)
     else:
