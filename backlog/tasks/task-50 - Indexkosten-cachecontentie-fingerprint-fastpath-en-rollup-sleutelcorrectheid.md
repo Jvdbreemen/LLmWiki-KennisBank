@@ -4,6 +4,7 @@ title: 'Indexkosten: cachecontentie, fingerprint-fastpath en rollup-sleutelcorre
 status: To Do
 assignee: []
 created_date: '2026-07-25 03:34'
+updated_date: '2026-07-25 04:06'
 labels:
   - bug
   - performance
@@ -41,3 +42,13 @@ Verder in dezelfde taak: `build-kb-index.py` doet een onvoorwaardelijke embeddin
 - [ ] #9 `build-kb-index.py` doet geen embedding-probe wanneer er geen werk te doen is
 - [ ] #10 De volledige testsuite draait groen
 <!-- AC:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: Claude (analyse-sessie)
+created: 2026-07-25 04:06
+---
+Beslissing (gebruiker, 2026-07-25): rollup_cache wordt VERWIJDERD, niet gerepareerd. Aanleiding: de dode-code-sweep stelde vast dat de cache leeft (elke /weeklog leest hem, tests/test_activity.py assert cache == 'hit'), terwijl de fix-designronde mat dat hij 0,88 ms body-berekening bespaart en 34 ms per hit kost, waarvan 30 ms een tweede SQLite-connectie. Netto verlies. Verwijderen haalt zowel de invalidatiebug (purge vergelijkt een watermark-digest met een per-periode-digest) als de sleutelbug (limiet en project ontbreken) permanent weg. De tabel blijft staan zodat er geen migratie nodig is. AC #7 en #8 van deze taak vervallen daarmee in hun huidige vorm: de kruisbesmettingstest moet aantonen dat het antwoord correct is, niet dat de sleutel klopt.
+---
+<!-- COMMENTS:END -->

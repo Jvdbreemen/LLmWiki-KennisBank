@@ -67,11 +67,19 @@ idempotent-veilige installer); deze tabel is alleen referentie voor wat waar lan
      `skills/*/` present in LATEST) where a deployed
      `~/.claude/skills/<name>/SKILL.md` exists and its content differs from
      the file step 9 will write, back it up:
-     `$HOME/.claude/skills/<name>` -> `$HOME/.claude/skills/<name>.pre-$INSTALLED.bak`.
+     `$HOME/.claude/skills/<name>` -> `$VAULT/.claude/skills.pre-$INSTALLED.bak/<name>`.
+     **The backup must land OUTSIDE `~/.claude/skills/`.** That directory is the
+     one the host scans, so a `<name>.pre-<tag>.bak` copy left inside it shows up
+     as a second, triggerable skill with the same description as the real one —
+     and an agent can pick the stale version.
      This explicitly covers skills that are new in LATEST (absent at INSTALLED)
      but have a pre-existing local file — those are at-risk and must be backed
      up. Only back up a skill dir if the deployed file differs from what step 9
      will write; skip identical ones.
+7b. Clean up backups from earlier upgrades that used the old convention: if any
+   `~/.claude/skills/*.pre-*.bak` entries exist, report them to the user and, on
+   confirmation, move them to `$VAULT/.claude/skills.pre-legacy.bak/`. Leaving
+   them in place keeps stale skills triggerable.
    Only back up a non-skill category if it actually has drift; skip clean ones.
    The backup set provably covers every skill that step 9 will overwrite — no false safety promise.
 8. `git -C "$REPO" -c advice.detachedHead=false checkout "$LATEST"`.

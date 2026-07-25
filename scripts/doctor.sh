@@ -118,6 +118,27 @@ else
   else
     report_pass "vault CLAUDE.md" "placeholders replaced"
   fi
+  # Hardcoded vaultpad (ADR-0002). setup.sh overschrijft CLAUDE.md bewust nooit,
+  # dus een vault die met een oud sjabloon is opgezet houdt de fout paden. Toets
+  # op het letterlijke pad, niet op "VAULT != default": in elke deploytest zijn
+  # die identiek en zou de check nooit vuren.
+  if grep -q '~/KennisBank/' "$VAULT_CLAUDE_MD" 2>/dev/null; then
+    report_warn "vault CLAUDE.md" \
+      "bevat hardcoded ~/KennisBank/-paden; vervang door \"\${KENNISBANK_VAULT:-\$HOME/KennisBank}\" (ADR-0002)"
+  fi
+fi
+
+# 3b. Skill-backups van eerdere upgrades. Een <naam>.pre-<tag>.bak in de map die
+# de client scant, laadt als een tweede skill met dezelfde description -- de
+# agent kan dan de verouderde versie kiezen.
+if [ -d "$SKILLS_DIR" ]; then
+  STALE_SKILL_BAKS="$(find "$SKILLS_DIR" -maxdepth 1 -name '*.bak' 2>/dev/null | wc -l | tr -d ' \r')"
+  if [ "${STALE_SKILL_BAKS:-0}" -gt 0 ] 2>/dev/null; then
+    report_warn "skill backups" \
+      "$STALE_SKILL_BAKS .bak-item(s) in $SKILLS_DIR zijn triggerbaar; verplaats ze naar \$VAULT/.claude/skills.pre-legacy.bak/"
+  else
+    report_pass "skill backups" "geen .bak-skills in $SKILLS_DIR"
+  fi
 fi
 
 # 4. Templates present.
