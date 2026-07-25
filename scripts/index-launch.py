@@ -40,12 +40,6 @@ LOCK_NAME = ".kb-index-worker.lock"
 # een grote vault); de rest is normaal seconden.
 PER_JOB_TIMEOUT = 300
 
-# De worker draait de jobs sequentieel, dus de bovengrens is de SOM. De
-# lock-vervaltijd moet daar strikt boven liggen: anders kan een tweede sessie
-# een nog draaiende worker als verweesd beschouwen en een tweede starten --
-# precies de dubbele-schrijver-situatie die dit script moet uitsluiten.
-STALE_SEC = PER_JOB_TIMEOUT * 8      # 2400s tegen een som van maximaal 1500s
-
 # Volgorde is betekenisvol: de sweep flipt memory-statussen en schrijft
 # markdown, dus die moet klaar zijn voordat de index eroverheen loopt.
 JOBS = (
@@ -54,6 +48,15 @@ JOBS = (
     ("build-kb-index.py", None),
     ("build-activity-index.py", None),
 )
+
+# De worker draait de jobs sequentieel, dus de bovengrens is PER_JOB_TIMEOUT maal
+# het aantal jobs. De lock-vervaltijd moet daar strikt boven liggen: anders kan
+# een tweede sessie een nog draaiende worker als verweesd beschouwen en een
+# tweede starten -- precies de dubbele-schrijver-situatie die dit script moet
+# uitsluiten. De factor is bewust ruim, en afgeleid in plaats van los genoteerd:
+# een los getal in een comment drift zodra JOBS groeit.
+# test_stale_window_exceeds_the_worst_case_run bewaakt de ongelijkheid.
+STALE_SEC = PER_JOB_TIMEOUT * len(JOBS) * 2
 
 
 def _lock_path() -> Path:
