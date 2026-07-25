@@ -2,9 +2,14 @@
 """sweep-launch.py - SessionStart-launcher voor de capture-sweep.
 
 Dun en NIET-blokkerend: gegate op memory_capture, neemt een single-flight lock,
-spawnt memory-sweep.py DETACHED en daarna build-kb-index.py (sweep->index-ordening),
-en eindigt met exit 0 (fail-open). De zware LLM-sweep draait dus los van SessionStart
-zodat de sessiestart onzichtbaar/snel blijft.
+spawnt memory-sweep.py DETACHED, en eindigt met exit 0 (fail-open). De zware
+LLM-sweep draait dus los van SessionStart zodat de sessiestart snel blijft.
+
+Spawnt bewust GEEN indexbouw meer. Dat deed het wel, met een comment die
+"sweep eerst, dan de index" beloofde -- maar beide processen werden losgekoppeld
+gestart en niets dwong die volgorde af, dus ze schreven tegelijk naar dezelfde
+index. index-launch.py draait sweep en bouwers sequentieel achter één lock; zie
+TASK-63.
 
 Stdlib only.
 """

@@ -33,13 +33,13 @@ Volgorde binnen de taak: fix 2 vóór of samen met fix 3, zodat een missende loc
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 `pool` in `_kbindex.search` overschrijdt nooit 4096, ook niet bij een corpus van 9999 docs; de `total`-term blijft behouden zodat de layer-starvation-fix uit TASK-10 intact blijft
-- [ ] #2 `tests/test_kbindex_search.py` bevat een test die vandaag rood is en die assert dat de pool-expressie bij `total=9999` ten hoogste 4096 oplevert
-- [ ] #3 `_alt([])` levert een nooit-matchende sentinel op in plaats van een lege string; `re.search(r'\b(?:' + _alt([]) + r')\b', 'gisteren')` geeft None
-- [ ] #4 `tests/test_activity_multilang.py` bevat een test die vandaag rood is op de lege-vocabulaire-case
-- [ ] #5 `setup.sh` deployt `scripts/*.json` mee naar de vault; `chmod +x` blijft beperkt tot .py en .sh
-- [ ] #6 `tests/test_setup_deploy.py` assert dat `activity-locales.json` na een install in de vault-scriptsmap staat; deze test is vandaag rood
-- [ ] #7 `doctor.sh` rapporteert de omvang van de GELADEN locale-vocabulaire (niet de aanwezigheid van het bestand) en geeft WARN bij een lege tabel; geen FAIL, want `set -e` breekt setup.sh dan vóór het dashboard
-- [ ] #8 `skills/kennisbank-upgrade/SKILL.md` noemt de json-bestanden in de te kopiëren set
-- [ ] #9 De volledige testsuite draait groen
+- [x] #1 `pool` in `_kbindex.search` overschrijdt nooit 4096, ook niet bij een corpus van 9999 docs; de `total`-term blijft behouden zodat de layer-starvation-fix uit TASK-10 intact blijft
+- [x] #2 `tests/test_kbindex_search.py` bevat een test die vandaag rood is en die assert dat de pool-expressie bij `total=9999` ten hoogste 4096 oplevert
+- [x] #3 `_alt([])` levert een nooit-matchende sentinel op in plaats van een lege string; `re.search(r'\b(?:' + _alt([]) + r')\b', 'gisteren')` geeft None
+- [x] #4 `tests/test_activity_multilang.py` bevat een test die vandaag rood is op de lege-vocabulaire-case
+- [x] #5 `setup.sh` deployt `scripts/*.json` mee naar de vault; `chmod +x` blijft beperkt tot .py en .sh
+- [x] #6 `tests/test_setup_deploy.py` assert dat `activity-locales.json` na een install in de vault-scriptsmap staat; deze test is vandaag rood
+- [x] #7 `doctor.sh` rapporteert de omvang van de GELADEN locale-vocabulaire (niet de aanwezigheid van het bestand) en geeft WARN bij een lege tabel; geen FAIL, want `set -e` breekt setup.sh dan vóór het dashboard
+- [x] #8 `skills/kennisbank-upgrade/SKILL.md` noemt de json-bestanden in de te kopiëren set
+- [x] #9 De volledige testsuite draait groen
 <!-- AC:END -->

@@ -30,11 +30,11 @@ Let op bij de fix: `CLAUDE.md` is user-owned en wordt door `setup.sh` bewust noo
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Upgrade-backups van skills worden buiten `~/.claude/skills/` geplaatst, zodat verouderde kopieën niet triggerbaar zijn
-- [ ] #2 De upgrade-skill bevat een stap die bestaande `.bak`-skills uit de skills-map opruimt
-- [ ] #3 `doctor.sh` geeft WARN wanneer er `.bak`-items in de skills-map staan
-- [ ] #4 `CLAUDE.md.template` en `skills/autoresearch/SKILL.md` bevatten geen hardcoded vaultpad meer maar resolven de vault via de bestaande shell-conventie
-- [ ] #5 Er is een test die shell-fences in commands en skills scant op hardcoded vaultpaden en die vandaag rood is; prozaregels buiten codefences worden niet meegenomen
-- [ ] #6 `doctor.sh` waarschuwt wanneer een bestaande gedeployde `CLAUDE.md` nog een hardcoded vaultpad bevat, zonder aan te nemen dat de vault een niet-default naam heeft
-- [ ] #7 De volledige testsuite draait groen
+- [x] #1 Upgrade-backups van skills worden buiten `~/.claude/skills/` geplaatst, zodat verouderde kopieën niet triggerbaar zijn
+- [x] #2 De upgrade-skill bevat een stap die bestaande `.bak`-skills uit de skills-map opruimt
+- [x] #3 `doctor.sh` geeft WARN wanneer er `.bak`-items in de skills-map staan
+- [x] #4 `CLAUDE.md.template` en `skills/autoresearch/SKILL.md` bevatten geen hardcoded vaultpad meer maar resolven de vault via de bestaande shell-conventie
+- [x] #5 Er is een test die shell-fences in commands en skills scant op hardcoded vaultpaden en die vandaag rood is; prozaregels buiten codefences worden niet meegenomen
+- [x] #6 `doctor.sh` waarschuwt wanneer een bestaande gedeployde `CLAUDE.md` nog een hardcoded vaultpad bevat, zonder aan te nemen dat de vault een niet-default naam heeft
+- [x] #7 De volledige testsuite draait groen
 <!-- AC:END -->

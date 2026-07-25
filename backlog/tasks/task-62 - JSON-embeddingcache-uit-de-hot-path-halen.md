@@ -31,11 +31,11 @@ Let op bij het testen: een van de bestaande tests die dit raakt draait alleen wa
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 De wiki-tak van de retrieval-hook raakt de JSON-cache niet meer wanneer de index treffers oplevert
-- [ ] #2 De JSON-cache blijft werken als terugvalweg wanneer de index geen treffers geeft
-- [ ] #3 Een vault zonder JSON-cache maar met een werkende index levert nog steeds resultaten; vandaag geeft dat een leeg blok
-- [ ] #4 Het memory-blok voert geen module dubbel uit
-- [ ] #5 De gebruikstelemetrie haalt de tellers voor alle stems in één databaseverbinding op
-- [ ] #6 De bestaande tests die de oude volgorde vastleggen zijn meegewijzigd, inclusief de test die alleen onder een integratievlag draait
-- [ ] #7 De volledige testsuite draait groen
+- [x] #1 De wiki-tak van de retrieval-hook raakt de JSON-cache niet meer wanneer de index treffers oplevert
+- [x] #2 De JSON-cache blijft werken als terugvalweg wanneer de index geen treffers geeft
+- [x] #3 Een vault zonder JSON-cache maar met een werkende index levert nog steeds resultaten; vandaag geeft dat een leeg blok
+- [x] #4 Het memory-blok voert geen module dubbel uit
+- [x] #5 De gebruikstelemetrie haalt de tellers voor alle stems in één databaseverbinding op
+- [x] #6 De bestaande tests die de oude volgorde vastleggen zijn meegewijzigd, inclusief de test die alleen onder een integratievlag draait
+- [x] #7 De volledige testsuite draait groen
 <!-- AC:END -->
