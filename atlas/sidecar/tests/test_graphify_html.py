@@ -28,6 +28,17 @@ def test_graphify_html_served_with_content_type(vault_factory):
     assert resp.text == HTML
 
 
+def test_graphify_html_head_probe(vault_factory):
+    # The lens probes with HEAD before embedding; @app.get alone would 405.
+    vault = vault_factory()
+    out = vault / "graphify-out"
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "graph.html").write_text(HTML, encoding="utf-8")
+
+    resp = _client(vault).head("/graphify-html")
+    assert resp.status_code == 200
+
+
 def test_graphify_html_missing_is_404(vault_factory):
     vault = vault_factory()
     assert _client(vault).get("/graphify-html").status_code == 404
