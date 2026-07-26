@@ -150,6 +150,18 @@ def create_app(
             raise HTTPException(status_code=exc.code, detail=exc.detail)
         return FileResponse(target, media_type=media)
 
+    @app.get("/graphify-html")
+    def graphify_html():
+        # Serve the self-contained interactive graph page that the graphify
+        # pipeline writes; the Graphify lens embeds it in an iframe. Served
+        # over loopback http so its scripts run (a file:// iframe would not).
+        target = vault / "graphify-out" / "graph.html"
+        if not target.is_file():
+            raise HTTPException(
+                status_code=404, detail="geen graphify-out/graph.html in de vault"
+            )
+        return FileResponse(target, media_type="text/html")
+
     @app.get("/recall")
     def recall(q: str = "", k: int = 3) -> dict:
         return _recall(q, k)
