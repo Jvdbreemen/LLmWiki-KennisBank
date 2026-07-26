@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-07-26
+
+A small quality release: a vault orientation summary at session start, an
+agent-focused install guide, and a test-isolation fix.
+
 ### Added
 
 - **Vault orientation at session start (TASK-80, idea borrowed from Mind's
@@ -17,6 +22,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   runs it as its orientation step; a new opt-in toggle `orientation`
   (default off) additionally injects it at every session start through the
   coordinator's notification phase.
+- **Agent install guide (TASK-82).** `docs/AGENT-INSTALL.md` gives AI agents
+  the shortest correct install path per platform (Claude Code, Codex CLI,
+  Copilot CLI, OpenCode, Claude Cowork) with a capability matrix; both READMEs
+  link it in their opening lines. The Claude Cowork section is verified
+  against the Claude Desktop 3P extensions documentation (2026-07): skills,
+  plugins and MCP work there, Claude Code-style hooks do not.
+
+### Fixed
+
+- **Test isolation: `test_layer2_absent_degrades_gracefully` read the
+  developer's real vault settings** through the `activity_llm_fallback`
+  default, so enabling that toggle locally made the suite fail. The test now
+  forces the settings module off.
 
 ## [0.22.0] - 2026-07-26
 
@@ -885,7 +903,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.22.0...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.23.0...HEAD
+[0.23.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.19.0...v0.20.0
