@@ -54,6 +54,7 @@ ROOT_COMMANDS = {
     "timeline": "Create a chronological activity timeline.",
     "watdeedik": "Answer what you did on a date or during a period.",
     "destilleer": "Distill raw sessions into reusable knowledge.",
+    "checkpoint": "Save, load or close a work-state checkpoint.",
     "kennisbank-upgrade": "Upgrade KennisBank tooling to the latest release.",
     "kennisbank-contribute": "Contribute local KennisBank tooling improvements upstream.",
 }

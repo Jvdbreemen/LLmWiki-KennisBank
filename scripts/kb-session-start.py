@@ -412,7 +412,27 @@ def coordinate(
     state_path = runtime / STATE_NAME
     lock_path = runtime / LOCK_NAME
 
+    # Het source-veld ("startup"|"resume"|"clear"|"compact"|"fork") stuurt de
+    # checkpoint-melding: na een compaction is die urgent en specifiek.
+    source = ""
+    try:
+        parsed = json.loads(payload.decode("utf-8", errors="replace")) if payload.strip() else {}
+        if isinstance(parsed, dict):
+            source = str(parsed.get("source") or "")
+    except ValueError:
+        pass
+
     always: list[Result] = []
+    # Checkpoint-melding draait VÓÓR de freshness-gate: een SessionStart met
+    # source=compact valt vrijwel altijd binnen 300s na de vorige start, en dan
+    # zou de melding in NOTIFICATIONS precies op het moment suprême wegvallen
+    # (TASK-79). Puur een state-file-lezing, dus goedkoop genoeg voor elk event.
+    always.extend(run_parallel(
+        (Job("kb-checkpoint.py", ("--notify", "--source", source), 15),),
+        scripts,
+        payload,
+        runner,
+    ))
     if client == "copilot":
         always.extend(run_parallel(
             (Job("kb-copilot-capture.py", ("--event", "sessionStart"), 30),),
