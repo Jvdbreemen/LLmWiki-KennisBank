@@ -115,18 +115,49 @@ def memory_path(title: str, created: str | None = None) -> Path:
     return memory_dir() / f"{date}-{slugify(title)}.md"
 
 
-def unique_memory_path(title: str, created: str | None = None) -> Path:
-    """memory_path met collision-guard: voegt -2,-3,.. toe tot het pad vrij is."""
+def _genormaliseerde_body(path: Path) -> "str | None":
+    """De body van een memory, zonder frontmatter, whitespace-genormaliseerd."""
+    try:
+        _fm, body = parse_frontmatter(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    return (body or "").strip()
+
+
+def unique_memory_path(title: str, created: str | None = None,
+                       body: str | None = None) -> "tuple[Path, bool]":
+    """Pad voor een nieuwe memory. Geeft (pad, bestaat_al) terug.
+
+    Een bezette slug is een SIGNAAL, geen hindernis om omheen te nummeren. Deze
+    functie voegde blind -2, -3 toe zodra het pad bezet was, en produceerde zo
+    byte-identieke memories naast elkaar. Nu wordt eerst de body vergeleken:
+
+      identieke body   -> (bestaand pad, True). De aanroeper schrijft NIET.
+      andere body      -> (pad met -2/-3/..., False), zoals voorheen.
+      body onbekend    -> nummeren, zoals voorheen; zonder body valt er niets
+                          te vergelijken en is stil overslaan gevaarlijker dan
+                          een duplicaat.
+
+    BEWUST BEPERKT, en dat hoort erbij: dit vangt alleen duplicaten met DEZELFDE
+    slug. Twee memories met verschillende titels maar dezelfde inhoud -- of
+    dezelfde inhoud op een andere datum, want de datum zit in de slug -- glippen
+    hier per definitie doorheen. Uit de meting op de echte vault dekt deze check
+    hooguit 15 van de 42 duplicaatgroepen; de andere 27 kregen een ander
+    datumprefix en botsen dus nooit. Die vragen het sweep-mechanisme.
+    """
     base = memory_path(title, created)
     if not base.exists():
-        return base
+        return base, False
+    nieuw = (body or "").strip()
     stem, suffix, parent = base.stem, base.suffix, base.parent
     n = 2
-    while True:
-        cand = parent / f"{stem}-{n}{suffix}"
-        if not cand.exists():
-            return cand
+    kandidaat = base
+    while kandidaat.exists():
+        if body is not None and _genormaliseerde_body(kandidaat) == nieuw:
+            return kandidaat, True
+        kandidaat = parent / f"{stem}-{n}{suffix}"
         n += 1
+    return kandidaat, False
 
 
 def _yaml_scalar(s) -> str:
@@ -224,7 +255,15 @@ def set_status(path, status: str, superseded_by=None, valid_until: str | None = 
     new_fm = re.sub(r"^status:.*$", lambda _m: f"status: {status}",
                     fm, count=1, flags=re.MULTILINE)
     if superseded_by:
-        link = "[" + ", ".join(f"[[{s}]]" for s in superseded_by) + "]"
+        # Elke wikilink in dubbele quotes. Zonder die quotes wordt het
+        # [[[slug]]], en dat lezen de twee partijen VERSCHILLEND: de eigen
+        # frontmatter-parser maakt er terecht ['[[slug]]'] van, maar strikte YAML
+        # -- PyYAML, en daarmee Obsidian -- ziet een drievoudig geneste lijst
+        # [[['slug']]]. Functioneel ging er binnen KennisBank dus niets mis, maar
+        # in Obsidian staat de eigenschap er verminkt bij. Met quotes komen beide
+        # lezers op ['[[slug]]'] uit; test_superseded_by_leest_hetzelfde_in_beide
+        # bewaakt dat.
+        link = "[" + ", ".join(f'"[[{s}]]"' for s in superseded_by) + "]"
         if re.search(r"^superseded_by:.*$", new_fm, flags=re.MULTILINE):
             new_fm = re.sub(r"^superseded_by:.*$", lambda _m: f"superseded_by: {link}",
                             new_fm, count=1, flags=re.MULTILINE)

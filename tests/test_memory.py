@@ -98,10 +98,71 @@ class MemoryFormatTest(unittest.TestCase):
         self.assertNotIn("[[a]], [[n]]", md)  # niet per-char gesplitst
 
     def test_unique_memory_path_avoids_collision(self):
+        """Andere inhoud onder dezelfde slug: nummeren, zoals altijd."""
         p1 = _memory.write("Zelfde titel", "een", created="2026-06-27")
-        p2 = _memory.unique_memory_path("Zelfde titel", created="2026-06-27")
+        p2, bestaat_al = _memory.unique_memory_path(
+            "Zelfde titel", created="2026-06-27", body="iets anders")
         self.assertNotEqual(p1, p2)
         self.assertTrue(p2.name.endswith("-2.md"))
+        self.assertFalse(bestaat_al)
+
+    def test_identieke_body_krijgt_geen_tweede_bestand(self):
+        """TASK-73: een bezette slug is een SIGNAAL, geen hindernis.
+
+        De functie nummerde blind door zodra het pad bezet was, en produceerde
+        zo byte-identieke memories naast elkaar. Nu wordt eerst de body
+        vergeleken.
+        """
+        p1 = _memory.write("Zelfde titel", "exact dezelfde inhoud", created="2026-06-27")
+        p2, bestaat_al = _memory.unique_memory_path(
+            "Zelfde titel", created="2026-06-27", body="exact dezelfde inhoud")
+        self.assertEqual(p1, p2)
+        self.assertTrue(bestaat_al)
+
+    def test_body_vergelijking_negeert_omringende_witruimte(self):
+        _memory.write("Zelfde titel", "inhoud", created="2026-06-27")
+        _p, bestaat_al = _memory.unique_memory_path(
+            "Zelfde titel", created="2026-06-27", body="\n  inhoud  \n\n")
+        self.assertTrue(bestaat_al)
+
+    def test_zonder_body_wordt_er_gewoon_genummerd(self):
+        """Zonder body valt er niets te vergelijken; stil overslaan zou daar
+        gevaarlijker zijn dan een duplicaat."""
+        p1 = _memory.write("Zelfde titel", "een", created="2026-06-27")
+        p2, bestaat_al = _memory.unique_memory_path("Zelfde titel", created="2026-06-27")
+        self.assertNotEqual(p1, p2)
+        self.assertFalse(bestaat_al)
+
+    def test_derde_identieke_vindt_ook_het_eerste_bestand(self):
+        """Met een -2 ernaast die AFWIJKT, moet een identieke body alsnog het
+        juiste bestaande bestand vinden in plaats van een -3 te maken."""
+        p1 = _memory.write("Zelfde titel", "origineel", created="2026-06-27")
+        p2, _ = _memory.unique_memory_path("Zelfde titel", created="2026-06-27",
+                                           body="afwijkend")
+        p2.write_text(_memory.render("Zelfde titel", "afwijkend", created="2026-06-27"),
+                      encoding="utf-8")
+        gevonden, bestaat_al = _memory.unique_memory_path(
+            "Zelfde titel", created="2026-06-27", body="origineel")
+        self.assertTrue(bestaat_al)
+        self.assertEqual(gevonden, p1)
+
+    def test_superseded_by_leest_hetzelfde_in_beide_parsers(self):
+        """De eigen parser las [[[slug]]] correct, strikte YAML zag een
+        drievoudig geneste lijst -- dus in Obsidian stond de eigenschap
+        verminkt. Met quotes komen beide op dezelfde waarde uit."""
+        from _frontmatter import parse_frontmatter
+        p = _memory.write("Oud", "iets", created="2026-06-27")
+        _memory.set_status(p, "superseded", superseded_by=["nieuw-artikel"])
+        tekst = p.read_text(encoding="utf-8")
+        self.assertIn('superseded_by: ["[[nieuw-artikel]]"]', tekst)
+        fm, _body = parse_frontmatter(tekst)
+        self.assertEqual(fm.get("superseded_by"), ["[[nieuw-artikel]]"])
+        try:
+            import yaml
+        except ImportError:
+            self.skipTest("PyYAML niet aanwezig")
+        blok = tekst.split("---")[1]
+        self.assertEqual(yaml.safe_load(blok).get("superseded_by"), ["[[nieuw-artikel]]"])
 
 
 if __name__ == "__main__":
