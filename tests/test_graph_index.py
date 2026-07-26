@@ -69,7 +69,7 @@ class GraphIndexTest(unittest.TestCase):
         os.environ["KENNISBANK_VAULT"] = str(self.tmp)
         import _kbindex
         self.idx = _kbindex
-        self.conn = _kbindex.connect(self.db)
+        self.conn = _kbindex.graph_connect(self.db)
         g = _graph()
         _kbindex.replace_graph(self.conn, g["nodes"], g["links"])
         _kbindex.set_graph_fingerprint(self.conn, _kbindex.graph_fingerprint(self.graph))
@@ -173,20 +173,67 @@ class GraphIndexTest(unittest.TestCase):
         self.assertFalse(self.idx.graph_is_current(self.conn, self.graph))
 
     def test_versheid_staat_los_van_het_embedmodel(self):
-        """De twee assen mogen elkaar niet beinvloeden: een modelwissel maakt de
-        graaf niet ongeldig, en een graafherbouw niet het embedmodel."""
-        self.idx.ensure_schema(self.conn, dim=4, embed_id="ollama:model-a")
-        self.assertTrue(self.idx.is_valid_for(self.conn, "ollama:model-a"))
+        """De twee assen mogen elkaar niet beinvloeden.
+
+        Deze test zette eerder BEIDE schema's op dezelfde verbinding om te tonen
+        dat een modelwissel de graaf niet ongeldig maakt. Sinds TASK-75 kan dat
+        niet meer -- en hoeft het niet meer: de graaf heeft een eigen bestand,
+        dus de onafhankelijkheid is structureel in plaats van afgesproken. Wat
+        overblijft is toetsen dat de graafversheid puur van graph.json afhangt en
+        van geen enkele embedding-eigenschap.
+        """
         self.assertTrue(self.idx.graph_is_current(self.conn, self.graph))
-        self.idx.ensure_schema(self.conn, dim=4, embed_id="ollama:model-b")
+        # Een graafverbinding heeft geen embed-eigenschappen; is_valid_for hoort
+        # daar fail-open op te reageren en niet te ontploffen.
         self.assertFalse(self.idx.is_valid_for(self.conn, "ollama:model-a"))
         self.assertTrue(self.idx.graph_is_current(self.conn, self.graph),
-                        "een modelwissel mag de graaf niet ongeldig maken")
+                        "graafversheid mag niet aan het embedmodel hangen")
+
+    def test_graafindex_gebruikt_wal(self):
+        """Vastgelegd omdat DELETE hier MEETBAAR sneller is (1,2 ms tegen 23,5 ms
+        per verse lezer) en een latere snelheidsronde die keuze dus zou kunnen
+        terugdraaien. De index kan meerdere agents tegelijk bedienen terwijl de
+        worker hem herbouwt; WAL houdt lezers en schrijvers by design uit elkaar,
+        DELETE leunt op de busy-timeout. Die 23 ms staan tegenover een
+        sessiestart van ~1230 ms."""
+        mode = self.conn.execute("PRAGMA journal_mode").fetchone()[0]
+        self.assertEqual(str(mode).lower(), "wal")
+
+    def test_lezers_worden_niet_geblokkeerd_door_een_herbouw(self):
+        """De reden dat WAL hier staat: een lezer tijdens een lopende herbouw
+        hoort gewoon antwoord te krijgen, niet SQLITE_BUSY."""
+        import sqlite3 as _sq
+        self.idx.replace_graph(
+            self.conn,
+            [{"id": "a", "source_file": "02-wiki/a.md"},
+             {"id": "b", "source_file": "02-wiki/b.md"}],
+            [{"source": "a", "target": "b", "relation": "references",
+              "confidence_score": 1.0}])
+        self.conn.execute("BEGIN IMMEDIATE")
+        self.conn.execute("DELETE FROM graph_edges")
+        try:
+            lezer = _sq.connect(f"file:{self.db}?mode=ro", uri=True, timeout=0.5)
+            try:
+                n, _e = self.idx.graph_count(lezer)
+                self.assertEqual(n, 2, "lezer ziet de vorige, consistente staat")
+            finally:
+                lezer.close()
+        finally:
+            self.conn.rollback()
+
+    def test_graaf_heeft_een_eigen_bestand(self):
+        """De kern van TASK-75: kb-index.db kan weggegooid worden, de graaf niet.
+
+        Zie test_build_kb_index.test_een_volledige_herbouw_laat_de_graaf_intact
+        voor het bewijs via de echte unlink-weg; hier alleen de padscheiding.
+        """
+        self.assertNotEqual(self.idx.graph_index_path(), self.idx.index_path())
+        self.assertEqual(self.idx.graph_index_path().name, "kb-graph.db")
 
     def test_lege_index_geeft_geen_buur(self):
         """Fail-open: zonder graaftabellen geen exception, gewoon niets."""
         import _kbindex
-        leeg = _kbindex.connect(self.tmp / "leeg.db")
+        leeg = _kbindex.graph_connect(self.tmp / "leeg.db")
         try:
             self.assertEqual(_kbindex.graph_neighbors(leeg, "09-memory/a.md"), [])
             self.assertEqual(_kbindex.graph_count(leeg), (0, 0))

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""build-graph-index.py - laad graphify-out/graph.json in kb-index.db.
+"""build-graph-index.py - laad graphify-out/graph.json in kb-graph.db.
 
 Waarom: graph.json is 4,2 MB. Dat per prompt parsen om te weten welke bestanden
 aan een treffer grenzen past niet in het hot-path-budget van kb-retrieve (2,0s
@@ -10,10 +10,12 @@ Draait OFF de hot path, naast build-kb-index.py: SessionStart, of handmatig na
 een graphify-run. Idempotent - een tweede run met dezelfde graaf doet niets
 behalve opnieuw dezelfde rijen wegschrijven.
 
-Versheid staat los van de embedding-index. is_valid_for() bewaakt het
-embedmodel; de graaf krijgt een eigen vingerafdruk (mtime+grootte) in meta.
-Een verouderde graaf naast een verse embedding-index levert daardoor GEEN buur
-op in plaats van een verkeerde.
+Versheid staat los van de embedding-index, en sinds TASK-75 geldt dat ook voor
+de OPSLAG: de graaf woont in een eigen bestand. kb-index.db wordt door
+build-kb-index.py in zijn geheel ge-unlinkt bij een herbouw of een
+embed_id-mismatch, en nam de graaftabellen daar eerder in mee. De graaf krijgt
+een eigen vingerafdruk (mtime+grootte) in zijn eigen meta-tabel; een verouderde
+graaf levert GEEN buur op in plaats van een verkeerde.
 
 Exit: 0 = geladen of niets te doen, 1 = graaf onleesbaar.
 """
@@ -50,7 +52,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--graph", default=None,
                         help="pad naar graph.json (default <vault>/graphify-out/graph.json)")
-    parser.add_argument("--db", default=None, help="pad naar kb-index.db (voor tests)")
+    parser.add_argument("--db", default=None, help="pad naar kb-graph.db (voor tests)")
     parser.add_argument("--force", action="store_true",
                         help="herladen ook als de vingerafdruk ongewijzigd is")
     parser.add_argument("--json", action="store_true", dest="as_json")
@@ -65,7 +67,9 @@ def main() -> int:
         return 0
 
     try:
-        conn = _kbindex.connect(args.db) if args.db else _kbindex.connect()
+        # graph_connect, niet connect: de graaf heeft een eigen bestand zodat een
+        # herbouw van de embedding-index hem niet meesleurt (TASK-75).
+        conn = _kbindex.graph_connect(args.db) if args.db else _kbindex.graph_connect()
     except Exception as exc:
         print(f"kan de index niet openen: {exc}", file=sys.stderr)
         return 1

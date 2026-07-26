@@ -298,7 +298,7 @@ def status_line(vault: Path, *, worker_running: bool) -> str:
     delen = []
     delen.append("onderhoud draait al" if worker_running else "onderhoud gestart op de achtergrond")
 
-    # Index: een telling en de graafversheid. Read-only, geen schrijfrechten nodig.
+    # Embedding-index: een telling. Read-only, geen schrijfrechten nodig.
     try:
         import sqlite3
         db = vault / ".claude" / "kb-index.db"
@@ -313,26 +313,42 @@ def status_line(vault: Path, *, worker_running: bool) -> str:
                 # zonder voorbehoud tonen is een verkeerd getal met stellige toon.
                 if worker_running:
                     deel += " (bijwerken)"
-                try:
-                    gpath = vault / "graphify-out" / "graph.json"
-                    if gpath.exists():
-                        row = conn.execute(
-                            "SELECT value FROM meta WHERE key='graph_fingerprint'").fetchone()
-                        if row:
-                            st = gpath.stat()
-                            actueel = row[0] == f"{int(st.st_mtime)}:{st.st_size}"
-                            deel += ", graaf " + ("actueel" if actueel else "verouderd")
-                        else:
-                            # Er is wel een graaf op schijf, maar de index kent
-                            # hem niet. Zwijgen zou dit onzichtbaar houden -- en
-                            # dat is precies hoe de graaftabellen ongemerkt uit
-                            # kb-index.db verdwenen (zie TASK-75).
-                            deel += ", graaf niet geladen"
-                except sqlite3.Error:
-                    pass
                 delen.append(deel)
             finally:
                 conn.close()
+    except Exception:
+        pass
+
+    # Graaf: een EIGEN bestand en dus een eigen aflezing. Bewust niet genest in
+    # de tak hierboven: sinds TASK-75 kan kb-index.db weg zijn of half herbouwd
+    # worden terwijl de graaf ongeschonden is. De graafstatus aan het bestaan van
+    # de embedding-index koppelen zou hem juist stil maken op het moment dat je
+    # hem het hardst nodig hebt.
+    try:
+        import sqlite3
+        gpath = vault / "graphify-out" / "graph.json"
+        gdb = vault / ".claude" / "kb-graph.db"
+        if gpath.exists():
+            if not gdb.exists():
+                delen.append("graaf niet geladen")
+            else:
+                conn = sqlite3.connect(f"file:{gdb}?mode=ro", uri=True, timeout=0.5)
+                try:
+                    row = conn.execute(
+                        "SELECT value FROM meta WHERE key='graph_fingerprint'").fetchone()
+                    if row:
+                        st = gpath.stat()
+                        actueel = row[0] == f"{int(st.st_mtime)}:{st.st_size}"
+                        delen.append("graaf " + ("actueel" if actueel else "verouderd"))
+                    else:
+                        # Wel een graaf op schijf, maar de graafindex kent hem
+                        # niet. Zwijgen hierover is precies hoe de graaftabellen
+                        # ongemerkt verdwenen (TASK-75).
+                        delen.append("graaf niet geladen")
+                except sqlite3.Error:
+                    delen.append("graaf niet geladen")
+                finally:
+                    conn.close()
     except Exception:
         pass
 
