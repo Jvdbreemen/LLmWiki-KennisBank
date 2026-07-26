@@ -61,6 +61,10 @@ MAINTENANCE = (
 NOTIFICATIONS = (
     Job("memory-notify.py", timeout=30),
     Job("distill-notify.py", timeout=30),
+    # Oriëntatie-summary (TASK-80): opt-in via de orientation-toggle, het
+    # script zelf gate-t. Routinecontext, dus bewust WEL achter de
+    # freshness-gate — anders spamt elke resume/compact dezelfde regels.
+    Job("kb-orientation.py", ("--hook",), 15),
     # Waarschuwt als de git-repo in de sessie-cwd achter zijn upstream loopt.
     # cwd-aware + fail-open: stil buiten een repo of als alles up-to-date is.
     # Erft de 300s freshness-gate van de coordinator, dus geen fetch-spam.

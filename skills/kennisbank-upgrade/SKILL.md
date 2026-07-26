@@ -115,7 +115,7 @@ Toon daarom de huidige waarden en bied aan ze te tunen — niet "vraag-indien-af
 Lees elke canonieke toggle's huidige waarde:
 
 ```bash
-for key in auto_archive distill_notify embed_index daily_graphify memory_capture memory_recall usage_telemetry activity_llm_fallback checkpoints; do
+for key in auto_archive distill_notify embed_index daily_graphify memory_capture memory_recall usage_telemetry activity_llm_fallback checkpoints orientation; do
   echo "$key=$(python3 "$VAULT/.claude/scripts/_settings.py" get "$key")"
 done
 ```
@@ -133,6 +133,7 @@ enable it, suggesting the default:
 - usage_telemetry (default ON) - record which injected knowledge was actually used
 - activity_llm_fallback (default OFF) - let a local LLM resolve dates the deterministic layers miss
 - checkpoints (default OFF) - auto-save a work-state stub at context compaction (Claude PreCompact) and surface it at the next session start
+- orientation (default OFF) - show a compact vault orientation at session start (document counts, recent articles, frequently used knowledge, open backlog tasks)
 
 Write each choice with `python3 "$VAULT/.claude/scripts/_settings.py" set <key> <true|false>`.
 Do NOT re-ask keys that are already set. Mention afterwards that the user can
