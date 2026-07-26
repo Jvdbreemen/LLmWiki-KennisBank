@@ -68,7 +68,31 @@ Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: 
 
 The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
 
-## Feature highlights (v0.21.0)
+## Feature highlights (v0.22.0)
+
+### New in v0.22.0
+
+- **A checkpoint primitive that survives context compaction.** `/checkpoint`
+  saves a forward-looking work-state snapshot (active task, open decisions,
+  next step) to the vault; an opt-in `checkpoints` toggle lets Claude's
+  PreCompact hook write a stub automatically right before compaction, and the
+  session-start coordinator now surfaces open checkpoints *before* its
+  freshness gate — exactly the moment a compact event would otherwise swallow
+  the notice. Codex and Copilot get the same recall path and a manual
+  `$checkpoint` / `/checkpoint` command.
+- **The knowledge graph became a queryable layer.** `graph.json` now loads
+  into its own `kb-graph.db` (fingerprint-gated, rebuilt by the background
+  worker), with a deterministic edge layer from wikilinks and frontmatter, a
+  link-only provenance ring for session logs, and scope controlled by
+  `.graphifyignore`. A full `kb-index.db` rebuild no longer drags the graph
+  down with it.
+- **Session start got an order of magnitude faster.** Cold start went from
+  35.7 s to 1.3 s: the notification tier is decoupled, the staleness count
+  moved to the background worker, and the status line only reads precomputed
+  state. The test suite also stopped running `setup.sh` eighteen times.
+- **Memory writes deduplicate at capture time**, a cold embedding model
+  reports itself instead of failing silently, and every settings toggle is now
+  test-coupled to the surfaces that manage it.
 
 ### New in v0.21.0
 
