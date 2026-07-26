@@ -4,6 +4,7 @@
 import { DataClient } from "./data-client";
 import { newGeneration, runLensLeave } from "./lifecycle";
 import { renderGraphLens } from "./lenses/graph";
+import { renderGraphifyLens } from "./lenses/graphify";
 import { renderOverviewLens } from "./lenses/overview";
 import { renderTimeSliderLens } from "./lenses/time-slider";
 import { renderMemoryHealthLens } from "./lenses/memory-health";
@@ -24,6 +25,7 @@ interface Lens {
 const LENSES: Lens[] = [
   { key: "overview", label: "Overzicht", render: renderOverviewLens },
   { key: "graph", label: "Graph", render: renderGraphLens },
+  { key: "graphify", label: "Graphify", render: renderGraphifyLens },
   { key: "wordcloud", label: "Wordcloud", render: renderWordcloudLens },
   { key: "timeslider", label: "Time-slider", render: renderTimeSliderLens },
   { key: "memory", label: "Memory Health", render: renderMemoryHealthLens },

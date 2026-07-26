@@ -145,4 +145,9 @@ export class DataClient {
   assetUrl(path: string): string | null {
     return this.base ? `${this.base}/asset?path=${encodeURIComponent(path)}` : null;
   }
+  // Loopback URL for the graphify graph.html page; the Graphify lens embeds it
+  // in an iframe. Returns null when no sidecar port is configured.
+  graphifyHtmlUrl(): string | null {
+    return this.base ? `${this.base}/graphify-html` : null;
+  }
 }
