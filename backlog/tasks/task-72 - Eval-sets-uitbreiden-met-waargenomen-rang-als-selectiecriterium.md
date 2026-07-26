@@ -1,10 +1,10 @@
 ---
 id: TASK-72
 title: Eval-sets uitbreiden met waargenomen-rang als selectiecriterium
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-25 16:41'
-updated_date: '2026-07-25 18:19'
+updated_date: '2026-07-26 08:55'
 labels:
   - retrieval
   - eval
@@ -45,7 +45,7 @@ PRIVACY: 06-claude staat in de whitelist van de vault-.gitignore en gaat dus mee
 - [x] #3 Nieuwe sets als aparte bestanden; kb-eval-set.json en kb-memory-eval-set.json blijven ongewijzigd zodat de TASK-67-baseline geldig blijft
 - [x] #4 Voor elke faal-case staat genoteerd WAAROM het document het antwoord draagt, zodat latere lezers de case kunnen betwisten
 - [x] #5 Baseline op de nieuwe sets gemeten en vastgelegd voor er iets aan de ranking verandert
-- [ ] #6 Privacy-consequentie van eval-inhoud in 06-claude expliciet bevestigd
+- [x] #6 Privacy-consequentie van eval-inhoud in 06-claude expliciet bevestigd
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -100,4 +100,12 @@ Ter vergelijking v1: memory @3 0.941, wiki @3 1.000 - die zaten op het plafond.
 ARTEFACT, eerlijk vastgelegd: @3 en @5 zijn identiek omdat ik de rang-4-en-5-gevallen (11 vragen) als bucket heb overgeslagen. Juist die zouden het verschil tussen @3 en @5 zichtbaar maken. De set kan @5 dus alleen bewegen via de rang-0-groep. Verdedigbaar, want daar moet de winst vandaan komen, maar het is een selectiekeuze en geen eigenschap van de data. Wie later @5-gevoeligheid wil, voegt die 11 gevallen toe.
 
 kb-eval eist q en expect op ELKE entry; een toelichtingsblok als eerste element breekt de set (foutmelding: 'entry 0 mist q of expect'). Documentatie staat daarom in README-eval-sets.md ernaast.
+
+AFGEROND 2026-07-26.
+
+AC #6 (privacy-consequentie expliciet bevestigd) is beantwoord door een directe gebruikersinstructie, niet door mijn eigen inschatting: "Je mag de eval ALLEEN in de private KLUIS zetten, niet in het upstream Kennisbank project."
+
+Daarnaar gehandeld en geverifieerd bij het opleveren van de PR's op 2026-07-26: de sets staan uitsluitend in $VAULT/06-claude. In de repo is alleen de METHODE en de gemeten baseline vastgelegd (task-72, PR #65) -- geen enkele vraag, geen enkel verwacht document, geen eval-inhoud. Gecontroleerd met een scan over alles wat gecommit zou worden voordat de eerste commit gemaakt werd.
+
+Bij diezelfde scan bleek de upstream-repo (Jvdbreemen/LLmWiki-KennisBank) PUBLIEK. Twee zaken opgeruimd voordat er iets gepusht werd: een hardcoded persoonlijk vaultpad en de naam van de private vault-repo mét de vermelding dat die privé is, beide in task-67. Gegeneraliseerd naar $KENNISBANK_VAULT en "de vault-remote".
 <!-- SECTION:NOTES:END -->
