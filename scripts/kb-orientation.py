@@ -35,7 +35,9 @@ TRENDING_WINDOW_DAYS = 14
 
 
 def _ro(path: Path) -> sqlite3.Connection:
-    return sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=0.5)
+    # as_posix(): backslashes in een file:-URI zijn op Windows randgeval-gevoelig
+    # (zelfde normalisatie als kb-recall.py en _activity.py).
+    return sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True, timeout=0.5)
 
 
 def index_lines(vault: Path) -> list[str]:
