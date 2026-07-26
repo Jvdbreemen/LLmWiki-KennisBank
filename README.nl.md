@@ -71,7 +71,31 @@ Geheugensystemen van leveranciers (Mem0, Zep, Letta, Cognee) zijn krachtig maar 
 
 De ontwerpvoorkeur is overal dezelfde: **deterministisch waar mogelijk, LLM alleen waar het oordeelsvermogen toevoegt, fail-open overal**. Een dood model blokkeert nooit een sessie, verliest nooit een transcript, en verwijdert nooit geverifieerde kennis.
 
-## Functie-highlights (v0.21.0)
+## Functie-highlights (v0.22.0)
+
+### Nieuw in v0.22.0
+
+- **Een checkpoint-primitief dat context-compaction overleeft.** `/checkpoint`
+  legt een vooruitkijkend werkstand-snapshot vast (actieve taak, open
+  beslissingen, volgende stap) in de vault; een opt-in toggle `checkpoints`
+  laat Claude's PreCompact-hook vlak vóór compaction automatisch een stub
+  schrijven, en de sessiestart-coordinator meldt open checkpoints *vóór* zijn
+  freshness-gate — precies het moment waarop een compact-event de melding
+  anders zou opslokken. Codex en Copilot krijgen hetzelfde herstel-pad en een
+  handmatig `$checkpoint` / `/checkpoint` command.
+- **De kennisgraaf is een queryable laag geworden.** `graph.json` laadt nu in
+  een eigen `kb-graph.db` (fingerprint-gated, herbouwd door de
+  achtergrondworker), met een deterministische edge-laag uit wikilinks en
+  frontmatter, een link-only provenance-ring voor sessielogs, en scope via
+  `.graphifyignore`. Een volledige herbouw van `kb-index.db` sleurt de graaf
+  niet meer mee.
+- **Sessiestart werd een orde van grootte sneller.** Koude start van 35,7 s
+  naar 1,3 s: de notificatietier is losgekoppeld, de rot-telling verhuisde
+  naar de achtergrondworker en de statusregel leest alleen nog voorberekende
+  state. De testsuite draait `setup.sh` ook niet meer achttien keer.
+- **Geheugen ontdubbelt bij het schrijven**, een koud embedding-model meldt
+  zichzelf in plaats van stil te falen, en elke settings-toggle is nu via een
+  test gekoppeld aan de oppervlakken die hem beheren.
 
 ### Nieuw in v0.21.0
 

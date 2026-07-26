@@ -132,7 +132,10 @@ def test_freshness_skips_maintenance_but_keeps_copilot_capture(tmp_path):
     assert module.coordinate(
         "copilot", vault, b"{}", runner=runner, now=1100.0
     ) == ""
-    assert called == ["kb-copilot-capture.py"]
+    # The checkpoint notice deliberately runs before the freshness gate
+    # (TASK-79): a SessionStart with source=compact almost always lands inside
+    # the gate, which is exactly when the notice matters most.
+    assert called == ["kb-checkpoint.py", "kb-copilot-capture.py"]
 
 
 def test_emit_uses_one_native_context_payload_per_client(capsys):

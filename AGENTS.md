@@ -1,5 +1,10 @@
 # AGENTS.md
 
+**Language policy: all documentation in this repository (README, CHANGELOG,
+docs/, commit messages, PR descriptions, code comments) is written in English
+by default. Dutch translations may exist alongside as explicitly named
+variants (e.g. `README.nl.md`), never as the primary document.**
+
 Operational instructions for AI coding agents installing or upgrading this repo.
 The human-facing guide is `README.md`; this file is the deployment contract.
 
