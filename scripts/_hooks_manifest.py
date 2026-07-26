@@ -15,6 +15,10 @@ HOOKS = [
     ("UserPromptSubmit", "kb-retrieve.py",        None),
     ("SessionEnd",       "kb-session-end.py",     None),
     ("PreToolUse",       "kb-presearch.py",       "WebSearch|WebFetch"),
+    # Claude-only: schrijft een werkstand-stub vlak vóór context-compaction
+    # (TASK-79). Codex/Copilot hebben geen PreCompact-equivalent; hun pad is het
+    # /checkpoint-command. install-agent-envs.py neemt dit event bewust NIET op.
+    ("PreCompact",       "kb-checkpoint.py",      None),
 ]
 
 # Timeout-plafond per hookscript, in seconden. EEN bron voor alle drie de
@@ -35,6 +39,7 @@ TIMEOUTS = {
     "kb-presearch.py": 30,
     "kb-session-end-recover.py": 30,
     "kb-copilot-capture.py": 30,
+    "kb-checkpoint.py": 15,
 }
 
 DEFAULT_TIMEOUT = 30
