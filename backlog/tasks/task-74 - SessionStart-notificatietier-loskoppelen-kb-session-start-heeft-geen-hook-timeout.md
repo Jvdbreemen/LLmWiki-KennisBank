@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-07-25 20:35'
-updated_date: '2026-07-25 22:38'
+updated_date: '2026-07-26 09:58'
 labels:
   - performance
   - hooks
@@ -188,4 +188,16 @@ Fix in de TEST, niet in de code -- die age<0-clausule is bewust en gedocumenteer
 Deploy-pariteit gecontroleerd na afloop: kb-session-start.py, quiet-hook.py, git-upstream-check.py, git-fetch-refresh.py en index-launch.py zijn byte-gelijk aan de repo. Deploy-drift was de hoofdoorzaak van deze taak; die fout niet zelf herhalen.
 
 STAND VAN DE CRITERIA: #3, #4 en #5 afgevinkt. #1 en #2 staan bewust open. De onbegrensde staart (netwerk) is van de interactieve weg af, wat de reden was dat ze er stonden -- maar de drie notify-scripts draaien nog synchroon, dus naar de LETTER zijn ze niet gehaald. Ze schrappen of alsnog uitvoeren is een keuze voor Robert.
+
+EINDSTAND 2026-07-26. AC #1 en #2 blijven OPEN, en dat is een keuze met een reden -- niet een vergeten restje.
+
+Wat die criteria wilden bereiken is bereikt: de onbegrensde staart is van de interactieve weg af (de fetch, TASK-74 iteratie 2) en de O(n)-scan ook (TASK-76). De sessiestart staat op 1.183 ms, gemeten.
+
+Wat er letterlijk nog staat: memory-notify, distill-notify en git-upstream-check draaien nog synchroon. Ze kosten samen niets noemenswaardigs meer -- de groep draait parallel en het maximum is nu git-upstream-check met 493 ms.
+
+WAAROM IK ZE NIET ALSNOG VERPLAATS. Om AC #1 naar de letter te halen moeten de meldingen naar een state-bestand dat de VOLGENDE sessiestart uitleest. Dan is elke melding een sessie oud: 'er wachten 6 transcripts op destillatie' zou gaan over de situatie van de vorige keer. Dat is een verslechtering van de functionaliteit voor een winst van enkele honderden milliseconden op een start die al ruim binnen het doel zit.
+
+Dat botst met de opdracht 'functionaliteit mag alleen vooruit'. Ik kan deze twee criteria dus niet afvinken zonder de andere helft van de opdracht te schenden, en ik vink ze ook niet af op basis van 'de bedoeling is gehaald' -- dat zou de tekst en het vinkje uit elkaar laten lopen.
+
+AANBEVELING: schrap AC #1 en #2, of herschrijf ze naar wat feitelijk het doel was ('geen onbegrensde wachttijd op de sessiestart', gehaald). Dat is een keuze voor Robert; het is zijn backlog.
 <!-- SECTION:NOTES:END -->

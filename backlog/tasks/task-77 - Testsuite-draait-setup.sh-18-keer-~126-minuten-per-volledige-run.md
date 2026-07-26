@@ -1,10 +1,10 @@
 ---
 id: TASK-77
 title: 'Testsuite draait setup.sh 18 keer: ~12,6 minuten per volledige run'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-25 22:38'
-updated_date: '2026-07-26 09:19'
+updated_date: '2026-07-26 09:57'
 labels:
   - tests
   - developer-experience
@@ -71,4 +71,6 @@ WAAROM GEEN KOPIE van de installatie per test, wat nog goedkoper zou zijn: de ge
 De resterende ~340 s is niet verder omlaag te brengen zonder de dekking te raken: idempotentie vraagt per definitie twee runs, de hernieuwde-run-test ook.
 
 Dezelfde 22 tests, dezelfde asserties, alle groen.
+
+CI groen op PR #68 (test, 1m21s), gemerged in main. Taak afgerond.
 <!-- SECTION:NOTES:END -->
