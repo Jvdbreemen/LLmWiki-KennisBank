@@ -1,10 +1,10 @@
 ---
 id: TASK-70
 title: 'Deterministische edge-laag: documentnodes en herkomst-edges in de kennisgraaf'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-25 16:29'
-updated_date: '2026-07-25 16:35'
+updated_date: '2026-07-26 08:54'
 labels:
   - graphify
   - retrieval
@@ -46,7 +46,7 @@ RISICO dat gemeten moet worden, niet aangenomen: ~2650 `contains`-edges verdubbe
 - [x] #4 Communitystructuur voor en na vergeleken; expliciet oordeel of de wiki-communities intact blijven of uiteenvallen in per-document-clusters
 - [x] #5 graph.json geback-upt voor het schrijven, zodat de oude topologie vergelijkbaar blijft
 - [x] #6 Idempotent: een tweede run voegt niets toe
-- [ ] #7 Vault-root via _vaultpath.vault_root(); tests in tests/; volledige suite groen
+- [x] #7 Vault-root via _vaultpath.vault_root(); tests in tests/; volledige suite groen
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -103,4 +103,8 @@ Die ene vraag is: 'Wat is de prioriteitsvolgorde van de gefaseerde data-inname s
 BELANGRIJK: de huidige one_hop_neighbor KAN die vraag niet redden. Hij slaat niet-wiki-hits over en accepteert alleen targets die als artikel in 02-wiki/ bestaan - een memory kan er per definitie niet uitkomen. Een graaf-buur voor de geheugenlaag bestaat vandaag helemaal niet.
 
 Conclusie: de edge-laag is gerechtvaardigd door /brug, /graphify query, auto-crosslink en navigeerbaarheid - niet door recall@k. AC #6 van TASK-67 hoort daarop herschreven te worden.
+
+AFGEROND 2026-07-26. Gemerged als PR #62 in Jvdbreemen/LLmWiki-KennisBank.
+
+AC #7 geverifieerd in plaats van aangenomen: graph-link-layer.py en graph-scope-prune.py halen de vault-root allebei via `from _vaultpath import vault_root`, geen hardcoded default (ADR-0002). Tests staan in tests/test_graph_link_layer.py (8) en tests/test_graph_scope_prune.py (6). Volledige suite groen op de samengevoegde main: 869 tests.
 <!-- SECTION:NOTES:END -->

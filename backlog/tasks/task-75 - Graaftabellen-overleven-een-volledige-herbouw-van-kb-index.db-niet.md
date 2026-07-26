@@ -1,9 +1,10 @@
 ---
 id: TASK-75
 title: Graaftabellen overleven een volledige herbouw van kb-index.db niet
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-07-25 21:18'
+updated_date: '2026-07-26 09:01'
 labels:
   - graaf
   - index
@@ -47,9 +48,49 @@ De statusregel uit TASK-74 meldt dit inmiddels als "graaf niet geladen", dus het
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Een volledige herbouw van kb-index.db (--rebuild en embed_id-mismatch) laat de graafgegevens intact
-- [ ] #2 Bewezen met een test die een herbouw uitvoert en daarna graph_neighbors() nog laat werken
-- [ ] #3 De statusregel meldt na een herbouw geen 'graaf niet geladen' meer
-- [ ] #4 Bestaande graafqueries blijven werken zonder join met docs
-- [ ] #5 Volledige suite groen
+- [x] #1 Een volledige herbouw van kb-index.db (--rebuild en embed_id-mismatch) laat de graafgegevens intact
+- [x] #2 Bewezen met een test die een herbouw uitvoert en daarna graph_neighbors() nog laat werken
+- [x] #3 De statusregel meldt na een herbouw geen 'graaf niet geladen' meer
+- [x] #4 Bestaande graafqueries blijven werken zonder join met docs
+- [x] #5 Volledige suite groen
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+UITGEVOERD 2026-07-26, PR #66.
+
+De graaf woont in kb-graph.db. graph_connect() is de enige ingang; build-graph-index en de statusregel zijn omgezet.
+
+STATUSREGEL LOSGEKOPPELD. De graafaflezing stond genest in `if kb-index.db bestaat` -- precies de tak die tijdens een herbouw leeg of half is. De graafstatus viel daardoor stil op het moment dat je hem het hardst nodig hebt. Nu een eigen try/except met een eigen verbinding.
+
+JOURNAL-MODE: EEN CORRECTIE OP MEZELF, TWEE KEER.
+
+Eerst koos ik DELETE op basis van een meting (WAL 27,4 ms tegen DELETE 1,2 ms per verse lezer; de kosten zitten in het -shm-bestand dat WAL op Windows aanlegt, niet in een achterblijvende -wal -- een checkpoint(TRUNCATE) veranderde niets).
+
+Robert wees erop dat deze index meerdere agents tegelijk kan bedienen. Ik beweerde daarop dat DELETE lezers blokkeert tijdens een herbouw. Dat bleek FOUT bij toetsing: in DELETE-mode blokkeert een schrijver pas tijdens de commit-flush, niet de hele transactie. Een lezer tijdens een open schrijftransactie kreeg gewoon antwoord.
+
+Dus gemeten in plaats van geredeneerd -- drie gelijktijdige lezers naast een schrijver die de graaf doorlopend herbouwde, 6 seconden per mode:
+
+  DELETE   6030 lezers ok / 0 geblokkeerd / 50 schrijfrondes
+  WAL      3730 lezers ok / 0 geblokkeerd / 93 schrijfrondes
+
+Nul blokkades in beide. WAL haalt wel bijna dubbele schrijfdoorvoer en houdt lezers en schrijvers by design uit elkaar, terwijl DELETE erop leunt dat de busy-timeout het exclusieve commit-venster opvangt -- dat gaat goed tot een trage schijf of een grotere graaf dat venster oprekt. WAL gekozen. test_graafindex_gebruikt_wal legt het vast, met de meting in de docstring, zodat een latere snelheidsronde het niet stilzwijgend terugdraait.
+
+PERFORMANCE, met WAL:
+  koude sessiestart   1289 ms -> 1214 ms
+  statusregel           33,7 ms -> 27,9 ms bij de DELETE-tussenstand; met WAL ~48 ms,
+                        maar de sessiestart als geheel werd sneller, en dat is de plek
+                        waar de gebruiker het merkt
+  graph_neighbors     submilliseconde, ongewijzigd
+
+GRAAF HERSTELD op de echte vault: 3956 nodes, 6860 edges -- exact de aantallen die verdwenen waren. kb-graph.db is 3 MB naast een kb-index.db van 35 MB.
+
+GEEN MIGRATIE, bewust. Oude vaults houden inerte graaftabellen in kb-index.db over; niets leest ze nog en de eerstvolgende volledige herbouw ruimt ze op -- precies de herbouw die dit probleem veroorzaakte. Een migratie zou een bewegend deel toevoegen voor iets dat zichzelf opruimt.
+
+AC #2 met opzet via de ECHTE unlink-weg: main(rebuild=True) uit build-kb-index, met een merker in meta die bewijst dat het bestand daadwerkelijk vervangen is. Zelf het bestand verwijderen zou mijn aanname toetsen in plaats van het gedrag van de code.
+
+Tests: 869 groen (alles behalve test_setup_deploy, dat apart draait en deze wijziging niet raakt).
+
+AC #5: CI groen op PR #66 (test, 2m40s), en lokaal 874 tests groen op de samengevoegde werkboom. Taak afgerond.
+<!-- SECTION:NOTES:END -->
