@@ -74,7 +74,14 @@ def rot_count(hours: int = 48) -> int:
     mdir = vault_root() / "09-memory"
     if not mdir.exists():
         return 0
-    cutoff = date.today() - timedelta(hours=hours)
+    # `created` in de frontmatter is een DATUM, niet een tijdstip. Een drempel in
+    # uren kan hier dus nooit fijner werken dan een hele dag. Dat was verstopt:
+    # `date.today() - timedelta(hours=36)` gooit de restfractie stilzwijgend weg
+    # en levert 1 dag, en onder de 24 uur zelfs 0 -- dan telde de check feitelijk
+    # 'ouder dan vandaag'. Expliciet naar dagen afronden, met een ondergrens van
+    # 1, maakt de granulariteit zichtbaar in plaats van hem te verbergen. Bij de
+    # gebruikte 48 uur verandert er niets (2 dagen, zoals voorheen).
+    cutoff = date.today() - timedelta(days=max(1, hours // 24))
     n = 0
     for f in mdir.glob("**/*.md"):
         try:

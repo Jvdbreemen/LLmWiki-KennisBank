@@ -156,6 +156,39 @@ class MemorySweepTest(unittest.TestCase):
         data = json.loads(hb.read_text(encoding="utf-8"))
         self.assertIn("last_run", data)
 
+    def test_heartbeat_draagt_de_rot_telling(self):
+        """TASK-76: de sweep telt, de sessiestart leest af.
+
+        De telling stond op de sessiestart-weg en las daar elk bestand in
+        09-memory (gemeten 509 ms van 543 ms). Hier is diezelfde scan gratis --
+        de sweep draait in de losgekoppelde worker en leest de geheugenlaag toch.
+        """
+        from datetime import date, timedelta
+        import _memory
+        old = (date.today() - timedelta(days=5)).isoformat()
+        _memory.write("Blijft liggen", "iets", status="unverified", created=old)
+        self.m.run_sweep()
+        data = json.loads((self.vault / ".claude" / "memory-sweep-status.json")
+                          .read_text(encoding="utf-8"))
+        self.assertIn("rot", data)
+        self.assertEqual(data.get("rot_hours"), self.m.ROT_HOURS)
+        self.assertGreaterEqual(data["rot"], 1)
+
+    def test_rot_telling_wordt_ook_geschreven_zonder_model(self):
+        """AC #3. De telling is een lokale scan en heeft met Ollama niets te
+        maken; hem alleen op het geslaagde pad schrijven zou de melding stil
+        laten verdwijnen juist wanneer er iets aan de hand is."""
+        from datetime import date, timedelta
+        import _memory
+        old = (date.today() - timedelta(days=5)).isoformat()
+        _memory.write("Blijft liggen", "iets", status="unverified", created=old)
+        s = {"model_unreachable": True, "errors": 0}
+        self.m._write_heartbeat(s)
+        data = json.loads((self.vault / ".claude" / "memory-sweep-status.json")
+                          .read_text(encoding="utf-8"))
+        self.assertTrue(data.get("model_unreachable"))
+        self.assertIn("rot", data)
+
     def test_expire_pass_flips_past_expires(self):
         import _memory
         old = _memory.write("Vluchtig", "iets", status="current",
