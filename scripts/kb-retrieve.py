@@ -63,6 +63,58 @@ def _emit(ctx: str) -> None:
         }))
 
 
+def _emit_notice(text: str) -> None:
+    """Meld een gemiste injectie ZICHTBAAR, in plaats van stil terug te keren.
+
+    Verschil met _emit: suppressOutput staat hier op False. Een geslaagde
+    injectie hoort onzichtbaar te zijn (noord-ster: uit de weg blijven), maar
+    een MISSER hoort de gebruiker te bereiken -- anders denkt hij dat de
+    kennisbank meekeek terwijl dat niet zo was, en dat is erger dan geen
+    kennisbank. De tekst gaat ook als additionalContext mee, zodat het model
+    weet dat het deze beurt zonder vault-context werkt.
+    """
+    if not text:
+        return
+    sys.stdout.write(json.dumps({
+        "suppressOutput": False,
+        "hookSpecificOutput": {
+            "hookEventName": "UserPromptSubmit",
+            "additionalContext": text,
+        }
+    }))
+
+
+#: Onder deze leeftijd (seconden) draait er al een warm-up van een eerdere
+#: prompt; dan is "wordt nu opgewarmd" onwaar en past een andere formulering.
+#: Spiegelt het min_interval van _embeddings.warm_async().
+_WARM_SENTINEL_WINDOW = 60.0
+
+
+def _warm_already_running(emb) -> bool:
+    """True als er binnen het sentinel-venster al een warm-up gestart is."""
+    try:
+        import time as _time
+        marker = emb._warm_marker()
+        return marker.exists() and (_time.time() - marker.stat().st_mtime) < _WARM_SENTINEL_WINDOW
+    except Exception:
+        return False
+
+
+def _cold_notice(already_warming: bool, timeout: float) -> str:
+    """Bouw de melding voor een gemiste injectie door een koud model."""
+    kern = (f"KennisBank: geen kennis opgehaald bij deze prompt. Het lokale "
+            f"embedding-model reageerde niet binnen {timeout:g}s "
+            f"(hot-path-budget); een koude modelload duurt tientallen seconden.")
+    if already_warming:
+        staart = ("Er loopt al een opwarm-actie op de achtergrond. Stel je vraag zo "
+                  "nog eens; zodra het model geladen is werkt het ophalen weer.")
+    else:
+        staart = ("Het model wordt nu op de achtergrond geladen. Deze hook kan niet "
+                  "zelf opnieuw proberen (dat zou je prompt blokkeren), dus: stel je "
+                  "vraag over ~30 seconden opnieuw, dan komt de context er wel bij.")
+    return kern + " " + staart
+
+
 def _num(env: str, cfg: dict, key: str, default):
     raw = os.environ.get(env)
     if raw is None and isinstance(cfg.get(key), (int, float)):
@@ -290,10 +342,18 @@ def main() -> None:
     timeout = _prompt_embed_timeout(cfg)
     qvec = emb.embed(prompt, timeout=timeout)
     if qvec is None:
+        # Stil terugkeren was hier de fout: de gebruiker denkt dan dat de
+        # kennisbank meekeek terwijl er niets is opgehaald. Melden dus, en
+        # daarna alsnog de detached warm zodat de volgende prompt hot is.
+        already = _warm_already_running(emb)
         try:
             emb.warm_async()
         except Exception:
             pass
+        try:
+            _emit_notice(_cold_notice(already, timeout))
+        except Exception:
+            pass  # fail-open blijft leidend: een melding mag nooit de prompt breken
         return
 
     wiki_text = _wiki_block(prompt, emb, vault_root, cfg, qvec)
