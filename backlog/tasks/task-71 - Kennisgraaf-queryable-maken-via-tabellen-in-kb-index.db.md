@@ -1,10 +1,10 @@
 ---
 id: TASK-71
 title: Kennisgraaf queryable maken via tabellen in kb-index.db
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-25 16:40'
-updated_date: '2026-07-25 18:35'
+updated_date: '2026-07-26 08:54'
 labels:
   - graphify
   - retrieval
@@ -48,7 +48,7 @@ Builder draait off-path, naast build-kb-index.py, op hetzelfde schema. SCHEMA_VE
 - [x] #4 Een stale of ontbrekende graaf levert 'geen buur' op, nooit een verkeerde buur; fail-open bewezen met een test
 - [x] #5 SCHEMA_VERSION opgehoogd; bestaande index wordt correct herbouwd bij versieverschil
 - [x] #6 Buurquery gemeten: aantoonbaar sneller dan graph.json parsen, en binnen het hot-path-budget
-- [ ] #7 Vault-root via _vaultpath.vault_root(); tests in tests/; volledige suite groen
+- [x] #7 Vault-root via _vaultpath.vault_root(); tests in tests/; volledige suite groen
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -91,4 +91,10 @@ De bottleneck is EDGEKWALITEIT, niet querysnelheid. Wat eerst moet:
 - de chunkgrens doorbreken: concept-edges lopen nooit tussen chunks. Een tweede extractiepas die ALLEEN naar bestaande node-labels kijkt (goedkoop, geen volledige tekst) zou cross-chunk verbanden kunnen leggen.
 
 Pas als een van beide meetbaar buren oplevert die het gezochte document bevatten, is bedraden in _rank te verdedigen. De v2-meetsets (memory@5 = 0.738, 22 geverifieerde faalgevallen) staan klaar om dat te toetsen.
+
+AFGEROND 2026-07-26. Gemerged als PR #63.
+
+AC #7 geverifieerd: build-graph-index.py haalt de vault-root via `from _vaultpath import vault_root`, geen hardcoded default (ADR-0002). Tests in tests/test_graph_index.py (inmiddels 28). Suite groen: 869 tests.
+
+NAWERK, belangrijk voor wie deze taak later leest: de opslagkeuze uit AC #1 (tabellen IN kb-index.db) is in TASK-75 teruggedraaid. Dat bestand wordt door build-kb-index.py ge-unlinkt bij een herbouw, en nam de graaf mee. De tabellen wonen nu in een eigen kb-graph.db; de API (graph_neighbors, graph_is_current) is ongewijzigd, alleen de verbinding komt uit graph_connect(). AC #1 blijft afgevinkt omdat het toen klopte en de functionaliteit geleverd is -- maar de tekst beschrijft niet meer de huidige staat.
 <!-- SECTION:NOTES:END -->
