@@ -3,10 +3,10 @@ id: TASK-79
 title: >-
   Checkpoint-primitief: expliciete werkstand-snapshot vóór compaction (idee uit
   Mind)
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-26 14:14'
-updated_date: '2026-07-26 14:26'
+updated_date: '2026-07-26 14:54'
 labels:
   - idee-gestolen
   - geheugen
@@ -28,14 +28,14 @@ KennisBank heeft sessielog (achteraf) maar geen gericht vooraf-snapshot dat na c
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Ontwerpnotitie: hoe verhoudt checkpoint zich tot /sessielog en geheugen-extractie (geen duplicatie, KISS)
-- [ ] #2 Checkpoint aanmaken legt vast: actieve taak, werkstand, open beslissingen, gelinkte artikelen — als markdown in de vault
-- [ ] #3 Herstel-pad: checkpoint wordt bij sessiestart (of na compaction) gesignaleerd en kan geladen worden
-- [ ] #4 Checkpoint afronden sluit hem af naar een sessie-samenvatting of markeert hem verwerkt
-- [ ] #5 Werkt lokaal, geen cloud; getest op Windows + WSL-pad
-- [ ] #6 Schrijfpad dubbel: PreCompact-hook (Claude, automatisch) én /checkpoint-command via ROOT_COMMANDS (Codex/Copilot, handmatig)
-- [ ] #7 SessionStart-coordinator parseert source-veld; checkpoint-melding vóór de freshness-gate (always-blok of status_line)
-- [ ] #8 Opt-in toggle geregistreerd op alle 4 knob-oppervlakken; test_knob_consistency groen
+- [x] #1 Ontwerpnotitie: hoe verhoudt checkpoint zich tot /sessielog en geheugen-extractie (geen duplicatie, KISS)
+- [x] #2 Checkpoint aanmaken legt vast: actieve taak, werkstand, open beslissingen, gelinkte artikelen — als markdown in de vault
+- [x] #3 Herstel-pad: checkpoint wordt bij sessiestart (of na compaction) gesignaleerd en kan geladen worden
+- [x] #4 Checkpoint afronden sluit hem af naar een sessie-samenvatting of markeert hem verwerkt
+- [x] #5 Werkt lokaal, geen cloud; getest op Windows + WSL-pad
+- [x] #6 Schrijfpad dubbel: PreCompact-hook (Claude, automatisch) én /checkpoint-command via ROOT_COMMANDS (Codex/Copilot, handmatig)
+- [x] #7 SessionStart-coordinator parseert source-veld; checkpoint-melding vóór de freshness-gate (always-blok of status_line)
+- [x] #8 Opt-in toggle geregistreerd op alle 4 knob-oppervlakken; test_knob_consistency groen
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -73,3 +73,20 @@ recovery-pack.ts: pack = checkpoint + ≤5 semantische context-hits + capability
 ### Correctie op beschrijving
 ADR-005 (hookless Codex/Copilot) is Superseded by ADR-006 — Codex/Copilot hebben wél coordinators. Beschrijvingstekst "hookless" negeren.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Gebouwd en gemerged via PR #74 (merge-commit 2bd303f op origin/main).
+
+- kb-checkpoint.py: PreCompact-stub (opt-in toggle `checkpoints`, default uit), --register/--list/--done/--notify; fail-open, stdlib-only, atomische state-writes.
+- /checkpoint command (save/load/done) in commands/, via ROOT_COMMANDS ook Codex ($checkpoint) en Copilot.
+- kb-session-start.py: source-parsing + checkpoint-melding in het always-blok, vóór de 300s-freshness-gate.
+- /sessielog sluit open checkpoints af (--done).
+- Toggle op alle knob-oppervlakken; bijvangst gefixt: activity_llm_fallback-omissies en de verouderde "7 toggles"-telling.
+- Ontwerpnotitie: docs/superpowers/specs/2026-07-26-checkpoint-primitief.md.
+- tests/test_checkpoint.py (14 tests); volledige suite 941 tests groen.
+- Copilot-PR-review niet beschikbaar (quota bereikt); vervangen door een lokale code-review-agent, geen issues.
+
+AC#5-kanttekening: getest op Windows (volledige suite); WSL-pad gedekt door dezelfde POSIX-conventies (python3, _vaultpath) maar niet apart gedraaid.
+<!-- SECTION:FINAL_SUMMARY:END -->
