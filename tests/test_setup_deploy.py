@@ -79,7 +79,62 @@ def _find_bash() -> str:
     )
 
 
+def _installeer_eenmalig():
+    """Draai setup.sh EEN keer in een verse temp-HOME en geef (home, vault).
+
+    Los van SetupDeployTest.run_setup omdat die per test een eigen installatie
+    maakt en assertEqual op self gebruikt. Hier is er geen test-instantie: dit
+    draait bij de eerste aanvraag en het resultaat wordt hergebruikt.
+    """
+    tmp = Path(tempfile.mkdtemp(prefix="kb-home-gedeeld-"))
+    vault = tmp / "KennisBank"
+    env = dict(os.environ)
+    env["HOME"] = _bash_path(tmp)
+    env["USERPROFILE"] = _bash_path(tmp)
+    env["KENNISBANK_VAULT"] = _bash_path(vault)
+    result = subprocess.run(
+        [_find_bash(), "setup.sh", "--yes", "--skip-model-check"],
+        cwd=REPO_ROOT, env=env, check=False, capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise AssertionError(
+            f"setup.sh faalde met {result.returncode}\n"
+            f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}")
+    return tmp, vault
+
+
+def tearDownModule():
+    """Ruim de gedeelde installatie op als hij is aangemaakt."""
+    gedeeld = getattr(SetupDeployTest, "_gedeeld", None)
+    if gedeeld:
+        shutil.rmtree(gedeeld[0], ignore_errors=True)
+        SetupDeployTest._gedeeld = None
+
+
 class SetupDeployTest(unittest.TestCase):
+    #: Eenmalige installatie, gedeeld door de tests die hem alleen LEZEN.
+    #: Gemeten: een setup.sh-run kost 42 s, en deze module riep hem 18 keer aan
+    #: -- 12,6 van de 17 minuten die de hele suite kostte. Daardoor paste de
+    #: suite niet in een voorgrondvenster en werd 'groen' duur om te bewijzen;
+    #: wat duur is te bewijzen wordt in de praktijk overgeslagen.
+    _gedeeld = None
+
+    @classmethod
+    def gedeelde_installatie(cls):
+        """De installatie die inspectie-tests delen. Lezen, niet schrijven.
+
+        Alleen voor tests die vaststellen DAT iets gedeployed is. Een test die
+        de installatie muteert -- settings weggooien, setup opnieuw draaien, met
+        andere vlaggen draaien -- moet run_setup() gebruiken en zijn eigen boel
+        opruimen. Gedeelde state tussen mutrende tests introduceert precies de
+        volgorde-afhankelijkheid die elders in deze suite al een flaky test
+        opleverde.
+        """
+        if cls._gedeeld is None:
+            cls._gedeeld = _installeer_eenmalig()
+        return cls._gedeeld
+
     def run_setup(self):
         tmp = Path(tempfile.mkdtemp(prefix="kb-home-"))
         vault = tmp / "KennisBank"
@@ -103,138 +158,105 @@ class SetupDeployTest(unittest.TestCase):
         return tmp, vault
 
     def test_doctor_sh_is_deployed(self):
-        tmp, vault = self.run_setup()
-        try:
-            doctor = vault / ".claude" / "scripts" / "doctor.sh"
-            self.assertTrue(doctor.is_file(), f"doctor.sh not deployed at {doctor}")
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+        tmp, vault = self.gedeelde_installatie()
+        doctor = vault / ".claude" / "scripts" / "doctor.sh"
+        self.assertTrue(doctor.is_file(), f"doctor.sh not deployed at {doctor}")
 
     def test_python_scripts_still_deployed(self):
-        tmp, vault = self.run_setup()
-        try:
-            common = vault / ".claude" / "scripts" / "_common.py"
-            self.assertTrue(common.is_file(), "_common.py regressed out of deploy")
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+        tmp, vault = self.gedeelde_installatie()
+        common = vault / ".claude" / "scripts" / "_common.py"
+        self.assertTrue(common.is_file(), "_common.py regressed out of deploy")
 
     def test_new_skills_are_installed(self):
-        tmp, vault = self.run_setup()
-        try:
-            base = tmp / ".claude" / "skills"
-            for slug in ("autoresearch", "kennisbank-upgrade", "kennisbank-contribute"):
-                skill = base / slug / "SKILL.md"
-                self.assertTrue(skill.is_file(), f"{slug} not installed at {skill}")
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+        tmp, vault = self.gedeelde_installatie()
+        base = tmp / ".claude" / "skills"
+        for slug in ("autoresearch", "kennisbank-upgrade", "kennisbank-contribute"):
+            skill = base / slug / "SKILL.md"
+            self.assertTrue(skill.is_file(), f"{slug} not installed at {skill}")
 
     def test_embedding_scripts_deployed(self):
-        tmp, vault = self.run_setup()
-        try:
-            scripts = vault / ".claude" / "scripts"
-            for name in ("_embeddings.py", "kb-retrieve.py", "build-embed-index.py"):
-                self.assertTrue((scripts / name).is_file(), f"{name} not deployed")
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+        tmp, vault = self.gedeelde_installatie()
+        scripts = vault / ".claude" / "scripts"
+        for name in ("_embeddings.py", "kb-retrieve.py", "build-embed-index.py"):
+            self.assertTrue((scripts / name).is_file(), f"{name} not deployed")
 
     def test_embed_config_is_deployed(self):
-        tmp, vault = self.run_setup()
-        try:
-            cfg = vault / ".claude" / "kennisbank-embed.json"
-            self.assertTrue(cfg.is_file(), f"kennisbank-embed.json not deployed at {cfg}")
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+        tmp, vault = self.gedeelde_installatie()
+        cfg = vault / ".claude" / "kennisbank-embed.json"
+        self.assertTrue(cfg.is_file(), f"kennisbank-embed.json not deployed at {cfg}")
 
     def test_archive_and_distill_scripts_deployed(self):
-        tmp, vault = self.run_setup()
-        try:
-            scripts = vault / ".claude" / "scripts"
-            for name in (
-                "archive-transcript.py",
-                "distill-notify.py",
-                "kb-session-start.py",
-                "kb-session-end.py",
-                "kb-session-log.py",
-            ):
-                self.assertTrue((scripts / name).is_file(), f"{name} not deployed")
-            self.assertTrue((vault / "01-raw" / "transcripts").is_dir(),
-                            "transcripts dir not created")
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+        tmp, vault = self.gedeelde_installatie()
+        scripts = vault / ".claude" / "scripts"
+        for name in (
+            "archive-transcript.py",
+            "distill-notify.py",
+            "kb-session-start.py",
+            "kb-session-end.py",
+            "kb-session-log.py",
+        ):
+            self.assertTrue((scripts / name).is_file(), f"{name} not deployed")
+        self.assertTrue((vault / "01-raw" / "transcripts").is_dir(),
+                        "transcripts dir not created")
 
     def test_settings_command_deploys_to_subdir(self):
-        tmp, vault = self.run_setup()
-        try:
-            cmd = tmp / ".claude" / "commands" / "kennisbank" / "settings.md"
-            self.assertTrue(cmd.is_file(),
-                            f"/kennisbank:settings niet gedeployed op {cmd}")
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+        tmp, vault = self.gedeelde_installatie()
+        cmd = tmp / ".claude" / "commands" / "kennisbank" / "settings.md"
+        self.assertTrue(cmd.is_file(),
+                        f"/kennisbank:settings niet gedeployed op {cmd}")
 
     def test_settings_file_bootstrapped_with_defaults(self):
         import json
-        tmp, vault = self.run_setup()  # run_setup gebruikt --yes (niet-interactief)
-        try:
-            sf = vault / "kennisbank-settings.json"
-            self.assertTrue(sf.is_file(), "settings-bestand niet aangemaakt door setup")
-            data = json.loads(sf.read_text(encoding="utf-8"))
-            self.assertEqual(data["auto_archive"], False)
-            self.assertEqual(data["distill_notify"], True)
-            self.assertEqual(data["embed_index"], True)
-            self.assertEqual(data["daily_graphify"], True)
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+        tmp, vault = self.gedeelde_installatie()  # run_setup gebruikt --yes (niet-interactief)
+        sf = vault / "kennisbank-settings.json"
+        self.assertTrue(sf.is_file(), "settings-bestand niet aangemaakt door setup")
+        data = json.loads(sf.read_text(encoding="utf-8"))
+        self.assertEqual(data["auto_archive"], False)
+        self.assertEqual(data["distill_notify"], True)
+        self.assertEqual(data["embed_index"], True)
+        self.assertEqual(data["daily_graphify"], True)
 
     def test_vault_onderhoud_scripts_deployed(self):
         """safe-edit.py, find-similar.py, kb-search.py, conflict-scan.py, context-budget.py."""
-        tmp, vault = self.run_setup()
-        try:
-            scripts = vault / ".claude" / "scripts"
-            for name in (
-                "safe-edit.py",
-                "find-similar.py",
-                "kb-search.py",
-                "conflict-scan.py",
-                "context-budget.py",
-            ):
-                self.assertTrue(
-                    (scripts / name).is_file(),
-                    f"{name} not deployed at {scripts / name}",
-                )
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+        tmp, vault = self.gedeelde_installatie()
+        scripts = vault / ".claude" / "scripts"
+        for name in (
+            "safe-edit.py",
+            "find-similar.py",
+            "kb-search.py",
+            "conflict-scan.py",
+            "context-budget.py",
+        ):
+            self.assertTrue(
+                (scripts / name).is_file(),
+                f"{name} not deployed at {scripts / name}",
+            )
 
     def test_vault_onderhoud_commands_deployed(self):
         """reconcile.md, uitdaag.md, brug.md must be installed as slash commands."""
-        tmp, vault = self.run_setup()
-        try:
-            commands = tmp / ".claude" / "commands"
-            for name in ("reconcile.md", "uitdaag.md", "brug.md"):
-                self.assertTrue(
-                    (commands / name).is_file(),
-                    f"{name} not installed at {commands / name}",
-                )
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+        tmp, vault = self.gedeelde_installatie()
+        commands = tmp / ".claude" / "commands"
+        for name in ("reconcile.md", "uitdaag.md", "brug.md"):
+            self.assertTrue(
+                (commands / name).is_file(),
+                f"{name} not installed at {commands / name}",
+            )
 
     def test_temporal_activity_commands_and_scripts_deployed(self):
-        tmp, vault = self.run_setup()
-        try:
-            commands = tmp / ".claude" / "commands"
-            scripts = vault / ".claude" / "scripts"
-            for name in ("weeklog.md", "timeline.md", "watdeedik.md"):
-                self.assertTrue((commands / name).is_file(), f"{name} not installed")
-            for name in ("_activity.py", "build-activity-index.py", "kb-activity.py", "kb-activity-eval.py"):
-                self.assertTrue((scripts / name).is_file(), f"{name} not deployed")
-            # Data-bestand, geen .py/.sh: viel buiten de deploy-glob. Zonder dit
-            # bestand draait de datumparser met een lege Laag-1-vocabulaire.
-            locales = scripts / "activity-locales.json"
-            self.assertTrue(locales.is_file(), f"activity-locales.json not deployed at {locales}")
-            self.assertGreater(len(json.loads(locales.read_text(encoding="utf-8"))), 0,
-                               "deployed locale table is empty")
-            self.assertTrue((vault / ".claude" / "kb-activity.db").is_file(), "activity index not built by setup")
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+        tmp, vault = self.gedeelde_installatie()
+        commands = tmp / ".claude" / "commands"
+        scripts = vault / ".claude" / "scripts"
+        for name in ("weeklog.md", "timeline.md", "watdeedik.md"):
+            self.assertTrue((commands / name).is_file(), f"{name} not installed")
+        for name in ("_activity.py", "build-activity-index.py", "kb-activity.py", "kb-activity-eval.py"):
+            self.assertTrue((scripts / name).is_file(), f"{name} not deployed")
+        # Data-bestand, geen .py/.sh: viel buiten de deploy-glob. Zonder dit
+        # bestand draait de datumparser met een lege Laag-1-vocabulaire.
+        locales = scripts / "activity-locales.json"
+        self.assertTrue(locales.is_file(), f"activity-locales.json not deployed at {locales}")
+        self.assertGreater(len(json.loads(locales.read_text(encoding="utf-8"))), 0,
+                           "deployed locale table is empty")
+        self.assertTrue((vault / ".claude" / "kb-activity.db").is_file(), "activity index not built by setup")
 
 
     def run_setup_in(self, tmp):
@@ -266,39 +288,33 @@ class SetupDeployTest(unittest.TestCase):
         )
 
     def test_hooks_registered_in_settings(self):
-        tmp, vault = self.run_setup()
-        try:
-            settings_path = tmp / ".claude" / "settings.json"
-            self.assertTrue(settings_path.is_file(), f"settings.json not created at {settings_path}")
-            settings = json.loads(settings_path.read_text(encoding="utf-8"))
-            session = _hook_commands(settings, "SessionStart")
-            prompt = _hook_commands(settings, "UserPromptSubmit")
-            end = _hook_commands(settings, "SessionEnd")
-            self.assertEqual(
-                sum("kb-session-start.py" in c for c in session),
-                1,
-                f"expected one KennisBank coordinator: {session}",
-            )
-            self.assertTrue(any("kb-retrieve.py" in c for c in prompt),
-                            f"kb-retrieve.py not on UserPromptSubmit: {prompt}")
-            self.assertEqual(
-                sum("kb-session-end.py" in c for c in end),
-                1,
-                f"expected one KennisBank exit coordinator: {end}",
-            )
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+        tmp, vault = self.gedeelde_installatie()
+        settings_path = tmp / ".claude" / "settings.json"
+        self.assertTrue(settings_path.is_file(), f"settings.json not created at {settings_path}")
+        settings = json.loads(settings_path.read_text(encoding="utf-8"))
+        session = _hook_commands(settings, "SessionStart")
+        prompt = _hook_commands(settings, "UserPromptSubmit")
+        end = _hook_commands(settings, "SessionEnd")
+        self.assertEqual(
+            sum("kb-session-start.py" in c for c in session),
+            1,
+            f"expected one KennisBank coordinator: {session}",
+        )
+        self.assertTrue(any("kb-retrieve.py" in c for c in prompt),
+                        f"kb-retrieve.py not on UserPromptSubmit: {prompt}")
+        self.assertEqual(
+            sum("kb-session-end.py" in c for c in end),
+            1,
+            f"expected one KennisBank exit coordinator: {end}",
+        )
 
     def test_doctor_reports_registered_hooks(self):
-        tmp, vault = self.run_setup()
-        try:
-            result = self.run_doctor_in(tmp, vault)
-            out = result.stdout
-            self.assertRegex(out, r"\[PASS\].*kb-session-start\.py.*registered")
-            self.assertRegex(out, r"\[PASS\].*kb-retrieve\.py.*registered")
-            self.assertEqual(result.returncode, 0, f"doctor exited {result.returncode}:\n{out}\n{result.stderr}")
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+        tmp, vault = self.gedeelde_installatie()
+        result = self.run_doctor_in(tmp, vault)
+        out = result.stdout
+        self.assertRegex(out, r"\[PASS\].*kb-session-start\.py.*registered")
+        self.assertRegex(out, r"\[PASS\].*kb-retrieve\.py.*registered")
+        self.assertEqual(result.returncode, 0, f"doctor exited {result.returncode}:\n{out}\n{result.stderr}")
 
     def test_doctor_warns_and_exits_clean_when_hooks_missing(self):
         tmp, vault = self.run_setup()
@@ -353,43 +369,34 @@ class SetupDeployTest(unittest.TestCase):
         self.assertIn("09-memory/archive", text)
 
     def test_full_memory_hookset_registered(self):
-        tmp, vault = self.run_setup()
-        try:
-            settings = json.loads((tmp / ".claude" / "settings.json").read_text(encoding="utf-8"))
-            session = " ".join(_hook_commands(settings, "SessionStart"))
-            self.assertIn("kb-session-start.py", session)
-            self.assertIn("--client claude", session)
-            for legacy in ("build-embed-index.py", "build-kb-index.py", "sweep-launch.py",
-                           "memory-notify.py", "build-activity-index.py"):
-                self.assertNotIn(legacy, session, f"{legacy} bleef als losse SessionStart-hook")
-            self.assertNotIn("statusMessage", json.dumps(settings))
-            pre = settings.get("hooks", {}).get("PreToolUse", [])
-            self.assertTrue(pre, "geen PreToolUse-hook")
-            self.assertEqual(pre[0].get("matcher"), "WebSearch|WebFetch")
-            self.assertIn("kb-presearch.py", _hook_commands(settings, "PreToolUse")[0])
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+        tmp, vault = self.gedeelde_installatie()
+        settings = json.loads((tmp / ".claude" / "settings.json").read_text(encoding="utf-8"))
+        session = " ".join(_hook_commands(settings, "SessionStart"))
+        self.assertIn("kb-session-start.py", session)
+        self.assertIn("--client claude", session)
+        for legacy in ("build-embed-index.py", "build-kb-index.py", "sweep-launch.py",
+                       "memory-notify.py", "build-activity-index.py"):
+            self.assertNotIn(legacy, session, f"{legacy} bleef als losse SessionStart-hook")
+        self.assertNotIn("statusMessage", json.dumps(settings))
+        pre = settings.get("hooks", {}).get("PreToolUse", [])
+        self.assertTrue(pre, "geen PreToolUse-hook")
+        self.assertEqual(pre[0].get("matcher"), "WebSearch|WebFetch")
+        self.assertIn("kb-presearch.py", _hook_commands(settings, "PreToolUse")[0])
 
     def test_version_stamp_written(self):
-        tmp, vault = self.run_setup()
-        try:
-            stamp = vault / ".claude" / ".kennisbank-schema-version"
-            self.assertTrue(stamp.is_file())
-            self.assertEqual(stamp.read_text(encoding="utf-8").strip(), "0.9.0")
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+        tmp, vault = self.gedeelde_installatie()
+        stamp = vault / ".claude" / ".kennisbank-schema-version"
+        self.assertTrue(stamp.is_file())
+        self.assertEqual(stamp.read_text(encoding="utf-8").strip(), "0.9.0")
 
     def test_doctor_reports_memory_hooks_and_version(self):
-        tmp, vault = self.run_setup()
-        try:
-            result = self.run_doctor_in(tmp, vault)
-            out = result.stdout
-            self.assertRegex(out, r"\[PASS\].*kb-session-start\.py.*registered")
-            self.assertRegex(out, r"\[PASS\].*kb-presearch\.py.*registered")
-            self.assertRegex(out, r"kennisbank-schema-versie.*0\.9\.0")
-            self.assertEqual(result.returncode, 0, f"doctor exited {result.returncode}:\n{out}")
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+        tmp, vault = self.gedeelde_installatie()
+        result = self.run_doctor_in(tmp, vault)
+        out = result.stdout
+        self.assertRegex(out, r"\[PASS\].*kb-session-start\.py.*registered")
+        self.assertRegex(out, r"\[PASS\].*kb-presearch\.py.*registered")
+        self.assertRegex(out, r"kennisbank-schema-versie.*0\.9\.0")
+        self.assertEqual(result.returncode, 0, f"doctor exited {result.returncode}:\n{out}")
 
     def test_rerun_preserves_user_data_and_refreshes_tooling(self):
         tmp, vault = self.run_setup()
