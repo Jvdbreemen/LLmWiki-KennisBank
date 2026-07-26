@@ -153,6 +153,36 @@ def _expire_pass() -> int:
     return n
 
 
+#: Drempel voor "unverified en blijft liggen". Staat hier omdat de SWEEP hem
+#: voortaan telt; memory-notify leest de uitkomst en rekent niets meer zelf.
+ROT_HOURS = 48
+
+
+def _rot_count() -> "int | None":
+    """Tel de unverified memories die blijven liggen. None als het niet lukt.
+
+    Deze telling stond tot TASK-76 in memory-notify, op de SESSIESTART-weg, waar
+    hij elk .md-bestand in 09-memory las: gemeten 509 ms van de 543 ms die die
+    hook kostte. Het bezwaar was niet dat getal maar de richting -- de kosten
+    groeiden mee met de geheugenlaag, dus elke memory die KennisBank erbij
+    leerde maakte de sessiestart trager.
+
+    Hier is de scan gratis: de sweep draait toch al in de losgekoppelde worker en
+    leest de geheugenlaag sowieso.
+    """
+    try:
+        import importlib.util
+        here = os.path.dirname(os.path.abspath(__file__))
+        spec = importlib.util.spec_from_file_location(
+            "memory_doctor", os.path.join(here, "memory-doctor.py"))
+        md = importlib.util.module_from_spec(spec)
+        sys.modules["memory_doctor"] = md
+        spec.loader.exec_module(md)
+        return int(md.rot_count(ROT_HOURS))
+    except Exception:
+        return None
+
+
 def _write_heartbeat(summary: dict) -> None:
     """Schrijf de heartbeat-status naar <vault>/.claude/memory-sweep-status.json."""
     hb = vault_root() / ".claude" / HEARTBEAT
@@ -160,6 +190,14 @@ def _write_heartbeat(summary: dict) -> None:
     out["last_run"] = datetime.now(timezone.utc).isoformat()
     out["provider"] = _llm.providers()[0] if _llm.providers() else ""
     out["is_local"] = _llm.is_local()
+    # Bewust ALTIJD, ook wanneer het model onbereikbaar was en de sweep vroeg
+    # terugkeert: de telling is een lokale scan en heeft met Ollama niets te
+    # maken. Hem alleen op het geslaagde pad schrijven zou de melding stil laten
+    # verdwijnen juist wanneer er iets aan de hand is.
+    rot = _rot_count()
+    if rot is not None:
+        out["rot"] = rot
+        out["rot_hours"] = ROT_HOURS
     try:
         hb.parent.mkdir(parents=True, exist_ok=True)
         hb.write_text(json.dumps(out, indent=2, ensure_ascii=False), encoding="utf-8")
