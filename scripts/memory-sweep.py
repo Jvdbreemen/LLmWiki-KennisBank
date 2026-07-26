@@ -318,8 +318,15 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = 6,
                     verdict = _judge.judge(body)
                     # Fail-safe: alleen bij expliciet hoog-zeker 'current' promoveren.
                     status = "current" if verdict.get("verdict") == "current" else "unverified"
-                    # Collision-guard: bereken uniek pad VOOR het schrijven.
-                    path = _memory.unique_memory_path(title, created=today)
+                    # Collision-guard: bereken uniek pad VOOR het schrijven. Een
+                    # bezette slug met IDENTIEKE body is geen collision om
+                    # omheen te nummeren maar een her-capture; dan blijft het
+                    # bestaande bestand staan en schrijven we niets.
+                    path, bestaat_al = _memory.unique_memory_path(
+                        title, created=today, body=body)
+                    if bestaat_al:
+                        s["duplicates"] += 1
+                        continue
                     rendered = _memory.render(
                         title, body,
                         status=status,
@@ -378,6 +385,13 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = 6,
     # Cross-memory onderhoud (v2): supersede, 2e-lijn-hercontrole, cluster-promotie.
     try:
         import _maintenance as _mnt
+        # Exacte duplicaten EERST, en zonder LLM. Scheelt supersede_pass een
+        # judge-aanroep per duplicaatpaar, en belangrijker: een identieke body
+        # hoort niet aan een oordeel onderworpen te worden dat fout kan gaan.
+        try:
+            s["exact_duplicates_closed"] = _mnt.exact_duplicate_pass()
+        except Exception:
+            s["exact_duplicates_closed"] = 0
         try:
             s["superseded"] = _mnt.supersede_pass()
         except Exception:

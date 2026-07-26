@@ -3,10 +3,10 @@ id: TASK-67
 title: >-
   Graphify-scope verbreden naar kern-corpus (wiki + memory + projecten +
   research)
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-25 15:20'
-updated_date: '2026-07-25 16:23'
+updated_date: '2026-07-26 09:32'
 labels:
   - graphify
   - scope
@@ -50,8 +50,8 @@ graphify detect skipt `graphify-out` al automatisch (_SKIP_DIRS). Uitsluiten van
 - [x] #3 04-templates, 04-templates.pre-*.bak, 06-claude, 08-archive, 01-raw/sessies en 05-bronnen/evernote zitten aantoonbaar niet in graph.json
 - [x] #4 Wijziging gedeployed naar ~/.claude/commands EN $VAULT/.claude (beide copies in sync)
 - [x] #5 graph.json herbouwd; source_file van elke node is vault-relatief met forward slashes
-- [ ] #6 recall@k gemeten met kb-eval.py voor en na, tegen 06-claude/kb-eval-set.json en kb-memory-eval-set.json; de nieuwe scope is niet slechter
-- [ ] #7 Artikel graphify-kennisgraaf-tool bijgewerkt naar de feitelijke scope
+- [x] #6 recall@k gemeten met kb-eval.py voor en na, tegen 06-claude/kb-eval-set.json en kb-memory-eval-set.json; de nieuwe scope is niet slechter
+- [x] #7 Artikel graphify-kennisgraaf-tool bijgewerkt naar de feitelijke scope
 - [x] #8 kb-lint schoon (exit 0) en volledige testsuite groen
 <!-- AC:END -->
 
@@ -104,4 +104,33 @@ Dat is geen meetfout maar een architectuurfeit dat de taakomschrijving miste: kb
 GEVONDEN VALKUIL in het --update-model: 'staat in het manifest' is niet hetzelfde als 'staat in de graaf'.
 
 03-projecten (2 bestanden) zat in manifest.json van een eerdere whole-vault-run en is sindsdien niet gewijzigd, dus detect_incremental meldt ze niet als nieuw. Maar TASK-28 heeft hun nodes destijds als non-02-wiki gepruned. Netto: die bestanden zijn permanent onzichtbaar tot iemand ze aanraakt. Elke scope-verbreding naar een map die ooit in het manifest stond heeft dit probleem. Losse extractie gestart om het gat te dichten; structureel hoort hier een manifest-reset bij een scope-wijziging.
+
+AFGEROND 2026-07-26.
+
+AC #6 -- RECALL@K. Eerst het punt dat de meting overbodig maakt en er tegelijk sterker dan is: de graaf zit HELEMAAL NIET in de retrieval-weg. Geverifieerd met grep over kb-retrieve.py, _kb_recall.py en kb-search.py: geen enkele aanroep van graph_neighbors of graph_connect. _rank.one_hop_neighbor heet wel zo maar leest WIKILINKS UIT DE ARTIKELTEKST (_rank.py:161), niet de graaf. Een scope-wijziging aan graphify kan recall@k dus per constructie niet beïnvloeden.
+
+Toch gemeten, want een a-priori-argument dat je niet toetst is een aanname:
+
+  set                n    @1      @3      @5      MRR
+  kb-eval-set        35   0.886   1.000   1.000   0.943
+  kb-memory-eval-set 17   0.765   0.941   0.941   0.853
+
+Identiek aan de vastgelegde v1-baseline (memory @3 0.941, wiki @3 1.000). Niet slechter, dus AC #6 is gehaald.
+
+Op de gevoeliger v2-sets: wiki-v2 @1 0.672 -> 0.690, memory-v2 @1 0.476 -> 0.464; @3 en @5 ongewijzigd. Dat zijn verschillen van precies EEN vraag op 58 respectievelijk 84. EERLIJK VOORBEHOUD: de vault is tussen beide metingen gegroeid doordat de sweep nieuwe memories schreef, dus dit is geen gecontroleerde voor/na-meting en die één vraag is niet aan de scope-wijziging toe te schrijven. De v1-sets, die exact gelijk bleven, zijn het schonere signaal.
+
+AC #7 -- WIKI-ARTIKEL. 02-wiki/graphify-kennisgraaf-tool.md bijgewerkt naar de feitelijke scope: die komt uit .graphifyignore en niet meer uit het pad, met de mappen erbij en de reden waarom een apart bestand nodig is (terugval op .gitignore sluit 09-memory stil uit).
+
+BELANGRIJKER dan de scope-update, en niet waar de taak om vroeg: het artikel bevatte een VALSE VEILIGHEIDSCLAIM. Er stond dat graphify's detect-laag gevoelige bronnen zoals Evernote in 05-bronnen sowieso overslaat, ook bij een whole-vault-run, en dat de 02-wiki-scope daarom geen privacy-mechanisme hoefde te zijn.
+
+Geverifieerd tegen de geïnstalleerde graphify.detect, en het klopt niet:
+  _SENSITIVE_DIRS = .aws, .gcloud, .gnupg, .secrets, .ssh, credentials, secrets
+  -- geen 05-bronnen, geen evernote
+  _SENSITIVE_PATTERNS dekt sleutels en certificaten, geen academische markers
+
+Empirisch beslist in plaats van uit de lijst afgeleid: een map 05-bronnen/evernote/ met een notitie erin gaat gewoon mee, en skipped_sensitive blijft leeg.
+
+Wat evernote buiten de graaf houdt is dus UITSLUITEND de expliciete uitsluiting in .graphifyignore. Dat staat nu met bewijs in het artikel, inclusief de waarschuwing dat de dekking stilzwijgend verandert wanneer dat bestand verdwijnt.
+
+kb-lint: dit artikel schoon (137 artikelen, 134 schoon; de 3 waarschuwingen betreffen andere bestanden).
 <!-- SECTION:NOTES:END -->

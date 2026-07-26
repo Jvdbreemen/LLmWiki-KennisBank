@@ -139,6 +139,98 @@ def judge_recheck(text: str) -> bool:
     return obj.get("retract") is True
 
 
+OPEN_STATUSES = ("current", "unverified")
+
+
+def exact_duplicate_groups(statuses=OPEN_STATUSES) -> list:
+    """Groepeer OPEN memories op genormaliseerde body; alleen groepen > 1.
+
+    Bewust ZONDER embeddings, anders dan current_items(). Twee redenen: gelijke
+    body is een exacte vaststelling waarvoor een vector niets toevoegt, en deze
+    pass moet ook werken wanneer het embedmodel onbereikbaar is -- juist dan
+    stapelen duplicaten zich op.
+
+    Een lege body telt niet mee. Die zouden allemaal op elkaar lijken zonder dat
+    er iets gedupliceerd is.
+    """
+    from collections import defaultdict
+    mdir = vault_root() / "09-memory"
+    if not mdir.exists():
+        return []
+    groepen = defaultdict(list)
+    for f in sorted(mdir.glob("**/*.md")):
+        try:
+            fm, body = parse_frontmatter(f.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if fm.get("status") not in statuses:
+            continue
+        sleutel = (body or "").strip()
+        if not sleutel:
+            continue
+        groepen[sleutel].append({
+            "path": str(f),
+            "created": fm.get("created", ""),
+            "valid_from": fm.get("valid_from", fm.get("created", "")),
+            "source_session": fm.get("source_session", ""),
+        })
+    return [g for g in groepen.values() if len(g) > 1]
+
+
+def exact_duplicate_pass(dry_run: bool = False) -> int:
+    """Sluit byte-identieke memories; houd er per groep een over.
+
+    Deterministisch en zonder LLM. supersede_pass hiernaast is voor memories die
+    op elkaar LIJKEN -- daar is een oordeel nodig, en daar kan een oordeel ook
+    fout zijn. Bij een identieke body valt er niets te oordelen; een judge zou
+    daar alleen ruis en kosten toevoegen.
+
+    WELKE BLIJFT: de oudste op event-tijd (valid_from, anders created). Daarna
+    telt of de bestandsnaam een collision-volgnummer draagt: een `-2`/`-3` is per
+    definitie de LATERE schrijver, dus het ongenummerde bestand is het origineel
+    en blijft. Zonder die regel zou een sortering op pad het genummerde bestand
+    houden -- '-' sorteert voor '.', dus '...-resources-2.md' komt voor
+    '...-resources.md'. Op de echte vault koos hij zo consequent de dubbel in
+    plaats van het origineel. Als laatste een tie-break op pad, zodat de uitkomst
+    reproduceerbaar is en niet afhangt van de volgorde van het bestandssysteem.
+
+    IDENTIEKE BODY, AFWIJKENDE FRONTMATTER (andere source_session, andere
+    created) -- de keuze, expliciet: de dubbelen worden GESLOTEN, niet
+    samengevoegd. Hun frontmatter blijft gewoon in het gesloten bestand staan,
+    inclusief de eigen source_session, en superseded_by wijst naar de
+    behoudene. Er gaat dus geen herkomst verloren en de relatie is expliciet.
+    Samenvoegen zou de behouden memory muteren om informatie te bewaren die al
+    bewaard is -- meer beweging, geen extra kennis.
+
+    Omkeerbaar: niets wordt verwijderd. Een gesloten memory terugzetten is
+    status weer op current en superseded_by weg.
+    """
+    import _memory
+    import re as _re
+    _volgnummer = _re.compile(r"-\d+$")
+
+    def _rang(it):
+        stem = Path(it["path"]).stem
+        return (it.get("valid_from") or "",
+                it.get("created") or "",
+                1 if _volgnummer.search(stem) else 0,
+                it["path"])
+
+    gesloten = 0
+    for groep in exact_duplicate_groups():
+        geordend = sorted(groep, key=_rang)
+        houden, rest = geordend[0], geordend[1:]
+        stem = Path(houden["path"]).stem
+        for dubbel in rest:
+            if dry_run:
+                gesloten += 1
+                continue
+            if _memory.set_status(dubbel["path"], "superseded",
+                                  superseded_by=[stem]):
+                gesloten += 1
+    return gesloten
+
+
 def supersede_pass(threshold: float = 0.85, judge_fn=None, get_cached_fn=None) -> int:
     import _memory
     judge_fn = judge_fn or judge_supersede
