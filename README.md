@@ -2,6 +2,11 @@
 
 **English** · [Nederlands](README.nl.md)
 
+> **Installing with an AI agent?** (Claude Code, Claude Cowork, Codex,
+> Copilot CLI, OpenCode) → follow the
+> **[Agent install guide](docs/AGENT-INSTALL.md)**. One command per platform;
+> `AGENTS.md` is the underlying deployment contract.
+
 **A sovereign memory layer for serious AI work.**
 
 Every agent session creates valuable context: decisions, fixes, preferences,
