@@ -150,7 +150,9 @@ def create_app(
             raise HTTPException(status_code=exc.code, detail=exc.detail)
         return FileResponse(target, media_type=media)
 
-    @app.get("/graphify-html")
+    # Explicit HEAD support: the Graphify lens probes with HEAD before
+    # embedding, and FastAPI's @app.get alone answers HEAD with 405.
+    @app.api_route("/graphify-html", methods=["GET", "HEAD"])
     def graphify_html():
         # Serve the self-contained interactive graph page that the graphify
         # pipeline writes; the Graphify lens embeds it in an iframe. Served
