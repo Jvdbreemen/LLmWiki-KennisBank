@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Vault orientation at session start (TASK-80, idea borrowed from Mind's
+  `space_get`).** `kb-orientation.py` prints a compact "what lives in this
+  vault" summary: document counts per layer, most recently changed articles,
+  frequently used knowledge (kb-usage.db) and open backlog tasks in the
+  session directory. Pure SQL reads, sub-second, no embeddings. `/sessiestart`
+  runs it as its orientation step; a new opt-in toggle `orientation`
+  (default off) additionally injects it at every session start through the
+  coordinator's notification phase.
+
 ## [0.22.0] - 2026-07-26
 
 The knowledge graph becomes a queryable layer instead of a standalone HTML

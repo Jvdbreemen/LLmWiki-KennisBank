@@ -7,5 +7,6 @@
   "memory_recall": true,
   "usage_telemetry": true,
   "activity_llm_fallback": false,
-  "checkpoints": false
+  "checkpoints": false,
+  "orientation": false
 }

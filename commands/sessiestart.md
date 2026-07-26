@@ -38,7 +38,17 @@ MEMORY=$(ls ~/.claude/projects/*/memory/MEMORY.md 2>/dev/null | head -1)
 ```
 Toon aantal memory-entries en hun titels. Geen memory gevonden: meld "geen memory gevonden, eerste sessie".
 
-## Stap 3: Wiki-overzicht
+## Stap 3: Vault-orientatie (één helper)
+Compacte orientatie uit de indexen: documentcounts per laag, recent gewijzigde
+artikelen, veelgebruikte kennis en open backlog-taken in de huidige map. Puur
+SQL, sub-seconde:
+```bash
+python3 $VAULT/.claude/scripts/kb-orientation.py
+```
+Neem de regels letterlijk over in de briefing. Lege uitvoer = indexen ontbreken
+nog; meld dat kort.
+
+## Stap 3b: Wiki-overzicht
 Lees de index als die bestaat:
 ```bash
 [ -f $VAULT/02-wiki/index.md ] && head -50 $VAULT/02-wiki/index.md
