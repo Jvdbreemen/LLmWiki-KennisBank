@@ -58,12 +58,38 @@ class MemoryNotifyTest(unittest.TestCase):
         self.assertIn("3", self.m.notice())
 
     def test_rot_notice(self):
+        """De telling komt sinds TASK-76 uit de heartbeat, niet uit een scan."""
+        self._hb({"errors": 0, "model_unreachable": False, "rot": 4, "rot_hours": 48})
+        melding = self.m.notice()
+        self.assertIn("unverified", melding.lower())
+        self.assertIn("4", melding)
+        self.assertIn("48u", melding)
+
+    def test_rot_zonder_telling_zwijgt_en_scant_niet(self):
+        """AC #4 van TASK-76, en het bewijs dat er niet meer gescand wordt.
+
+        Er ligt een rottende memory op schijf, maar de heartbeat kent geen
+        rot-sleutel. Zou notice() nog zelf scannen, dan zou hij die memory vinden
+        en alsnog melden -- en dan zouden de kosten terug zijn op precies het pad
+        waar ze weg moesten. Zwijgen is hier het juiste antwoord: de worker draait
+        bij elke sessiestart, dus de telling is er de volgende keer.
+        """
         from datetime import date, timedelta
         old = (date.today() - timedelta(days=3)).isoformat()
         (self.vault / "09-memory" / "a.md").write_text(
-            f"---\ntype: memory\nstatus: unverified\ncreated: {old}\n---\n\nx", encoding="utf-8")
+            f"---\ntype: memory\nstatus: unverified\ncreated: {old}\n---\n\nx",
+            encoding="utf-8")
         self._hb({"errors": 0, "model_unreachable": False})
-        self.assertIn("unverified", self.m.notice().lower())
+        self.assertNotIn("unverified", self.m.notice().lower())
+
+    def test_rot_nul_meldt_niets(self):
+        self._hb({"errors": 0, "model_unreachable": False, "rot": 0})
+        self.assertNotIn("unverified", self.m.notice().lower())
+
+    def test_rot_uren_valt_terug_op_48(self):
+        """Een heartbeat van voor TASK-76 kan rot_hours missen."""
+        self._hb({"errors": 0, "model_unreachable": False, "rot": 2})
+        self.assertIn("48u", self.m.notice())
 
     def _pending_transcript(self, name="t1.jsonl"):
         """Create a pending transcript file in the vault."""
