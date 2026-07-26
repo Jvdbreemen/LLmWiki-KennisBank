@@ -253,6 +253,105 @@ def _write_state(path: Path, client: str) -> None:
             pass
 
 
+#: Bovengrens voor de statusregel. Puur een leesactie op al bestaande state;
+#: zodra dit meer kost dan een handvol milliseconden hoort het niet meer op de
+#: hot path en moet het naar de achtergrondworker.
+STATUS_BUDGET_MS = 250
+
+
+def worker_is_alive(vault: Path) -> bool:
+    """Draait het achtergrondonderhoud nog echt?
+
+    Het BESTAAN van de lock is geen antwoord. Een verweesde lock blijft gewoon
+    liggen -- gemeten: een lock met PID 31772 terwijl de levende worker 22552
+    was -- en dan zou de statusregel voor altijd "onderhoud draait al" beweren
+    terwijl er niets draait. Precies het stille falen dat deze regel wegneemt.
+
+    index-launch heeft die vraag al beantwoord: leeftijd ten opzichte van
+    STALE_SEC, afgeleid uit de job-timeouts en bewaakt door een eigen test. Dat
+    antwoord lenen we hier. Een tweede, PID-gebaseerd antwoord zou onvermijdelijk
+    op een ander moment "verlopen" dan de partij die de lock echt beheert.
+    """
+    try:
+        import importlib.util
+        pad = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index-launch.py")
+        spec = importlib.util.spec_from_file_location("index_launch", pad)
+        il = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(il)
+        lock = vault / ".claude" / il.LOCK_NAME
+        return lock.exists() and not il.is_stale(lock)
+    except Exception:
+        return False
+
+
+def status_line(vault: Path, *, worker_running: bool) -> str:
+    """Eenregelig statusbericht, afgelezen uit bestaande state.
+
+    Bewust een AFLEZING en geen berekening: alles hier komt uit bestanden die
+    de vorige achtergrondrun al heeft achtergelaten, of uit een enkele
+    SQLite-telling. Geen embed-calls, geen vault-scan, geen LLM. Een sessiestart
+    hoort te melden waar je aan toe bent, niet het te gaan uitzoeken.
+
+    Fail-open per onderdeel: elk stuk dat niet leesbaar is wordt overgeslagen,
+    zodat een ontbrekende index nooit de melding (of de sessie) breekt.
+    """
+    delen = []
+    delen.append("onderhoud draait al" if worker_running else "onderhoud gestart op de achtergrond")
+
+    # Index: een telling en de graafversheid. Read-only, geen schrijfrechten nodig.
+    try:
+        import sqlite3
+        db = vault / ".claude" / "kb-index.db"
+        if db.exists():
+            conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=0.5)
+            try:
+                docs = conn.execute("SELECT count(*) FROM docs").fetchone()[0]
+                deel = f"index {docs} documenten"
+                # Draait er onderhoud, dan is deze telling een momentopname van
+                # een tabel die op dit moment gevuld wordt. Gemeten: 258 -> 262
+                # -> 266 in drie runs, terwijl de vault er 1268 heeft. Het getal
+                # zonder voorbehoud tonen is een verkeerd getal met stellige toon.
+                if worker_running:
+                    deel += " (bijwerken)"
+                try:
+                    gpath = vault / "graphify-out" / "graph.json"
+                    if gpath.exists():
+                        row = conn.execute(
+                            "SELECT value FROM meta WHERE key='graph_fingerprint'").fetchone()
+                        if row:
+                            st = gpath.stat()
+                            actueel = row[0] == f"{int(st.st_mtime)}:{st.st_size}"
+                            deel += ", graaf " + ("actueel" if actueel else "verouderd")
+                        else:
+                            # Er is wel een graaf op schijf, maar de index kent
+                            # hem niet. Zwijgen zou dit onzichtbaar houden -- en
+                            # dat is precies hoe de graaftabellen ongemerkt uit
+                            # kb-index.db verdwenen (zie TASK-75).
+                            deel += ", graaf niet geladen"
+                except sqlite3.Error:
+                    pass
+                delen.append(deel)
+            finally:
+                conn.close()
+    except Exception:
+        pass
+
+    # Staat er werk klaar voor de graaf? Een niet-lege vlag betekent ja.
+    try:
+        flag = vault / "graphify-out" / ".needs-rebuild"
+        if flag.exists() and flag.stat().st_size > 0:
+            delen.append("graaf-rebuild staat klaar")
+    except OSError:
+        pass
+
+    # ASCII-only scheiding, bewust. _emit escapet inmiddels naar ASCII, dus dit
+    # is niet meer strikt nodig -- maar de statusregel is het laatste wat stil
+    # mag falen, en twee onafhankelijke waarborgen kosten hier niets. Een bullet
+    # (U+00B7) leverde eerder een LEGE sessiestart met exitcode 0 op.
+    # test_statusregel_is_cp1252_veilig bewaakt dit.
+    return "KennisBank: " + " | ".join(delen)
+
+
 def _emit(client: str, report: str) -> None:
     if not report:
         return
@@ -274,7 +373,13 @@ def _emit(client: str, report: str) -> None:
         payload = {"additionalContext": context}
     else:
         payload = {"suppressOutput": True, "additionalContext": context}
-    sys.stdout.write(json.dumps(payload, ensure_ascii=False))
+    # ensure_ascii=True (de default) is hier bewust: deze hook geeft de uitvoer
+    # van ALLE kindscripts door. Een enkel niet-cp1252 teken -- een accent in een
+    # bestandsnaam, een typografisch aanhalingsteken -- gooit op Windows een
+    # UnicodeEncodeError die main() opslokt, en dan verdwijnt het HELE
+    # sessierapport zonder spoor. \uXXXX-escapes decoderen aan de leeskant naar
+    # exact hetzelfde teken, dus dit kost niets.
+    sys.stdout.write(json.dumps(payload))
 
 
 def coordinate(
@@ -338,6 +443,14 @@ def main(argv: list[str] | None = None) -> int:
         vault = _vault()
         _prewarm_embed_model(vault)
         report = coordinate(args.client, vault, payload)
+        # De statusregel gaat VOOROP en verschijnt altijd, ook als er verder
+        # niets te melden viel. Zonder die regel is een stille sessiestart niet
+        # te onderscheiden van een kapotte: beide leveren niets op.
+        try:
+            regel = status_line(vault, worker_running=worker_is_alive(vault))
+            report = f"{regel}\n{report}" if report else regel
+        except Exception:
+            pass
         _emit(args.client, report)
     except Exception:
         # Session startup and agent operation must never depend on KennisBank.
