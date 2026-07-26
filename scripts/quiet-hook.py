@@ -64,7 +64,9 @@ def _emit_context(client: str, event: str, report: str) -> None:
             "suppressOutput": True,
             "additionalContext": report,
         }
-    sys.stdout.write(json.dumps(payload, ensure_ascii=False))
+    # ASCII-escapes, zie kb-session-start._emit: een niet-cp1252 teken in het
+    # doorgegeven rapport laat de hele hook-uitvoer stil verdwijnen op Windows.
+    sys.stdout.write(json.dumps(payload))
 
 
 def main(argv: list[str] | None = None) -> int:

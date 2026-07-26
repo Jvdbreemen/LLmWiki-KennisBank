@@ -54,6 +54,41 @@ def _behind(local: str, upstream: str) -> int | None:
     return int(n)
 
 
+def _upstream_refs() -> "tuple[str | None, str | None, str | None]":
+    """(branch, upstream-van-de-branch, upstream-van-main). None waar het ontbreekt."""
+    branch = _git("rev-parse", "--abbrev-ref", "HEAD")
+    cur_upstream = _git("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}")
+    main_upstream = None
+    if branch != "main":
+        main_upstream = _git(
+            "rev-parse", "--abbrev-ref", "--symbolic-full-name", "main@{upstream}")
+    return branch, cur_upstream, main_upstream
+
+
+def refresh_remote() -> bool:
+    """Haal de remote op, zodat de drift-tellingen bij de volgende sessiestart vers zijn.
+
+    Dit is de ENIGE netwerkaanroep in deze hook, en netwerk hoort niet op de
+    interactieve weg: de rest van de check is lokaal en kost milliseconden, maar
+    een fetch kost hier gemeten 801 ms van de 1384 ms (58%) en loopt bij een
+    trage of dode verbinding door tot FETCH_TIMEOUT. Een startup-doel dat alleen
+    geldt bij goed weer is geen doel.
+
+    Draait daarom in de losgekoppelde worker (index-launch.JOBS). Gevolg: de
+    tellingen in main() lezen wat de VORIGE fetch heeft achtergelaten en kunnen
+    dus een sessie oud zijn. Voor een drift-waarschuwing is dat prima -- 'main
+    staat achter' is geen feit dat per seconde verandert.
+    """
+    if _git("rev-parse", "--is-inside-work-tree") != "true":
+        return False
+    _branch, cur_upstream, main_upstream = _upstream_refs()
+    ref = cur_upstream or main_upstream
+    if not ref:
+        return False
+    remote = ref.split("/", 1)[0] if "/" in ref else "origin"
+    return _git("fetch", "--quiet", "--no-tags", remote, timeout=FETCH_TIMEOUT) is not None
+
+
 def _emit(lines: list[str]) -> None:
     if lines:
         print("Git-check — repo vraagt aandacht:")
@@ -104,22 +139,16 @@ def main() -> None:
     lines: list[str] = _uncommitted_backlog()
 
     # 1) Current branch vs its own upstream.
-    branch = _git("rev-parse", "--abbrev-ref", "HEAD")
-    cur_upstream = _git("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}")
-    main_upstream = None
-    if branch != "main":
-        main_upstream = _git("rev-parse", "--abbrev-ref", "--symbolic-full-name", "main@{upstream}")
+    branch, cur_upstream, main_upstream = _upstream_refs()
 
-    # No configured upstream anywhere -> stay silent (and avoid a potentially slow fetch).
-    upstream_ref = cur_upstream or main_upstream
-    if not upstream_ref:
+    # No configured upstream anywhere -> stay silent.
+    if not (cur_upstream or main_upstream):
         _emit(lines)
         return
 
-    # Fetch the relevant remote once so counts are fresh.
-    remote = upstream_ref.split("/", 1)[0] if "/" in upstream_ref else "origin"
-    _git("fetch", "--quiet", "--no-tags", remote, timeout=FETCH_TIMEOUT)
-
+    # GEEN fetch hier. Die staat in refresh_remote() en draait in de
+    # losgekoppelde worker; zie de uitleg daar. De tellingen hieronder lezen de
+    # object store en zijn puur lokaal -- ze kunnen een sessie oud zijn.
     if branch and branch != "HEAD" and cur_upstream:
         b = _behind("HEAD", cur_upstream)
         if b is not None and b >= BEHIND_THRESHOLD:
