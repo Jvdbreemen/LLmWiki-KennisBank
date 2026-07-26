@@ -1,0 +1,79 @@
+# =============================================================================
+# Graphify-scope voor de KennisBank-vault (TASK-67)
+#
+# Graphify leest bij voorkeur dit bestand; ontbreekt het, dan valt het terug op
+# .gitignore. Die terugval is hier gevaarlijk: de vault-.gitignore is een
+# deny-all whitelist voor PUBLICATIE (alleen 02-wiki, 03-projecten, 06-claude,
+# 04-templates mogen naar de remote). Zonder dit bestand zou graphify die
+# publicatie-whitelist als graaf-scope gebruiken en 09-memory stil overslaan.
+#
+# Scope-principe: gedestilleerde en gecureerde kennis gaat de graaf in.
+# Ruwe intake, sessie-transcripts en het Evernote-archief niet -- die zijn
+# ofwel de input waaruit 02-wiki al gedestilleerd is (near-duplicate nodes,
+# verwatert het graafbuur-signaal in _rank.py), ofwel te groot om zinnig te
+# clusteren. Zie backlog TASK-67, TASK-68 en TASK-69.
+# =============================================================================
+
+# 1) Negeer alles
+*
+
+# 2) Sta alleen het kern-corpus toe.
+#    Let op de gitignore-regel dat een ! een bestand niet kan terughalen als
+#    een bovenliggende map uitgesloten is: elke map moet apart terug.
+
+# Gecureerde kennis -- de kern van de graaf
+!02-wiki/
+!02-wiki/**
+
+# Geheugenlaag -- even groot als de wiki (~95k woorden), en tot TASK-67
+# volledig onvindbaar via de graaf. Filteren op status: current gebeurt na de
+# build (frontmatter is geen ignore-criterium).
+!09-memory/
+!09-memory/**
+
+# Projectnotities over de KennisBank zelf
+!03-projecten/
+!03-projecten/**
+
+# Onderzoeksbronnen achter de wiki-vergelijkingen (3 bestanden).
+# 05-bronnen/evernote blijft bewust buiten de graaf: 14837 notities zouden de
+# Leiden-clustering laten partitioneren over e-mailbevestigingen in plaats van
+# over kennis. Zie TASK-69 (lokale Ollama-sample eerst).
+!05-bronnen/
+05-bronnen/*
+!05-bronnen/research/
+!05-bronnen/research/**
+
+# Debug-notities (OTGW e.d.) -- klein en concreet vindbaar.
+# 01-raw/sessies blijft eruit: 834 transcripts / 1,41M woorden waaruit 02-wiki
+# al gedestilleerd is. Wordt link-only ontsloten in TASK-68.
+!01-raw/
+01-raw/*
+!01-raw/debug/
+!01-raw/debug/**
+
+# =============================================================================
+# Bewust buiten de graaf (vallen al onder de deny-all, hier expliciet zodat een
+# latere versoepeling van de whitelist ze niet per ongeluk binnenhaalt):
+#
+#   00-inbox/       onverwerkte intake, 5,4 GB, 659 afbeeldingen en 48 pdf's;
+#                   36 van de 37 md-bestanden zitten in een persoonlijke
+#                   OpenAI-export. Inhoud verhuist na /intake toch naar elders.
+#   04-templates/   lege sjablonen, nul kennis
+#   04-templates.pre-*.bak/  per definitie duplicaat
+#   06-claude/      eval-sets (json), geen kennis
+#   08-archive/     upgrade-backups: duplicaten van live bestanden
+#   07-media/       leeg
+#   graphify-out/   staat al in graphify's eigen _SKIP_DIRS
+# =============================================================================
+00-inbox/
+04-templates/
+04-templates.pre-*/
+06-claude/
+07-media/
+08-archive/
+graphify-out/
+.claude/
+.obsidian/
+.git/
+"Kennisbank Robert"/
