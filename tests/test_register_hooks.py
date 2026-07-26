@@ -219,18 +219,25 @@ class LockStalenessTest(unittest.TestCase):
 
     def test_a_killed_cycle_recovers_within_one_ceiling(self):
         import tempfile
-        import time as _time
         import _hooks_manifest as man
         from tests._loader import load_script
         kbss = load_script("kb-session-start.py")
         with tempfile.TemporaryDirectory() as d:
             lock = Path(d) / kbss.LOCK_NAME
             lock.write_text("1", encoding="utf-8")
-            # Een cyclus die NU gekilld is, moet één plafond later herstellen.
-            later = _time.time() + man.timeout("kb-session-start.py") + 1
-            self.assertFalse(kbss.acquire_lock(lock, now=_time.time()),
+            # Tijdbasis is de mtime van de lock zelf, niet time.time(). De code
+            # rekent age = now - mtime en behandelt een NEGATIEVE age bewust als
+            # verlopen (klokverzetting). Op Windows tikken de systeemklok en de
+            # bestands-mtime op ~15,6 ms; onder belasting kan time.time() net
+            # VOOR de zojuist geschreven mtime uitkomen, en dan geldt een verse
+            # lock als verlopen. Deze test viel daar op 2026-07-26 een keer over
+            # -- flaky, niet fout in de code.
+            ceiling = man.timeout("kb-session-start.py")
+            geschreven = lock.stat().st_mtime
+            self.assertFalse(kbss.acquire_lock(lock, now=geschreven),
                              "een verse lock hoort te blokkeren")
-            self.assertTrue(kbss.acquire_lock(lock, now=later),
+            # Een cyclus die NU gekilld is, moet één plafond later herstellen.
+            self.assertTrue(kbss.acquire_lock(lock, now=geschreven + ceiling + 1),
                             "een afgebroken cyclus blijft langer dan één plafond geblokkeerd")
 
     def test_a_future_mtime_does_not_block_forever(self):
