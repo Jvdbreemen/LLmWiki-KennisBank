@@ -25,16 +25,28 @@ HEARTBEAT = "memory-sweep-status.json"
 _STALE_HOURS = 26
 
 
-def _rot() -> int:
-    try:
-        import importlib.util
-        spec = importlib.util.spec_from_file_location(
-            "memory_doctor", os.path.join(os.path.dirname(os.path.abspath(__file__)), "memory-doctor.py"))
-        md = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(md)
-        return md.rot_count(48)
-    except Exception:
-        return 0
+def _rot(hb: dict) -> "tuple[int, int] | None":
+    """Lees de rot-telling AF uit de heartbeat; bereken hem niet.
+
+    Deze functie scande tot TASK-76 zelf de hele geheugenlaag: elk .md-bestand in
+    09-memory openen en de frontmatter parsen, bij elke sessiestart. Gemeten 509
+    ms van de 543 ms die deze hook kostte -- en erger dan het getal was de
+    richting, want de kosten groeiden mee met het aantal memories.
+
+    De uitkomst is bovendien geen live feit: het aantal verandert alleen wanneer
+    de sweep/judge draait, en die draait al in de losgekoppelde worker. Daar
+    wordt hij nu geteld en in de heartbeat gezet.
+
+    Ontbreekt de sleutel (oude heartbeat, sweep nog nooit gedraaid), dan geeft
+    dit None en zwijgt de melding. BEWUST geen terugval op zelf scannen: dat zou
+    de kosten terugbrengen op precies het pad waar ze weg moesten. Zelfherstellend,
+    want de worker draait bij elke sessiestart.
+    """
+    rot = hb.get("rot")
+    if not isinstance(rot, int) or isinstance(rot, bool):
+        return None
+    uren = hb.get("rot_hours")
+    return rot, uren if isinstance(uren, int) else 48
 
 
 def notice() -> str:
@@ -51,9 +63,10 @@ def notice() -> str:
                     "(transcripts blijven wachten).")
     if isinstance(hb.get("errors"), int) and hb["errors"] > 0:
         msgs.append(f"geheugen-sweep: {hb['errors']} fout(en) in de laatste run.")
-    rot = _rot()
-    if rot > 0:
-        msgs.append(f"geheugen: {rot} unverified memories ouder dan 48u "
+    gelezen = _rot(hb)
+    if gelezen is not None and gelezen[0] > 0:
+        rot, uren = gelezen
+        msgs.append(f"geheugen: {rot} unverified memories ouder dan {uren}u "
                     f"(sweep/judge promoot ze niet - draai /kennisbank:settings of check Ollama).")
 
     # Signaleer een gestalde/afwezige sweep: pending transcripts + absent/stale heartbeat.
