@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Checkpoint-primitief (TASK-79, idee uit Mind).** `/checkpoint` legt een
+  werkstand-snapshot vast in `01-raw/checkpoints/` (actieve taak, open
+  beslissingen, volgende stap) en `kb-checkpoint.py` registreert het in
+  `.claude/kb-checkpoint-state.json`. Nieuwe opt-in toggle `checkpoints`
+  (default uit) laat Claude's `PreCompact`-hook bovendien automatisch een stub
+  schrijven vlak vóór context-compaction. De SessionStart-coordinator parseert
+  nu het `source`-veld en meldt open checkpoints VÓÓR de 300s-freshness-gate —
+  een compact-event valt vrijwel altijd binnen die gate, dus in de
+  notificatiefase zou de melding precies dan wegvallen. Codex en Copilot hebben
+  geen PreCompact-equivalent; daar is het pad handmatig (`$checkpoint` /
+  `/checkpoint`), de melding werkt via de gedeelde coordinator. `/sessielog`
+  sluit open checkpoints automatisch af. Ontwerp:
+  `docs/superpowers/specs/2026-07-26-checkpoint-primitief.md`.
+
+### Fixed
+
+- **Toggle-oppervlakken bijgewerkt.** `activity_llm_fallback` ontbrak in het
+  `set`-blok van `/kennisbank:settings` en in de CONFIGURATION-tabel; de
+  "7 toggles"-telling in het command klopte niet meer. Beide gerepareerd bij
+  het toevoegen van de negende toggle.
+
 ## [0.21.0] - 2026-07-25
 
 The four structural items the v0.20.0 analysis identified but deliberately left

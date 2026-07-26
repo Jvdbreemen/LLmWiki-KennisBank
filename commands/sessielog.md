@@ -173,6 +173,13 @@ activiteitsindexen plus de sweep-launcher parallel, en voert geheugen- en
 destillatiemeldingen pas daarna uit. Hij is fail-open en geeft één samengevoegd
 resultaat terug. Voer de losse child-scripts niet daarnaast uit.
 
+Sluit daarna eventuele open checkpoints af — een geschreven sessielog vervangt
+elk ouder werkstand-checkpoint:
+
+```bash
+python3 "$VAULT/.claude/scripts/kb-checkpoint.py" --done
+```
+
 ---
 
 ## Bevestiging
