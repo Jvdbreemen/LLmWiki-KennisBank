@@ -43,6 +43,18 @@ class StatusLineTest(unittest.TestCase):
         conn.executemany("INSERT INTO docs(path) VALUES (?)",
                          [(f"09-memory/{i}.md",) for i in range(docs)])
         conn.execute("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT)")
+        conn.commit()
+        conn.close()
+        # Sinds TASK-75 woont de vingerafdruk in kb-graph.db. Het argument blijft
+        # hier staan zodat de tests leesbaar blijven, maar het schrijft elders.
+        if fingerprint is not None:
+            self._graphdb(fingerprint)
+
+    def _graphdb(self, fingerprint=None):
+        """De graafindex als EIGEN bestand -- de kern van TASK-75."""
+        db = self.tmp / ".claude" / "kb-graph.db"
+        conn = sqlite3.connect(db)
+        conn.execute("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT)")
         if fingerprint is not None:
             conn.execute("INSERT INTO meta VALUES ('graph_fingerprint', ?)", (fingerprint,))
         conn.commit()
@@ -106,6 +118,18 @@ class StatusLineTest(unittest.TestCase):
         self._index(fingerprint=None)
         self.assertIn("graaf niet geladen",
                       self.mod.status_line(self.tmp, worker_running=False))
+
+    def test_graafstatus_overleeft_een_verdwenen_embedindex(self):
+        """TASK-75, AC #3. Tijdens een herbouw kan kb-index.db weg zijn of half
+        gevuld. De graafstatus zat eerder GENEST in die tak en viel dan stil --
+        precies op het moment dat je wilt weten of de graaf er nog is."""
+        g = self._graph()
+        st = g.stat()
+        self._graphdb(f"{int(st.st_mtime)}:{st.st_size}")
+        self.assertFalse((self.tmp / ".claude" / "kb-index.db").exists())
+        regel = self.mod.status_line(self.tmp, worker_running=True)
+        self.assertIn("graaf actueel", regel)
+        self.assertNotIn("niet geladen", regel)
 
     def test_geen_graaf_op_schijf_meldt_niets_over_de_graaf(self):
         self._index(fingerprint=None)

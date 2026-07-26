@@ -89,6 +89,59 @@ class BuildKbIndexTest(unittest.TestCase):
         self.assertIn("m1.md", names)      # memory current
         self.assertNotIn("m2.md", names)   # memory unverified -> niet geindexeerd
 
+    def test_een_volledige_herbouw_laat_de_graaf_intact(self):
+        """TASK-75: de graaf hoort een herbouw van de embedding-index te overleven.
+
+        Eerder deelden beide hetzelfde bestand en nam `idx.unlink()` in main()
+        de graaftabellen mee -- waargenomen als `no such table: graph_nodes`.
+
+        Deze test drijft de ECHTE unlink-weg aan via main(rebuild=True), niet een
+        handmatige verwijdering: dat laatste zou mijn aanname over de code
+        toetsen in plaats van de code zelf. Dat de unlink daadwerkelijk plaatsvond
+        wordt bewezen met een merker in de meta van kb-index.db: overleeft die de
+        herbouw, dan is het bestand niet vervangen en zegt de rest niets.
+        """
+        import _kbindex
+        self._build(rebuild=True)                     # kb-index.db bestaat nu
+
+        conn = _kbindex.connect()
+        conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('merker', 'voor')")
+        conn.commit()
+        conn.close()
+
+        g = _kbindex.graph_connect()
+        _kbindex.replace_graph(
+            g,
+            [{"id": "n1", "source_file": "02-wiki/alpha.md"},
+             {"id": "n2", "source_file": "09-memory/m1.md"}],
+            [{"source": "n1", "target": "n2", "relation": "references",
+              "confidence_score": 1.0}])
+        _kbindex.set_graph_fingerprint(g, "vast:1")
+        g.close()
+
+        self._build(rebuild=True)                     # hier valt idx.unlink()
+
+        conn = _kbindex.connect()
+        try:
+            self.assertIsNone(_kbindex.meta_get(conn, "merker"),
+                              "kb-index.db is niet vervangen; de unlink-weg liep niet")
+        finally:
+            conn.close()
+
+        g = _kbindex.graph_connect()
+        try:
+            self.assertEqual(_kbindex.graph_count(g), (2, 1))
+            buren = _kbindex.graph_neighbors(g, "02-wiki/alpha.md")
+            self.assertIn("09-memory/m1.md", [b["source_file"] for b in buren])
+            self.assertEqual(_kbindex.meta_get(g, "graph_fingerprint"), "vast:1")
+        finally:
+            g.close()
+
+    def test_graaf_en_embedindex_zijn_verschillende_bestanden(self):
+        """De scheiding is de hele fix; hem per ongeluk terugdraaien mag opvallen."""
+        import _kbindex
+        self.assertNotEqual(_kbindex.graph_index_path(), _kbindex.index_path())
+
     def test_rebuild_is_idempotent(self):
         self._build(rebuild=True)
         self._build(rebuild=True)
