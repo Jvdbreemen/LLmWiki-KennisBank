@@ -9,72 +9,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.22.0] - 2026-07-26
 
-De kennisgraaf wordt een queryable laag in plaats van een los HTML-artefact, de
-sessiestart wordt een orde van grootte sneller, en er is een nieuw
-checkpoint-primitief dat een context-compaction overbrugt.
+The knowledge graph becomes a queryable layer instead of a standalone HTML
+artefact, session start gets an order of magnitude faster, and a new
+checkpoint primitive bridges context compaction.
 
 ### Added
 
-- **Checkpoint-primitief (TASK-79, idee uit Mind).** `/checkpoint` legt een
-  werkstand-snapshot vast in `01-raw/checkpoints/` (actieve taak, open
-  beslissingen, volgende stap) en `kb-checkpoint.py` registreert het in
-  `.claude/kb-checkpoint-state.json`. Nieuwe opt-in toggle `checkpoints`
-  (default uit) laat Claude's `PreCompact`-hook bovendien automatisch een stub
-  schrijven vlak vóór context-compaction. De SessionStart-coordinator parseert
-  nu het `source`-veld en meldt open checkpoints VÓÓR de 300s-freshness-gate —
-  een compact-event valt vrijwel altijd binnen die gate, dus in de
-  notificatiefase zou de melding precies dan wegvallen. Codex en Copilot hebben
-  geen PreCompact-equivalent; daar is het pad handmatig (`$checkpoint` /
-  `/checkpoint`), de melding werkt via de gedeelde coordinator. `/sessielog`
-  sluit open checkpoints automatisch af. Ontwerp:
-  `docs/superpowers/specs/2026-07-26-checkpoint-primitief.md`.
-- **De kennisgraaf is queryable via tabellen in `kb-index.db` (TASK-71).**
-  `graph.json` wordt bij sessiestart in SQLite-tabellen geladen
-  (fingerprint-gated), zodat retrieval en MCP-tools graafburen kunnen opvragen
-  zonder het JSON-bestand te parsen.
-- **Deterministische edge-laag en scope-prune voor de graaf (TASK-70).**
-  Wikilinks en frontmatter leveren edges zonder LLM-pass; nodes buiten de
-  graphify-scope worden bij de merge geprund.
-- **Link-only provenance-ring voor sessies (TASK-68).** Sessielogs hangen als
-  provenance-ring aan de graaf zonder als volwaardige artikelen mee te wegen.
-- **Graphify-scope via `.graphifyignore` (TASK-67).** De scope staat in een
-  bestand in de vault in plaats van een pad-argument dat per aanroep kon
-  verschillen.
+- **Checkpoint primitive (TASK-79, idea borrowed from Mind).** `/checkpoint`
+  saves a forward-looking work-state snapshot to `01-raw/checkpoints/` (active
+  task, open decisions, next step) and `kb-checkpoint.py` registers it in
+  `.claude/kb-checkpoint-state.json`. A new opt-in toggle `checkpoints`
+  (default off) additionally lets Claude's `PreCompact` hook write a stub
+  automatically right before context compaction. The SessionStart coordinator
+  now parses the `source` field and surfaces open checkpoints BEFORE the 300s
+  freshness gate — a compact event almost always falls inside that gate, so in
+  the notification phase the notice would vanish at exactly the wrong moment.
+  Codex and Copilot have no PreCompact equivalent; there the write path is
+  manual (`$checkpoint` / `/checkpoint`) while the notice works through the
+  shared coordinator. `/sessielog` closes open checkpoints automatically.
+  Design note: `docs/superpowers/specs/2026-07-26-checkpoint-primitief.md`.
+- **The knowledge graph is queryable through tables in its own database
+  (TASK-71).** `graph.json` is loaded into SQLite at session start
+  (fingerprint-gated), so retrieval and the MCP tools can query graph
+  neighbours without parsing the JSON file.
+- **Deterministic edge layer and scope prune for the graph (TASK-70).**
+  Wikilinks and frontmatter produce edges without an LLM pass; nodes outside
+  the graphify scope are pruned during the merge.
+- **Link-only provenance ring for sessions (TASK-68).** Session logs attach to
+  the graph as a provenance ring without weighing in as full articles.
+- **Graphify scope via `.graphifyignore` (TASK-67).** The scope lives in a
+  file in the vault instead of a path argument that could differ per
+  invocation.
 
 ### Changed
 
-- **Koude sessiestart van 35,7 s naar 1,3 s (TASK-74).** De notificatietier is
-  losgekoppeld en `kb-session-start` heeft geen eigen hook-timeout meer nodig
-  boven het gedeclareerde plafond.
-- **Rot-telling naar de achtergrondworker (TASK-76).** De stale-telling liep op
-  de hot path; nu leest de statusregel alleen nog voorberekende state.
-- **Testsuite: gedeelde installatie voor de deploy-inspectie (TASK-77).** De
-  suite draaide `setup.sh` 18 keer (~12,6 min); de inspectietests delen nu één
-  installatie.
+- **Cold session start from 35.7 s down to 1.3 s (TASK-74).** The
+  notification tier is decoupled and `kb-session-start` no longer needs its
+  own hook timeout above the declared ceiling.
+- **Staleness count moved to the background worker (TASK-76).** The stale
+  count ran on the hot path; the status line now only reads precomputed state.
+- **Test suite: shared installation for the deploy inspection (TASK-77).**
+  The suite ran `setup.sh` 18 times (~12.6 min); the inspection tests now
+  share a single installation.
 
 ### Fixed
 
-- **De graaf overleeft een indexherbouw (TASK-75).** De graaftabellen wonen in
-  een eigen `kb-graph.db`, zodat een volledige herbouw van `kb-index.db` ze
-  niet meer meesleurt; de statusregel meldt "graaf niet geladen" in plaats van
-  te zwijgen.
-- **`build-graph-index.py` draait mee in de worker-jobs (TASK-78).** De
-  graafindex werd wel gebouwd bij een handmatige rebuild maar niet door de
-  achtergrondworker, waardoor hij stil verouderde.
-- **Geheugen: automatische ontdubbeling en een collisie-check bij schrijven
-  (TASK-73).** Near-duplicates worden bij capture gedetecteerd in plaats van
-  achteraf opgeruimd.
-- **Een koud embed-model faalt niet meer stil.** De retrieval-hook meldt
-  expliciet dat de recall is overgeslagen en dat een warm-up loopt, in plaats
-  van een lege injectie zonder uitleg.
-- **Knoppen kloppen weer met hun bron (TASK-66).** Kalibratieharnas, toggles en
-  agent-home-fallbacks worden nu door `test_knob_consistency` bewaakt.
-- **Docs: het post-install doctor-transcript is echte output (TASK-59).**
-
-- **Toggle-oppervlakken bijgewerkt.** `activity_llm_fallback` ontbrak in het
-  `set`-blok van `/kennisbank:settings` en in de CONFIGURATION-tabel; de
-  "7 toggles"-telling in het command klopte niet meer. Beide gerepareerd bij
-  het toevoegen van de negende toggle.
+- **The graph survives an index rebuild (TASK-75).** The graph tables live in
+  their own `kb-graph.db`, so a full rebuild of `kb-index.db` no longer drags
+  them down; the status line reports "graph not loaded" instead of staying
+  silent.
+- **`build-graph-index.py` runs with the worker jobs (TASK-78).** The graph
+  index was built on a manual rebuild but not by the background worker, so it
+  silently went stale.
+- **Memory: automatic deduplication and a collision check on write
+  (TASK-73).** Near-duplicates are detected at capture time instead of being
+  cleaned up afterwards.
+- **A cold embedding model no longer fails silently.** The retrieval hook now
+  states explicitly that recall was skipped and a warm-up is running, instead
+  of an empty injection without explanation.
+- **Knobs agree with their source again (TASK-66).** The calibration harness,
+  toggles and agent-home fallbacks are now guarded by
+  `test_knob_consistency`.
+- **Docs: the post-install doctor transcript is real output (TASK-59).**
+- **Toggle surfaces updated.** `activity_llm_fallback` was missing from the
+  `set` block of `/kennisbank:settings` and from the CONFIGURATION table; the
+  "7 toggles" count in the command had drifted. Both repaired while adding
+  the ninth toggle.
 
 ## [0.21.0] - 2026-07-25
 

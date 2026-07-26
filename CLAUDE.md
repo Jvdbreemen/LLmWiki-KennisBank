@@ -1,5 +1,10 @@
 # CLAUDE.md — KennisBank ontwikkelprincipes
 
+**Taalbeleid: alle documentatie in deze repo (README, CHANGELOG, docs/,
+commit-berichten, PR-beschrijvingen, codecommentaar) is standaard Engels.
+Nederlandse vertalingen mogen bestaan als expliciet benoemde varianten
+(bv. `README.nl.md`), nooit als het primaire document.**
+
 Operationele installatie-instructies staan in `AGENTS.md`. Dit bestand legt vast
 *hoe KennisBank moet aanvoelen* — leidend bij elke ontwerp- en codebeslissing in deze repo.
 
