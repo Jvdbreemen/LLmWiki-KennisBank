@@ -47,6 +47,10 @@ JOBS = (
     ("build-embed-index.py", None),
     ("build-kb-index.py", None),
     ("build-activity-index.py", None),
+    # Netwerk. Stond tot 2026-07-25 blokkerend in git-upstream-check op de
+    # sessiestart-weg: 801 ms van de 1384 ms daar, en bij een trage verbinding
+    # oplopend tot FETCH_TIMEOUT. Hier kost het de gebruiker geen wachttijd.
+    ("git-fetch-refresh.py", None),
 )
 
 # De worker draait de jobs sequentieel, dus de bovengrens is PER_JOB_TIMEOUT maal
