@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-07-26
+
+De kennisgraaf wordt een queryable laag in plaats van een los HTML-artefact, de
+sessiestart wordt een orde van grootte sneller, en er is een nieuw
+checkpoint-primitief dat een context-compaction overbrugt.
+
 ### Added
 
 - **Checkpoint-primitief (TASK-79, idee uit Mind).** `/checkpoint` legt een
@@ -22,8 +28,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `/checkpoint`), de melding werkt via de gedeelde coordinator. `/sessielog`
   sluit open checkpoints automatisch af. Ontwerp:
   `docs/superpowers/specs/2026-07-26-checkpoint-primitief.md`.
+- **De kennisgraaf is queryable via tabellen in `kb-index.db` (TASK-71).**
+  `graph.json` wordt bij sessiestart in SQLite-tabellen geladen
+  (fingerprint-gated), zodat retrieval en MCP-tools graafburen kunnen opvragen
+  zonder het JSON-bestand te parsen.
+- **Deterministische edge-laag en scope-prune voor de graaf (TASK-70).**
+  Wikilinks en frontmatter leveren edges zonder LLM-pass; nodes buiten de
+  graphify-scope worden bij de merge geprund.
+- **Link-only provenance-ring voor sessies (TASK-68).** Sessielogs hangen als
+  provenance-ring aan de graaf zonder als volwaardige artikelen mee te wegen.
+- **Graphify-scope via `.graphifyignore` (TASK-67).** De scope staat in een
+  bestand in de vault in plaats van een pad-argument dat per aanroep kon
+  verschillen.
+
+### Changed
+
+- **Koude sessiestart van 35,7 s naar 1,3 s (TASK-74).** De notificatietier is
+  losgekoppeld en `kb-session-start` heeft geen eigen hook-timeout meer nodig
+  boven het gedeclareerde plafond.
+- **Rot-telling naar de achtergrondworker (TASK-76).** De stale-telling liep op
+  de hot path; nu leest de statusregel alleen nog voorberekende state.
+- **Testsuite: gedeelde installatie voor de deploy-inspectie (TASK-77).** De
+  suite draaide `setup.sh` 18 keer (~12,6 min); de inspectietests delen nu één
+  installatie.
 
 ### Fixed
+
+- **De graaf overleeft een indexherbouw (TASK-75).** De graaftabellen wonen in
+  een eigen `kb-graph.db`, zodat een volledige herbouw van `kb-index.db` ze
+  niet meer meesleurt; de statusregel meldt "graaf niet geladen" in plaats van
+  te zwijgen.
+- **`build-graph-index.py` draait mee in de worker-jobs (TASK-78).** De
+  graafindex werd wel gebouwd bij een handmatige rebuild maar niet door de
+  achtergrondworker, waardoor hij stil verouderde.
+- **Geheugen: automatische ontdubbeling en een collisie-check bij schrijven
+  (TASK-73).** Near-duplicates worden bij capture gedetecteerd in plaats van
+  achteraf opgeruimd.
+- **Een koud embed-model faalt niet meer stil.** De retrieval-hook meldt
+  expliciet dat de recall is overgeslagen en dat een warm-up loopt, in plaats
+  van een lege injectie zonder uitleg.
+- **Knoppen kloppen weer met hun bron (TASK-66).** Kalibratieharnas, toggles en
+  agent-home-fallbacks worden nu door `test_knob_consistency` bewaakt.
+- **Docs: het post-install doctor-transcript is echte output (TASK-59).**
 
 - **Toggle-oppervlakken bijgewerkt.** `activity_llm_fallback` ontbrak in het
   `set`-blok van `/kennisbank:settings` en in de CONFIGURATION-tabel; de
@@ -828,7 +874,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.21.0...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.22.0...HEAD
+[0.22.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.18.1...v0.19.0
