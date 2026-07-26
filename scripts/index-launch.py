@@ -47,6 +47,10 @@ JOBS = (
     ("build-embed-index.py", None),
     ("build-kb-index.py", None),
     ("build-activity-index.py", None),
+    # Laadt graphify-out/graph.json in kb-graph.db. Stond tot TASK-78 in geen
+    # enkele launcher, waardoor de graaf-db stil verouderde na een graphify-run.
+    # Zonder graph.json of bij ongewijzigde vingerafdruk is het een no-op.
+    ("build-graph-index.py", None),
     # Netwerk. Stond tot 2026-07-25 blokkerend in git-upstream-check op de
     # sessiestart-weg: 801 ms van de 1384 ms daar, en bij een trage verbinding
     # oplopend tot FETCH_TIMEOUT. Hier kost het de gebruiker geen wachttijd.
