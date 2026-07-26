@@ -255,3 +255,184 @@ def search(conn: sqlite3.Connection, *, query_vector, query_text: str = "",
     # Afkappen NA het filteren: andersom zou een onder de drempel liggende
     # treffer een plek innemen die een geldige treffer had moeten krijgen.
     return out[:k]
+
+
+# --- kennisgraaf in de index (TASK-71) --------------------------------------
+#
+# graph.json is inmiddels 4,2 MB. Dat bestand per prompt parsen past niet in
+# het hot-path-budget van kb-retrieve (2,0s inclusief embed). Daarom leeft de
+# graaf ook hier, als twee tabellen met indexen: "geef de buren van dit
+# bestand" wordt dan een indexed lookup in plaats van een JSON-parse.
+#
+# Bewust GEEN voorberekende buurtabel. De buurvraag IS een query op
+# graph_edges; een afgeleide tabel zou een tweede verouderingssignaal
+# introduceren zonder eigen guard, en dat is precies de faalvorm die TASK-49
+# voor .needs-rebuild documenteerde.
+#
+# Versheid heeft hier TWEE onafhankelijke assen. is_valid_for() bewaakt het
+# embedding-model; de graaf kan verouderd zijn terwijl de embeddings vers zijn,
+# of andersom. Vandaar een eigen vingerafdruk in meta. Een stale graaf degradeert
+# naar GEEN buur, nooit naar een verkeerde buur.
+
+#: contains-edges verbinden een documentnode met zijn eigen concepten (zie
+#: graph-link-layer.py). Als buur-relatie zijn ze waardeloos: ze wijzen altijd
+#: naar het bestand waar je al bent. Standaard dus uitgesloten.
+GRAPH_SELF_RELATIONS = ("contains",)
+
+
+def ensure_graph_schema(conn: sqlite3.Connection) -> None:
+    """Maak de graaftabellen. Idempotent; los van ensure_schema aanroepbaar.
+
+    Maakt ook `meta` aan: de vingerafdruk van de graaf hoort daar thuis, en de
+    graafbouwer kan draaien voordat de embedding-index ooit gebouwd is (een
+    verse vault, of een machine zonder embedmodel). meta alleen in
+    ensure_schema aanmaken zou die volgorde stilzwijgend verplicht maken.
+    """
+    conn.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)")
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS graph_nodes ("
+        "id TEXT PRIMARY KEY, label TEXT, source_file TEXT, "
+        "file_type TEXT, community INTEGER)")
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS graph_edges ("
+        "source TEXT, target TEXT, relation TEXT, confidence_score REAL)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_graph_nodes_src "
+                 "ON graph_nodes(source_file)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_graph_edges_source "
+                 "ON graph_edges(source)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_graph_edges_target "
+                 "ON graph_edges(target)")
+    conn.commit()
+
+
+def graph_fingerprint(graph_path) -> str:
+    """Goedkope vingerafdruk van graph.json: mtime + grootte.
+
+    Bewust geen sha256: het bestand is megabytes groot en deze functie wordt
+    ook op de leesweg aangeroepen om de versheid te toetsen. mtime+grootte
+    verandert bij elke herbouw die de graaf echt wijzigt; een herbouw die
+    byte-identieke inhoud oplevert hoeft ook niet opnieuw geladen te worden.
+    """
+    try:
+        st = Path(graph_path).stat()
+        return f"{int(st.st_mtime)}:{st.st_size}"
+    except OSError:
+        return ""
+
+
+def set_graph_fingerprint(conn: sqlite3.Connection, fingerprint: str) -> None:
+    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('graph_fingerprint', ?)",
+                 (fingerprint,))
+    conn.commit()
+
+
+def graph_is_current(conn: sqlite3.Connection, graph_path) -> bool:
+    """Komt de opgeslagen graaf overeen met graph.json op schijf?
+
+    False bij een ontbrekend bestand, een ontbrekende vingerafdruk of een
+    verschil. De leesweg gebruikt dit om te degraderen naar 'geen buur'.
+    """
+    fp = graph_fingerprint(graph_path)
+    if not fp:
+        return False
+    try:
+        return meta_get(conn, "graph_fingerprint") == fp
+    except sqlite3.Error:
+        # Index zonder meta-tabel (nooit gebouwd): geen graaf, dus geen buur.
+        return False
+
+
+def graph_count(conn: sqlite3.Connection) -> "tuple[int, int]":
+    try:
+        n = conn.execute("SELECT count(*) FROM graph_nodes").fetchone()[0]
+        e = conn.execute("SELECT count(*) FROM graph_edges").fetchone()[0]
+        return n, e
+    except sqlite3.Error:
+        return 0, 0
+
+
+def replace_graph(conn: sqlite3.Connection, nodes, edges) -> "tuple[int, int]":
+    """Vervang de hele graaf in één transactie.
+
+    Vervangen in plaats van bijwerken: de graaf wordt als geheel herbouwd door
+    graphify, dus een incrementele merge zou alleen maar een tweede plek zijn
+    waar verouderde nodes kunnen achterblijven. Nodes zonder id worden
+    overgeslagen; edges naar een onbekende node blijven staan (de query filtert
+    ze vanzelf weg) zodat een halve graaf niet stil half verdwijnt.
+    """
+    ensure_graph_schema(conn)
+    conn.execute("DELETE FROM graph_edges")
+    conn.execute("DELETE FROM graph_nodes")
+    node_rows = []
+    for n in nodes:
+        nid = n.get("id")
+        if not nid:
+            continue
+        src = str(n.get("source_file") or "").replace("\\", "/")
+        node_rows.append((str(nid), str(n.get("label") or ""), src,
+                          str(n.get("file_type") or ""), n.get("community")))
+    conn.executemany(
+        "INSERT OR REPLACE INTO graph_nodes(id, label, source_file, file_type, community) "
+        "VALUES (?, ?, ?, ?, ?)", node_rows)
+    edge_rows = []
+    for e in edges:
+        s, t = e.get("source"), e.get("target")
+        if s is None or t is None:
+            continue
+        try:
+            score = float(e.get("confidence_score", 1.0))
+        except (TypeError, ValueError):
+            score = 1.0
+        edge_rows.append((str(s), str(t), str(e.get("relation") or ""), score))
+    conn.executemany(
+        "INSERT INTO graph_edges(source, target, relation, confidence_score) "
+        "VALUES (?, ?, ?, ?)", edge_rows)
+    conn.commit()
+    return len(node_rows), len(edge_rows)
+
+
+def graph_neighbors(conn: sqlite3.Connection, source_file: str, *, limit: int = 5,
+                    min_confidence: float = 0.0,
+                    exclude_relations=GRAPH_SELF_RELATIONS) -> list:
+    """Bestanden die via de graaf aan source_file grenzen, gewogen.
+
+    Werkt op BESTANDSNIVEAU, niet op conceptniveau: alle nodes van het
+    bronbestand vormen samen het startpunt, en de buren worden weer naar hun
+    bronbestand teruggerekend en opgeteld. Zo telt een bestand dat via drie
+    concepten verbonden is zwaarder dan een dat via één verbinding hangt.
+
+    Ongericht: een edge telt in beide richtingen. De graaf is als undirected
+    gebouwd (build_from_json zonder --directed), dus richting zou hier een
+    betekenis suggereren die de data niet draagt.
+
+    Geeft [{"source_file": ..., "weight": float, "hops": int}], aflopend op
+    gewicht, met een deterministische tie-break op pad.
+    """
+    src = str(source_file or "").replace("\\", "/")
+    if not src:
+        return []
+    excl = tuple(exclude_relations or ())
+    placeholders = ",".join("?" for _ in excl)
+    rel_filter = f"AND e.relation NOT IN ({placeholders})" if excl else ""
+    sql = f"""
+        SELECT n2.source_file AS nbr, sum(e.confidence_score) AS w, count(*) AS hops
+        FROM graph_nodes n1
+        JOIN graph_edges e
+          ON (e.source = n1.id OR e.target = n1.id)
+        JOIN graph_nodes n2
+          ON n2.id = CASE WHEN e.source = n1.id THEN e.target ELSE e.source END
+        WHERE n1.source_file = ?
+          AND n2.source_file <> ''
+          AND n2.source_file <> n1.source_file
+          AND e.confidence_score >= ?
+          {rel_filter}
+        GROUP BY n2.source_file
+        ORDER BY w DESC, nbr ASC
+        LIMIT ?
+    """
+    params = [src, float(min_confidence), *excl, int(limit)]
+    try:
+        rows = conn.execute(sql, params).fetchall()
+    except sqlite3.Error:
+        return []
+    return [{"source_file": r[0], "weight": float(r[1]), "hops": int(r[2])} for r in rows]
