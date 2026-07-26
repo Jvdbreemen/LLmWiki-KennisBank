@@ -73,7 +73,18 @@ Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: 
 
 The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
 
-## Feature highlights (v0.22.0)
+## Feature highlights (v0.23.0)
+
+### New in v0.23.0
+
+- **Vault orientation at session start.** `kb-orientation.py` summarises the
+  vault in a few lines — document counts, recently changed articles,
+  frequently used knowledge, open backlog tasks — with pure SQL reads,
+  sub-second. `/sessiestart` runs it by default; the opt-in `orientation`
+  toggle injects it at every session start.
+- **Agent install guide.** `docs/AGENT-INSTALL.md` gives AI agents the
+  shortest correct install path per platform (Claude Code, Codex, Copilot
+  CLI, OpenCode, Claude Cowork), linked from the top of both READMEs.
 
 ### New in v0.22.0
 

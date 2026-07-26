@@ -76,7 +76,18 @@ Geheugensystemen van leveranciers (Mem0, Zep, Letta, Cognee) zijn krachtig maar 
 
 De ontwerpvoorkeur is overal dezelfde: **deterministisch waar mogelijk, LLM alleen waar het oordeelsvermogen toevoegt, fail-open overal**. Een dood model blokkeert nooit een sessie, verliest nooit een transcript, en verwijdert nooit geverifieerde kennis.
 
-## Functie-highlights (v0.22.0)
+## Functie-highlights (v0.23.0)
+
+### Nieuw in v0.23.0
+
+- **Vault-orientatie bij sessiestart.** `kb-orientation.py` vat de vault in
+  een paar regels samen: documentcounts, recent gewijzigde artikelen,
+  veelgebruikte kennis, open backlog-taken. Puur SQL, sub-seconde.
+  `/sessiestart` draait hem standaard; de opt-in toggle `orientation`
+  injecteert hem bij elke sessiestart.
+- **Agent install guide.** `docs/AGENT-INSTALL.md` geeft AI-agents de kortste
+  correcte installatieroute per platform (Claude Code, Codex, Copilot CLI,
+  OpenCode, Claude Cowork), gelinkt bovenaan beide README's.
 
 ### Nieuw in v0.22.0
 
