@@ -49,6 +49,10 @@ DEFAULTS = {
     # deterministische tabellen (Laag 1) en dateparser (Laag 2) falen. Niet-
     # deterministisch pad → bewust default UIT (opt-in). Resultaten worden gecachet.
     "activity_llm_fallback": False,
+    # Checkpoint-primitief (TASK-79): schrijf bij PreCompact automatisch een
+    # werkstand-stub en meld die bij de volgende sessiestart. Opt-in: wie het
+    # niet kent, merkt er niets van. /checkpoint (handmatig) werkt altijd.
+    "checkpoints": False,
 }
 
 _TRUTHY = ("1", "true", "yes", "y", "on")

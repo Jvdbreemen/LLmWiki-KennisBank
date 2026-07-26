@@ -710,6 +710,8 @@ De achtergrond-automatieken zijn individueel aan/uit te zetten via
 | `memory_capture` | aan | extractie + judge van memories naar `09-memory/` + onderhoud | geen automatische memory-extractie; `/wiki` blijft werken |
 | `memory_recall` | aan | injecteer relevante memories in de context via hook + lokale MCP | geen memory-injectie; context bevat alleen wiki-retrieval |
 | `usage_telemetry` | aan | registreer geinjecteerde + gebruikte kennis in `kb-usage.db` (ranking-boost, stale-warm-skip) | geen gebruiksmeting; ranking en stale-check vallen terug op leeftijd |
+| `activity_llm_fallback` | uit | laag 3 van de temporele parser: lokale LLM duidt exotische datums/periodes (zie 4b) | alleen de deterministische lagen 1-2 |
+| `checkpoints` | uit | Claude PreCompact schrijft automatisch een werkstand-stub; volgende sessiestart meldt hem (`/checkpoint load`) | alleen handmatige checkpoints via `/checkpoint` |
 
 - **Wijzigen**: draai `/kennisbank:settings` (toont een tabel en zet toggles aan/uit), of bewerk het JSON-bestand (waarden zijn JSON-booleans).
 - **Self-gating**: één SessionStart-coördinator blijft per client statisch
