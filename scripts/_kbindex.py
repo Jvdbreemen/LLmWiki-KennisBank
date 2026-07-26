@@ -280,13 +280,73 @@ def search(conn: sqlite3.Connection, *, query_vector, query_text: str = "",
 GRAPH_SELF_RELATIONS = ("contains",)
 
 
-def ensure_graph_schema(conn: sqlite3.Connection) -> None:
-    """Maak de graaftabellen. Idempotent; los van ensure_schema aanroepbaar.
+def graph_index_path() -> Path:
+    """De graaf woont in een EIGEN bestand, niet in kb-index.db.
 
-    Maakt ook `meta` aan: de vingerafdruk van de graaf hoort daar thuis, en de
-    graafbouwer kan draaien voordat de embedding-index ooit gebouwd is (een
-    verse vault, of een machine zonder embedmodel). meta alleen in
-    ensure_schema aanmaken zou die volgorde stilzwijgend verplicht maken.
+    TASK-71 zette de graaftabellen in kb-index.db. Dat bestand wordt door
+    build-kb-index.py in zijn geheel weggegooid -- `idx.unlink()` bij --rebuild
+    en bij een embed_id- of unit_norm-mismatch. De graaf ging daar als bijvangst
+    mee: waargenomen als `no such table: graph_nodes` na een herbouw, zonder dat
+    iets dat meldde of herstelde.
+
+    Een eigen bestand kost hier niets: graph_neighbors() bevraagt uitsluitend de
+    graaftabellen op source_file en joint NIET met docs. Er is dus geen query die
+    beide bestanden tegelijk nodig heeft. De alternatieven -- tabellen bewaren
+    over een herbouw heen, of de bouwer erna opnieuw draaien -- laten de
+    koppeling in stand en daarmee de kans dat iemand hem later opnieuw breekt.
+    """
+    return vault_root() / ".claude" / "kb-graph.db"
+
+
+def graph_connect(path=None) -> sqlite3.Connection:
+    """Verbinding met de graafindex.
+
+    Bewust GEEN sqlite_vec: de graaftabellen zijn gewone SQL zonder vectoren.
+    Dat scheelt niet alleen laadtijd, het maakt de graaf ook leesbaar op een
+    machine waar de extensie ontbreekt -- bijvoorbeeld voor de statusregel bij
+    de sessiestart, die alleen wil weten of de graaf actueel is.
+
+    WAL, en dat is een bewuste keuze TEGEN de snelste optie. Deze index kan
+    meerdere agents tegelijk bedienen (Claude, Codex en Copilot delen een vault)
+    terwijl de achtergrondworker hem herbouwt.
+
+    Gemeten, openen + een enkele meta-lookup, mediaan van 11 op de echte index:
+
+        WAL       23,5 ms      DELETE   1,2 ms
+
+    Dat verschil is echt: WAL legt per verse lezer een -shm-bestand aan, en dat
+    is op Windows de hele kostenpost. Toch WAL, om twee redenen.
+
+    Ten eerste: een race-proef met drie gelijktijdige lezers naast een schrijver
+    die de graaf doorlopend herbouwde gaf in BEIDE modes nul geblokkeerde
+    lezers, maar WAL haalde 93 schrijfrondes tegen 50 voor DELETE. WAL houdt
+    lezers en schrijvers by design uit elkaar; DELETE leunt erop dat de
+    busy-timeout het exclusieve commit-venster toevallig opvangt. Dat gaat goed
+    tot een trage schijf of een grotere graaf dat venster oprekt.
+
+    Ten tweede: die 23 ms staan tegenover een sessiestart van ~1230 ms. Op de
+    plek waar de gebruiker het merkt is het ruis, en robuustheid onder
+    gelijktijdig gebruik is dat niet.
+
+    test_graafindex_gebruikt_wal legt deze keuze vast, zodat een latere
+    snelheidsronde hem niet stilzwijgend terugdraait.
+    """
+    p = Path(path) if path is not None else graph_index_path()
+    if path is None:
+        p.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(p))
+    conn.execute("PRAGMA journal_mode=WAL")
+    return conn
+
+
+def ensure_graph_schema(conn: sqlite3.Connection) -> None:
+    """Maak de graaftabellen. Idempotent.
+
+    Maakt ook een eigen `meta`-tabel aan, waarin de vingerafdruk van de graaf
+    komt te staan. Sinds de graaf een eigen bestand heeft (zie graph_index_path)
+    is dat niet dezelfde meta als die van de embedding-index, en dat is precies
+    de bedoeling: de twee indexen hebben geen gedeelde staat meer en kunnen dus
+    onafhankelijk herbouwd worden.
     """
     conn.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)")
     conn.execute(
