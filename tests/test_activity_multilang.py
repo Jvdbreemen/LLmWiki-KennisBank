@@ -86,15 +86,23 @@ class MultilingualTemporalTest(unittest.TestCase):
             shutil.rmtree(tmp, ignore_errors=True)
 
     def test_layer2_absent_degrades_gracefully(self):
-        """With dateparser forced unavailable and the LLM off (default), an
-        otherwise-unresolvable foreign phrase returns a clean parse error."""
-        saved = _activity._DATEPARSER_CLS
+        """With dateparser forced unavailable and the LLM layer forced off, an
+        otherwise-unresolvable foreign phrase returns a clean parse error.
+
+        The LLM layer must be forced off, not assumed off: the test previously
+        relied on the DEFAULT of activity_llm_fallback, so it read the
+        developer's real vault settings and started failing the moment that
+        vault enabled the toggle."""
+        saved_cls = _activity._DATEPARSER_CLS
+        saved_settings = _activity._SETTINGS_MOD
         try:
             _activity._DATEPARSER_CLS = False
+            _activity._SETTINGS_MOD = False  # settings unavailable -> LLM layer off
             p = _activity.parse_period("wczoraj", now=_NOW)  # Polish, Layer-2 only
             self.assertFalse(p.ok)
         finally:
-            _activity._DATEPARSER_CLS = saved
+            _activity._DATEPARSER_CLS = saved_cls
+            _activity._SETTINGS_MOD = saved_settings
 
     def test_layer3_llm_call_http(self):
         """Exercise the real _llm_call HTTP path (stdlib urllib) with a fake

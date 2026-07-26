@@ -3,9 +3,10 @@ id: TASK-80
 title: >-
   Oriëntatie-summary bij sessiestart: counts + trending onderwerpen (idee uit
   Mind)
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-07-26 14:14'
+updated_date: '2026-07-26 18:52'
 labels:
   - idee-gestolen
   - retrieval

@@ -53,6 +53,10 @@ DEFAULTS = {
     # werkstand-stub en meld die bij de volgende sessiestart. Opt-in: wie het
     # niet kent, merkt er niets van. /checkpoint (handmatig) werkt altijd.
     "checkpoints": False,
+    # Oriëntatie-summary bij sessiestart (TASK-80): counts, recente artikelen
+    # en veelgebruikte kennis als eerste context. Extra contextregels bij elke
+    # start → opt-in. /sessiestart toont hetzelfde altijd on-demand.
+    "orientation": False,
 }
 
 _TRUTHY = ("1", "true", "yes", "y", "on")
