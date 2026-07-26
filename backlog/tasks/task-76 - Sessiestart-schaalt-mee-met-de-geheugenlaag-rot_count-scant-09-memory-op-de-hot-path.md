@@ -3,10 +3,10 @@ id: TASK-76
 title: >-
   Sessiestart schaalt mee met de geheugenlaag: rot_count scant 09-memory op de
   hot path
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-25 21:33'
-updated_date: '2026-07-26 09:01'
+updated_date: '2026-07-26 09:57'
 labels:
   - performance
   - hooks
@@ -50,7 +50,7 @@ APART OPGEMERKT, niet de kern van deze taak: memory-doctor.py:77 doet `date.toda
 - [x] #2 De sessiestart-kosten van memory-notify groeien niet meer met het aantal memories; bewezen met een meting op de echte vault
 - [x] #3 De telling wordt ook bijgewerkt wanneer het embed/LLM-model onbereikbaar was
 - [x] #4 Ontbrekende telling laat de sessiestart niet alsnog scannen en breekt de melding niet
-- [ ] #5 Volledige suite groen
+- [x] #5 Volledige suite groen
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -76,4 +76,6 @@ test_rot_zonder_telling_zwijgt_en_scant_niet legt dat vast EN bewijst tegelijk d
 DAGGRANULARITEIT-BUG uit de taakomschrijving meegenomen. memory-doctor deed `date.today() - timedelta(hours=hours)`; date-rekenen gooit de restfractie stilzwijgend weg, dus onder de 24 uur werd de cutoff vandaag en telde de check feitelijk 'ouder dan vandaag'. Nu expliciet `timedelta(days=max(1, hours // 24))`, met de reden erbij. Bij de gebruikte 48 uur verandert er niets.
 
 Tests: 5 nieuwe (3 notify, 2 sweep). Suite 874 groen.
+
+AC #5: CI groen op PR #67 (test, 2m10s), gemerged in main. Taak afgerond.
 <!-- SECTION:NOTES:END -->
