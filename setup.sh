@@ -193,6 +193,12 @@ chmod +x "$VAULT/.claude/scripts/"*.py "$VAULT/.claude/scripts/"*.sh
 copy_file kennisbank-embed.example.json "$VAULT/.claude/kennisbank-embed.json"
 copy_file kennisbank-llm.example.json "$VAULT/.claude/kennisbank-llm.json"
 
+# Graphify-scope. Zonder dit bestand valt graphify terug op .gitignore, en dat
+# is in een KennisBank-vault de publicatie-whitelist -- die sluit de
+# geheugenlaag uit en zou de graaf stil incompleet maken. copy_file laat een
+# bestaand bestand staan, dus een aangepaste scope blijft behouden.
+copy_file graphifyignore.example "$VAULT/.graphifyignore"
+
 configure_llm_backend() {
   if [ "$ASSUME_YES" = "1" ] || [ ! -t 0 ]; then
     return 0
