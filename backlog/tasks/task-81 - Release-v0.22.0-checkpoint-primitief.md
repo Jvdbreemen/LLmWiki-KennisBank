@@ -6,7 +6,7 @@ assignee: []
 created_date: '2026-07-26 15:28'
 labels:
   - release
-milestone: m-0
+milestone: Agent-geheugen
 dependencies: []
 priority: high
 ordinal: 91000
