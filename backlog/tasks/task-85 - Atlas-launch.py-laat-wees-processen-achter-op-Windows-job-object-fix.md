@@ -1,9 +1,10 @@
 ---
 id: TASK-85
 title: 'Atlas: launch.py laat wees-processen achter op Windows (job object fix)'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-27 00:09'
+updated_date: '2026-07-27 00:25'
 labels:
   - atlas
   - bug
@@ -20,8 +21,14 @@ launch.py installs SIGINT/SIGTERM handlers, but on Windows a terminated launcher
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 On Windows, killing the launcher process (hard kill, no signal) also terminates the sidecar and vite children
-- [ ] #2 POSIX path unchanged (signal handlers still used)
-- [ ] #3 Verified live: start launcher, hard-kill it, confirm no orphan atlas.sidecar/vite processes remain
-- [ ] #4 pytest suite green
+- [x] #1 On Windows, killing the launcher process (hard kill, no signal) also terminates the sidecar and vite children
+- [x] #2 POSIX path unchanged (signal handlers still used)
+- [x] #3 Verified live: start launcher, hard-kill it, confirm no orphan atlas.sidecar/vite processes remain
+- [x] #4 pytest suite green
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+launch.py now binds itself to a Windows Job Object with JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE before spawning the sidecar and vite; the OS kills the whole tree when the launcher dies, however it dies. Root cause of the orphans: Python signal handlers never run on Windows process termination. Extra pitfall fixed: ctypes needs explicit HANDLE prototypes or AssignProcessToJobObject fails with ERROR_INVALID_HANDLE. Verified live (hard-kill → 0 orphans); gate 1016 passed, 2 skipped. Merged via PR #81 (c0e42a0). Copilot review unavailable (quota); merged with green gate under standing user instruction.
+<!-- SECTION:FINAL_SUMMARY:END -->

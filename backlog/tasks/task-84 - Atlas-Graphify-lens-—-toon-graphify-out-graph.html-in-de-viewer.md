@@ -1,10 +1,10 @@
 ---
 id: TASK-84
 title: 'Atlas: Graphify-lens — toon graphify-out/graph.html in de viewer'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-26 20:53'
-updated_date: '2026-07-26 21:05'
+updated_date: '2026-07-26 22:10'
 labels:
   - atlas
   - visualization
@@ -44,3 +44,9 @@ Live-checked against the real vault (Kluis): /graphify-html returns 200 text/htm
 
 Full gate green: 1015 passed, 2 skipped in 8:37 (pytest tests + atlas/sidecar/tests).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Sidecar endpoint GET /graphify-html serves <vault>/graphify-out/graph.html (404 when missing); new Graphify lens embeds it in a full-size iframe after a HEAD probe (clean degraded message when absent). Tauri CSP widened with frame-src http://127.0.0.1:*. Tests: test_graphify_html.py; full gate 1015 passed, 2 skipped. Merged via PR #79 (merge commit 1d69e6c, verified on origin/main). Note: Copilot review unavailable (quota limit reached) — merged on explicit user instruction with green gate; no inline findings to process.
+<!-- SECTION:FINAL_SUMMARY:END -->
