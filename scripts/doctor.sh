@@ -481,7 +481,8 @@ try:
     w = stats.get("wiki", (0, 0)); m = stats.get("memory", (0, 0))
     print(f"{w[0]} {w[1]} {m[0]} {m[1]}")
 except Exception:
-    print("ERR")' "$VAULT/.claude/kb-index.db" 2>/dev/null | tr -d '')"
+    print("ERR")' "$VAULT/.claude/kb-index.db" 2>/dev/null | tr -d '
+')"
   if [ "$PROV_COV" = "ERR" ] || [ -z "$PROV_COV" ]; then
     report_info "provenance coverage" "index nog zonder doc_sources-tabel; draai build-kb-index.py --rebuild voor de backfill"
   else
@@ -494,7 +495,8 @@ try:
     cfg = json.loads(open(os.path.join(sys.argv[1], ".claude", "kennisbank-embed.json"), encoding="utf-8").read())
     print(int(bool(cfg.get("rank_coupling", 0))))
 except Exception:
-    print(0)' "$VAULT" 2>/dev/null | tr -d '')"
+    print(0)' "$VAULT" 2>/dev/null | tr -d '
+')"
     if [ "$COUPLING_ON" = "1" ] && [ "${PC_WC:-0}" = "0" ] && [ "${PC_MC:-0}" = "0" ]; then
       report_warn "provenance coverage" "rank_coupling staat AAN maar geen enkel doc heeft een bron in de index — het signaal weegt stil niets; draai build-kb-index.py --rebuild"
     else
@@ -549,6 +551,26 @@ EOF2
     report_warn "geheugen quarantaine" "$rot unverified memories ouder dan 48u (sweep/judge hangt?)"
   else
     report_pass "geheugen quarantaine" "geen rot"
+  fi
+  # Review-queue-teller (TASK-89): een queue die bestaat maar nooit gebruikt
+  # wordt is de TASK-23-faalvorm (31 gestuwde unverified, mens zag het niet).
+  REVIEW_STAT="$(python3 -c 'import sys
+sys.path.insert(0, sys.argv[1])
+import _memory
+pending = len(_memory.pending_reviews())
+c = _memory.review_counts(30)
+print(f"{pending} {c[\"approve\"]} {c[\"reject\"]} {c[\"skip\"]}")' "$SCRIPTS_DIR" 2>/dev/null | tr -d '\r')"
+  if [ -n "$REVIEW_STAT" ]; then
+    RV_P="$(printf '%s' "$REVIEW_STAT" | cut -d' ' -f1)"
+    RV_A="$(printf '%s' "$REVIEW_STAT" | cut -d' ' -f2)"
+    RV_R="$(printf '%s' "$REVIEW_STAT" | cut -d' ' -f3)"
+    RV_S="$(printf '%s' "$REVIEW_STAT" | cut -d' ' -f4)"
+    RV_TOT=$((${RV_A:-0} + ${RV_R:-0} + ${RV_S:-0}))
+    if [ "${RV_P:-0}" -ge 10 ] 2>/dev/null && [ "$RV_TOT" -eq 0 ] 2>/dev/null; then
+      report_warn "review-queue" "$RV_P unverified wachten en 0 beslissingen in 30d — draai /kennisbank:review"
+    else
+      report_pass "review-queue" "$RV_P wachtend; beslist (30d): $RV_A approve / $RV_R reject / $RV_S skip"
+    fi
   fi
 fi
 

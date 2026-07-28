@@ -949,6 +949,28 @@ def decide_memory(vault: Path, stem: str, decision: str) -> dict:
     new_status = _DECISIONS.get(decision)
     if new_status is None:
         raise DocError(400, f"onbekende beslissing: {decision!r} (approve|reject)")
+    # Gedeelde codepath (TASK-89): dezelfde _memory.decide() bedient Atlas,
+    # CLI, command en MCP, zodat de beslissemantiek (guards, crash-veilige
+    # volgorde, audit-log) maar één keer bestaat. Oudere vaults zonder
+    # decide() vallen terug op de inline-implementatie hieronder.
+    try:
+        mem = _load_vault_module(vault, "_memory_decide", "_memory.py")
+    except Exception:
+        mem = None
+    if mem is not None and hasattr(mem, "decide") and hasattr(mem, "ReviewError"):
+        # Guard: de helper resolvet de vault zelf via vault_root(). Alleen de
+        # gedeelde weg nemen als die resolutie op DEZE vault uitkomt, anders
+        # zou een afwijkende KENNISBANK_VAULT-env in een andere vault beslissen.
+        try:
+            same_vault = Path(mem.vault_root()).resolve() == Path(vault).resolve()
+        except Exception:
+            same_vault = False
+        if same_vault:
+            try:
+                res = mem.decide(stem, decision, via="atlas")
+            except mem.ReviewError as exc:
+                raise DocError(exc.code, str(exc))
+            return {"status": "ok", "stem": stem, "new_status": res["new_status"]}
     if not stem or "/" in stem or "\\" in stem or ".." in stem:
         raise DocError(400, "ongeldige stem")
     mem_root = (vault / "09-memory").resolve()

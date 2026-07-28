@@ -54,6 +54,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   identical, locked by a regression test. Enabling requires the kb-eval A/B
   on 100+-question sets plus the evidence-of-improvement AC (TASK-88 #5/#6).
 
+- **Human memory review outside Atlas + deterministic wiki-scan (TASK-89,
+  Spoor D).** The unverified->current/retracted transition had exactly one
+  human entry point: the Atlas GUI. Decision semantics now live once in
+  `_memory.py` (approve/reject/**skip** — explicit no-op, Mem0 pattern;
+  traversal guard; 400/404/409/500 codes) shared by four surfaces: the Atlas
+  sidecar (refactored onto the helper with a vault-identity guard and an
+  inline fallback for older vaults), `memory-doctor.py pending/decide`, the
+  new `/kennisbank:review` command (the human decides per item, the command
+  never decides), and MCP tools `review_pending`/`review_decide` (decide
+  only after explicit user confirmation). **Crash-safe order** (llm_wiki
+  #614 lesson): the status change is written durably first, the audit line
+  (`.claude/memory-review-log.jsonl`) after; any failure leaves the item
+  unverified and surfaces the error. doctor.sh shows the queue plus
+  decisions (30d) and warns on a large queue with zero decisions. Evidence
+  test replays TASK-23: 31 backed-up memories cleared through the regular
+  flow, no one-off script. And `wiki-scan.py` closes /wiki step 2 — the
+  last free-form LLM decision point: deterministic candidates (markers,
+  promote_candidate clusters, recurring H2 headings across >=2 logs) with a
+  closed `suggested_action` (herschrijf|nieuw|overslaan, tuple-validated,
+  fail-safe overslaan) and a `scanned_logs` silent-empty guard; /wiki
+  follows the scan, deviation only with motivation.
+
 ### Fixed
 
 - **kb-eval measured a different pipeline than the hook runs.** `_live_hits_fn`
