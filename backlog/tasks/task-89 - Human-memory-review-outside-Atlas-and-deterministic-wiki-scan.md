@@ -24,13 +24,13 @@ D2 — `/wiki` step 2 (candidate identification) is the last free-form LLM decis
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 `decide()` approves/rejects only unverified; skip logs without writing; invalid decision 400; traversal 400; missing 404; state 409; write-failure 500 with unchanged file and no audit line
-- [ ] #2 Crash-safety test: failed set_status leaves a consistent, re-decidable state
-- [ ] #3 Atlas sidecar uses the shared helper (existing decide tests green) + fallback test for vaults without deployed scripts
-- [ ] #4 `/kennisbank:review` + MCP tools expose the queue; the human decides every item; README command tables (EN+NL) updated
-- [ ] #5 EVIDENCE: TASK-23 replay test — 31 unverified cleared via the flow, no one-off script
-- [ ] #6 wiki-scan deterministic (two runs identical), enum-validated, `scanned_logs` guard; /wiki steps 1-2 follow it
+- [x] #1 `decide()` approves/rejects only unverified; skip logs without writing; invalid decision 400; traversal 400; missing 404; state 409; write-failure 500 with unchanged file and no audit line
+- [x] #2 Crash-safety test: failed set_status leaves a consistent, re-decidable state
+- [x] #3 Atlas sidecar uses the shared helper (existing decide tests green) + fallback test for vaults without deployed scripts
+- [x] #4 `/kennisbank:review` + MCP tools expose the queue; the human decides every item; README command tables (EN+NL) updated
+- [x] #5 EVIDENCE: TASK-23 replay test — 31 unverified cleared via the flow, no one-off script
+- [x] #6 wiki-scan deterministic (two runs identical), enum-validated, `scanned_logs` guard; /wiki steps 1-2 follow it
 - [ ] #7 EVIDENCE: one shadow week — scan misses nothing a manual run with markers would find; result here
-- [ ] #8 doctor.sh counters visible
+- [x] #8 doctor.sh counters visible
 - [ ] #9 EVIDENCE OF IMPROVEMENT: TASK-23-replay test output + first real /kennisbank:review run on this vault (queue size before/after, decisions logged in memory-review-log.jsonl) + wiki-scan run on the real vault compared against a manual /wiki candidate pass — all numbers recorded here
 <!-- AC:END -->
