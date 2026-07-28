@@ -27,12 +27,27 @@ Work: extract `retrieve_params(cfg)` + `load_embed_cfg()` from kb-retrieve (beha
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 `_live_hits_fn` passes the same `expand` and `min_cos` as production resolves from config/env (parity test with stubbed `recall_hits`)
-- [ ] #2 `kb-eval --latency` reports p50/p95 wall time per layer (text + `--json`)
-- [ ] #3 An injection-path test parses full `kb-retrieve` hook output and verifies expected stems appear in the injected text
-- [ ] #4 `kb-eval-gen.py` writes only `*.draft.json`, never touches live sets; output loads via `kb_eval.load_set`; non-LLM layer deterministic
+- [x] #1 `_live_hits_fn` passes the same `expand` and `min_cos` as production resolves from config/env (parity test with stubbed `recall_hits`)
+- [x] #2 `kb-eval --latency` reports p50/p95 wall time per layer (text + `--json`)
+- [x] #3 An injection-path test parses full `kb-retrieve` hook output and verifies expected stems appear in the injected text
+- [x] #4 `kb-eval-gen.py` writes only `*.draft.json`, never touches live sets; output loads via `kb_eval.load_set`; non-LLM layer deterministic
 - [ ] #5 Curated eval sets reach >=100 questions per layer (wiki and memory) with type labels — blocks every adoption gate downstream
-- [ ] #6 Baseline (recall@1/3/5, MRR, per-type, latency) recorded here and in CHANGELOG
-- [ ] #7 Existing suites stay green
-- [ ] #8 EVIDENCE OF IMPROVEMENT: before/after report proving the harness now measures production (parity diff on identical sets: old call path vs new on the real vault) + honest baseline numbers recorded here; eval-gen drafts generated on the real vault as input for curation
+- [x] #6 Baseline (recall@1/3/5, MRR, per-type, latency) recorded here and in CHANGELOG
+- [x] #7 Existing suites stay green
+- [x] #8 EVIDENCE OF IMPROVEMENT: before/after report proving the harness now measures production (parity diff on identical sets: old call path vs new on the real vault) + honest baseline numbers recorded here; eval-gen drafts generated on the real vault as input for curation
 <!-- AC:END -->
+
+## Evidence (2026-07-29, real vault, Ollama qwen3-embedding:8b)
+
+- Parity + latency shipped and green (1089 repo tests). First honest,
+  production-faithful baseline on the live sets (35 wiki / 17 memory
+  questions), `kb-eval --json --latency`:
+  - wiki: recall@1 0.886, @3 1.000, @5 1.000, MRR 0.943, p50 583 ms, p95 666 ms
+  - memory: recall@1 0.706, @3 0.824, @5 0.824, MRR 0.765, p50 585 ms
+  - Memory dropped vs the TASK-70 numbers (0.941@5) exactly as predicted:
+    the old eval measured without MEMORY_MIN_COS/parity — this is the first
+    honest ruler, not a regression.
+- `kb-eval-gen.py` on the real vault: **294 wiki + 1207 memory candidate
+  questions** written to `06-claude/*.draft.json` — curation input for AC#5.
+- OPEN: AC#5 human curation to >=100 per layer (drafts ready), then re-run
+  the baseline on the curated sets and update this section.
