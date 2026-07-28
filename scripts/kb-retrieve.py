@@ -154,6 +154,37 @@ def _prompt_embed_timeout(cfg: dict) -> float:
     return min(max(requested, 0.1), max(ceiling, 0.1))
 
 
+def retrieve_params(cfg: dict) -> dict:
+    """Resolve the wiki-retrieval knobs exactly as the hook uses them.
+
+    Single source of truth for (top_n, min_cos, expand): `_wiki_block` consumes
+    this, and kb-eval.py loads it via importlib so the eval harness measures the
+    SAME gate/expansion/weighting as production. Any new retrieval knob must be
+    added here, not resolved inline, or the eval silently drifts from the hook
+    again (that drift is exactly what TASK-86 fixes).
+    """
+    return {
+        "top_n": int(_num("KB_RETRIEVE_TOP_N", cfg, "retrieve_top_n", 3)),
+        "min_cos": _num("KB_RETRIEVE_THRESHOLD", cfg, "retrieve_threshold", 0.60),
+        "expand": bool(int(_num("KB_RETRIEVE_EXPAND", cfg, "retrieve_expand", 1))),
+    }
+
+
+def load_embed_cfg(vault_root) -> dict:
+    """Read <vault>/.claude/kennisbank-embed.json fail-soft (missing/corrupt -> {}).
+
+    Shared by main() and the eval harness so both resolve knobs from the same
+    file with the same error behaviour.
+    """
+    cfg_file = vault_root() / ".claude" / "kennisbank-embed.json"
+    if cfg_file.exists():
+        try:
+            return json.loads(cfg_file.read_text(encoding="utf-8")) or {}
+        except Exception:
+            return {}
+    return {}
+
+
 def _wiki_block(prompt, emb, vault_root, cfg, qvec):
     """Hybride wiki-injectie voor een reeds berekende query-embedding qvec.
     Gate = cosine-relevant OF FTS-keyword-match. Selectie via kb_recall.wiki_hits
@@ -161,9 +192,10 @@ def _wiki_block(prompt, emb, vault_root, cfg, qvec):
 
     qvec wordt eenmalig in main() berekend en aan zowel dit blok als het memory-
     blok doorgegeven: op de hot path embedden we nooit twee keer."""
-    top_n = int(_num("KB_RETRIEVE_TOP_N", cfg, "retrieve_top_n", 3))
-    threshold = _num("KB_RETRIEVE_THRESHOLD", cfg, "retrieve_threshold", 0.60)
-    expand = bool(int(_num("KB_RETRIEVE_EXPAND", cfg, "retrieve_expand", 1)))
+    params = retrieve_params(cfg)
+    top_n = params["top_n"]
+    threshold = params["min_cos"]
+    expand = params["expand"]
 
     # Snelle weg: de index doet zelf de poort (min_cos) en de selectie. Alleen
     # wanneer de index dat ECHT kan -- geldig voor het live model en met
@@ -327,13 +359,7 @@ def main() -> None:
     except Exception:
         return
 
-    cfg = {}
-    cfg_file = vault_root() / ".claude" / "kennisbank-embed.json"
-    if cfg_file.exists():
-        try:
-            cfg = json.loads(cfg_file.read_text(encoding="utf-8")) or {}
-        except Exception:
-            cfg = {}
+    cfg = load_embed_cfg(vault_root)
 
     # Eén embed voor de hele hook. Hot path (noord-ster #1): sub-seconde, korte
     # timeout. Bij een cold model komt qvec niet op tijd terug -> we injecteren
