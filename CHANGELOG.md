@@ -94,6 +94,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **no-network-during-ingest test** — deterministic ingest paths proven to
   make zero socket calls (arkon#29).
 
+- **OKF v0.2 export as a rendered view of the vault (TASK-92, Spoor G).**
+  `kb-okf-export.py` renders the vault as an Open Knowledge Format bundle
+  (GoogleCloudPlatform/knowledge-catalog, Apache-2.0 spec) — deliberately an
+  export, never internal storage: bi-temporality has no OKF equivalent and
+  the vault stays on wikilinks+Obsidian. The motivating fit: OKF's trust
+  tiers map 1:1 onto the memory lifecycle (unverified -> draft without
+  `verified`; judge-current -> `verified: process:kb-judge`; a review-log
+  approve adds `human:owner` -> human-reviewed), `generated` carries the
+  producer provenance from TASK-90, `sources[]` the provenance keys from
+  TASK-88, `expires` -> `stale_after`. Deterministic and byte-idempotent
+  (views are rendered, not prompted); wikilinks become bundle-root-absolute
+  markdown links with a broken-link count; per-directory `index.md` plus
+  root `okf_version`; `log.md` rendered from activity rollups.
+
 ### Fixed
 
 - **kb-eval measured a different pipeline than the hook runs.** `_live_hits_fn`

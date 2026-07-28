@@ -1,7 +1,7 @@
 ---
 id: TASK-92
 title: 'OKF v0.2 export as a rendered view of the vault (Spoor G)'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-07-28 08:00'
 labels:
