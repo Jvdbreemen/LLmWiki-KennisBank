@@ -122,6 +122,10 @@ def create_app(
     def overview() -> dict:
         return sources.build_overview(vault)
 
+    @app.get("/titles")
+    def titles() -> dict:
+        return sources.list_titles(vault)
+
     @app.post("/memory/decide")
     def memory_decide(payload: dict) -> dict:
         try:

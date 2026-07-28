@@ -108,6 +108,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   markdown links with a broken-link count; per-directory `index.md` plus
   root `okf_version`; `log.md` rendered from activity rollups.
 
+- **Atlas: activity heatmap, Cmd+K palette, waterfall JSON export, facets,
+  CI (TASK-91, Spoor F — ideas verified in Pratiyush/llm-wiki).** Principle
+  applied: view data is aggregated in the sidecar, never computed per item
+  while the user waits (llm_wiki #604 went unusable at 7k pages doing the
+  opposite). `/overview` now carries a 365-day activity heatmap (one SQL
+  GROUP BY over kb-activity.db) and wiki freshness buckets, rendered as a
+  non-graph strip in the Overzicht lens — a half-step toward TASK-44's tour
+  idea. New `/titles` endpoint feeds a **Cmd/Ctrl+K palette** (jump to lens
+  or open any document; index fetched once per session, pure `fuzzyFilter`
+  pinned by vitest). The Recall Inspector gained **facet chips**
+  (alle/wiki/memory, client-side, no query per click) and **copy-as-JSON**
+  of the whole waterfall. Atlas finally runs in CI: a dedicated job with
+  sidecar pytest, frontend typecheck and vitest — until now every Atlas
+  change shipped unguarded. `atlas/README` corrected to the seven shipped
+  lenses and the real write-path story (docs = contract).
+
 ### Fixed
 
 - **kb-eval measured a different pipeline than the hook runs.** `_live_hits_fn`

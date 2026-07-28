@@ -62,11 +62,17 @@ export interface Overview {
   inbox_waiting: number;
   provenance: { sourced: number; total: number };
   graph_stale: boolean;
+  // TASK-91 F1 — optional so an older sidecar keeps rendering the lens.
+  heatmap?: { day: string; n: number }[];
+  freshness?: { d7: number; d30: number; d90: number; older: number; unknown: number };
 }
+
+export interface TitleItem { title: string; path: string; layer: string; }
+export interface Titles { status: string; items: TitleItem[]; }
 
 export interface DecideResult { status: string; stem: string; new_status: string; }
 
-export interface RecallHit { path: string; score: number; snippet: string; neighbor?: boolean; }
+export interface RecallHit { path: string; score: number; snippet: string; neighbor?: boolean; layer?: string; }
 export interface StageEntry { path: string; score: number; }
 export interface RerankEntry extends StageEntry { factors?: Record<string, number>; }
 export interface RecallStages {
@@ -137,6 +143,7 @@ export class DataClient {
   }
   memoryLinks(): Promise<MemoryLinks> { return this.get<MemoryLinks>("/memory-links"); }
   overview(): Promise<Overview> { return this.get<Overview>("/overview"); }
+  titles(): Promise<Titles> { return this.get<Titles>("/titles"); }
   decideMemory(stem: string, decision: "approve" | "reject"): Promise<DecideResult> {
     return this.post<DecideResult>("/memory/decide", { stem, decision });
   }

@@ -2,7 +2,9 @@
 // (ADR-0004 frontend module boundaries). All DOM is built with textContent /
 // createElement — never innerHTML — so no lens payload can inject markup.
 import { DataClient } from "./data-client";
+import { openInspect } from "./inspect";
 import { newGeneration, runLensLeave } from "./lifecycle";
+import { installPalette } from "./palette";
 import { renderGraphLens } from "./lenses/graph";
 import { renderGraphifyLens } from "./lenses/graphify";
 import { renderOverviewLens } from "./lenses/overview";
@@ -96,6 +98,13 @@ async function main(): Promise<void> {
     btn.addEventListener("click", () => select(l.key));
     tabs.appendChild(btn);
   }
+
+  // Cmd/Ctrl+K palette (TASK-91 F2): jump to a lens or open a document via
+  // the prebuilt title index — no live query per keystroke.
+  installPalette(client, LENSES.map((l) => ({ key: l.key, label: l.label })), {
+    selectLens: select,
+    openDoc: (path) => { void openInspect(client, path); },
+  });
 
   // Gate the first lens render on sidecar readiness; tabs stay clickable and a
   // manual tab switch simply retries the fetch.
