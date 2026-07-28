@@ -27,12 +27,24 @@ The most expensive lessons mined from production issue trackers across the LLM-w
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Aggregate audit recorded with per-artifact verdict; atomic+snapshot rule documented
-- [ ] #2 kb-lint self-source (HARD) + index-drift (advisory) rules with fixtures; index-drift excluded from warned/clean counts
-- [ ] #3 kb-normalize.py idempotent (two runs byte-identical), wired into /wiki and /reconcile, with #576 fixture tests
-- [ ] #4 Refusal gate with arkon#25-replay fixture; structural field validation stays fail-closed in _memory.render
-- [ ] #5 Socket-blocked no-network-during-ingest test
-- [ ] #6 model_id + prompt_version roundtrip test; absent by default on human-typed memories
-- [ ] #7 Epistemic-axis decision recorded; self-source rule fixture-tested
-- [ ] #8 EVIDENCE OF IMPROVEMENT: each gate proven by a replayed-failure fixture (arkon#25 refusal, #576 normalization, #538 self-source, #580 index-drift) PLUS one run of kb-lint + kb-normalize --check on the real vault with finding counts recorded here (evidence the gates catch real-world material, not only fixtures)
+- [x] #1 Aggregate audit recorded with per-artifact verdict; atomic+snapshot rule documented
+- [x] #2 kb-lint self-source (HARD) + index-drift (advisory) rules with fixtures; index-drift excluded from warned/clean counts
+- [x] #3 kb-normalize.py idempotent (two runs byte-identical), wired into /wiki and /reconcile, with #576 fixture tests
+- [x] #4 Refusal gate with arkon#25-replay fixture; structural field validation stays fail-closed in _memory.render
+- [x] #5 Socket-blocked no-network-during-ingest test
+- [x] #6 model_id + prompt_version roundtrip test; absent by default on human-typed memories
+- [x] #7 Epistemic-axis decision recorded; self-source rule fixture-tested
+- [x] #8 EVIDENCE OF IMPROVEMENT: each gate proven by a replayed-failure fixture (arkon#25 refusal, #576 normalization, #538 self-source, #580 index-drift) PLUS one run of kb-lint + kb-normalize --check on the real vault with finding counts recorded here (evidence the gates catch real-world material, not only fixtures)
 <!-- AC:END -->
+
+## Evidence (2026-07-29, real vault)
+
+- Fixture replays green (arkon#25 refusal, #576 normalize, #538 self-source,
+  #580 index-drift) — 1089 repo tests.
+- Real-vault runs: `kb-lint --json` over 147 articles -> 1 hard (missing),
+  **0 self-source, 0 index-drift** (clean on the new axes);
+  `kb-normalize --check` -> **50/149 articles carry form drift**, sample diff
+  verified as exactly the #576 class (path-prefixed session link -> bare
+  stem). The gates catch real-world material, not only fixtures.
+- Application of the 50 normalizations left to the regular /wiki//reconcile
+  flow (content mutation at scale = deliberate step, not a side effect).

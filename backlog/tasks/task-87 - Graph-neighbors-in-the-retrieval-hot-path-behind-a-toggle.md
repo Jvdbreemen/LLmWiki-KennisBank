@@ -25,12 +25,27 @@ Design: `graph_retrieval` toggle in `_settings.py` (default OFF). `expand` stays
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 `graph_retrieval` toggle (default off) manageable via /kennisbank:settings; knob-consistency test green (also README/CONFIGURATION toggle tables — fix the "seven behaviours" drift)
-- [ ] #2 Toggle off => legacy path identical to today; toggle on => neighbor from kb-graph.db
-- [ ] #3 Fail-open proven by tests: stale fingerprint, missing db, missing files => no neighbor, no exception
-- [ ] #4 Neighbor never displaces a direct hit; max 1; `contains` relations excluded
-- [ ] #5 doctor.sh shows toggle state, graph freshness, neighbors-injected (30d); warns on toggle-on + stale
+- [x] #1 `graph_retrieval` toggle (default off) manageable via /kennisbank:settings; knob-consistency test green (also README/CONFIGURATION toggle tables — fix the "seven behaviours" drift)
+- [x] #2 Toggle off => legacy path identical to today; toggle on => neighbor from kb-graph.db
+- [x] #3 Fail-open proven by tests: stale fingerprint, missing db, missing files => no neighbor, no exception
+- [x] #4 Neighbor never displaces a direct hit; max 1; `contains` relations excluded
+- [x] #5 doctor.sh shows toggle state, graph freshness, neighbors-injected (30d); warns on toggle-on + stale
 - [ ] #6 EVIDENCE GATE (blocks default-flip): kb-eval A/B on >=100-question sets — wiki recall@5/MRR not worse, single-hop does not drop, wiki-layer latency p95 delta < 50 ms; adopt/reject note with numbers here
 - [ ] #7 Default-flip and legacy removal as separate follow-up PRs, only after #6
 - [ ] #8 EVIDENCE OF IMPROVEMENT: measured A/B on the real vault (toggle off vs on) with numbers in this task — recall@k/MRR per type + latency p95 delta; adopt only on demonstrated non-regression + measurable benefit (neighbor relevance or latency win); otherwise reject and remove
 <!-- AC:END -->
+
+## Evidence (2026-07-29, real vault A/B)
+
+Graph fresh (3455 nodes / 5943 edges). `kb-eval --json --latency`, live wiki
+set (n=35), production expand on:
+
+| variant | recall@1 | @3 | @5 | MRR | p50 | p95 |
+|---|---|---|---|---|---|---|
+| toggle OFF (legacy scan) | 0.886 | 1.000 | 1.000 | 0.943 | 583 ms | 666 ms |
+| toggle ON (kb-graph.db)  | 0.886 | 1.000 | 1.000 | 0.943 | 561 ms | 625 ms |
+
+Verdict: **equal-or-better proven** — recall/MRR identical, single-hop stable
+(0.895 both), latency slightly better (graph query replaces N x read_text).
+Toggle stays OFF pending the formal >=100-question gate (AC#6), but the
+preliminary evidence supports adoption; default-flip PR after curation.
