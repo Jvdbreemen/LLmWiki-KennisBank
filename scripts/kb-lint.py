@@ -47,10 +47,26 @@ from _vaultpath import vault_root  # noqa: E402
 SKIP_FILES = {"index.md", "log.md"}
 SESSION_PREFIX = "raw-sessie-"
 
-# Findings die de auditeerbaarheid ECHT breken (geen herleidbare herkomst).
-# In --strict-modus zijn dit fail-closed; path-only blijft advisory (de link
-# bestaat wel, maar als pad-tekst i.p.v. wikilink).
-HARD_TYPES = ("missing", "dangling")
+# Findings die de auditeerbaarheid ECHT breken (geen herleidbare herkomst,
+# of herkomst die uit het systeem zelf komt). In --strict-modus zijn dit
+# fail-closed; path-only blijft advisory (de link bestaat wel, maar als
+# pad-tekst i.p.v. wikilink).
+#
+# self-source (TASK-90 E6, epistemische as): een artikel dat een ANDER
+# wiki-artikel, een memory of een systeembestand als HERKOMST opvoert citeert
+# een conclusie als bewijs — de zelfbevestigingslus waarin het systeem zijn
+# eigen gevolgtrekkingen als bron gaat aanhalen (llm_wiki #538 was hiervan de
+# bug-vorm: de wiki citeerde het eigen logbestand). Geen judge of stale-check
+# vangt dit; het ziet eruit als goede kennis. Daarom een harde lintregel.
+HARD_TYPES = ("missing", "dangling", "self-source")
+
+#: Padprefixen die nooit herkomst mogen zijn: gesynthetiseerde kennis (wiki),
+#: gedestilleerde fragmenten (memory) en tooling/systeembestanden.
+SELF_SOURCE_PREFIXES = ("02-wiki/", "09-memory/", ".claude/", "06-claude/")
+
+#: De Sessie-herkomst-sectie: van de kop tot de volgende kop of het einde.
+HERKOMST_SECTION_RE = re.compile(
+    r"^##\s+Sessie-herkomst\s*$(.*?)(?=^##\s|\Z)", re.MULTILINE | re.DOTALL)
 
 # [[target]], [[target|alias]], [[pad/naar/target#kop]]
 WIKILINK_RE = re.compile(r"\[\[([^\[\]]+?)\]\]")
@@ -150,6 +166,21 @@ def lint_article(path: Path, stems: set[str], root: Path) -> list[dict]:
     path_refs = PATH_REF_RE.findall(text_without_links)
 
     findings: list[dict] = []
+    # E6: conclusies zijn geen bewijs. Alleen links BINNEN de
+    # Sessie-herkomst-sectie tellen; een [[ander-artikel]] in ## Verbanden is
+    # een verband en blijft gewoon toegestaan.
+    m = HERKOMST_SECTION_RE.search(text)
+    if m:
+        for t2 in WIKILINK_RE.findall(m.group(1)):
+            cleaned = _clean_target(t2)
+            if cleaned.startswith(SELF_SOURCE_PREFIXES):
+                findings.append({
+                    "file": path.name,
+                    "type": "self-source",
+                    "detail": (f"herkomst [[{cleaned}]] is gesynthetiseerde kennis of een "
+                               "systeembestand — een conclusie mag nooit als bron/bewijs "
+                               "terugvloeien (epistemische as, TASK-90)"),
+                })
     for target in dangling:
         findings.append({
             "file": path.name,
@@ -172,6 +203,38 @@ def lint_article(path: Path, stems: set[str], root: Path) -> list[dict]:
     return findings
 
 
+def lint_index_drift(root: Path) -> list:
+    """Ghost-docs in kb-index.db: geindexeerde paden die niet meer bestaan.
+
+    Index-drift is de best-bevestigde faalwijze van het LLM-wiki-veld (drie
+    onafhankelijke waarnemingen: llm_wiki #580, Pratiyush ``index_sync``,
+    Arkon's dashboard-vs-linter-telverschil): de catalogus loopt stil uiteen
+    met de werkelijkheid en niemand merkt het. Hier is de index een
+    wegwerp-cache, dus drift is advisory (een rebuild lost het op) — maar hij
+    hoort ZICHTBAAR te zijn. Fail-soft: geen db of sqlite-fout -> [].
+    """
+    import sqlite3
+    db = root / ".claude" / "kb-index.db"
+    if not db.exists():
+        return []
+    try:
+        conn = sqlite3.connect(f"file:{db.as_posix()}?mode=ro", uri=True)
+        paths = [r[0] for r in conn.execute("SELECT path FROM docs").fetchall()]
+        conn.close()
+    except Exception:
+        return []
+    ghosts = [p for p in paths if not Path(p).exists()]
+    if not ghosts:
+        return []
+    voorbeeld = Path(ghosts[0]).name
+    return [{
+        "file": "kb-index.db",
+        "type": "index-drift",
+        "detail": (f"{len(ghosts)} geindexeerde doc(s) bestaan niet meer op schijf "
+                   f"(o.a. {voorbeeld}); draai build-kb-index.py voor een prune"),
+    }]
+
+
 def lint_vault(root: Path) -> dict:
     """Lint alle wiki-artikelen onder ``root``. Geeft het rapport-dict terug."""
     wiki_dir = root / "02-wiki"
@@ -186,8 +249,11 @@ def lint_vault(root: Path) -> dict:
             continue
         articles += 1
         warnings.extend(lint_article(f, stems, root))
+    warnings.extend(lint_index_drift(root))
 
-    warned_files = {w["file"] for w in warnings}
+    # index-drift is geen artikel-finding; hij telt niet mee in warned/clean
+    # (anders zou "clean" negatief kunnen worden bij een lege wiki).
+    warned_files = {w["file"] for w in warnings if w["type"] != "index-drift"}
     hard = sum(1 for w in warnings if w["type"] in HARD_TYPES)
     return {
         "articles": articles,

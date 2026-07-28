@@ -1,7 +1,7 @@
 ---
 id: TASK-90
 title: 'Structural hardening from ecosystem failure modes (Spoor E)'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-07-28 08:00'
 labels:
