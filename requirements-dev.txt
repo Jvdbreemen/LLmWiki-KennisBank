@@ -7,3 +7,7 @@
 # daardoor nog nooit had gedraaid. Zie TASK-53.
 -r requirements.txt
 pytest==8.3.4
+# PyYAML: strikte frontmatter-scheidsrechter in tests/test_okf_export.py —
+# de eigen _frontmatter-parser is bewust minimaal en kan de geneste
+# OKF-structuren (generated: {...}, sources: [-{...}]) niet valideren.
+PyYAML==6.0.2

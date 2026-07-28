@@ -116,6 +116,8 @@ class OkfExportTest(unittest.TestCase):
         self.assertNotIn("verified", fm)
 
     def test_current_maps_to_machine_confirmed(self):
+        if not HAVE_YAML:
+            self.skipTest("PyYAML vereist: geneste frontmatter-asserties")
         self._export()
         fm = self._fm_of("09-memory/2026-07-01-besluit.md")
         self.assertNotIn("status", fm)  # stable = spec-default, niet dubbel
@@ -125,6 +127,8 @@ class OkfExportTest(unittest.TestCase):
         self.assertTrue(str(entry["by"]).startswith("process:"))
 
     def test_human_approval_from_review_log_adds_human_tier(self):
+        if not HAVE_YAML:
+            self.skipTest("PyYAML vereist: geneste frontmatter-asserties")
         (self.vault / ".claude" / "memory-review-log.jsonl").write_text(
             json.dumps({"ts": "2026-07-03T10:00:00+00:00",
                         "stem": "2026-07-01-besluit", "decision": "approve",
@@ -139,6 +143,8 @@ class OkfExportTest(unittest.TestCase):
         self.assertTrue(any(b.startswith("human:") for b in bys))
 
     def test_generated_carries_producer_provenance(self):
+        if not HAVE_YAML:
+            self.skipTest("PyYAML vereist: geneste frontmatter-asserties")
         self._export()
         fm = self._fm_of("09-memory/2026-07-01-besluit.md")
         gen = fm.get("generated")
@@ -147,6 +153,8 @@ class OkfExportTest(unittest.TestCase):
         self.assertIn("p1", str(gen["by"]))
 
     def test_sources_from_provenance(self):
+        if not HAVE_YAML:
+            self.skipTest("PyYAML vereist: geneste frontmatter-asserties")
         self._export()
         fm = self._fm_of("02-wiki/wireguard.md")
         srcs = fm.get("sources")
