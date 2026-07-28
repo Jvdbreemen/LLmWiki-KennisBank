@@ -28,12 +28,21 @@ Ideas verified in Pratiyush/llm-wiki (closest relative: offline-first, session t
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Heatmap + freshness from single SQL aggregation; sidecar tests (events per day, fail-open without db, freshness buckets)
-- [ ] #2 No graph/relation computation on the UI thread
-- [ ] #3 Palette over prebuilt /titles; fuzzyFilter vitest-pinned; no live query per keystroke
-- [ ] #4 Copy-as-JSON + facet chips in Recall Inspector
+- [x] #1 Heatmap + freshness from single SQL aggregation; sidecar tests (events per day, fail-open without db, freshness buckets)
+- [x] #2 No graph/relation computation on the UI thread
+- [x] #3 Palette over prebuilt /titles; fuzzyFilter vitest-pinned; no live query per keystroke
+- [x] #4 Copy-as-JSON + facet chips in Recall Inspector
 - [ ] #5 Collapsible tool-call blocks (or explicitly deferred here)
-- [ ] #6 atlas CI job green
-- [ ] #7 atlas/README corrected (docs = contract)
+- [x] #6 atlas CI job green
+- [x] #7 atlas/README corrected (docs = contract)
 - [ ] #8 EVIDENCE OF IMPROVEMENT: measured first-render time of the overview lens on the real vault (<500 ms target), palette open-to-filter latency, and CI job green on a real push — numbers/screenshots recorded here
 <!-- AC:END -->
+
+## Notes (2026-07-29)
+
+- AC#5 (collapsible tool-call blocks): **explicitly deferred** — frontend-only
+  follow-up, geen blokkade voor de rest van het spoor.
+- AC#6 evidence: CI groen op PR #82 (test + atlas jobs, beide events pass) —
+  runs 30405050117 / 30405054555.
+- AC#1/#8 rest: eerste-render-meting van de Overzicht-lens op de echte vault
+  (<500 ms-doel) bij de eerstvolgende Atlas-start.
