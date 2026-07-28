@@ -404,7 +404,12 @@ def main() -> None:
             import re as _re2
             import _usage
             stems = sorted({m for m in _re2.findall(r"\[\[([^\[\]|#]+)\]\]", ctx)})
-            _usage.log_injected(stems, session_id=str(data.get("session_id") or ""))
+            # Graafbuur-entries dragen het "(buur)"-label in de injectieregel;
+            # tel ze apart zodat doctor.sh kan tonen of expansie iets oplevert.
+            nb_stems = sorted({m for line in ctx.splitlines() if "(buur)" in line
+                               for m in _re2.findall(r"\[\[([^\[\]|#]+)\]\]", line)})
+            _usage.log_injected(stems, session_id=str(data.get("session_id") or ""),
+                                neighbor_stems=nb_stems)
         except Exception:
             pass
 

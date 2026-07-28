@@ -32,4 +32,5 @@ D2 — `/wiki` step 2 (candidate identification) is the last free-form LLM decis
 - [ ] #6 wiki-scan deterministic (two runs identical), enum-validated, `scanned_logs` guard; /wiki steps 1-2 follow it
 - [ ] #7 EVIDENCE: one shadow week — scan misses nothing a manual run with markers would find; result here
 - [ ] #8 doctor.sh counters visible
+- [ ] #9 EVIDENCE OF IMPROVEMENT: TASK-23-replay test output + first real /kennisbank:review run on this vault (queue size before/after, decisions logged in memory-review-log.jsonl) + wiki-scan run on the real vault compared against a manual /wiki candidate pass — all numbers recorded here
 <!-- AC:END -->

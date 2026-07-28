@@ -35,4 +35,5 @@ Ideas verified in Pratiyush/llm-wiki (closest relative: offline-first, session t
 - [ ] #5 Collapsible tool-call blocks (or explicitly deferred here)
 - [ ] #6 atlas CI job green
 - [ ] #7 atlas/README corrected (docs = contract)
+- [ ] #8 EVIDENCE OF IMPROVEMENT: measured first-render time of the overview lens on the real vault (<500 ms target), palette open-to-filter latency, and CI job green on a real push — numbers/screenshots recorded here
 <!-- AC:END -->

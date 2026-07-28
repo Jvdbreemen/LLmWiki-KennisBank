@@ -21,6 +21,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   paraphrases) that writes `*.draft.json` for human curation and can never
   touch the live sets.
 
+- **Graph retrieval experiment behind a toggle (TASK-87, Spoor B, default
+  OFF).** The weighted graph index (`kb-graph.db`, sub-millisecond
+  `graph_neighbors`) existed but nothing on the retrieval path called it
+  (TASK-67's own finding); the `(buur)` expansion entry instead came from a
+  regex over article bodies inside the 2.0 s prompt budget. New
+  `graph_retrieval` toggle selects the source of the neighbor: the graph
+  (weighted by confidence, wiki-only, never displacing a direct hit, stale
+  graph fails open to no neighbor) or the unchanged legacy scan.
+  `retrieve_expand` stays the master switch; rollback is one setting.
+  Telemetry counts neighbor injections per day (`neighbor_log` in
+  kb-usage.db) and `doctor.sh` gained a "graph retrieval" check that WARNS
+  when the toggle is on while the graph index is stale — the silent-empty
+  failure mode TASK-15 documented. Default-flip only after the kb-eval A/B
+  on 100+-question sets (adopt/reject gate in TASK-87). Also fixes the
+  README toggle-table drift: it said seven behaviours while there are now
+  eleven.
+
 ### Fixed
 
 - **kb-eval measured a different pipeline than the hook runs.** `_live_hits_fn`

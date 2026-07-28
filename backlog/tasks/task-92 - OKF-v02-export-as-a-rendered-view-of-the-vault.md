@@ -33,4 +33,5 @@ Key fit: OKF's trust tiers map 1:1 onto the memory lifecycle — no `verified` k
 - [ ] #4 index.md per dir + root okf_version; log.md from rollups; byte-idempotent across two runs (test)
 - [ ] #5 Manual validation of one real-vault bundle against the spec's example bundles recorded here
 - [ ] #6 Spec license: Apache 2.0 (verified 2026-07-27); no reference-agent code copied
+- [ ] #7 EVIDENCE OF IMPROVEMENT: real-vault export run recorded here (concept count, broken-link count, byte-idempotence check via two runs + hash compare) and one bundle validated against the spec examples
 <!-- AC:END -->

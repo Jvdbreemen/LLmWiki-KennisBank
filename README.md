@@ -434,7 +434,7 @@ Upgrade and contribute are two halves of one loop: `contribute` sends your local
 
 ## Background automation toggles
 
-Seven background behaviours are individual toggles in `kennisbank-settings.json`, managed with `/kennisbank:settings`:
+Eleven background behaviours are individual toggles in `kennisbank-settings.json`, managed with `/kennisbank:settings`:
 
 | Toggle | Default | Controls |
 |--------|---------|----------|
@@ -445,6 +445,10 @@ Seven background behaviours are individual toggles in `kennisbank-settings.json`
 | `memory_capture` | on | Extract and judge memories into `09-memory/` |
 | `memory_recall` | on | Inject memories into context via hooks |
 | `usage_telemetry` | on | Track which injected knowledge gets used |
+| `activity_llm_fallback` | off | Local-LLM fallback for exotic date phrasing in temporal recall |
+| `checkpoints` | off | Auto-save a work-state stub at context compaction (PreCompact) |
+| `orientation` | off | Inject a compact vault orientation at session start |
+| `graph_retrieval` | off | Source the neighbor expansion from the weighted graph index (experiment, TASK-87) |
 
 ## Measuring your retrieval
 

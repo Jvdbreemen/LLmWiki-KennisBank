@@ -448,7 +448,7 @@ Upgrade en contribute zijn twee helften van één lus: `contribute` stuurt je lo
 
 ## Achtergrond-automatiek-toggles
 
-Zeven achtergrondgedragingen zijn individuele toggles in `kennisbank-settings.json`, beheerd met `/kennisbank:settings`:
+Elf achtergrondgedragingen zijn individuele toggles in `kennisbank-settings.json`, beheerd met `/kennisbank:settings`:
 
 | Toggle | Standaard | Regelt |
 |--------|---------|----------|
@@ -459,6 +459,10 @@ Zeven achtergrondgedragingen zijn individuele toggles in `kennisbank-settings.js
 | `memory_capture` | aan | Extraheer en beoordeel herinneringen naar `09-memory/` |
 | `memory_recall` | aan | Injecteer herinneringen in context via hooks |
 | `usage_telemetry` | aan | Volg welke geïnjecteerde kennis wordt gebruikt |
+| `activity_llm_fallback` | uit | Lokale-LLM-terugval voor exotische datumformuleringen in temporele recall |
+| `checkpoints` | uit | Schrijf bij context-compaction (PreCompact) automatisch een werkstand-stub |
+| `orientation` | uit | Injecteer een compacte vault-oriëntatie bij sessiestart |
+| `graph_retrieval` | uit | Haal de buur-expansie uit de gewogen graafindex (experiment, TASK-87) |
 
 ## Je retrieval meten
 
