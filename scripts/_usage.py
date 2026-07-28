@@ -33,7 +33,7 @@ import os
 import sqlite3
 import sys
 from contextlib import closing
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 os.environ.setdefault("KENNISBANK_VAULT", str(Path(__file__).resolve().parents[2]))
@@ -55,6 +55,10 @@ CREATE TABLE IF NOT EXISTS pending (
     stem TEXT NOT NULL,
     ts TEXT,
     PRIMARY KEY (session_id, stem)
+);
+CREATE TABLE IF NOT EXISTS neighbor_log (
+    day TEXT PRIMARY KEY,
+    n INTEGER NOT NULL DEFAULT 0
 );
 """
 
@@ -95,8 +99,15 @@ def enabled() -> bool:
         return True
 
 
-def log_injected(stems, session_id: str = "", today: str | None = None) -> int:
+def log_injected(stems, session_id: str = "", today: str | None = None,
+                 neighbor_stems=()) -> int:
     """Registreer geinjecteerde stems (+pending voor de transcript-scan).
+
+    ``neighbor_stems``: de subset die als graafbuur-expansie is geinjecteerd
+    (TASK-87). Wordt per dag geteld in neighbor_log zodat doctor.sh kan tonen
+    of de expansie daadwerkelijk iets oplevert — de stil-leeg-guard uit
+    TASK-15: een gesloten mechanisme dat maandenlang 0 teruggeeft hoort
+    zichtbaar te zijn, niet onzichtbaar.
 
     Returns het aantal geregistreerde stems; 0 bij uit/fout (fail-open).
     """
@@ -114,7 +125,26 @@ def log_injected(stems, session_id: str = "", today: str | None = None) -> int:
                     conn.execute(
                         "INSERT OR IGNORE INTO pending(session_id, stem, ts) VALUES(?,?,?)",
                         (session_id, stem, day))
+            nb = len([s for s in (neighbor_stems or ()) if s in set(stems)])
+            if nb:
+                conn.execute(
+                    "INSERT INTO neighbor_log(day, n) VALUES(?,?) "
+                    "ON CONFLICT(day) DO UPDATE SET n=n+?", (day, nb, nb))
         return len(stems)
+    except Exception:
+        return 0
+
+
+def neighbor_injected(days: int = 30) -> int:
+    """Aantal als graafbuur geinjecteerde entries in de laatste ``days`` dagen.
+    Fail-open -> 0 (ook op een oude db zonder neighbor_log-tabel)."""
+    try:
+        cutoff = (date.today() - timedelta(days=days)).isoformat()
+        with closing(_connect()) as conn:
+            row = conn.execute(
+                "SELECT COALESCE(sum(n), 0) FROM neighbor_log WHERE day >= ?",
+                (cutoff,)).fetchone()
+            return int(row[0] or 0)
     except Exception:
         return 0
 

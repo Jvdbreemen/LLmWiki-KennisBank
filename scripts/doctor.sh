@@ -419,6 +419,49 @@ else
   report_info "graphify graph" "geen graph.json; /brug, auto-crosslink en de graaf-lenzen vallen stil terug (externe graphify-skill vereist)"
 fi
 
+# 11c-ter. Graafretrieval (TASK-87). De stil-leeg-guard uit TASK-15: een
+# toggle die aan staat terwijl de graaf stale is levert maandenlang stil
+# GEEN buur — dat hoort een WARN te zijn, geen onzichtbaarheid. De teller
+# (buren geinjecteerd, 30d) toont of de expansie daadwerkelijk iets doet.
+if command -v python3 >/dev/null 2>&1 && [ -f "$SCRIPTS_DIR/_settings.py" ]; then
+  GRAPH_RETR="$(python3 -c 'import sys
+sys.path.insert(0, sys.argv[1])
+import _settings, _kbindex, _usage
+import sqlite3
+on = _settings.get("graph_retrieval", False)
+fresh = "n/a"
+try:
+    p = _kbindex.graph_index_path()
+    if p.exists():
+        conn = sqlite3.connect(f"file:{p.as_posix()}?mode=ro", uri=True)
+        from _vaultpath import vault_root
+        fresh = "fresh" if _kbindex.graph_is_current(conn, vault_root() / "graphify-out" / "graph.json") else "stale"
+        conn.close()
+    else:
+        fresh = "no-db"
+except Exception:
+    fresh = "error"
+print(f"{int(on)} {fresh} {_usage.neighbor_injected(30)}")' "$SCRIPTS_DIR" 2>/dev/null | tr -d '')"
+  GR_ON="$(printf '%s' "$GRAPH_RETR" | cut -d' ' -f1)"
+  GR_FRESH="$(printf '%s' "$GRAPH_RETR" | cut -d' ' -f2)"
+  GR_NB="$(printf '%s' "$GRAPH_RETR" | cut -d' ' -f3)"
+  case "$GR_ON" in
+    1)
+      if [ "$GR_FRESH" = "fresh" ]; then
+        report_pass "graph retrieval" "toggle aan, graaf vers, buren geinjecteerd (30d): ${GR_NB:-0}"
+      else
+        report_warn "graph retrieval" "toggle AAN maar graafindex ${GR_FRESH:-onbekend} — expansie levert stil niets; draai /graphify + build-graph-index.py"
+      fi
+      ;;
+    0)
+      report_info "graph retrieval" "toggle uit (legacy wikilink-expansie actief); buren geinjecteerd (30d): ${GR_NB:-0}"
+      ;;
+    *)
+      report_warn "graph retrieval" "status niet leesbaar (python3/_settings-fout)"
+      ;;
+  esac
+fi
+
 # 11d. Temporele locale-vocabulaire. Toetst de GELADEN tabel, niet de
 # aanwezigheid van het bestand: een aanwezig-maar-onleesbaar activity-locales.json
 # faalt stil open en laat de datumparser met een lege Laag 1 achter.

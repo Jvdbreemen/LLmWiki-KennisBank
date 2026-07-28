@@ -57,6 +57,13 @@ DEFAULTS = {
     # en veelgebruikte kennis als eerste context. Extra contextregels bij elke
     # start → opt-in. /sessiestart toont hetzelfde altijd on-demand.
     "orientation": False,
+    # Graafretrieval-experiment (TASK-87): de (buur)-entry in de hook-injectie
+    # komt uit kb-graph.db (gewogen, submilliseconde) in plaats van de legacy
+    # regex over artikelteksten. retrieve_expand blijft de master-switch; deze
+    # toggle kiest alleen de BRON van de buur. Default UIT tot de A/B-meetpoort
+    # op de >=100-vraag-eval-sets gehaald is (bewijsregel TASK-86): geen meting,
+    # geen default-flip.
+    "graph_retrieval": False,
 }
 
 _TRUTHY = ("1", "true", "yes", "y", "on")

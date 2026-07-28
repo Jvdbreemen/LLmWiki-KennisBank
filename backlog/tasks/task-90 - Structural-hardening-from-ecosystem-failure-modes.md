@@ -34,4 +34,5 @@ The most expensive lessons mined from production issue trackers across the LLM-w
 - [ ] #5 Socket-blocked no-network-during-ingest test
 - [ ] #6 model_id + prompt_version roundtrip test; absent by default on human-typed memories
 - [ ] #7 Epistemic-axis decision recorded; self-source rule fixture-tested
+- [ ] #8 EVIDENCE OF IMPROVEMENT: each gate proven by a replayed-failure fixture (arkon#25 refusal, #576 normalization, #538 self-source, #580 index-drift) PLUS one run of kb-lint + kb-normalize --check on the real vault with finding counts recorded here (evidence the gates catch real-world material, not only fixtures)
 <!-- AC:END -->

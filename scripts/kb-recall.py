@@ -57,6 +57,109 @@ def _open_ro(db_path: Path):
         return None
 
 
+def _open_graph_ro():
+    """Read-only open van kb-graph.db; None bij afwezig/fout.
+
+    Bewust NIET _kbindex.graph_connect(): die opent read-write, maakt
+    directories aan en zet WAL — allemaal schrijfgedrag dat niet op de leesweg
+    thuishoort. Geen sqlite_vec nodig (gewone tabellen zonder vectoren).
+    """
+    p = _kbindex.graph_index_path()
+    if not p.exists():
+        return None
+    try:
+        return sqlite3.connect(f"file:{p.as_posix()}?mode=ro", uri=True)
+    except Exception:
+        return None
+
+
+def graph_neighbor(hits) -> "dict | None":
+    """Beste graafbuur van de wiki-hits via kb-graph.db (TASK-87).
+
+    Vervangt de legacy regex-expansie (_rank.one_hop_neighbor: N× read_text in
+    het promptbudget, 1 hop, ongewogen) door de gewogen, submilliseconde
+    adjacency-query die er al was maar nergens op de retrieval-weg werd
+    aangeroepen (TASK-67-constatering).
+
+    Semantiek identiek aan de batch-keten: een stale of ontbrekende graaf
+    degradeert naar GEEN buur, nooit naar een verkeerde buur. Pariteit met het
+    legacy-gedrag: alleen wiki-buren, nooit een stem die al hit is, bestand
+    moet bestaan, deterministische tie-break. Fail-open: elke fout -> None.
+    """
+    conn = _open_graph_ro()
+    if conn is None:
+        return None
+    try:
+        gpath = _vault_root() / "graphify-out" / "graph.json"
+        if not _kbindex.graph_is_current(conn, gpath):
+            return None
+        root = _vault_root().resolve()
+        hit_stems = {Path(h.get("path", "")).stem for h in hits}
+        weights = {}
+        for h in hits:
+            if h.get("layer") != "wiki":
+                continue
+            # kb-index bewaart absolute OS-paden; de graaf vault-relatieve
+            # POSIX-paden ("02-wiki/x.md"). Reduceer naar dezelfde sleutel.
+            try:
+                rel = Path(h["path"]).resolve().relative_to(root).as_posix()
+            except Exception:
+                rel = Path(h.get("path", "")).as_posix().lstrip("/")
+            for nb in _kbindex.graph_neighbors(conn, rel, limit=5):
+                sf = str(nb.get("source_file") or "")
+                if not (sf.startswith("02-wiki/") and sf.endswith(".md")):
+                    continue
+                if Path(sf).stem in hit_stems:
+                    continue
+                weights[sf] = weights.get(sf, 0.0) + float(nb.get("weight", 0.0))
+        for sf, _w in sorted(weights.items(), key=lambda kv: (-kv[1], kv[0])):
+            cand = _vault_root() / sf
+            if cand.exists():
+                return {"path": str(cand), "stem": cand.stem}
+        return None
+    except Exception:
+        return None
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def _neighbor_entry(out) -> "dict | None":
+    """Bouw de (buur)-expansie-entry voor een hits-lijst; None = geen buur.
+
+    TASK-87: de toggle ``graph_retrieval`` kiest de BRON van de buur — de
+    gewogen graaf (kb-graph.db, submilliseconde) of de legacy regex-expansie
+    (_rank.one_hop_neighbor). ``expand`` blijft de master-switch in
+    recall_hits; toggle uit = gedrag exact als voorheen, rollback is één
+    setting. Fail-open: elke fout -> None.
+    """
+    try:
+        use_graph = False
+        try:
+            import _settings
+            use_graph = bool(_settings.get("graph_retrieval", False))
+        except Exception:
+            use_graph = False
+        root = _vault_root()
+        if use_graph:
+            nb = graph_neighbor(out)
+            stem = nb["stem"] if nb else None
+            p = Path(nb["path"]) if nb else None
+        else:
+            stem = _rank.one_hop_neighbor(out, root)
+            p = (root / "02-wiki" / f"{stem}.md") if stem else None
+        if not stem or p is None:
+            return None
+        snippet = emb.doc_text(p, cap=280).replace("\n", " ").strip()
+        return {"path": str(p), "layer": "wiki", "title": stem,
+                "created": "", "score": 0.0, "snippet": snippet,
+                "neighbor": True}
+    except Exception:
+        return None
+
+
 def recall_hits(query_vector, query_text: str = "", k: int = 3,
                 layers=("wiki", "memory"), expand: bool = False,
                 min_cos: float = 0.0) -> list:
@@ -108,14 +211,9 @@ def recall_hits(query_vector, query_text: str = "", k: int = 3,
         out = _rank.rerank(out, _frontmatter_of, last_used_fn=_lu, noise_fn=_nf)
         if expand and out:
             try:
-                root = _vault_root()
-                stem = _rank.one_hop_neighbor(out, root)
-                if stem:
-                    p = root / "02-wiki" / f"{stem}.md"
-                    snippet = emb.doc_text(p, cap=280).replace("\n", " ").strip()
-                    out.append({"path": str(p), "layer": "wiki", "title": stem,
-                                "created": "", "score": 0.0, "snippet": snippet,
-                                "neighbor": True})
+                entry = _neighbor_entry(out)
+                if entry:
+                    out.append(entry)
             except Exception:
                 pass
         return out

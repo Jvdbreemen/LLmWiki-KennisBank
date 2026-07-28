@@ -1,7 +1,7 @@
 ---
 id: TASK-87
 title: 'Graph neighbors in the retrieval hot path, behind a toggle (Spoor B, experiment)'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-07-28 08:00'
 labels:
@@ -32,4 +32,5 @@ Design: `graph_retrieval` toggle in `_settings.py` (default OFF). `expand` stays
 - [ ] #5 doctor.sh shows toggle state, graph freshness, neighbors-injected (30d); warns on toggle-on + stale
 - [ ] #6 EVIDENCE GATE (blocks default-flip): kb-eval A/B on >=100-question sets — wiki recall@5/MRR not worse, single-hop does not drop, wiki-layer latency p95 delta < 50 ms; adopt/reject note with numbers here
 - [ ] #7 Default-flip and legacy removal as separate follow-up PRs, only after #6
+- [ ] #8 EVIDENCE OF IMPROVEMENT: measured A/B on the real vault (toggle off vs on) with numbers in this task — recall@k/MRR per type + latency p95 delta; adopt only on demonstrated non-regression + measurable benefit (neighbor relevance or latency win); otherwise reject and remove
 <!-- AC:END -->

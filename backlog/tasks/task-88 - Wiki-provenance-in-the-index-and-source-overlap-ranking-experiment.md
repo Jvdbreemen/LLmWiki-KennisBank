@@ -32,4 +32,5 @@ Known risk: trivial clustering when a few large sources feed many docs — the 1
 - [ ] #3 doctor.sh reports provenance coverage per layer; warns when coupling knob on + coverage 0
 - [ ] #4 `rerank` without `sources_fn` provably identical (regression lock test)
 - [ ] #5 EVIDENCE GATE (blocks enabling): kb-eval A/B on >=100-question sets — MRR/recall@3 not worse, single-hop stable, latency delta negligible; adopt/reject note here
+- [ ] #6 EVIDENCE OF IMPROVEMENT: measured A/B on the real vault (rank_coupling off vs on) with numbers here — MRR/recall@3 per type; provenance coverage counts from doctor before/after --rebuild; adopt only on demonstrated benefit, otherwise reject and remove
 <!-- AC:END -->

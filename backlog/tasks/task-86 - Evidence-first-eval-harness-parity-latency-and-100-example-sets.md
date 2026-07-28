@@ -1,7 +1,7 @@
 ---
 id: TASK-86
 title: 'Evidence-first eval harness: production parity, latency, and 100+ example sets (Spoor A)'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-07-28 08:00'
 labels:
@@ -34,4 +34,5 @@ Work: extract `retrieve_params(cfg)` + `load_embed_cfg()` from kb-retrieve (beha
 - [ ] #5 Curated eval sets reach >=100 questions per layer (wiki and memory) with type labels — blocks every adoption gate downstream
 - [ ] #6 Baseline (recall@1/3/5, MRR, per-type, latency) recorded here and in CHANGELOG
 - [ ] #7 Existing suites stay green
+- [ ] #8 EVIDENCE OF IMPROVEMENT: before/after report proving the harness now measures production (parity diff on identical sets: old call path vs new on the real vault) + honest baseline numbers recorded here; eval-gen drafts generated on the real vault as input for curation
 <!-- AC:END -->
