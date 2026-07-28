@@ -40,7 +40,7 @@ doet:
 - **activity_llm_fallback** (default UIT) - laat een lokale LLM een datum/periode duiden die de deterministische lagen niet herkennen (laag 3 van de temporele parser). Aan = tragere maar bredere taaldekking; uit = alleen de locale-tabellen en dateparser.
 - **checkpoints** (default UIT) - schrijf bij context-compaction (Claude PreCompact) automatisch een werkstand-stub en meld die bij de volgende sessiestart. Uit = alleen handmatige checkpoints via `/checkpoint`.
 - **orientation** (default UIT) - toon bij sessiestart een compacte vault-orientatie: documentcounts, recent gewijzigde artikelen, veelgebruikte kennis en open backlog-taken. Uit = alleen on-demand via `/sessiestart`.
-- **graph_retrieval** (default UIT, experiment TASK-87) - haal de (buur)-entry in de hook-injectie uit de gewogen graafindex (kb-graph.db) in plaats van de legacy wikilink-scan. Aanzetten alleen na een kb-eval A/B op sets van >=100 vragen (bewijsregel TASK-86).
+- **graph_retrieval** (default AAN sinds de A/B-poort van 2026-07-29, TASK-87) - haal de (buur)-entry in de hook-injectie uit de gewogen graafindex (kb-graph.db) in plaats van de legacy wikilink-scan. Aanzetten alleen na een kb-eval A/B op sets van >=100 vragen (bewijsregel TASK-86).
 
 Vraag de gewenste staat tekstueel uit (NIET via `AskUserQuestion`: die tool
 staat maximaal 4 opties per vraag toe, en er zijn 10 toggles; een enkele

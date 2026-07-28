@@ -1,7 +1,7 @@
 ---
 id: TASK-88
 title: 'Wiki provenance in the index + source-overlap ranking experiment (Spoor C)'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-28 08:00'
 labels:
@@ -31,7 +31,7 @@ Known risk: trivial clustering when a few large sources feed many docs — the 1
 - [x] #2 `doc_sources` table filled by build-kb-index; `--rebuild` backfills; readers fail-soft without the table
 - [x] #3 doctor.sh reports provenance coverage per layer; warns when coupling knob on + coverage 0
 - [x] #4 `rerank` without `sources_fn` provably identical (regression lock test)
-- [ ] #5 EVIDENCE GATE (blocks enabling): kb-eval A/B on >=100-question sets — MRR/recall@3 not worse, single-hop stable, latency delta negligible; adopt/reject note here
+- [x] #5 EVIDENCE GATE (blocks enabling): kb-eval A/B on >=100-question sets — MRR/recall@3 not worse, single-hop stable, latency delta negligible; adopt/reject note here
 - [ ] #6 EVIDENCE OF IMPROVEMENT: measured A/B on the real vault (rank_coupling off vs on) with numbers here — MRR/recall@3 per type; provenance coverage counts from doctor before/after --rebuild; adopt only on demonstrated benefit, otherwise reject and remove
 <!-- AC:END -->
 
@@ -55,3 +55,15 @@ plumbing (C1-C3) stays: provenance coverage is valuable on its own (doctor,
 OKF export) and the regression lock proves zero impact with the knob off.
 Revisit only after >=100-set curation AND a redesign (e.g. exclude sources
 feeding >X% of docs, or lower boost) — with a new A/B.
+
+## Evidence update (2026-07-29, >=100-set gate) — REJECT CONFIRMED
+
+A/B on 329 wiki / 1224 memory questions, `KB_RANK_COUPLING=1` vs off:
+wiki @1 0.745 -> 0.757 and MRR 0.836 -> 0.868 rise, but **single-hop@1
+drops 0.777 -> 0.765** and memory degrades slightly (@1 0.361 -> 0.355,
+MRR 0.461 -> 0.459). Gate criterion "single-hop stable" failed on both set
+sizes -> knob stays OFF (default). Plumbing (C1-C3 provenance index,
+coverage wiki 146/147 / memory 1147/1147) ships and stays: it feeds doctor
++ the OKF export, and the regression lock proves zero ranking impact with
+the knob off. Any revisit needs a redesign (e.g. exclude sources feeding
+>X% of docs) plus a fresh A/B. Done (verdict recorded).

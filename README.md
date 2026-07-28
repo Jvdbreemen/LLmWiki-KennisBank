@@ -449,7 +449,7 @@ Eleven background behaviours are individual toggles in `kennisbank-settings.json
 | `activity_llm_fallback` | off | Local-LLM fallback for exotic date phrasing in temporal recall |
 | `checkpoints` | off | Auto-save a work-state stub at context compaction (PreCompact) |
 | `orientation` | off | Inject a compact vault orientation at session start |
-| `graph_retrieval` | off | Source the neighbor expansion from the weighted graph index (experiment, TASK-87) |
+| `graph_retrieval` | on | Source the neighbor expansion from the weighted graph index (A/B-proven, TASK-87) |
 
 ## Measuring your retrieval
 
