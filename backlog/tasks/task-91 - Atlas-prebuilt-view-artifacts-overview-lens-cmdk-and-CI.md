@@ -1,7 +1,7 @@
 ---
 id: TASK-91
 title: 'Atlas: prebuilt view artifacts, overview lens 2.0, Cmd+K, JSON twin, facets, CI (Spoor F)'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-07-28 08:00'
 labels:

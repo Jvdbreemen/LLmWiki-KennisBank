@@ -54,3 +54,43 @@ jobs:
             python3 -m coverage report
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # Atlas draaide tot TASK-91 volledig buiten CI: pytest-sidecar noch
+  # vitest-frontend werd afgedwongen, dus elke Atlas-wijziging shipte
+  # onbewaakt. Aparte job: eigen dependencies, eigen faaldomein.
+  atlas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install sidecar dependencies
+        run: pip install -r atlas/sidecar/requirements.txt pytest
+
+      - name: Sidecar tests
+        run: python3 -m pytest atlas/sidecar/tests -q
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: atlas/frontend/package-lock.json
+
+      - name: Frontend install
+        working-directory: atlas/frontend
+        run: npm ci
+
+      - name: Frontend typecheck
+        working-directory: atlas/frontend
+        run: npx tsc --noEmit
+
+      - name: Frontend tests
+        working-directory: atlas/frontend
+        run: npx vitest run
