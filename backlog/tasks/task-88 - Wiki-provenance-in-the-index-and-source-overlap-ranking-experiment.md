@@ -1,7 +1,7 @@
 ---
 id: TASK-88
 title: 'Wiki provenance in the index + source-overlap ranking experiment (Spoor C)'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-07-28 08:00'
 labels:

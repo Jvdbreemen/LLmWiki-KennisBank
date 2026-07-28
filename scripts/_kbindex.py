@@ -57,6 +57,15 @@ def ensure_schema(conn: sqlite3.Connection, dim: int, embed_id: str) -> None:
         f"CREATE VIRTUAL TABLE IF NOT EXISTS vec_docs USING vec0("
         f"doc_id INTEGER PRIMARY KEY, embedding float[{int(dim)}])")
     conn.execute("CREATE VIRTUAL TABLE IF NOT EXISTS fts_docs USING fts5(body)")
+    # Provenance-sleutels per doc (TASK-88): voedt het bibliographic-coupling-
+    # signaal. Eigen tabel (meerdere bronnen per doc), geen migratie nodig:
+    # kb-index.db is een wegwerp-cache en ensure_schema draait bij elke build.
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS doc_sources ("
+        "doc_id INTEGER NOT NULL, source TEXT NOT NULL, "
+        "PRIMARY KEY (doc_id, source))")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_doc_sources_source "
+                 "ON doc_sources(source)")
     conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('dim', ?)", (str(int(dim)),))
     conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('embed_id', ?)", (embed_id,))
     conn.commit()
@@ -118,8 +127,13 @@ def count(conn: sqlite3.Connection) -> int:
 
 def upsert(conn: sqlite3.Connection, *, path: str, layer: str, status: str,
            body: str, vector, file_hash: str, title: str = "",
-           created: str = "") -> int:
-    """Insert/replace een doc over docs+fts_docs+vec_docs onder één doc_id."""
+           created: str = "", sources=()) -> int:
+    """Insert/replace een doc over docs+fts_docs+vec_docs onder één doc_id.
+
+    ``sources``: provenance-sleutels (TASK-88); delete+insert onder hetzelfde
+    doc_id, zelfde patroon als fts/vec. Leeg = geen rijen (en dat betekent
+    "geen herkomst", niet "onbekend" — de dekkingsteller in doctor toont het).
+    """
     row = conn.execute("SELECT doc_id FROM docs WHERE path=?", (path,)).fetchone()
     if row:
         doc_id = row[0]
@@ -128,6 +142,7 @@ def upsert(conn: sqlite3.Connection, *, path: str, layer: str, status: str,
             (layer, status, file_hash, title, created, doc_id))
         conn.execute("DELETE FROM fts_docs WHERE rowid=?", (doc_id,))
         conn.execute("DELETE FROM vec_docs WHERE doc_id=?", (doc_id,))
+        conn.execute("DELETE FROM doc_sources WHERE doc_id=?", (doc_id,))
     else:
         cur = conn.execute(
             "INSERT INTO docs(path, layer, status, hash, title, created) "
@@ -136,8 +151,33 @@ def upsert(conn: sqlite3.Connection, *, path: str, layer: str, status: str,
     conn.execute("INSERT INTO fts_docs(rowid, body) VALUES (?, ?)", (doc_id, body))
     conn.execute("INSERT INTO vec_docs(doc_id, embedding) VALUES (?, ?)",
                  (doc_id, _serialize(unit(vector))))
+    for s in sources or ():
+        conn.execute("INSERT OR IGNORE INTO doc_sources(doc_id, source) VALUES (?, ?)",
+                     (doc_id, str(s)))
     conn.commit()
     return doc_id
+
+
+def sources_for(conn: sqlite3.Connection, doc_ids) -> dict:
+    """{doc_id: set(bron-sleutels)} in één batch-query.
+
+    Fail-soft: een oude index zonder doc_sources-tabel (of welke sqlite-fout
+    dan ook) geeft {} — het coupling-signaal degradeert dan naar neutraal.
+    """
+    ids = [int(d) for d in doc_ids]
+    if not ids:
+        return {}
+    placeholders = ",".join("?" for _ in ids)
+    try:
+        rows = conn.execute(
+            f"SELECT doc_id, source FROM doc_sources WHERE doc_id IN ({placeholders})",
+            ids).fetchall()
+    except sqlite3.Error:
+        return {}
+    out: dict = {}
+    for doc_id, source in rows:
+        out.setdefault(int(doc_id), set()).add(source)
+    return out
 
 
 def prune(conn: sqlite3.Connection, keep_paths: set) -> int:
@@ -147,6 +187,10 @@ def prune(conn: sqlite3.Connection, keep_paths: set) -> int:
         conn.execute("DELETE FROM docs WHERE doc_id=?", (doc_id,))
         conn.execute("DELETE FROM fts_docs WHERE rowid=?", (doc_id,))
         conn.execute("DELETE FROM vec_docs WHERE doc_id=?", (doc_id,))
+        try:
+            conn.execute("DELETE FROM doc_sources WHERE doc_id=?", (doc_id,))
+        except sqlite3.Error:
+            pass  # oude index zonder doc_sources-tabel
     conn.commit()
     return len(gone)
 
@@ -250,7 +294,7 @@ def search(conn: sqlite3.Connection, *, query_vector, query_text: str = "",
             continue
         out.append({"path": path, "layer": layer, "status": status,
                     "title": title, "created": created, "score": score,
-                    "cos": cos, "fts": by_fts})
+                    "cos": cos, "fts": by_fts, "doc_id": doc_id})
     out.sort(key=lambda d: d["score"], reverse=True)
     # Afkappen NA het filteren: andersom zou een onder de drempel liggende
     # treffer een plek innemen die een geldige treffer had moeten krijgen.

@@ -126,6 +126,42 @@ def graph_neighbor(hits) -> "dict | None":
             pass
 
 
+def _coupling_enabled() -> bool:
+    """Knop voor het bibliographic-coupling-signaal (TASK-88, default UIT).
+
+    Zelfde conventie als de andere retrieval-knoppen: env ``KB_RANK_COUPLING``
+    wint van ``"rank_coupling"`` in <vault>/.claude/kennisbank-embed.json.
+    Fail-soft naar False — activering is een bewuste keuze ná de kb-eval A/B
+    op de >=100-vraag-sets (bewijsregel TASK-86), geen sluiproute.
+    """
+    raw = os.environ.get("KB_RANK_COUPLING")
+    if raw is not None:
+        return str(raw).strip().lower() in ("1", "true", "yes", "on")
+    try:
+        import json
+        cfg_file = _vault_root() / ".claude" / "kennisbank-embed.json"
+        cfg = json.loads(cfg_file.read_text(encoding="utf-8")) or {}
+        return bool(cfg.get("rank_coupling", 0))
+    except Exception:
+        return False
+
+
+def _coupling_sources_fn(conn, rows):
+    """Batch-lookup van provenance-sleutels; None als de knop uit staat of
+    er niets te wegen valt. Eén extra query op de al-open connectie."""
+    if not _coupling_enabled():
+        return None
+    try:
+        ids = [r["doc_id"] for r in rows if r.get("doc_id") is not None]
+        smap = _kbindex.sources_for(conn, ids)
+        if not smap:
+            return None
+        by_path = {r["path"]: smap.get(r.get("doc_id"), set()) for r in rows}
+        return lambda p: by_path.get(p, set())
+    except Exception:
+        return None
+
+
 def _neighbor_entry(out) -> "dict | None":
     """Bouw de (buur)-expansie-entry voor een hits-lijst; None = geen buur.
 
@@ -208,7 +244,8 @@ def recall_hits(query_vector, query_text: str = "", k: int = 3,
         except Exception:
             _lu = None
             _nf = None
-        out = _rank.rerank(out, _frontmatter_of, last_used_fn=_lu, noise_fn=_nf)
+        out = _rank.rerank(out, _frontmatter_of, last_used_fn=_lu, noise_fn=_nf,
+                           sources_fn=_coupling_sources_fn(conn, rows))
         if expand and out:
             try:
                 entry = _neighbor_entry(out)
