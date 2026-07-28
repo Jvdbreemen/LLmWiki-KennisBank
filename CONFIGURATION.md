@@ -483,6 +483,14 @@ The five env vars below control the behavior of the vault-onderhoud scripts
 - **Uitzetten expansie**: env `KB_RETRIEVE_EXPAND=0` of `"retrieve_expand": 0` in `<vault>/.claude/kennisbank-embed.json` — dat is het bestand dat `kb-retrieve.py` leest, niet `kennisbank-settings.json`.
 - **To change**: pas de constanten aan en hermeet met `kb-eval.py` (voor en na; een daling is een regressie).
 
+### Bibliographic coupling (`rank_coupling`, experiment TASK-88)
+
+- **Default**: UIT (`"rank_coupling": 0`; env-override `KB_RANK_COUPLING`).
+- **Where set**: `<vault>/.claude/kennisbank-embed.json`; boosts als module-constanten in `scripts/_rank.py` (`COUPLING_BOOST_ONE = 1.05`, `COUPLING_BOOST_MULTI = 1.1`).
+- **Effect aan**: kandidaten die >=1 herkomst-bron delen met een andere kandidaat in dezelfde resultaatset krijgen een begrensde bonus (1.05 bij een partner, 1.10 bij twee of meer — gelijk aan de cap van de usage-warmte, nooit onder 1.0). Klassieke IR: bibliographic coupling (Kessler 1963). De bronnen komen uit de `doc_sources`-indextabel, gevuld door `build-kb-index.py` via `_provenance.py` (wiki: `[[raw-sessie-*]]`- en `[[05-bronnen/...]]`-herkomstlinks, exact het kb-lint-contract; memory: `source_session`). Backfill: `build-kb-index.py --rebuild`.
+- **Effect uit**: ranking bit-voor-bit identiek aan voor TASK-88 (vergrendeld in `tests/test_rank.py`).
+- **Aanzetten**: alleen na een kb-eval A/B op sets van >=100 vragen per laag (bewijsregel TASK-86): MRR/recall@3 niet slechter, `single-hop` daalt niet. De startgewichten zijn bewust conservatief en NIET llm_wiki's ongefundeerde 4.0/3.0/1.5/1.0.
+
 ### Recall-eval (`scripts/kb-eval.py`)
 
 - **Default sets**: `<vault>/06-claude/kb-eval-set.json` (wiki) + `<vault>/06-claude/kb-memory-eval-set.json` (geheugen); voorbeelden in `kb-eval-set.example.json` en `kb-memory-eval-set.example.json`.

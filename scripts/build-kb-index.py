@@ -27,12 +27,23 @@ MEMORY = VAULT / "09-memory"
 WIKI_SKIP = {"index.md", "log.md"}
 
 
-def _title_created(path):
+def _doc_meta(path, layer):
+    """(title, created, sources) uit één read; fail-soft naar leeg.
+
+    sources = provenance-sleutels via _provenance.doc_sources (TASK-88):
+    wiki-herkomstlinks c.q. memory source_session, geindexeerd zodat het
+    coupling-signaal ze als één batch-query kan opvragen.
+    """
     try:
-        fm, _ = parse_frontmatter(Path(path).read_text(encoding="utf-8"))
-        return fm.get("title", ""), fm.get("created", "")
+        fm, body = parse_frontmatter(Path(path).read_text(encoding="utf-8"))
     except Exception:
-        return "", ""
+        return "", "", ()
+    try:
+        import _provenance
+        sources = tuple(_provenance.doc_sources(Path(path), layer, fm, body))
+    except Exception:
+        sources = ()
+    return fm.get("title", ""), fm.get("created", ""), sources
 
 
 def _collect():
@@ -118,10 +129,10 @@ def main(rebuild: bool = False) -> None:
         if not vec:
             failed += 1
             continue
-        title, created = _title_created(f)
+        title, created, sources = _doc_meta(f, layer)
         _kbindex.upsert(conn, path=sp, layer=layer, status=status,
                         body=emb.doc_text(f), vector=vec, file_hash=fh,
-                        title=title, created=created)
+                        title=title, created=created, sources=sources)
         indexed += 1
     removed = _kbindex.prune(conn, keep_paths=seen)
     # De cache muteert alleen op het niet-overgeslagen pad; zonder nieuw

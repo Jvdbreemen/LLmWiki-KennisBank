@@ -38,6 +38,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   README toggle-table drift: it said seven behaviours while there are now
   eleven.
 
+- **Wiki provenance in the index + bibliographic-coupling experiment
+  (TASK-88, Spoor C, knob default OFF).** New `_provenance.py` extracts
+  source keys per document at index time — wiki: the `[[raw-sessie-*]]` and
+  `[[05-bronnen/...]]` provenance links (exactly kb-lint's contract, imported
+  from kb-lint itself so the parsers cannot drift); memory: `source_session`.
+  Stored in a new `doc_sources` table in kb-index.db (disposable cache — the
+  backfill is simply `build-kb-index.py --rebuild`); readers fail soft on
+  old indexes. `doctor.sh` reports provenance coverage per layer and warns
+  when the `rank_coupling` knob is on with zero coverage. The ranking side:
+  `_rank.coupling_factor` gives candidates sharing >=1 source with another
+  candidate in the same result set a bounded bonus (1.05 / 1.10 — capped at
+  usage-warmth level, never below 1.0; deliberately NOT llm_wiki's unfounded
+  4.0/3.0/1.5/1.0 weights). Without the knob the ranking is bit-for-bit
+  identical, locked by a regression test. Enabling requires the kb-eval A/B
+  on 100+-question sets plus the evidence-of-improvement AC (TASK-88 #5/#6).
+
 ### Fixed
 
 - **kb-eval measured a different pipeline than the hook runs.** `_live_hits_fn`

@@ -441,7 +441,8 @@ try:
         fresh = "no-db"
 except Exception:
     fresh = "error"
-print(f"{int(on)} {fresh} {_usage.neighbor_injected(30)}")' "$SCRIPTS_DIR" 2>/dev/null | tr -d '')"
+print(f"{int(on)} {fresh} {_usage.neighbor_injected(30)}")' "$SCRIPTS_DIR" 2>/dev/null | tr -d '
+')"
   GR_ON="$(printf '%s' "$GRAPH_RETR" | cut -d' ' -f1)"
   GR_FRESH="$(printf '%s' "$GRAPH_RETR" | cut -d' ' -f2)"
   GR_NB="$(printf '%s' "$GRAPH_RETR" | cut -d' ' -f3)"
@@ -460,6 +461,46 @@ print(f"{int(on)} {fresh} {_usage.neighbor_injected(30)}")' "$SCRIPTS_DIR" 2>/de
       report_warn "graph retrieval" "status niet leesbaar (python3/_settings-fout)"
       ;;
   esac
+fi
+
+# 11c-quater. Provenance-dekking in de index (TASK-88). Het coupling-signaal
+# kan alleen wegen wat geindexeerd is; dekking 0 terwijl de knop aan staat is
+# de stil-leeg-faalvorm (TASK-15) en verdient een WARN.
+if command -v python3 >/dev/null 2>&1 && [ -f "$VAULT/.claude/kb-index.db" ]; then
+  PROV_COV="$(python3 -c 'import sqlite3, sys
+db = sys.argv[1]
+try:
+    conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    rows = conn.execute(
+        "SELECT d.layer, count(DISTINCT d.doc_id), "
+        "count(DISTINCT CASE WHEN s.doc_id IS NOT NULL THEN d.doc_id END) "
+        "FROM docs d LEFT JOIN doc_sources s ON s.doc_id = d.doc_id "
+        "GROUP BY d.layer").fetchall()
+    conn.close()
+    stats = {layer: (int(cov), int(tot)) for layer, tot, cov in rows}
+    w = stats.get("wiki", (0, 0)); m = stats.get("memory", (0, 0))
+    print(f"{w[0]} {w[1]} {m[0]} {m[1]}")
+except Exception:
+    print("ERR")' "$VAULT/.claude/kb-index.db" 2>/dev/null | tr -d '')"
+  if [ "$PROV_COV" = "ERR" ] || [ -z "$PROV_COV" ]; then
+    report_info "provenance coverage" "index nog zonder doc_sources-tabel; draai build-kb-index.py --rebuild voor de backfill"
+  else
+    PC_WC="$(printf '%s' "$PROV_COV" | cut -d' ' -f1)"
+    PC_WT="$(printf '%s' "$PROV_COV" | cut -d' ' -f2)"
+    PC_MC="$(printf '%s' "$PROV_COV" | cut -d' ' -f3)"
+    PC_MT="$(printf '%s' "$PROV_COV" | cut -d' ' -f4)"
+    COUPLING_ON="$(python3 -c 'import json, sys, os
+try:
+    cfg = json.loads(open(os.path.join(sys.argv[1], ".claude", "kennisbank-embed.json"), encoding="utf-8").read())
+    print(int(bool(cfg.get("rank_coupling", 0))))
+except Exception:
+    print(0)' "$VAULT" 2>/dev/null | tr -d '')"
+    if [ "$COUPLING_ON" = "1" ] && [ "${PC_WC:-0}" = "0" ] && [ "${PC_MC:-0}" = "0" ]; then
+      report_warn "provenance coverage" "rank_coupling staat AAN maar geen enkel doc heeft een bron in de index — het signaal weegt stil niets; draai build-kb-index.py --rebuild"
+    else
+      report_pass "provenance coverage" "wiki ${PC_WC:-0}/${PC_WT:-0}, memory ${PC_MC:-0}/${PC_MT:-0} docs met >=1 bron"
+    fi
+  fi
 fi
 
 # 11d. Temporele locale-vocabulaire. Toetst de GELADEN tabel, niet de
