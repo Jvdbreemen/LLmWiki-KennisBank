@@ -9,5 +9,5 @@
   "activity_llm_fallback": false,
   "checkpoints": false,
   "orientation": false,
-  "graph_retrieval": false
+  "graph_retrieval": true
 }

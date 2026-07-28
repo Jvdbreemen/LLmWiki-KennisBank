@@ -124,6 +124,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   change shipped unguarded. `atlas/README` corrected to the seven shipped
   lenses and the real write-path story (docs = contract).
 
+- **`graph_retrieval` default ON — the A/B gate passed (TASK-87).** Formal
+  measurement on the curated 329-question wiki set (owner bulk-accepted the
+  generated candidates): recall@1 0.745 -> 0.790, @5 0.954 -> 1.000, MRR
+  0.836 -> 0.882, and single-hop@1 0.777 -> 0.831 — the GraphRAG
+  hurts-single-hop concern did not materialise on this vault; p95 latency
+  lower. The `rank_coupling` knob stays OFF: on the same sets wiki MRR rises
+  but single-hop@1 drops (0.777 -> 0.765) and memory degrades slightly —
+  gate failed, reject confirmed (TASK-88). Honest new baseline for future
+  work: memory recall@1 0.361 on 1224 questions is the real improvement
+  space.
+
 ### Fixed
 
 - **kb-eval measured a different pipeline than the hook runs.** `_live_hits_fn`

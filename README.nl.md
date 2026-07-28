@@ -463,7 +463,7 @@ Elf achtergrondgedragingen zijn individuele toggles in `kennisbank-settings.json
 | `activity_llm_fallback` | uit | Lokale-LLM-terugval voor exotische datumformuleringen in temporele recall |
 | `checkpoints` | uit | Schrijf bij context-compaction (PreCompact) automatisch een werkstand-stub |
 | `orientation` | uit | Injecteer een compacte vault-oriëntatie bij sessiestart |
-| `graph_retrieval` | uit | Haal de buur-expansie uit de gewogen graafindex (experiment, TASK-87) |
+| `graph_retrieval` | aan | Haal de buur-expansie uit de gewogen graafindex (A/B-bewezen, TASK-87) |
 
 ## Je retrieval meten
 
