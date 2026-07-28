@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Evidence-first eval harness (TASK-86, Spoor A of the llm_wiki adoption
+  plan).** Standing rule recorded in Backlog tasks 86-92: no feature gets
+  adopted from any external project without an A/B measurement on eval sets
+  of at least 100 questions per layer. To carry that rule the harness gained:
+  `--latency` (p50/p95 wall time per recall call), `--expand`/`--no-expand`
+  (offline A/B of neighbor expansion), an end-to-end injection-path test that
+  parses the full hook stdout (claude-mem lesson: silent injection dropout is
+  invisible when you only measure the ranking), and `kb-eval-gen.py` — a
+  deterministic candidate-question generator (plus optional local-LLM
+  paraphrases) that writes `*.draft.json` for human curation and can never
+  touch the live sets.
+
+### Fixed
+
+- **kb-eval measured a different pipeline than the hook runs.** `_live_hits_fn`
+  called `recall_hits()` without `expand=` and `min_cos=` while production
+  passes both. The harness now resolves the same knobs through the same
+  function (`kb-retrieve.retrieve_params`, extracted as the single source of
+  truth) over the same config file. Consequence: numbers measured before this
+  fix (including the TASK-70 wiki@5 = 1.000 ceiling) are not comparable to
+  anything measured after it — this is the first honest baseline, not a
+  regression.
+
 ## [0.23.0] - 2026-07-26
 
 A small quality release: a vault orientation summary at session start, an

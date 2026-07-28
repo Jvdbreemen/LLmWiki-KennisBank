@@ -1,19 +1,138 @@
 """Tests voor scripts/kb-eval.py - recall@k eval-harnas.
 
 Pure-function tests: hits_fn geinjecteerd, geen model, geen index.
+De pariteitstests (TASK-86) stubben kb-recall en bewijzen dat het harnas
+dezelfde expand/min_cos doorgeeft als de productie-hook resolvet.
 """
 from __future__ import annotations
 
 import json
+import os
+import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from tests._loader import load_script
+from tests._loader import SCRIPTS_DIR, load_script
 
 
 def _ev():
     return load_script("kb-eval.py")
+
+
+class TestLatency(unittest.TestCase):
+    """--latency: p50/p95 per hits_fn-aanroep, alleen op verzoek in het rapport."""
+
+    def setUp(self):
+        self.ev = _ev()
+        self.entries = [{"q": "v1", "expect": ["a"]}]
+
+    def _fn(self, q, k):
+        return ["a"]
+
+    def test_latency_block_present_when_requested(self):
+        r = self.ev.evaluate(self.entries, self._fn, measure_latency=True)
+        self.assertIn("latency_ms", r)
+        self.assertIn("p50", r["latency_ms"])
+        self.assertIn("p95", r["latency_ms"])
+        self.assertGreaterEqual(r["latency_ms"]["p95"], r["latency_ms"]["p50"])
+
+    def test_latency_block_absent_by_default(self):
+        r = self.ev.evaluate(self.entries, self._fn)
+        self.assertNotIn("latency_ms", r)
+
+
+class TestProductionParity(unittest.TestCase):
+    """TASK-86: het harnas moet de productieroute meten, niet een kale variant.
+
+    Vóór de fix riep _live_hits_fn recall_hits aan ZONDER expand= en min_cos=,
+    terwijl kb-retrieve die wel meegeeft. Deze tests vergrendelen de pariteit:
+    de doorgegeven knoppen moeten exact zijn wat kb-retrieve.retrieve_params
+    over dezelfde config resolvet (wiki) c.q. MEMORY_MIN_COS (memory).
+    """
+
+    def setUp(self):
+        self.ev = _ev()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        vault = Path(self.tmp.name) / "vault"
+        (vault / ".claude").mkdir(parents=True)
+        self._env = patch.dict(os.environ, {"KENNISBANK_VAULT": str(vault)}, clear=False)
+        self._env.start()
+        self.addCleanup(self._env.stop)
+        # KB_RETRIEVE_*-env zou de defaults overschrijven; schoon voor de test.
+        for var in ("KB_RETRIEVE_TOP_N", "KB_RETRIEVE_THRESHOLD", "KB_RETRIEVE_EXPAND"):
+            os.environ.pop(var, None)
+        if str(SCRIPTS_DIR) not in sys.path:
+            sys.path.insert(0, str(SCRIPTS_DIR))
+        import _embeddings as emb
+        self.emb = emb
+        self._orig_embed = emb.embed
+        emb.embed = lambda text, timeout=20.0: [0.1, 0.2]
+        self.addCleanup(lambda: setattr(self.emb, "embed", self._orig_embed))
+        self.real_retrieve = load_script("kb-retrieve.py")
+
+    def _fake_modules(self, calls, memory_min_cos=0.60):
+        def recall_hits(qv, query_text="", k=3, layers=("wiki", "memory"),
+                        expand=False, min_cos=0.0):
+            calls.append({"layers": tuple(layers), "expand": expand,
+                          "min_cos": min_cos, "k": k})
+            return []
+        fake_recall = types.SimpleNamespace(recall_hits=recall_hits,
+                                            MEMORY_MIN_COS=memory_min_cos)
+
+        def load(name):
+            return fake_recall if name == "kb-recall.py" else self.real_retrieve
+        return load
+
+    def _expected_params(self):
+        cfg = self.real_retrieve.load_embed_cfg(self.ev.vault_root)
+        return self.real_retrieve.retrieve_params(cfg)
+
+    def test_wiki_passes_production_expand_and_min_cos(self):
+        calls = []
+        with patch.object(self.ev, "_load_by_path", side_effect=self._fake_modules(calls)):
+            hits_fn, err = self.ev._live_hits_fn(layers=("wiki",))
+            self.assertIsNone(err)
+            hits_fn("een vraag", 5)
+        expected = self._expected_params()
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["layers"], ("wiki",))
+        self.assertEqual(calls[0]["expand"], expected["expand"])
+        self.assertEqual(calls[0]["min_cos"], expected["min_cos"])
+
+    def test_wiki_respects_config_threshold(self):
+        vault = Path(os.environ["KENNISBANK_VAULT"])
+        (vault / ".claude" / "kennisbank-embed.json").write_text(
+            json.dumps({"retrieve_threshold": 0.72, "retrieve_expand": 0}),
+            encoding="utf-8")
+        calls = []
+        with patch.object(self.ev, "_load_by_path", side_effect=self._fake_modules(calls)):
+            hits_fn, _ = self.ev._live_hits_fn(layers=("wiki",))
+            hits_fn("een vraag", 5)
+        self.assertEqual(calls[0]["min_cos"], 0.72)
+        self.assertFalse(calls[0]["expand"])
+
+    def test_memory_uses_module_memory_min_cos(self):
+        calls = []
+        with patch.object(self.ev, "_load_by_path",
+                          side_effect=self._fake_modules(calls, memory_min_cos=0.61)):
+            hits_fn, _ = self.ev._live_hits_fn(layers=("memory",))
+            hits_fn("een vraag", 5)
+        self.assertEqual(calls[0]["layers"], ("memory",))
+        # de drempel komt uit kb_recall.MEMORY_MIN_COS, niet uit een hardcode
+        self.assertEqual(calls[0]["min_cos"], 0.61)
+        # productie expandeert het memory-blok niet
+        self.assertFalse(calls[0]["expand"])
+
+    def test_cli_expand_override_wins(self):
+        calls = []
+        with patch.object(self.ev, "_load_by_path", side_effect=self._fake_modules(calls)):
+            hits_fn, _ = self.ev._live_hits_fn(layers=("wiki",), expand=False)
+            hits_fn("een vraag", 5)
+        self.assertFalse(calls[0]["expand"])
 
 
 class TestRank(unittest.TestCase):

@@ -84,17 +84,32 @@ def rank_of_first_expected(hit_stems: list, expect: list) -> int:
     return 0
 
 
-def evaluate(entries: list, hits_fn, ks=KS) -> dict:
+def _pct(sorted_vals: list, q: float) -> float:
+    """Percentiel (nearest-rank) over een reeds gesorteerde lijst."""
+    if not sorted_vals:
+        return 0.0
+    idx = max(0, min(len(sorted_vals) - 1, int(round(q * (len(sorted_vals) - 1)))))
+    return sorted_vals[idx]
+
+
+def evaluate(entries: list, hits_fn, ks=KS, measure_latency=False) -> dict:
     """Draai de eval. ``hits_fn(q: str, k: int) -> list[stem]`` is injecteerbaar
     zodat het harnas zonder model/index getest kan worden.
 
     Returns rapport-dict: per-k recall, mrr, per-type breakdown, per-vraag
-    resultaten (q, expect, rank, hits).
+    resultaten (q, expect, rank, hits). Met ``measure_latency=True`` komt er
+    een ``latency_ms``-blok bij (p50/p95 wall time per hits_fn-aanroep) — de
+    deel-latency van de recall-route; de volledige hook-latency meet je door
+    kb-retrieve.py zelf te timen (recept in TASK-86).
     """
+    import time as _time
     kmax = max(ks)
     results = []
+    timings = []
     for e in entries:
+        t0 = _time.perf_counter()
         stems = hits_fn(e["q"], kmax)
+        timings.append((_time.perf_counter() - t0) * 1000.0)
         rank = rank_of_first_expected(stems, e["expect"])
         results.append({
             "q": e["q"], "expect": e["expect"],
@@ -111,6 +126,12 @@ def evaluate(entries: list, hits_fn, ks=KS) -> dict:
         "by_type": {},
         "results": results,
     }
+    if measure_latency:
+        st = sorted(timings)
+        report["latency_ms"] = {
+            "p50": round(_pct(st, 0.50), 1),
+            "p95": round(_pct(st, 0.95), 1),
+        }
     for t in sorted({r["type"] for r in results}):
         sub = [r for r in results if r["type"] == t]
         report["by_type"][t] = {
@@ -121,20 +142,47 @@ def evaluate(entries: list, hits_fn, ks=KS) -> dict:
     return report
 
 
-def _live_hits_fn(layers=("wiki",)):
+def _load_by_path(filename: str):
+    """Importlib-load van een hyphenated zusterscript uit scripts/."""
+    spec = importlib.util.spec_from_file_location(
+        filename.replace("-", "_").replace(".py", ""),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), filename))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _live_hits_fn(layers=("wiki",), expand=None):
     """Bouw de echte hits_fn op de hook-route: embed + recall over EEN laag.
 
     ``layers`` is de laag-tuple die de hook voor dit blok gebruikt: ("wiki",)
     voor _wiki_block, ("memory",) voor _memory_block. Bewust GEEN gefuseerde
     ("wiki","memory") — dat is niet hoe de hook injecteert (zie module-docstring).
 
+    PRODUCTIE-PARITEIT (TASK-86): de hook geeft ``expand=`` en ``min_cos=`` mee
+    aan recall_hits; dit harnas resolvet die knoppen via exact dezelfde functie
+    (kb-retrieve.retrieve_params over dezelfde config) zodat de eval de poort,
+    de buur-expansie en de weging van productie meet — niet een kale variant.
+    Vóór deze fix mat kb-eval een pipeline zonder relevance floor en zonder
+    expansie; de task-70-cijfers (wiki@5=1.000) zijn daardoor niet vergelijkbaar
+    met alles wat hierna gemeten wordt.
+
+    ``expand=None`` volgt productie (config/env); True/False (CLI --expand /
+    --no-expand) overschrijft alleen de buur-expansie, voor offline A/B.
+
+    NB: de eval vraagt k=max(KS)=5 waar productie top_n=3 injecteert; dat is
+    bewust (recall@5 vereist 5 kandidaten). De pariteit zit in gate/expansie/
+    weging, niet in k.
+
     Returns (hits_fn, None) of (None, foutmelding).
     """
     import _embeddings as emb
-    spec = importlib.util.spec_from_file_location(
-        "kb_recall", os.path.join(os.path.dirname(os.path.abspath(__file__)), "kb-recall.py"))
-    kb_recall = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(kb_recall)
+    kb_recall = _load_by_path("kb-recall.py")
+    kb_retrieve = _load_by_path("kb-retrieve.py")
+
+    cfg = kb_retrieve.load_embed_cfg(vault_root)
+    params = kb_retrieve.retrieve_params(cfg)
+    wiki_expand = params["expand"] if expand is None else bool(expand)
 
     if emb.embed("ping") is None:
         return None, "embedding-backend onbereikbaar (Ollama draait niet?)"
@@ -143,7 +191,14 @@ def _live_hits_fn(layers=("wiki",)):
         qv = emb.embed(q)
         if qv is None:
             return []
-        rows = kb_recall.recall_hits(qv, query_text=q, k=k, layers=tuple(layers))
+        if tuple(layers) == ("memory",):
+            # productie: _memory_block -> memory_hits met de EIGEN memory-drempel
+            rows = kb_recall.recall_hits(qv, query_text=q, k=k, layers=("memory",),
+                                         min_cos=kb_recall.MEMORY_MIN_COS)
+        else:
+            # productie: _wiki_block -> wiki_hits met drempel + buur-expansie
+            rows = kb_recall.recall_hits(qv, query_text=q, k=k, layers=tuple(layers),
+                                         expand=wiki_expand, min_cos=params["min_cos"])
         return [Path(r["path"]).stem for r in rows]
 
     return hits_fn, None
@@ -154,6 +209,9 @@ def _print_report(name: str, layer: str, report: dict, verbose: bool) -> None:
     for k, v in report["recall"].items():
         print(f"  recall{k}: {v}")
     print(f"  MRR: {report['mrr']}")
+    if report.get("latency_ms"):
+        lm = report["latency_ms"]
+        print(f"  latency: p50={lm['p50']}ms p95={lm['p95']}ms")
     for t, stats in report["by_type"].items():
         print(f"  [{t}] n={stats['n']} " +
               " ".join(f"{k}={v}" for k, v in stats.items() if k != "n"))
@@ -170,17 +228,17 @@ def _print_report(name: str, layer: str, report: dict, verbose: bool) -> None:
                 print(f"    {mark}{i}. {h}")
 
 
-def _run_one(set_path: Path, layer: str):
+def _run_one(set_path: Path, layer: str, expand=None, latency=False):
     """Laad set, bouw laag-specifieke hits_fn, evalueer. Returns (name, report)
     of (name, foutmelding-str)."""
     try:
         entries = load_set(set_path)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         return set_path.name, f"eval-set niet bruikbaar: {exc}"
-    hits_fn, err = _live_hits_fn(layers=(layer,))
+    hits_fn, err = _live_hits_fn(layers=(layer,), expand=expand)
     if hits_fn is None:
         return set_path.name, err
-    return set_path.name, evaluate(entries, hits_fn)
+    return set_path.name, evaluate(entries, hits_fn, measure_latency=latency)
 
 
 def main() -> int:
@@ -191,6 +249,13 @@ def main() -> int:
                         help="laag voor een custom --set (default: wiki)")
     parser.add_argument("--json", action="store_true", help="machine-leesbare uitvoer")
     parser.add_argument("--verbose", action="store_true", help="toon per vraag de top-k")
+    parser.add_argument("--latency", action="store_true",
+                        help="meet p50/p95 wall time per recall-aanroep")
+    expand_group = parser.add_mutually_exclusive_group()
+    expand_group.add_argument("--expand", dest="expand", action="store_true", default=None,
+                              help="forceer buur-expansie aan (offline A/B)")
+    expand_group.add_argument("--no-expand", dest="expand", action="store_false",
+                              help="forceer buur-expansie uit (offline A/B)")
     args = parser.parse_args()
 
     # Bepaal welke (set, laag)-paren te draaien. Custom --set: één paar met de
@@ -207,7 +272,7 @@ def main() -> int:
     reports = {}
     any_ok = False
     for set_path, layer in jobs:
-        name, res = _run_one(set_path, layer)
+        name, res = _run_one(set_path, layer, expand=args.expand, latency=args.latency)
         if isinstance(res, str):
             print(f"kb-eval [{layer}] {name}: {res}", file=sys.stderr)
             continue

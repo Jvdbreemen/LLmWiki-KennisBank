@@ -486,10 +486,21 @@ The five env vars below control the behavior of the vault-onderhoud scripts
 ### Recall-eval (`scripts/kb-eval.py`)
 
 - **Default sets**: `<vault>/06-claude/kb-eval-set.json` (wiki) + `<vault>/06-claude/kb-memory-eval-set.json` (geheugen); voorbeelden in `kb-eval-set.example.json` en `kb-memory-eval-set.example.json`.
-- **CLI**: `python3 kb-eval.py [--set pad] [--layer wiki|memory] [--json] [--verbose]`. Zonder `--set` draait het beide sets in één run.
+- **CLI**: `python3 kb-eval.py [--set pad] [--layer wiki|memory] [--json] [--verbose] [--latency] [--expand|--no-expand]`. Zonder `--set` draait het beide sets in één run.
 - **Fidelity (belangrijk)**: het harnas meet PER LAAG, niet gefuseerd — de wiki-set wiki-only, de geheugen-set memory-only. Dat spiegelt de hook, die wiki en geheugen als twee gescheiden blokken injecteert (`_wiki_block` / `_memory_block`) en nooit fuseert. Een gefuseerde meting geeft vals signaal (memories verdringen wiki-artikelen in één ranked lijst terwijl ze in productie in aparte blokken staan).
+- **Productie-pariteit (TASK-86)**: het harnas resolvet `expand` en `min_cos` via dezelfde functie als de hook (`kb-retrieve.retrieve_params` over `kennisbank-embed.json`), zodat het de poort, buur-expansie en weging van productie meet. Metingen van vóór deze fix (o.a. TASK-70) zijn niet vergelijkbaar met metingen erna.
+- **A/B**: `--expand`/`--no-expand` overschrijven alleen de buur-expansie — de knop voor offline A/B van graafexpansie-varianten. `--latency` rapporteert p50/p95 wall time per recall-aanroep per laag.
 - **Effect**: meet recall@1/3/5 en MRR per laag tegen vragen met verwachte documenten. Draai voor en na elke wijziging aan drempels, embeddingmodel of ranking; een daling is een regressie.
 - **To change**: onderhoud beide eval-sets in de vault (voeg vragen toe bij nieuwe kennisdomeinen); de metriek-k's staan als `KS` in het script.
+- **Bewijsregel voor feature-adoptie**: elke overgenomen retrieval-feature vereist een A/B op sets van **minimaal 100 vragen per laag**. Geen meting = geen merge.
+
+### Eval-set-generator (`scripts/kb-eval-gen.py`)
+
+- **Doel**: kandidaat-vragen genereren zodat de eval-sets naar ≥100 vragen per laag kunnen groeien zonder handwerk vanaf nul. Het systeem stelt voor, de mens cureert.
+- **CLI**: `python3 kb-eval-gen.py [--layer wiki|memory|both] [--out-dir pad] [--llm]`.
+- **Deterministische laag**: per wiki-artikel een titelvraag (`single-hop`) en een keyword-vraag uit de tags (of een kopvraag zonder tags); per current-memory één vraag naar het sjabloon van zijn `memory_type`. Twee runs op dezelfde vault geven byte-identieke drafts.
+- **LLM-laag (`--llm`, optioneel)**: één parafrasevraag per doc via de lokale `_llm`-router, gelabeld `paraphrase`; fail-soft bij een onbereikbare provider.
+- **Veiligheid**: schrijft uitsluitend `*.draft.json` in `<vault>/06-claude`; de echte sets worden per constructie nooit aangeraakt. Curatie is bewust een menselijke handeling.
 
 ### RECONCILE_THRESHOLD / TOP_K (write-time invalidatie)
 
