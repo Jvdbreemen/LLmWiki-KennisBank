@@ -510,6 +510,13 @@ The five env vars below control the behavior of the vault-onderhoud scripts
 - **LLM-laag (`--llm`, optioneel)**: één parafrasevraag per doc via de lokale `_llm`-router, gelabeld `paraphrase`; fail-soft bij een onbereikbare provider.
 - **Veiligheid**: schrijft uitsluitend `*.draft.json` in `<vault>/06-claude`; de echte sets worden per constructie nooit aangeraakt. Curatie is bewust een menselijke handeling.
 
+### OKF-export (`scripts/kb-okf-export.py`, TASK-92)
+
+- **Doel**: de vault als OKF v0.2-bundle renderen (Open Knowledge Format, GoogleCloudPlatform/knowledge-catalog; Apache-2.0-spec) — een deterministische **export-view**, geen intern opslagformaat (bi-temporaliteit heeft geen OKF-equivalent; de vault blijft op wikilinks/Obsidian).
+- **CLI**: `python3 kb-okf-export.py [--out pad]` (default `<vault>/okf-out`). Off-path batch; twee runs op een ongewijzigde vault zijn byte-identiek.
+- **Trust-mapping**: unverified → `status: draft` zonder `verified`; judge-`current` → `verified: process:kb-judge` (machine-confirmed); een approve in het review-log → extra `human:owner`-entry (human-reviewed); retracted/superseded/expired → `status: deprecated`; `model_id`+`prompt_version` → `generated: {by, at}`; `_provenance`-sleutels → `sources[]`; `expires` → `stale_after`.
+- **Links**: `[[wikilinks]]` worden bundle-root-absolute markdown-links; niet-resolvende targets blijven links (spec: consumers MUST tolerate broken links) en worden geteld in de samenvatting.
+
 ### RECONCILE_THRESHOLD / TOP_K (write-time invalidatie)
 
 - **Default**: `0.75` / `2`
