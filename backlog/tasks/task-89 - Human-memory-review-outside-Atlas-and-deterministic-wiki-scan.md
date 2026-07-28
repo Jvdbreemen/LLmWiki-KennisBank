@@ -1,7 +1,7 @@
 ---
 id: TASK-89
 title: 'Human memory review outside Atlas + deterministic wiki-scan (Spoor D)'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-07-28 08:00'
 labels:

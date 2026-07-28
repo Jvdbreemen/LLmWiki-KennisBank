@@ -392,6 +392,7 @@ The hooks are fail-open by design: an error means no injected context or a skipp
 | `/timeline` | date/period/topic | Chronological temporal activity timeline with strict range filtering |
 | `/watdeedik` | date/period/topic | Compact answer to "what did I do then?" with evidence links |
 | `/kennisbank:settings` | none | Show and flip the background-automation toggles |
+| `/kennisbank:review` | optional topic | Walk the unverified-memory queue; the human decides approve/reject/skip per item |
 | `/kennisbank:rebuild-index` | none | Rebuild the hybrid search index from the vault markdown |
 | `/kennisbank:rebuild-memory` | none | Re-extract ALL memory from archived transcripts (heavy; semantic dedup makes it near-idempotent) |
 | `/kennisbank-upgrade` | optional `--dry-run` | Upgrade the deployed vault to the latest release tag |

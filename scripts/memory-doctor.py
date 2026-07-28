@@ -168,6 +168,46 @@ def main(argv=None) -> int:
                 hours = 48
         print(rot_count(hours))
         return 0
+    if argv and argv[0] == "pending":
+        import json as _json
+        import _memory
+        limit = None
+        if "--limit" in argv:
+            try:
+                limit = int(argv[argv.index("--limit") + 1])
+            except Exception:
+                limit = None
+        items = _memory.pending_reviews(limit=limit)
+        if "--json" in argv:
+            print(_json.dumps(items, ensure_ascii=False))
+        elif not items:
+            print("review-queue leeg: geen unverified memories")
+        else:
+            for it in items:
+                age = f"{it['age_days']}d" if it["age_days"] is not None else "?"
+                print(f"{it['stem']}  [{it['memory_type']}/{it['importance']}] "
+                      f"({age}, {it['evidence_basis']}) {it['title']}")
+        return 0
+    if argv and argv[0] == "decide":
+        import _memory
+        if len(argv) < 3:
+            print("usage: memory-doctor.py decide <stem> <approve|reject|skip>",
+                  file=sys.stderr)
+            return 2
+        via = "cli"
+        if "--via" in argv:
+            try:
+                via = argv[argv.index("--via") + 1]
+            except Exception:
+                via = "cli"
+        try:
+            r = _memory.decide(argv[1], argv[2], via=via)
+        except _memory.ReviewError as exc:
+            print(f"decide: {exc} (code {exc.code})", file=sys.stderr)
+            return 1
+        print(f"decide: {r['stem']} -> {r['new_status']}"
+              + (" (skipped)" if r["status"] == "skipped" else ""))
+        return 0
     if argv and argv[0] == "rejudge":
         kw = {"dry_run": "--dry-run" in argv}
         for flag in ("--limit", "--hours"):
@@ -180,7 +220,8 @@ def main(argv=None) -> int:
         print(f"rejudge: promoted={r['promoted']} kept={r['kept']} failed={r['failed']}"
               + (" (dry-run)" if kw["dry_run"] else ""))
         return 0
-    print("usage: memory-doctor.py nocloud|rot [--hours N]|rejudge [--limit N] [--hours N] [--dry-run]",
+    print("usage: memory-doctor.py nocloud|rot [--hours N]|rejudge [--limit N] [--hours N] [--dry-run]"
+          "|pending [--json] [--limit N]|decide <stem> <approve|reject|skip>",
           file=sys.stderr)
     return 2
 

@@ -406,6 +406,7 @@ De hooks zijn fail-open van opzet: een fout betekent geen geïnjecteerde context
 | `/timeline` | datum/periode/onderwerp | Chronologische temporele activiteitentijdlijn met strikte bereikfiltering |
 | `/watdeedik` | datum/periode/onderwerp | Compact antwoord op "wat deed ik toen?" met bewijslinks |
 | `/kennisbank:settings` | geen | Toont en schakelt de achtergrond-automatiek-toggles |
+| `/kennisbank:review` | optioneel onderwerp | Loop de unverified-memory-wachtrij door; de mens beslist approve/reject/skip per item |
 | `/kennisbank:rebuild-index` | geen | Herbouwt de hybride zoekindex uit de kluis-markdown |
 | `/kennisbank:rebuild-memory` | geen | Her-extraheert ALLE geheugen uit gearchiveerde transcripts (zwaar; semantische dedup maakt het bijna-idempotent) |
 | `/kennisbank-upgrade` | optioneel `--dry-run` | Upgradet de gedeployde kluis naar de nieuwste release-tag |
