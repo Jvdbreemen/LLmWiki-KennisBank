@@ -76,6 +76,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fail-safe overslaan) and a `scanned_logs` silent-empty guard; /wiki
   follows the scan, deviation only with motivation.
 
+- **Structural hardening from ecosystem failure modes (TASK-90, Spoor E).**
+  Each failure replayed as a fixture test: (1) **refusal gate** in
+  `_extract` — a model answer like "ik kan deze vraag niet beantwoorden" is
+  dropped before it persists as canonical knowledge (arkon#25); (2)
+  **`self-source` kb-lint rule (HARD)** — provenance links inside
+  `## Sessie-herkomst` to `02-wiki/`, `09-memory/`, `.claude/` or
+  `06-claude/` are rejected: a stored conclusion never re-enters as evidence
+  (llm_wiki #538's self-confirmation loop); (3) **`index-drift` kb-lint rule
+  (advisory)** — ghost docs in kb-index.db surfaced (best-confirmed failure
+  of the field: llm_wiki #580, Pratiyush `index_sync`, Arkon); (4)
+  **producer provenance** — sweep-written memories carry `model_id` and
+  `prompt_version` (`EXTRACT_PROMPT_VERSION`); (5) **kb-normalize.py** —
+  idempotent deterministic post-pass after every LLM write in /wiki and
+  /reconcile (path-prefixed wikilinks -> bare stems, 05-bronnen paths kept,
+  bare tags listified; llm_wiki #576: deterministic beats instructed); (6)
+  **no-network-during-ingest test** — deterministic ingest paths proven to
+  make zero socket calls (arkon#29).
+
 ### Fixed
 
 - **kb-eval measured a different pipeline than the hook runs.** `_live_hits_fn`

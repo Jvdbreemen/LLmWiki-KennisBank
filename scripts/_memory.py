@@ -180,7 +180,8 @@ def render(title: str, body: str, *, status: str = DEFAULT_STATUS,
            created: str | None = None, updated: str | None = None,
            valid_from: str | None = None, valid_until: str | None = None,
            expires: str | None = None, superseded_by=None, tags=None,
-           memory_type: str = DEFAULT_MEMORY_TYPE, importance: int = 3) -> str:
+           memory_type: str = DEFAULT_MEMORY_TYPE, importance: int = 3,
+           model_id: str = "", prompt_version=None) -> str:
     if status not in STATUSES:
         raise ValueError(f"ongeldige status: {status!r} (verwacht een van {STATUSES})")
     if evidence_basis not in EVIDENCE_BASES:
@@ -208,6 +209,14 @@ def render(title: str, body: str, *, status: str = DEFAULT_STATUS,
         lines.append(f"expires: {expires}")
     if superseded_by:
         lines.append(f"superseded_by: {_yaml_list(superseded_by)}")
+    # Producent-provenance (TASK-90 E5): welk model en welke promptversie deze
+    # claim produceerde. Bi-temporeel dekt wanneer; dit dekt waardoor — zonder
+    # deze as zijn claims van een slechte promptversie niet selecteerbaar.
+    # Beide optioneel: mens-getypte memories hebben geen producent.
+    if model_id:
+        lines.append(f"model_id: {_yaml_scalar(model_id)}")
+    if prompt_version is not None:
+        lines.append(f"prompt_version: {int(prompt_version)}")
     lines.append(f"tags: {_yaml_list(tags or [])}")
     lines.append("---")
     lines.append("")

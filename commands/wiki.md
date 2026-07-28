@@ -96,6 +96,17 @@ Patroonherkenning over sessies heen — destilleer herbruikbare kennis als wiki-
      meerdere links op één regel.
    - **`## Bronnen`:** alleen externe bronnen (APA7), geen sessieverwijzingen.
 
+4.4. Deterministische post-pass (TASK-90 E3) — draai na ELK geschreven of
+   herschreven artikel, vóór de lint:
+   ```
+   python3 $VAULT/.claude/scripts/kb-normalize.py <artikelpad>
+   ```
+   Dit normaliseert vorm, geen inhoud: padgeprefixte wikilinks worden kale
+   stems (05-bronnen-paden blijven staan), backslashes worden forward slashes,
+   een kale tags-regel wordt een lijst. Vertrouw hierop in plaats van het
+   zelf in de prompt "goed te doen" — deterministisch wint altijd van
+   geïnstrueerd (llm_wiki #576-les).
+
 4.5. Valideer de herkomst met de lint — FAIL-CLOSED op niet-herleidbare herkomst:
    ```
    python3 $VAULT/.claude/scripts/kb-lint.py --strict

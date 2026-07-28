@@ -47,6 +47,18 @@ EMBED_RETRY_BACKOFF_SECONDS = 0.25
 SESSION_DATE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})")
 
 
+def _producer_id() -> str:
+    """Actor-id van de actieve extract-keten (TASK-90 E5): '<provider>/<model>'.
+    Fail-soft -> "" (niet-herleidbare producties dragen geen stempel)."""
+    try:
+        provs = _llm.providers()
+        if provs:
+            return f"{provs[0]}/{_llm.model_for(provs[0])}"
+    except Exception:
+        pass
+    return ""
+
+
 def _session_date(name: str, fallback: str) -> str:
     """Event-tijd van een transcript: leidende ISO-datum uit de bestandsnaam,
     anders de fallback (capture-datum). Voedt valid_from."""
@@ -336,6 +348,8 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = 6,
                         valid_from=valid_from,
                         memory_type=_memory.coerce_memory_type(cand.get("type")),
                         importance=_memory.coerce_importance(verdict.get("importance")),
+                        model_id=_producer_id(),
+                        prompt_version=_extract.EXTRACT_PROMPT_VERSION,
                     )
                     path.parent.mkdir(parents=True, exist_ok=True)
                     path.write_text(rendered, encoding="utf-8")
