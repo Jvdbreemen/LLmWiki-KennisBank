@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.1] - 2026-07-29
+
+Two fixes: no more console windows popping up on Windows at session start, and
+the eval-set privacy guard that keeps personal eval sets out of the repository
+and releases.
+
+### Fixed
+
+- **Windows: multiple console windows popped up at every session start
+  (PR #85).** The detached index-maintenance worker in `index-launch.py` runs
+  with `DETACHED_PROCESS` and therefore has no console; each maintenance job it
+  spawned (`python.exe` per entry in `JOBS`) then got a freshly allocated
+  *visible* console from Windows. The default job runner now passes
+  `CREATE_NO_WINDOW`, so jobs run with a hidden console — and children such as
+  git inherit it. Background maintenance is now invisible, as it should be.
+- **Eval-set privacy guard (PR #84).** Personal eval sets
+  (`eval/questions-*.json`) can never enter the repository or a release:
+  enforced by `.gitignore` plus `test_eval_privacy.py`. The shipped example
+  sets were replaced with fully fabricated entries so no personal vault
+  content remains in the distribution.
+
 ## [0.24.0] - 2026-07-29
 
 Evidence-first adoption of the llm_wiki-ecosystem lessons (sporen A-G,
@@ -1059,7 +1080,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.24.0...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.24.1...HEAD
+[0.24.1]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.24.0...v0.24.1
 [0.24.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.23.0...v0.24.0
 [0.23.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.21.0...v0.22.0
