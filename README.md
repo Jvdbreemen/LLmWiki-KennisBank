@@ -73,7 +73,37 @@ Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: 
 
 The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
 
-## Feature highlights (v0.23.0)
+## Feature highlights (v0.24.0)
+
+### New in v0.24.0
+
+- **Graph retrieval, proven and default-on.** The `(buur)` expansion entry
+  now comes from the weighted graph index (`kb-graph.db`, sub-millisecond)
+  instead of a regex over article bodies. Measured on a 329-question eval
+  set: recall@1 0.745 -> 0.790, recall@5 -> 1.000, MRR 0.836 -> 0.882 —
+  single-hop included. Toggle `graph_retrieval` turns it back off.
+- **Evidence-first eval harness.** `kb-eval` now measures exactly what the
+  hook runs (threshold + expansion parity), reports `--latency` p50/p95,
+  and A/Bs variants with `--expand/--no-expand`; `kb-eval-gen.py` proposes
+  candidate questions into drafts so eval sets grow without hand-writing.
+  The same gate REJECTED llm_wiki's source-overlap ranking boost on real
+  data — the knob exists but stays off, with the numbers recorded.
+- **Human memory review everywhere.** `/kennisbank:review`,
+  `memory-doctor.py pending/decide` and MCP `review_pending/review_decide`
+  share one crash-safe decision path with the Atlas GUI: approve, reject or
+  skip unverified memories; a failed write never reports as decided.
+- **Deterministic gates.** `wiki-scan.py` closes /wiki's last free-form LLM
+  decision point; a refusal gate keeps "I cannot answer this" out of the
+  archive; kb-lint rejects conclusions cited as evidence (`self-source`)
+  and surfaces index drift; `kb-normalize.py` fixes link/tag form after
+  every LLM write; sweep-written memories carry `model_id`+`prompt_version`.
+- **Atlas: heatmap, Cmd+K, facets — and CI.** The Overzicht lens shows a
+  365-day activity heatmap and freshness buckets; Cmd/Ctrl+K jumps to any
+  lens or document; the Recall Inspector filters by layer and exports the
+  waterfall as JSON. Atlas sidecar+frontend tests now run in CI.
+- **OKF v0.2 export.** `kb-okf-export.py` renders the vault as an Open
+  Knowledge Format bundle — trust tiers map 1:1 onto the memory lifecycle;
+  deterministic and byte-idempotent.
 
 ### New in v0.23.0
 
