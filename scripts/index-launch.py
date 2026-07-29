@@ -143,10 +143,15 @@ def run_jobs(runner=None) -> list:
     """Draai de bouwers sequentieel. Geeft [(script, returncode|None)] terug."""
     if runner is None:
         def runner(path, timeout):
-            proc = subprocess.run(
-                [sys.executable, path],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                timeout=timeout)
+            kwargs: dict = {"stdout": subprocess.DEVNULL,
+                            "stderr": subprocess.DEVNULL}
+            if os.name == "nt":
+                # The worker itself is DETACHED_PROCESS and has no console; a
+                # console-less parent spawning python.exe makes Windows pop up
+                # a visible console per job. CREATE_NO_WINDOW keeps it hidden.
+                kwargs["creationflags"] = 0x08000000
+            proc = subprocess.run([sys.executable, path], timeout=timeout,
+                                  **kwargs)
             return proc.returncode
     here = os.path.dirname(os.path.abspath(__file__))
     out = []
