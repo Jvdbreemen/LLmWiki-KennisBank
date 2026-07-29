@@ -10,3 +10,13 @@ graphify-out/
 .claude/
 pip/cache/
 *.egg-info/
+
+# Personal eval sets are derived from private vault content (article and
+# memory titles) and must NEVER enter the repo or a release; only the
+# fabricated *.example.json variants are allowed. Enforced by
+# tests/test_eval_privacy.py.
+kb-eval-set.json
+kb-memory-eval-set.json
+kb-activity-eval-set.json
+*.draft.json
+06-claude/
