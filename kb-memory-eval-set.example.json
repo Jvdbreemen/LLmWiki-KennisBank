@@ -1,0 +1,12 @@
+[
+  {"q": "Waarom kozen we een push-hook boven een pull-protocol voor kennisretrieval?", "expect": ["2026-01-05-voorbeeld-push-boven-pull"], "type": "beslissing"},
+  {"q": "Hoe onderschept de prompt-hook de invoer en wat injecteert hij?", "expect": ["2026-01-06-voorbeeld-werking-prompt-hook"], "type": "procedure"},
+  {"q": "Wat moet een hook-script doen als zijn toggle uit staat?", "expect": ["2026-01-07-voorbeeld-toggle-gating"], "type": "procedure"},
+  {"q": "Waarvoor dient de sessie-einde-hook?", "expect": ["2026-01-08-voorbeeld-sessie-einde-hook"], "type": "feit"},
+  {"q": "Welke frontmatter-velden beheren veroudering en hoe weegt recall die?", "expect": ["2026-01-09-voorbeeld-veroudering-frontmatter"], "type": "feit"},
+  {"q": "Waarom een lokaal model gebruiken voor de judge in plaats van een cloud-dienst?", "expect": ["2026-01-10-voorbeeld-lokale-judge"], "type": "beslissing"},
+  {"q": "Wat doet de eenmalige backfill over oude transcripten bij een upgrade?", "expect": ["2026-01-11-voorbeeld-upgrade-backfill"], "type": "procedure"},
+  {"q": "Waarom serveert recall soms verouderde data na een gefaalde build?", "expect": ["2026-01-12-voorbeeld-stale-na-gefaalde-build"], "type": "feit"},
+  {"q": "Mogen plannen open einden of vage instructies bevatten?", "expect": ["2026-01-13-voorbeeld-geen-placeholders"], "type": "voorkeur"},
+  {"q": "Wat is de prioriteitsvolgorde van de gefaseerde data-inname?", "expect": ["2026-01-14-voorbeeld-gefaseerde-inname"], "type": "beslissing"}
+]
