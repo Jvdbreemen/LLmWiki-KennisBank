@@ -1,0 +1,953 @@
+openapi: 3.1.0
+info:
+  title: KennisBank Atlas Sidecar API
+  version: "0.1.0"
+  description: |
+    Internal, loopback-only HTTP API of the Atlas desktop application's Python
+    sidecar (`atlas/sidecar/app.py`, `create_app()`). Derived directly from the
+    13 routes declared in that factory and their backing functions in
+    `atlas/sidecar/sources.py`; cross-checked against
+    `C4-Documentation/c4-code-atlas-sidecar.md`.
+
+    **Trust boundary.** The sidecar binds `127.0.0.1` on an OS-assigned
+    ephemeral port chosen by the Tauri Rust shell (`main.rs`) and passed to the
+    sidecar via `--port`; the same port is injected into the WebView2 frontend
+    as `window.__ATLAS_PORT__` before any frontend code runs (dev mode instead
+    passes `?port=` on the URL). No socket other than this loopback port is
+    ever bound. CORS additionally restricts callers to
+    `http://(localhost|127.0.0.1)(:port)?`, `tauri://localhost` (macOS/Linux),
+    and `http://tauri.localhost` (Windows WebView2) — see
+    `app.py:_CORS_ORIGIN_REGEX`. In production this API has exactly one
+    consumer: the bundled frontend's `data-client.ts`; it is documented in
+    full here because the container-level containment boundary is the whole
+    desktop app, not the sidecar process alone.
+
+    **Fail-open vs fail-closed.** Every route except `POST /memory/decide`,
+    `GET /doc`, `GET /asset`, and `GET|HEAD /graphify-html` is fail-open: on
+    any internal error it still answers HTTP 200 with a degraded/empty JSON
+    payload (`status: "degraded"` or `"empty"`) rather than an HTTP error
+    status. The four listed routes are the deliberate fail-closed exceptions
+    (path-traversal / write-safety guards) and raise `HTTPException`, which
+    FastAPI serializes as `{"detail": "<string>"}`. Detail strings are the
+    sidecar's own **Dutch** text (e.g. `"pad buiten de vault"`) — treat them
+    as opaque human-readable messages, not machine-parseable error codes; the
+    HTTP status code is the stable part of the contract.
+
+    **Status vocabulary.** Most payloads carry a top-level `status` of `"ok"`,
+    `"empty"`, or `"degraded"`. `GET /overview` always returns `"ok"` (every
+    missing source degrades to a zero inside the payload instead).
+
+    **Not part of this spec.** FastAPI additionally serves its own generated
+    `/openapi.json`, `/docs`, and `/redoc` — framework defaults, not declared
+    in `atlas/sidecar/app.py`, and intentionally omitted as `paths` here.
+    `sources.live_recall()` and `sources.memory_links_for()` exist in
+    `sources.py` but are wired to no route (verified unreferenced by grep) and
+    are likewise omitted.
+  contact:
+    name: LLmWiki-KennisBank
+    url: https://github.com/rvdbreemen/LLmWiki-KennisBank
+
+servers:
+  - url: "http://127.0.0.1:{port}"
+    description: >-
+      Loopback-only. {port} is an OS-assigned ephemeral port chosen at
+      process start by the Tauri shell (bundled) or atlas/launch.py (dev);
+      there is no fixed/default port.
+    variables:
+      port:
+        default: "5175"
+        description: Placeholder only — the real port is assigned at runtime.
+
+tags:
+  - name: health
+    description: Sidecar and data-source readiness.
+  - name: graph
+    description: Knowledge-graph lens (file-level, collapsed from graphify's concept graph).
+  - name: timeline
+    description: Bi-temporal activity-event aggregation.
+  - name: memory
+    description: Memory lifecycle, review queue, and the one write path.
+  - name: overview
+    description: Composite vault-health dashboard.
+  - name: search
+    description: Cmd/Ctrl+K title index and the live recall waterfall.
+  - name: provenance
+    description: Wiki-article source-provenance coverage.
+  - name: content
+    description: Read-only markdown/asset access for the inspect drawer.
+
+paths:
+  /health:
+    get:
+      tags: [health]
+      summary: Sidecar and data-source readiness
+      description: >-
+        Pure filesystem existence checks for four stores plus a live Ollama
+        probe. Touches no database itself. `version` is the sidecar's own
+        module constant (`app.py:VERSION`), **not** the KennisBank release
+        version.
+      operationId: getHealth
+      responses:
+        "200":
+          description: Readiness snapshot. Always HTTP 200 — degradation is expressed in the body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              example:
+                status: ok
+                version: "0.1.0"
+                vault: /home/user/KennisBank
+                sources:
+                  kb_index: true
+                  activity: true
+                  usage: true
+                  memory: true
+                  graph: true
+                  ollama: true
+
+  /graph:
+    get:
+      tags: [graph]
+      summary: File-level knowledge graph
+      description: >-
+        Collapses the graphify concept graph to one node per kept
+        `source_file` (under `02-wiki/` or `09-memory/`), joins `kb-index.db`
+        metadata and `kb-usage.db` warmth, aggregates parallel edges by
+        summing weight, and computes degree. `include_memory=true` adds
+        `09-memory` fragments as nodes and can trigger the same ~47s
+        cold-cache cost as `GET /memory-links` (see that route).
+      operationId: getGraph
+      parameters:
+        - name: include_memory
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: >-
+            FastAPI boolean coercion accepts 1/true/on/yes. The frontend
+            sends `?include_memory=1`.
+      responses:
+        "200":
+          description: Always HTTP 200; `status` is `"empty"` when no node survives.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GraphResponse"
+
+  /timeline:
+    get:
+      tags: [timeline]
+      summary: Bi-temporal activity buckets
+      description: >-
+        Full-table scan of `kb-activity.db`'s `activity_events`, bucketed in
+        Python by day or ISO week. Every row contributes to two buckets: its
+        `event_time` bucket (`event_count`, `by_kind`) and its `captured_at`
+        bucket (`capture_count`). The `[from, to]` range filter applies once,
+        to whichever field `dimension` selects, before either increment.
+        **No caller in the current frontend** (retained for external
+        tooling / future use).
+      operationId: getTimeline
+      parameters:
+        - name: bucket
+          in: query
+          required: false
+          schema:
+            type: string
+            default: day
+          description: >-
+            `"week"` snaps to the Monday of the ISO week. Any other value
+            (including unrecognised strings) silently falls through to day
+            granularity — no validation, no 422.
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          description: >-
+            Inclusive lower bound, ISO date; only the first 10 characters are
+            parsed. Wire name is literally `from` (Python-side parameter name
+            is `frm` because `from` is a keyword).
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          description: Inclusive upper bound, ISO date.
+        - name: dimension
+          in: query
+          required: false
+          schema:
+            type: string
+            default: event
+          description: >-
+            `"event"` filters `[from, to]` on `event_time`; any other value
+            filters on `captured_at`.
+      responses:
+        "200":
+          description: Always HTTP 200; `status` is `"empty"` when the DB is missing or the query fails.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TimelineResponse"
+
+  /memory-health:
+    get:
+      tags: [memory]
+      summary: Memory lifecycle cockpit
+      description: >-
+        Globs `09-memory/*.md`, parses front-matter, and buckets by `status`
+        into active/quarantined/superseded/unverified. Feeds the review queue
+        (unverified, sorted by importance desc then created then id), an
+        importance x recency heatmap (active only), supersede chains (walked
+        from `superseded_by`, 100-hop cycle guard, `missing` flags dangling
+        targets), and per-file warmth/temperature from `kb-usage.db`.
+      operationId: getMemoryHealth
+      responses:
+        "200":
+          description: >-
+            Always HTTP 200. A missing `09-memory/` or an empty one returns
+            the zero-filled skeleton — all six collections present but empty.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryHealthResponse"
+
+  /overview:
+    get:
+      tags: [overview]
+      summary: Composite vault-health dashboard
+      description: >-
+        The heaviest read-only route — transitively runs the full
+        memory-health and provenance (kb-lint) computations plus a wiki
+        front-matter scan, an activity heatmap (SQL `GROUP BY`), and three
+        directory counts (`01-raw/sessies`, `01-raw/transcripts`,
+        `00-inbox`). `wiki.by_status` keys come from each article's own
+        front-matter status (the editorial vocabulary, e.g.
+        `actief`/`concept`/`stabiel`/`archief`) and are open-ended — not the
+        `kb-index.db` lifecycle status column.
+      operationId: getOverview
+      responses:
+        "200":
+          description: 'Always HTTP 200 with `status` fixed at `"ok"` — every missing store degrades to a zero inside the payload.'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OverviewResponse"
+
+  /titles:
+    get:
+      tags: [search]
+      summary: Cmd/Ctrl+K title index
+      description: >-
+        One read over `kb-index.db`, loaded once per client session and
+        filtered client-side — not a live per-keystroke query.
+      operationId: getTitles
+      responses:
+        "200":
+          description: Always HTTP 200; `status` is `"empty"` when `kb-index.db` is missing.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TitlesResponse"
+
+  /memory/decide:
+    post:
+      tags: [memory]
+      summary: Approve or reject one unverified memory fragment
+      description: |
+        The single deliberate write route in the entire sidecar. Every other
+        route is read-only by construction (SQLite opened `?mode=ro`,
+        filesystem reads only). Rewrites exactly one frontmatter `status:`
+        line in `$VAULT/09-memory/<stem>.md`.
+
+        Two code paths, both reached from the same handler:
+        1. **Shared path (preferred, production)** — calls the deployed
+           vault's own `_memory.decide(stem, decision, via="atlas")`
+           (`$VAULT/.claude/scripts/_memory.py`), which appends an
+           audit-log entry to `.claude/memory-review-log.jsonl` shared with
+           the CLI, MCP, and slash-command review paths. Only taken when
+           `_memory.py`'s own `vault_root()` resolves to *this* vault (a
+           vault-identity guard).
+        2. **Inline fallback** — used when `.claude/scripts` is absent (an
+           older deploy or a fixture vault). Validates the stem, confirms
+           containment under `09-memory/`, requires `status: unverified`,
+           and rewrites the line directly. Writes no audit log.
+
+        The request body is an untyped dict — FastAPI performs no schema
+        validation and returns no 422 for a malformed body; a missing key
+        simply coerces to `""` and fails the guards below as a 400.
+      operationId: decideMemory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemoryDecideRequest"
+            example:
+              stem: u-hi-importance-fact
+              decision: approve
+      responses:
+        "200":
+          description: Decision applied.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryDecideResponse"
+              example:
+                status: ok
+                stem: u-hi-importance-fact
+                new_status: current
+        "400":
+          description: >-
+            Unknown decision (only `approve`/`reject` are accepted — unlike
+            the MCP `review_decide` tool, which also accepts `skip`), an
+            invalid stem (empty, or containing `/`, `\`, or `..`), or a
+            resolved path escaping `09-memory/`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorDetail"
+              examples:
+                unknownDecision:
+                  value: { detail: "onbekende beslissing: 'maybe' (approve|reject)" }
+                invalidStem:
+                  value: { detail: "ongeldige stem" }
+                pathOutside:
+                  value: { detail: "pad buiten 09-memory" }
+        "404":
+          description: No such memory-fragment file.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorDetail"
+              example:
+                detail: "memory-fragment niet gevonden"
+        "409":
+          description: >-
+            The fragment's current front-matter status is not `unverified`
+            (already decided), or the file has no `status:` line to rewrite.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorDetail"
+              examples:
+                notUnverified:
+                  value: { detail: "status is current, alleen unverified is beslisbaar" }
+                noStatusLine:
+                  value: { detail: "geen status-regel in frontmatter" }
+
+  /provenance:
+    get:
+      tags: [provenance]
+      summary: Wiki source-provenance coverage
+      description: >-
+        Reuses the deployed vault's `kb-lint.lint_vault()` for data-parity
+        with the CLI (`kb-lint.py`, `/wiki`, `doctor.sh`); falls back to a
+        local wikilink heuristic (`[[raw-sessie-...]]` / `[[05-bronnen/...]]`)
+        only when kb-lint cannot be loaded (missing deploy, or a fixture
+        vault without `02-wiki/`). **Known shape caveats, both consequences
+        of grouping every kb-lint warning while only article findings feed
+        `coverage`:** `unsourced` can include a non-article path
+        (`kb-index.db` itself, from an index-drift finding, always prefixed
+        `02-wiki/`); and `coverage.unsourced` can be one less than
+        `len(unsourced)` when an index-drift finding is present. `types` is
+        present only on the kb-lint path; the heuristic fallback omits it.
+      operationId: getProvenance
+      responses:
+        "200":
+          description: Always HTTP 200; `status` is `"empty"` when `02-wiki/` is absent.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProvenanceResponse"
+
+  /doc:
+    get:
+      tags: [content]
+      summary: Read a vault markdown file
+      description: >-
+        Fail-**closed**, unlike almost every other route: only `.md` files,
+        and the resolved target must stay inside the vault (path-traversal
+        guard). Content is decoded UTF-8 with `errors="replace"` so a
+        mojibake byte cannot 500 the route. `title` is the first `# `
+        heading in the body, falling back to the file stem.
+      operationId: getDoc
+      parameters:
+        - name: path
+          in: query
+          required: false
+          schema:
+            type: string
+            default: ""
+          description: Vault-relative path, must end in `.md`.
+      responses:
+        "200":
+          description: File content.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocResponse"
+        "400":
+          description: Empty/non-`.md` path, or a path that escapes the vault.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorDetail"
+              examples:
+                notMarkdown:
+                  value: { detail: "alleen .md-bestanden" }
+                traversal:
+                  value: { detail: "pad buiten de vault" }
+        "404":
+          description: File not found, or unreadable (`OSError`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorDetail"
+              example:
+                detail: "bestand niet gevonden"
+
+  /asset:
+    get:
+      tags: [content]
+      summary: Serve a vault image
+      description: >-
+        Fail-closed: only a fixed allowlist of image extensions, plus the
+        same path-containment guard as `/doc`. Returns raw binary bytes, not
+        JSON.
+      operationId: getAsset
+      parameters:
+        - name: path
+          in: query
+          required: false
+          schema:
+            type: string
+            default: ""
+          description: Vault-relative path to an image file.
+      responses:
+        "200":
+          description: >-
+            Binary image content. `Content-Type` is one of `image/png`,
+            `image/jpeg` (`.jpg`/`.jpeg`), `image/gif`, `image/webp`,
+            `image/svg+xml` — the six-entry extension allowlist.
+          content:
+            image/png: { schema: { type: string, format: binary } }
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/gif: { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+            image/svg+xml: { schema: { type: string, format: binary } }
+        "400":
+          description: Unknown/absent extension, or a path that escapes the vault.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorDetail"
+              examples:
+                notImage:
+                  value: { detail: "alleen afbeeldingen" }
+                traversal:
+                  value: { detail: "pad buiten de vault" }
+        "404":
+          description: Image not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorDetail"
+              example:
+                detail: "afbeelding niet gevonden"
+
+  /graphify-html:
+    get:
+      tags: [graph]
+      summary: Serve the external Graphify pipeline's self-contained graph.html
+      description: >-
+        Serves `graphify-out/graph.html` verbatim, produced entirely outside
+        this repository by the external `/graphify` skill. Served over
+        loopback HTTP rather than `file://` specifically so the page's own
+        scripts execute; the Graphify lens embeds it in an iframe.
+      operationId: getGraphifyHtml
+      responses:
+        "200":
+          description: The graph.html document.
+          content:
+            text/html:
+              schema: { type: string }
+        "404":
+          description: "`graphify-out/graph.html` does not exist in the vault."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorDetail"
+              example:
+                detail: "geen graphify-out/graph.html in de vault"
+    head:
+      tags: [graph]
+      summary: Probe for graphify-out/graph.html without fetching the body
+      description: >-
+        Declared explicitly via `@app.api_route(methods=["GET", "HEAD"])`
+        because the Graphify lens probes with HEAD before embedding the
+        iframe, and a bare `@app.get` would answer HEAD with 405.
+      operationId: headGraphifyHtml
+      responses:
+        "200":
+          description: The document exists.
+        "404":
+          description: "`graphify-out/graph.html` does not exist in the vault."
+
+  /recall:
+    get:
+      tags: [search]
+      summary: Live retrieval waterfall (Recall Inspector)
+      description: >-
+        Runs a live query through the production recall pipeline and exposes
+        every intermediate stage: vector-KNN candidates, FTS5 candidates, RRF
+        fusion, and per-hit rerank factors. Data-parity by construction — it
+        reuses the deployed vault's own `_embeddings.embed`,
+        `_kbindex._rrf`/`_serialize`, `kb-recall._open_ro`/`_frontmatter_of`,
+        and `_rank` factor functions rather than reimplementing them. Only
+        `status == "current"` docs survive into ranked hits. Fail-open: an
+        empty/whitespace query, a down Ollama daemon, or a stale/missing
+        index all degrade the response rather than erroring.
+      operationId: getRecall
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+            default: ""
+          description: 'Query text. Empty or whitespace-only short-circuits to `status` = `"empty"`.'
+        - name: k
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 3
+          description: >-
+            Route-level default is 3 (note: the underlying
+            `recall_waterfall()` function's own default is 8, and the
+            frontend always sends `k=8` explicitly — the route's own default
+            of 3 is reached only when a caller omits `k`).
+      responses:
+        "200":
+          description: Always HTTP 200; `status` is `"ok"`, `"empty"`, or `"degraded"`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecallResponse"
+
+  /memory-links:
+    get:
+      tags: [memory]
+      summary: Per-article memory entry-point counts
+      description: >-
+        Links each `09-memory` fragment to the wiki article it sits closest
+        to, using the fragment's *stored* embedding (no re-embed) fused by
+        RRF with an FTS match on the fragment's title/opening terms —
+        deliberately no rerank, since rerank would bias toward popular
+        articles rather than the closest one. Roughly **47 seconds** cold on
+        the real vault (scans stored embeddings for every fragment);
+        mitigated by an in-process cache keyed by resolved vault path, warmed
+        by a background daemon thread started in `create_app()` whenever a
+        real `kb-index.db` exists. `GET /graph?include_memory=1` shares this
+        same cost.
+      operationId: getMemoryLinks
+      responses:
+        "200":
+          description: Always HTTP 200; two independent fail-open nets (data layer and route layer) both degrade to the same empty shape.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryLinksResponse"
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, version, vault, sources]
+      properties:
+        status: { $ref: "#/components/schemas/Status" }
+        version: { type: string, example: "0.1.0", description: "Sidecar module constant, not the KennisBank release version." }
+        vault: { type: string, description: Absolute path to the vault the sidecar was started against. }
+        sources:
+          type: object
+          required: [kb_index, activity, usage, memory, graph, ollama]
+          description: Exactly these six booleans, no more, no fewer.
+          properties:
+            kb_index: { type: boolean }
+            activity: { type: boolean }
+            usage: { type: boolean }
+            memory: { type: boolean }
+            graph: { type: boolean }
+            ollama: { type: boolean }
+
+    Status:
+      type: string
+      enum: [ok, empty, degraded]
+
+    GraphNode:
+      type: object
+      properties:
+        id: { type: string, description: "Vault-relative POSIX path, e.g. 02-wiki/alpha.md." }
+        label: { type: string, description: File basename. }
+        kind: { type: string, enum: [wiki, memory] }
+        layer: { type: string, description: "kb-index layer, falls back to kind when unindexed." }
+        node_status: { type: string, description: "kb-index lifecycle status, falls back to 'active'." }
+        community: { type: [integer, "null"], description: Graphify community-detection cluster id. }
+        community_name: { type: [string, "null"] }
+        memory_type: { type: [string, "null"], description: "Set only for kind=memory nodes." }
+        importance: { type: number }
+        warmth: { type: number, description: "kb-usage 'used' count, joined by file stem." }
+        created: { type: [string, "null"] }
+        valid_from: { type: [string, "null"] }
+        valid_until: { type: [string, "null"] }
+        degree: { type: integer }
+      required: [id, label, kind, layer, node_status, importance, warmth, degree]
+
+    GraphLink:
+      type: object
+      properties:
+        source: { type: string }
+        target: { type: string }
+        rel: { type: string, description: "Relation label from graphify; for aggregated parallel edges this is the first-seen relation only." }
+        weight: { type: number }
+      required: [source, target, rel, weight]
+
+    GraphResponse:
+      type: object
+      required: [status, nodes, links]
+      properties:
+        status: { $ref: "#/components/schemas/Status" }
+        nodes:
+          type: array
+          items: { $ref: "#/components/schemas/GraphNode" }
+        links:
+          type: array
+          items: { $ref: "#/components/schemas/GraphLink" }
+
+    TimelineBucket:
+      type: object
+      properties:
+        start: { type: string, format: date-time }
+        end: { type: string, format: date-time }
+        event_count: { type: integer }
+        capture_count: { type: integer }
+        by_kind:
+          type: object
+          additionalProperties: { type: integer }
+          description: Histogram over activity_kind for rows in this bucket's event_time.
+      required: [start, end, event_count, capture_count, by_kind]
+
+    TimelineResponse:
+      type: object
+      required: [status, buckets]
+      properties:
+        status: { $ref: "#/components/schemas/Status" }
+        buckets:
+          type: array
+          items: { $ref: "#/components/schemas/TimelineBucket" }
+
+    MemoryHealthCounts:
+      type: object
+      properties:
+        active: { type: integer }
+        quarantined: { type: integer }
+        superseded: { type: integer }
+        unverified: { type: integer }
+      required: [active, quarantined, superseded, unverified]
+
+    MemoryHealthResponse:
+      type: object
+      required: [status, counts, queue, supersede_chains, heatmap, warmth, quarantine]
+      properties:
+        status: { $ref: "#/components/schemas/Status" }
+        counts: { $ref: "#/components/schemas/MemoryHealthCounts" }
+        queue:
+          type: array
+          description: Unverified memories, sorted by importance desc, then created, then id.
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              importance: { type: integer, minimum: 1, maximum: 5 }
+              created: { type: string }
+            required: [id, importance, created]
+        supersede_chains:
+          type: array
+          items:
+            type: object
+            properties:
+              head: { type: string }
+              chain: { type: array, items: { type: string } }
+              missing: { type: array, items: { type: string }, description: Chain targets with no backing file. }
+              valid_until: { type: [string, "null"] }
+            required: [head, chain, missing]
+        heatmap:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              importance: { type: integer }
+              age_days: { type: integer }
+            required: [id, importance, age_days]
+        warmth:
+          type: array
+          items:
+            type: object
+            properties:
+              path: { type: string }
+              warmth: { type: number }
+              last_used: { type: [string, "null"] }
+              temperature: { type: string, enum: [warm, tepid, stale] }
+            required: [path, warmth, temperature]
+        quarantine:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              reason: { type: string }
+            required: [id, reason]
+
+    OverviewResponse:
+      type: object
+      required: [status, wiki, memory, memory_status, raw, inbox_waiting, provenance, graph_stale, heatmap, freshness]
+      properties:
+        status: { type: string, enum: [ok] }
+        wiki:
+          type: object
+          properties:
+            total: { type: integer }
+            by_status:
+              type: object
+              additionalProperties: { type: integer }
+              description: >-
+                Open-ended — any front-matter status string an article
+                carries becomes a key (editorial vocabulary, e.g.
+                actief/concept/stabiel/archief/onbekend). Not an enum.
+          required: [total, by_status]
+        memory: { $ref: "#/components/schemas/MemoryHealthCounts" }
+        memory_status: { $ref: "#/components/schemas/Status" }
+        raw:
+          type: object
+          properties:
+            sessies: { type: integer }
+            transcripts: { type: integer }
+          required: [sessies, transcripts]
+        inbox_waiting: { type: integer }
+        provenance:
+          type: object
+          properties:
+            sourced: { type: integer }
+            total: { type: integer }
+          required: [sourced, total]
+        graph_stale: { type: boolean, description: "True iff graphify-out/.needs-rebuild exists." }
+        heatmap:
+          type: array
+          items:
+            type: object
+            properties:
+              day: { type: string, format: date }
+              n: { type: integer }
+            required: [day, n]
+        freshness:
+          type: object
+          properties:
+            d7: { type: integer }
+            d30: { type: integer }
+            d90: { type: integer }
+            older: { type: integer }
+            unknown: { type: integer }
+          required: [d7, d30, d90, older, unknown]
+
+    TitlesResponse:
+      type: object
+      required: [status, items]
+      properties:
+        status: { $ref: "#/components/schemas/Status" }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              title: { type: string }
+              path: { type: string }
+              layer: { type: string }
+            required: [title, path, layer]
+
+    MemoryDecideRequest:
+      type: object
+      description: >-
+        Untyped on the server side (a plain dict coerced with str()) — this
+        schema documents the two keys the handler actually reads. There is
+        no request validation; a missing key becomes an empty string and
+        fails as a 400.
+      required: [stem, decision]
+      properties:
+        stem:
+          type: string
+          description: "The memory fragment's filename stem (no extension, no path)."
+        decision:
+          type: string
+          enum: [approve, reject]
+          description: >-
+            HTTP-only enum. The sibling MCP tool `review_decide` additionally
+            accepts `skip`; this route does not.
+
+    MemoryDecideResponse:
+      type: object
+      required: [status, stem, new_status]
+      properties:
+        status: { type: string, enum: [ok] }
+        stem: { type: string }
+        new_status: { type: string, enum: [current, retracted] }
+
+    ErrorDetail:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: string
+          description: >-
+            Human-readable Dutch error text (FastAPI's default HTTPException
+            body shape). Not machine-parseable; use the HTTP status code as
+            the stable signal.
+
+    ProvenanceResponse:
+      type: object
+      required: [status, coverage, unsourced]
+      properties:
+        status: { $ref: "#/components/schemas/Status" }
+        coverage:
+          type: object
+          properties:
+            sourced: { type: integer }
+            unsourced:
+              type: integer
+              description: >-
+                May be one less than len(unsourced) when an index-drift
+                finding is present — lint_vault excludes index-drift from
+                its own 'warned' count, but this route's unsourced list does
+                not. Do not assume these two numbers agree.
+            total: { type: integer }
+          required: [sourced, unsourced, total]
+        unsourced:
+          type: array
+          items:
+            type: object
+            properties:
+              path:
+                type: string
+                description: >-
+                  Normally a 02-wiki/ article path, but an index-drift
+                  finding surfaces as "02-wiki/kb-index.db" — a path that
+                  does not exist and will 404 if opened via /doc.
+              reason: { type: string }
+              types:
+                type: array
+                items:
+                  type: string
+                  enum: [missing, dangling, path-only, self-source, unreadable, index-drift]
+                description: Present only on the primary kb-lint path; omitted entirely by the heuristic fallback.
+            required: [path, reason]
+
+    DocResponse:
+      type: object
+      required: [status, path, title, content]
+      properties:
+        status: { type: string, enum: [ok] }
+        path: { type: string, description: Canonical vault-relative POSIX path, re-derived from the resolved target. }
+        title: { type: string, description: "First '# ' heading in the body, or the file stem." }
+        content: { type: string, description: "Full file content, UTF-8 decoded with errors=replace." }
+
+    RecallHitFactors:
+      type: object
+      description: >-
+        `relevance` and `final` are always present. `recency`/`importance`/
+        `trust` appear only for layer=="memory" hits. `usage` appears only
+        when the vault's _usage module loaded successfully.
+      properties:
+        relevance: { type: number }
+        recency: { type: number }
+        importance: { type: number }
+        trust: { type: number }
+        usage: { type: number }
+        final: { type: number }
+      required: [relevance, final]
+
+    RecallResponse:
+      type: object
+      required: [status, query, stages, final]
+      properties:
+        status: { $ref: "#/components/schemas/Status" }
+        query: { type: string }
+        stages:
+          type: object
+          required: [vector, fts, rrf, rerank]
+          properties:
+            vector:
+              type: array
+              items:
+                type: object
+                properties: { path: { type: string }, score: { type: number } }
+                required: [path, score]
+            fts:
+              type: array
+              items:
+                type: object
+                properties: { path: { type: string }, score: { type: number } }
+                required: [path, score]
+            rrf:
+              type: array
+              items:
+                type: object
+                properties: { path: { type: string }, score: { type: number } }
+                required: [path, score]
+            rerank:
+              type: array
+              items:
+                type: object
+                properties:
+                  path: { type: string }
+                  score: { type: number }
+                  factors: { $ref: "#/components/schemas/RecallHitFactors" }
+                  neighbor:
+                    type: boolean
+                    description: "True only on the one graph-neighbour entry appended last, with score 0.0."
+                required: [path, score, factors]
+        final:
+          type: array
+          description: >-
+            The final ranked hit list, plus at most one appended
+            graph-neighbour entry (neighbor=true, score=0.0).
+          items:
+            type: object
+            properties:
+              path: { type: string }
+              score: { type: number }
+              snippet: { type: string }
+              neighbor: { type: boolean }
+            required: [path, score, snippet]
+
+    MemoryLinksResponse:
+      type: object
+      required: [status, links, counts, types]
+      properties:
+        status: { $ref: "#/components/schemas/Status" }
+        links:
+          type: object
+          additionalProperties: { type: string }
+          description: "Memory-fragment stem -> the wiki article path it links to."
+        counts:
+          type: object
+          additionalProperties: { type: integer }
+          description: "Wiki article path -> number of memory fragments pointing at it (entry-point count)."
+        types:
+          type: object
+          additionalProperties: { type: string }
+          description: "Memory-fragment stem -> its memory_type."
