@@ -1,9 +1,10 @@
 ---
 id: TASK-94
 title: Release v0.24.0 — evidence-first llm_wiki adoption (sporen A-G)
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-29 04:52'
+updated_date: '2026-07-29 05:17'
 labels:
   - release
 dependencies: []
@@ -18,12 +19,18 @@ Release of PR #82 (merge 71cc9f6) plus the two unreleased Atlas fixes (PR #80/#8
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Full suite green on released code
-- [ ] #2 Changelog v0.24.0 section + compare links
-- [ ] #3 README highlights EN+NL co-edited
-- [ ] #4 Docs-subset gate green after steps 2-3
-- [ ] #5 PR merged and verified on origin/main
-- [ ] #6 Tag on verified origin/main SHA only
-- [ ] #7 GitHub release published with non-empty body
-- [ ] #8 Release task + carried tasks closed
+- [x] #1 Full suite green on released code
+- [x] #2 Changelog v0.24.0 section + compare links
+- [x] #3 README highlights EN+NL co-edited
+- [x] #4 Docs-subset gate green after steps 2-3
+- [x] #5 PR merged and verified on origin/main
+- [x] #6 Tag on verified origin/main SHA only
+- [x] #7 GitHub release published with non-empty body
+- [x] #8 Release task + carried tasks closed
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+v0.24.0 released. Full suite green pre-docs (1089 passed, 8m11s); docs-subset gate green post-edit (56). Changelog section + compare links + README highlights EN/NL co-edited (PR #83, merge 5a5c73e verified on origin/main before tagging). Tag v0.24.0 on 5a5c73e, rev-list check equal. GitHub release published, body 10125 chars verified non-empty. Copilot review unavailable on both PR #82 and #83 (quota); merged with green gate under the standing user instruction (TASK-85 precedent). Carried tasks TASK-86/87/88/90 Done with recorded evidence; TASK-84/85 fixes included; TASK-89/91/92 remain In Progress on small human-evidence ACs; TASK-93 (legacy removal) starts its one-release clock now.
+<!-- SECTION:FINAL_SUMMARY:END -->
