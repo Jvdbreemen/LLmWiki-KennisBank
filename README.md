@@ -73,7 +73,17 @@ Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: 
 
 The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
 
-## Feature highlights (v0.24.0)
+## Feature highlights (v0.24.1)
+
+### New in v0.24.1
+
+- **No more console pop-ups on Windows.** The detached index-maintenance
+  worker spawned each background job with a freshly allocated visible
+  console window at every session start. Jobs now run with
+  `CREATE_NO_WINDOW`, so background maintenance is invisible again.
+- **Eval-set privacy guard.** Personal eval sets can never enter the
+  repository or a release (`.gitignore` + `test_eval_privacy.py`); the
+  shipped example sets are fully fabricated.
 
 ### New in v0.24.0
 

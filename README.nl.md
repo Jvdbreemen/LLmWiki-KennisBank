@@ -76,7 +76,18 @@ Geheugensystemen van leveranciers (Mem0, Zep, Letta, Cognee) zijn krachtig maar 
 
 De ontwerpvoorkeur is overal dezelfde: **deterministisch waar mogelijk, LLM alleen waar het oordeelsvermogen toevoegt, fail-open overal**. Een dood model blokkeert nooit een sessie, verliest nooit een transcript, en verwijdert nooit geverifieerde kennis.
 
-## Functie-highlights (v0.24.0)
+## Functie-highlights (v0.24.1)
+
+### Nieuw in v0.24.1
+
+- **Geen console-popups meer op Windows.** De losgekoppelde
+  indexonderhouds-worker opende bij elke sessiestart per achtergrondjob een
+  zichtbaar console-venster. Jobs draaien nu met `CREATE_NO_WINDOW`, dus
+  achtergrondonderhoud is weer onzichtbaar.
+- **Privacy-guard voor eval-sets.** Persoonlijke eval-sets kunnen nooit in
+  de repository of een release belanden (`.gitignore` +
+  `test_eval_privacy.py`); de meegeleverde voorbeeldsets zijn volledig
+  gefingeerd.
 
 ### Nieuw in v0.24.0
 
