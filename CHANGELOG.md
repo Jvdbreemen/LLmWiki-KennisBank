@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-07-29
+
+Evidence-first adoption of the llm_wiki-ecosystem lessons (sporen A-G,
+TASK-86..92): every feature was built as an experiment behind a toggle,
+measured on curated eval sets of 329 wiki / 1224 memory questions, and only
+adopted on demonstrated improvement. One feature passed its gate and is now
+default-on (graph retrieval); one failed and stays off with the verdict
+recorded (source-overlap coupling). Also carries the two Atlas fixes that
+shipped after v0.23.0 (PR #80/#81).
+
 ### Added
 
 - **Evidence-first eval harness (TASK-86, Spoor A of the llm_wiki adoption
@@ -137,6 +147,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Atlas Graphify lens now answers HEAD on `/graphify-html` (TASK-84, PR
+  #80).** The lens probe issued a HEAD request the sidecar rejected, so the
+  embedded graph page never loaded.
+- **Atlas launcher no longer leaves orphan processes on Windows (TASK-85, PR
+  #81).** Python signal handlers never run on Windows process termination;
+  the launcher now binds itself to a Job Object with KILL_ON_JOB_CLOSE so
+  the OS tears down the sidecar+vite tree however the launcher dies.
 - **kb-eval measured a different pipeline than the hook runs.** `_live_hits_fn`
   called `recall_hits()` without `expand=` and `min_cos=` while production
   passes both. The harness now resolves the same knobs through the same
@@ -1042,7 +1059,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.23.0...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.24.0...HEAD
+[0.24.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.23.0...v0.24.0
 [0.23.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.20.0...v0.21.0

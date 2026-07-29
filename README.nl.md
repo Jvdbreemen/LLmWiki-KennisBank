@@ -76,7 +76,39 @@ Geheugensystemen van leveranciers (Mem0, Zep, Letta, Cognee) zijn krachtig maar 
 
 De ontwerpvoorkeur is overal dezelfde: **deterministisch waar mogelijk, LLM alleen waar het oordeelsvermogen toevoegt, fail-open overal**. Een dood model blokkeert nooit een sessie, verliest nooit een transcript, en verwijdert nooit geverifieerde kennis.
 
-## Functie-highlights (v0.23.0)
+## Functie-highlights (v0.24.0)
+
+### Nieuw in v0.24.0
+
+- **Graafretrieval, bewezen en standaard aan.** De `(buur)`-entry komt nu
+  uit de gewogen graafindex (`kb-graph.db`, submilliseconde) in plaats van
+  een regex over artikelteksten. Gemeten op een eval-set van 329 vragen:
+  recall@1 0.745 -> 0.790, recall@5 -> 1.000, MRR 0.836 -> 0.882 — óók
+  single-hop. Toggle `graph_retrieval` zet hem terug uit.
+- **Evidence-first eval-harnas.** `kb-eval` meet nu exact wat de hook
+  draait (drempel- en expansie-pariteit), rapporteert `--latency` p50/p95
+  en A/B't varianten met `--expand/--no-expand`; `kb-eval-gen.py` stelt
+  kandidaat-vragen voor als drafts zodat eval-sets groeien zonder handwerk.
+  Dezelfde poort WEES llm_wiki's source-overlap-boost af op echte data —
+  de knop bestaat maar blijft uit, met de cijfers vastgelegd.
+- **Menselijke memory-review overal.** `/kennisbank:review`,
+  `memory-doctor.py pending/decide` en MCP `review_pending/review_decide`
+  delen één crash-veilig beslispad met de Atlas-GUI: approve, reject of
+  skip voor unverified memories; een gefaalde write meldt zich nooit als
+  beslist.
+- **Deterministische poorten.** `wiki-scan.py` sluit het laatste vrije
+  LLM-beslispunt van /wiki; een weigering-poort houdt "ik kan dit niet
+  beantwoorden" uit het archief; kb-lint weigert conclusies als bewijs
+  (`self-source`) en toont index-drift; `kb-normalize.py` herstelt link- en
+  tagvorm na elke LLM-write; sweep-memories dragen `model_id`+`prompt_version`.
+- **Atlas: heatmap, Cmd+K, facetten — en CI.** De Overzicht-lens toont een
+  365-dagen-activiteitsheatmap en freshness-buckets; Cmd/Ctrl+K springt naar
+  elke lens of elk document; de Recall Inspector filtert op laag en
+  exporteert de waterfall als JSON. Atlas-sidecar+frontend-tests draaien nu
+  in CI.
+- **OKF v0.2-export.** `kb-okf-export.py` rendert de vault als Open
+  Knowledge Format-bundle — trust-tiers mappen 1-op-1 op de
+  memory-levenscyclus; deterministisch en byte-idempotent.
 
 ### Nieuw in v0.23.0
 
