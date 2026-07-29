@@ -76,7 +76,19 @@ Geheugensystemen van leveranciers (Mem0, Zep, Letta, Cognee) zijn krachtig maar 
 
 De ontwerpvoorkeur is overal dezelfde: **deterministisch waar mogelijk, LLM alleen waar het oordeelsvermogen toevoegt, fail-open overal**. Een dood model blokkeert nooit een sessie, verliest nooit een transcript, en verwijdert nooit geverifieerde kennis.
 
-## Functie-highlights (v0.24.1)
+## Functie-highlights (v0.25.0)
+
+### Nieuw in v0.25.0
+
+- **Een eval telt nooit als gebruik.** De recall-ranking wordt gevoed door
+  usage-telemetrie, dus een eval die zijn eigen recall-aanroepen wegschreef,
+  mat een signaal dat hij zelf net had verschoven. `kb-eval` zet de
+  usage-telemetrie nu uit voor de duur van elke run — onvoorwaardelijk, geen
+  vlag om te onthouden — en herstelt de vorige staat daarna, zodat het leren
+  gewoon doorgaat. De run meldt dat op stderr, vóór en na de resultaten.
+- **`doctor.sh` betrapt een verdwaalde `KB_USAGE_DISABLE`.** Blijft die in je
+  shell-profiel staan, dan leert de KennisBank stil niets meer van gebruik.
+  Dat wordt nu gemeld in plaats van onzichtbaar.
 
 ### Nieuw in v0.24.1
 

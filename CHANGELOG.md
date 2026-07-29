@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-07-29
+
+The eval harness no longer pollutes the signal it measures, and a stray kill
+switch can no longer silence usage learning unnoticed.
+
+### Changed
+
+- **An eval run never counts as usage (TASK-97).** The recall ranking is fed by
+  usage telemetry (`_rank.usage_factor` boosts warm documents), so an eval that
+  registered its own recall calls as usage was measuring a signal it had just
+  moved. Worse, run from inside an agent session, its per-question output could
+  be picked up by the SessionEnd transcript scan as "this document was used".
+  `kb-eval.py` now sets `KB_USAGE_DISABLE=1` for the duration of every run and
+  `_usage.enabled()` returns `False` while it is set, which gates all three
+  writers (`log_injected`, `mark_used`, `mark_noise`).
+
+  This is unconditional, not a flag: the safe behaviour has to be the default,
+  not something you must remember. A `try/finally` restores the previous
+  environment state afterwards, so an in-process caller — a long-lived host, a
+  test, an eval started inside a Claude Code session — gets normal learning
+  behaviour back. A `KB_USAGE_DISABLE` that was already set before the run is
+  left exactly as it was.
+
+  What you notice: the eval frames itself on stderr (`usage-telemetrie UIT`
+  before the results, `weer AAN` after), so it is visible what happened.
+  `stdout` stays clean for `--json` consumers. An eval still *reads* usage
+  history — that is deliberate parity with what the hook actually ranks.
+
+### Added
+
+- **`doctor.sh` warns on a stray `KB_USAGE_DISABLE`.** Exported in a shell
+  profile or system environment, that variable silently stops the KennisBank
+  from learning from usage, and nothing surfaced it. A closed mechanism that
+  returns nothing should be visible rather than invisible.
+
 ## [0.24.1] - 2026-07-29
 
 Two fixes: no more console windows popping up on Windows at session start, and
@@ -1080,7 +1115,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.24.1...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.25.0...HEAD
+[0.25.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.24.1...v0.25.0
 [0.24.1]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.24.0...v0.24.1
 [0.24.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.23.0...v0.24.0
 [0.23.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.22.0...v0.23.0

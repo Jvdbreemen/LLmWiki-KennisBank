@@ -73,7 +73,19 @@ Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: 
 
 The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
 
-## Feature highlights (v0.24.1)
+## Feature highlights (v0.25.0)
+
+### New in v0.25.0
+
+- **An eval never counts as usage.** The recall ranking is fed by usage
+  telemetry, so an eval that logged its own recall calls was measuring a
+  signal it had just moved. `kb-eval` now disables usage telemetry for the
+  duration of every run — unconditionally, no flag to remember — and
+  restores the previous state afterwards, so learning continues as normal.
+  The run says so on stderr, before and after the results.
+- **`doctor.sh` catches a stray `KB_USAGE_DISABLE`.** Left in your shell
+  profile, that variable silently stops the KennisBank from learning from
+  usage. Now it is reported instead of invisible.
 
 ### New in v0.24.1
 
