@@ -7,6 +7,145 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Evidence-first eval harness (TASK-86, Spoor A of the llm_wiki adoption
+  plan).** Standing rule recorded in Backlog tasks 86-92: no feature gets
+  adopted from any external project without an A/B measurement on eval sets
+  of at least 100 questions per layer. To carry that rule the harness gained:
+  `--latency` (p50/p95 wall time per recall call), `--expand`/`--no-expand`
+  (offline A/B of neighbor expansion), an end-to-end injection-path test that
+  parses the full hook stdout (claude-mem lesson: silent injection dropout is
+  invisible when you only measure the ranking), and `kb-eval-gen.py` — a
+  deterministic candidate-question generator (plus optional local-LLM
+  paraphrases) that writes `*.draft.json` for human curation and can never
+  touch the live sets.
+
+- **Graph retrieval experiment behind a toggle (TASK-87, Spoor B, default
+  OFF).** The weighted graph index (`kb-graph.db`, sub-millisecond
+  `graph_neighbors`) existed but nothing on the retrieval path called it
+  (TASK-67's own finding); the `(buur)` expansion entry instead came from a
+  regex over article bodies inside the 2.0 s prompt budget. New
+  `graph_retrieval` toggle selects the source of the neighbor: the graph
+  (weighted by confidence, wiki-only, never displacing a direct hit, stale
+  graph fails open to no neighbor) or the unchanged legacy scan.
+  `retrieve_expand` stays the master switch; rollback is one setting.
+  Telemetry counts neighbor injections per day (`neighbor_log` in
+  kb-usage.db) and `doctor.sh` gained a "graph retrieval" check that WARNS
+  when the toggle is on while the graph index is stale — the silent-empty
+  failure mode TASK-15 documented. Default-flip only after the kb-eval A/B
+  on 100+-question sets (adopt/reject gate in TASK-87). Also fixes the
+  README toggle-table drift: it said seven behaviours while there are now
+  eleven.
+
+- **Wiki provenance in the index + bibliographic-coupling experiment
+  (TASK-88, Spoor C, knob default OFF).** New `_provenance.py` extracts
+  source keys per document at index time — wiki: the `[[raw-sessie-*]]` and
+  `[[05-bronnen/...]]` provenance links (exactly kb-lint's contract, imported
+  from kb-lint itself so the parsers cannot drift); memory: `source_session`.
+  Stored in a new `doc_sources` table in kb-index.db (disposable cache — the
+  backfill is simply `build-kb-index.py --rebuild`); readers fail soft on
+  old indexes. `doctor.sh` reports provenance coverage per layer and warns
+  when the `rank_coupling` knob is on with zero coverage. The ranking side:
+  `_rank.coupling_factor` gives candidates sharing >=1 source with another
+  candidate in the same result set a bounded bonus (1.05 / 1.10 — capped at
+  usage-warmth level, never below 1.0; deliberately NOT llm_wiki's unfounded
+  4.0/3.0/1.5/1.0 weights). Without the knob the ranking is bit-for-bit
+  identical, locked by a regression test. Enabling requires the kb-eval A/B
+  on 100+-question sets plus the evidence-of-improvement AC (TASK-88 #5/#6).
+
+- **Human memory review outside Atlas + deterministic wiki-scan (TASK-89,
+  Spoor D).** The unverified->current/retracted transition had exactly one
+  human entry point: the Atlas GUI. Decision semantics now live once in
+  `_memory.py` (approve/reject/**skip** — explicit no-op, Mem0 pattern;
+  traversal guard; 400/404/409/500 codes) shared by four surfaces: the Atlas
+  sidecar (refactored onto the helper with a vault-identity guard and an
+  inline fallback for older vaults), `memory-doctor.py pending/decide`, the
+  new `/kennisbank:review` command (the human decides per item, the command
+  never decides), and MCP tools `review_pending`/`review_decide` (decide
+  only after explicit user confirmation). **Crash-safe order** (llm_wiki
+  #614 lesson): the status change is written durably first, the audit line
+  (`.claude/memory-review-log.jsonl`) after; any failure leaves the item
+  unverified and surfaces the error. doctor.sh shows the queue plus
+  decisions (30d) and warns on a large queue with zero decisions. Evidence
+  test replays TASK-23: 31 backed-up memories cleared through the regular
+  flow, no one-off script. And `wiki-scan.py` closes /wiki step 2 — the
+  last free-form LLM decision point: deterministic candidates (markers,
+  promote_candidate clusters, recurring H2 headings across >=2 logs) with a
+  closed `suggested_action` (herschrijf|nieuw|overslaan, tuple-validated,
+  fail-safe overslaan) and a `scanned_logs` silent-empty guard; /wiki
+  follows the scan, deviation only with motivation.
+
+- **Structural hardening from ecosystem failure modes (TASK-90, Spoor E).**
+  Each failure replayed as a fixture test: (1) **refusal gate** in
+  `_extract` — a model answer like "ik kan deze vraag niet beantwoorden" is
+  dropped before it persists as canonical knowledge (arkon#25); (2)
+  **`self-source` kb-lint rule (HARD)** — provenance links inside
+  `## Sessie-herkomst` to `02-wiki/`, `09-memory/`, `.claude/` or
+  `06-claude/` are rejected: a stored conclusion never re-enters as evidence
+  (llm_wiki #538's self-confirmation loop); (3) **`index-drift` kb-lint rule
+  (advisory)** — ghost docs in kb-index.db surfaced (best-confirmed failure
+  of the field: llm_wiki #580, Pratiyush `index_sync`, Arkon); (4)
+  **producer provenance** — sweep-written memories carry `model_id` and
+  `prompt_version` (`EXTRACT_PROMPT_VERSION`); (5) **kb-normalize.py** —
+  idempotent deterministic post-pass after every LLM write in /wiki and
+  /reconcile (path-prefixed wikilinks -> bare stems, 05-bronnen paths kept,
+  bare tags listified; llm_wiki #576: deterministic beats instructed); (6)
+  **no-network-during-ingest test** — deterministic ingest paths proven to
+  make zero socket calls (arkon#29).
+
+- **OKF v0.2 export as a rendered view of the vault (TASK-92, Spoor G).**
+  `kb-okf-export.py` renders the vault as an Open Knowledge Format bundle
+  (GoogleCloudPlatform/knowledge-catalog, Apache-2.0 spec) — deliberately an
+  export, never internal storage: bi-temporality has no OKF equivalent and
+  the vault stays on wikilinks+Obsidian. The motivating fit: OKF's trust
+  tiers map 1:1 onto the memory lifecycle (unverified -> draft without
+  `verified`; judge-current -> `verified: process:kb-judge`; a review-log
+  approve adds `human:owner` -> human-reviewed), `generated` carries the
+  producer provenance from TASK-90, `sources[]` the provenance keys from
+  TASK-88, `expires` -> `stale_after`. Deterministic and byte-idempotent
+  (views are rendered, not prompted); wikilinks become bundle-root-absolute
+  markdown links with a broken-link count; per-directory `index.md` plus
+  root `okf_version`; `log.md` rendered from activity rollups.
+
+- **Atlas: activity heatmap, Cmd+K palette, waterfall JSON export, facets,
+  CI (TASK-91, Spoor F — ideas verified in Pratiyush/llm-wiki).** Principle
+  applied: view data is aggregated in the sidecar, never computed per item
+  while the user waits (llm_wiki #604 went unusable at 7k pages doing the
+  opposite). `/overview` now carries a 365-day activity heatmap (one SQL
+  GROUP BY over kb-activity.db) and wiki freshness buckets, rendered as a
+  non-graph strip in the Overzicht lens — a half-step toward TASK-44's tour
+  idea. New `/titles` endpoint feeds a **Cmd/Ctrl+K palette** (jump to lens
+  or open any document; index fetched once per session, pure `fuzzyFilter`
+  pinned by vitest). The Recall Inspector gained **facet chips**
+  (alle/wiki/memory, client-side, no query per click) and **copy-as-JSON**
+  of the whole waterfall. Atlas finally runs in CI: a dedicated job with
+  sidecar pytest, frontend typecheck and vitest — until now every Atlas
+  change shipped unguarded. `atlas/README` corrected to the seven shipped
+  lenses and the real write-path story (docs = contract).
+
+- **`graph_retrieval` default ON — the A/B gate passed (TASK-87).** Formal
+  measurement on the curated 329-question wiki set (owner bulk-accepted the
+  generated candidates): recall@1 0.745 -> 0.790, @5 0.954 -> 1.000, MRR
+  0.836 -> 0.882, and single-hop@1 0.777 -> 0.831 — the GraphRAG
+  hurts-single-hop concern did not materialise on this vault; p95 latency
+  lower. The `rank_coupling` knob stays OFF: on the same sets wiki MRR rises
+  but single-hop@1 drops (0.777 -> 0.765) and memory degrades slightly —
+  gate failed, reject confirmed (TASK-88). Honest new baseline for future
+  work: memory recall@1 0.361 on 1224 questions is the real improvement
+  space.
+
+### Fixed
+
+- **kb-eval measured a different pipeline than the hook runs.** `_live_hits_fn`
+  called `recall_hits()` without `expand=` and `min_cos=` while production
+  passes both. The harness now resolves the same knobs through the same
+  function (`kb-retrieve.retrieve_params`, extracted as the single source of
+  truth) over the same config file. Consequence: numbers measured before this
+  fix (including the TASK-70 wiki@5 = 1.000 ceiling) are not comparable to
+  anything measured after it — this is the first honest baseline, not a
+  regression.
+
 ## [0.23.0] - 2026-07-26
 
 A small quality release: a vault orientation summary at session start, an

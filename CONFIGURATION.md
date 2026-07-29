@@ -483,13 +483,39 @@ The five env vars below control the behavior of the vault-onderhoud scripts
 - **Uitzetten expansie**: env `KB_RETRIEVE_EXPAND=0` of `"retrieve_expand": 0` in `<vault>/.claude/kennisbank-embed.json` — dat is het bestand dat `kb-retrieve.py` leest, niet `kennisbank-settings.json`.
 - **To change**: pas de constanten aan en hermeet met `kb-eval.py` (voor en na; een daling is een regressie).
 
+### Bibliographic coupling (`rank_coupling`, experiment TASK-88)
+
+- **Default**: UIT (`"rank_coupling": 0`; env-override `KB_RANK_COUPLING`).
+- **Where set**: `<vault>/.claude/kennisbank-embed.json`; boosts als module-constanten in `scripts/_rank.py` (`COUPLING_BOOST_ONE = 1.05`, `COUPLING_BOOST_MULTI = 1.1`).
+- **Effect aan**: kandidaten die >=1 herkomst-bron delen met een andere kandidaat in dezelfde resultaatset krijgen een begrensde bonus (1.05 bij een partner, 1.10 bij twee of meer — gelijk aan de cap van de usage-warmte, nooit onder 1.0). Klassieke IR: bibliographic coupling (Kessler 1963). De bronnen komen uit de `doc_sources`-indextabel, gevuld door `build-kb-index.py` via `_provenance.py` (wiki: `[[raw-sessie-*]]`- en `[[05-bronnen/...]]`-herkomstlinks, exact het kb-lint-contract; memory: `source_session`). Backfill: `build-kb-index.py --rebuild`.
+- **Effect uit**: ranking bit-voor-bit identiek aan voor TASK-88 (vergrendeld in `tests/test_rank.py`).
+- **Aanzetten**: alleen na een kb-eval A/B op sets van >=100 vragen per laag (bewijsregel TASK-86): MRR/recall@3 niet slechter, `single-hop` daalt niet. De startgewichten zijn bewust conservatief en NIET llm_wiki's ongefundeerde 4.0/3.0/1.5/1.0.
+
 ### Recall-eval (`scripts/kb-eval.py`)
 
 - **Default sets**: `<vault>/06-claude/kb-eval-set.json` (wiki) + `<vault>/06-claude/kb-memory-eval-set.json` (geheugen); voorbeelden in `kb-eval-set.example.json` en `kb-memory-eval-set.example.json`.
-- **CLI**: `python3 kb-eval.py [--set pad] [--layer wiki|memory] [--json] [--verbose]`. Zonder `--set` draait het beide sets in één run.
+- **CLI**: `python3 kb-eval.py [--set pad] [--layer wiki|memory] [--json] [--verbose] [--latency] [--expand|--no-expand]`. Zonder `--set` draait het beide sets in één run.
 - **Fidelity (belangrijk)**: het harnas meet PER LAAG, niet gefuseerd — de wiki-set wiki-only, de geheugen-set memory-only. Dat spiegelt de hook, die wiki en geheugen als twee gescheiden blokken injecteert (`_wiki_block` / `_memory_block`) en nooit fuseert. Een gefuseerde meting geeft vals signaal (memories verdringen wiki-artikelen in één ranked lijst terwijl ze in productie in aparte blokken staan).
+- **Productie-pariteit (TASK-86)**: het harnas resolvet `expand` en `min_cos` via dezelfde functie als de hook (`kb-retrieve.retrieve_params` over `kennisbank-embed.json`), zodat het de poort, buur-expansie en weging van productie meet. Metingen van vóór deze fix (o.a. TASK-70) zijn niet vergelijkbaar met metingen erna.
+- **A/B**: `--expand`/`--no-expand` overschrijven alleen de buur-expansie — de knop voor offline A/B van graafexpansie-varianten. `--latency` rapporteert p50/p95 wall time per recall-aanroep per laag.
 - **Effect**: meet recall@1/3/5 en MRR per laag tegen vragen met verwachte documenten. Draai voor en na elke wijziging aan drempels, embeddingmodel of ranking; een daling is een regressie.
 - **To change**: onderhoud beide eval-sets in de vault (voeg vragen toe bij nieuwe kennisdomeinen); de metriek-k's staan als `KS` in het script.
+- **Bewijsregel voor feature-adoptie**: elke overgenomen retrieval-feature vereist een A/B op sets van **minimaal 100 vragen per laag**. Geen meting = geen merge.
+
+### Eval-set-generator (`scripts/kb-eval-gen.py`)
+
+- **Doel**: kandidaat-vragen genereren zodat de eval-sets naar ≥100 vragen per laag kunnen groeien zonder handwerk vanaf nul. Het systeem stelt voor, de mens cureert.
+- **CLI**: `python3 kb-eval-gen.py [--layer wiki|memory|both] [--out-dir pad] [--llm]`.
+- **Deterministische laag**: per wiki-artikel een titelvraag (`single-hop`) en een keyword-vraag uit de tags (of een kopvraag zonder tags); per current-memory één vraag naar het sjabloon van zijn `memory_type`. Twee runs op dezelfde vault geven byte-identieke drafts.
+- **LLM-laag (`--llm`, optioneel)**: één parafrasevraag per doc via de lokale `_llm`-router, gelabeld `paraphrase`; fail-soft bij een onbereikbare provider.
+- **Veiligheid**: schrijft uitsluitend `*.draft.json` in `<vault>/06-claude`; de echte sets worden per constructie nooit aangeraakt. Curatie is bewust een menselijke handeling.
+
+### OKF-export (`scripts/kb-okf-export.py`, TASK-92)
+
+- **Doel**: de vault als OKF v0.2-bundle renderen (Open Knowledge Format, GoogleCloudPlatform/knowledge-catalog; Apache-2.0-spec) — een deterministische **export-view**, geen intern opslagformaat (bi-temporaliteit heeft geen OKF-equivalent; de vault blijft op wikilinks/Obsidian).
+- **CLI**: `python3 kb-okf-export.py [--out pad]` (default `<vault>/okf-out`). Off-path batch; twee runs op een ongewijzigde vault zijn byte-identiek.
+- **Trust-mapping**: unverified → `status: draft` zonder `verified`; judge-`current` → `verified: process:kb-judge` (machine-confirmed); een approve in het review-log → extra `human:owner`-entry (human-reviewed); retracted/superseded/expired → `status: deprecated`; `model_id`+`prompt_version` → `generated: {by, at}`; `_provenance`-sleutels → `sources[]`; `expires` → `stale_after`.
+- **Links**: `[[wikilinks]]` worden bundle-root-absolute markdown-links; niet-resolvende targets blijven links (spec: consumers MUST tolerate broken links) en worden geteld in de samenvatting.
 
 ### RECONCILE_THRESHOLD / TOP_K (write-time invalidatie)
 
@@ -713,6 +739,7 @@ De achtergrond-automatieken zijn individueel aan/uit te zetten via
 | `activity_llm_fallback` | uit | laag 3 van de temporele parser: lokale LLM duidt exotische datums/periodes (zie 4b) | alleen de deterministische lagen 1-2 |
 | `checkpoints` | uit | Claude PreCompact schrijft automatisch een werkstand-stub; volgende sessiestart meldt hem (`/checkpoint load`) | alleen handmatige checkpoints via `/checkpoint` |
 | `orientation` | uit | sessiestart toont een compacte vault-orientatie (counts, recente artikelen, veelgebruikte kennis, open backlog-taken) | alleen on-demand via `/sessiestart` |
+| `graph_retrieval` | aan | de `(buur)`-entry in de hook-injectie komt uit de gewogen graafindex `kb-graph.db` (submilliseconde; stale graaf → geen buur, zie doctor) | legacy wikilink-scan over artikelteksten levert de buur (gedrag van vóór TASK-87) |
 
 - **Wijzigen**: draai `/kennisbank:settings` (toont een tabel en zet toggles aan/uit), of bewerk het JSON-bestand (waarden zijn JSON-booleans).
 - **Self-gating**: één SessionStart-coördinator blijft per client statisch

@@ -115,7 +115,7 @@ Toon daarom de huidige waarden en bied aan ze te tunen — niet "vraag-indien-af
 Lees elke canonieke toggle's huidige waarde:
 
 ```bash
-for key in auto_archive distill_notify embed_index daily_graphify memory_capture memory_recall usage_telemetry activity_llm_fallback checkpoints orientation; do
+for key in auto_archive distill_notify embed_index daily_graphify memory_capture memory_recall usage_telemetry activity_llm_fallback checkpoints orientation graph_retrieval; do
   echo "$key=$(python3 "$VAULT/.claude/scripts/_settings.py" get "$key")"
 done
 ```
@@ -134,6 +134,7 @@ enable it, suggesting the default:
 - activity_llm_fallback (default OFF) - let a local LLM resolve dates the deterministic layers miss
 - checkpoints (default OFF) - auto-save a work-state stub at context compaction (Claude PreCompact) and surface it at the next session start
 - orientation (default OFF) - show a compact vault orientation at session start (document counts, recent articles, frequently used knowledge, open backlog tasks)
+- graph_retrieval (default ON since the 2026-07-29 A/B gate, TASK-87) - source the (buur) expansion entry from the weighted graph index (kb-graph.db) instead of the legacy wikilink scan; flip only after a kb-eval A/B on 100+-question sets
 
 Write each choice with `python3 "$VAULT/.claude/scripts/_settings.py" set <key> <true|false>`.
 Do NOT re-ask keys that are already set. Mention afterwards that the user can

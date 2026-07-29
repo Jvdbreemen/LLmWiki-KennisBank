@@ -406,6 +406,7 @@ De hooks zijn fail-open van opzet: een fout betekent geen geïnjecteerde context
 | `/timeline` | datum/periode/onderwerp | Chronologische temporele activiteitentijdlijn met strikte bereikfiltering |
 | `/watdeedik` | datum/periode/onderwerp | Compact antwoord op "wat deed ik toen?" met bewijslinks |
 | `/kennisbank:settings` | geen | Toont en schakelt de achtergrond-automatiek-toggles |
+| `/kennisbank:review` | optioneel onderwerp | Loop de unverified-memory-wachtrij door; de mens beslist approve/reject/skip per item |
 | `/kennisbank:rebuild-index` | geen | Herbouwt de hybride zoekindex uit de kluis-markdown |
 | `/kennisbank:rebuild-memory` | geen | Her-extraheert ALLE geheugen uit gearchiveerde transcripts (zwaar; semantische dedup maakt het bijna-idempotent) |
 | `/kennisbank-upgrade` | optioneel `--dry-run` | Upgradet de gedeployde kluis naar de nieuwste release-tag |
@@ -448,7 +449,7 @@ Upgrade en contribute zijn twee helften van één lus: `contribute` stuurt je lo
 
 ## Achtergrond-automatiek-toggles
 
-Zeven achtergrondgedragingen zijn individuele toggles in `kennisbank-settings.json`, beheerd met `/kennisbank:settings`:
+Elf achtergrondgedragingen zijn individuele toggles in `kennisbank-settings.json`, beheerd met `/kennisbank:settings`:
 
 | Toggle | Standaard | Regelt |
 |--------|---------|----------|
@@ -459,6 +460,10 @@ Zeven achtergrondgedragingen zijn individuele toggles in `kennisbank-settings.js
 | `memory_capture` | aan | Extraheer en beoordeel herinneringen naar `09-memory/` |
 | `memory_recall` | aan | Injecteer herinneringen in context via hooks |
 | `usage_telemetry` | aan | Volg welke geïnjecteerde kennis wordt gebruikt |
+| `activity_llm_fallback` | uit | Lokale-LLM-terugval voor exotische datumformuleringen in temporele recall |
+| `checkpoints` | uit | Schrijf bij context-compaction (PreCompact) automatisch een werkstand-stub |
+| `orientation` | uit | Injecteer een compacte vault-oriëntatie bij sessiestart |
+| `graph_retrieval` | aan | Haal de buur-expansie uit de gewogen graafindex (A/B-bewezen, TASK-87) |
 
 ## Je retrieval meten
 

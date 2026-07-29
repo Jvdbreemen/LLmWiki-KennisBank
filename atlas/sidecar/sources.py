@@ -570,7 +570,10 @@ def live_recall(vault: Path, query: str, k: int = 3) -> dict:
         hits = kbrecall.recall_hits(vector, query_text=query, k=k)
         final = [
             {"path": h.get("path", ""), "score": float(h.get("score", 0.0)),
-             "snippet": h.get("snippet", "")}
+             "snippet": h.get("snippet", ""),
+             # TASK-91 F5: facet-dimensies voor de Recall Inspector.
+             "layer": h.get("layer", ""),
+             "neighbor": bool(h.get("neighbor", False))}
             for h in hits
         ]
         return {
@@ -897,21 +900,61 @@ def _count_files(directory: Path, pattern: str = "*") -> int:
                if p.is_file() and not p.name.startswith("."))
 
 
+def _activity_heatmap(vault: Path, *, days: int = 365,
+                      today: date | None = None) -> list:
+    """Daily activity counts for the overview heatmap (TASK-91 F1).
+
+    One SQL GROUP BY over activity_events — no per-doc reads, O(1) with vault
+    size at render time (the llm_wiki #604 lesson: view data is aggregated,
+    never computed per item while the user waits). Fail-open -> []."""
+    conn = _connect_ro(vault / ".claude" / "kb-activity.db")
+    if conn is None:
+        return []
+    try:
+        rows = conn.execute(
+            "SELECT substr(event_time, 1, 10) AS day, count(*) "
+            "FROM activity_events GROUP BY day").fetchall()
+    except Exception:
+        return []
+    finally:
+        conn.close()
+    cutoff = ((today or date.today()) - timedelta(days=days)).isoformat()
+    pairs = sorted((str(r[0]), int(r[1])) for r in rows if r[0])
+    return [{"day": d, "n": n} for d, n in pairs if d >= cutoff]
+
+
 def build_overview(vault: Path, *, today: date | None = None) -> dict:
     """Aggregate vault-wide health metrics: wiki-article statuses, memory
     lifecycle counts, raw-log volumes, inbox backlog (input waiting),
-    provenance as a single coverage line, and graph staleness. Fail-open:
-    each missing store yields zeros, never an error."""
+    provenance as a single coverage line, graph staleness, plus the activity
+    heatmap and wiki freshness buckets (TASK-91). Fail-open: each missing
+    store yields zeros, never an error."""
     # Wiki status from the articles' own frontmatter (actief/concept/stabiel/
     # archief) — the kb-index status column holds lifecycle state ("current")
     # and would collapse every article into one bucket.
     wiki_status: dict[str, int] = {}
+    freshness = {"d7": 0, "d30": 0, "d90": 0, "older": 0, "unknown": 0}
+    ref_day = today or date.today()
     wiki_dir = vault / "02-wiki"
     if wiki_dir.is_dir():
         for p in wiki_dir.glob("*.md"):
             fm = _parse_frontmatter(p.read_text(encoding="utf-8"))
             st = str(fm.get("status") or "onbekend").lower()
             wiki_status[st] = wiki_status.get(st, 0) + 1
+            upd = str(fm.get("updated") or fm.get("created") or "").strip()
+            try:
+                age = (ref_day - date.fromisoformat(upd[:10])).days
+            except ValueError:
+                freshness["unknown"] += 1
+                continue
+            if age <= 7:
+                freshness["d7"] += 1
+            elif age <= 30:
+                freshness["d30"] += 1
+            elif age <= 90:
+                freshness["d90"] += 1
+            else:
+                freshness["older"] += 1
 
     mh = build_memory_health(vault, today=today)
     prov = build_provenance(vault)
@@ -932,7 +975,30 @@ def build_overview(vault: Path, *, today: date | None = None) -> dict:
             "total": cov.get("total", 0),
         },
         "graph_stale": (vault / "graphify-out" / ".needs-rebuild").exists(),
+        "heatmap": _activity_heatmap(vault, today=today),
+        "freshness": freshness,
     }
+
+
+def list_titles(vault: Path) -> dict:
+    """Title index for the Cmd+K palette (TASK-91 F2): every indexed doc as
+    {title, path (vault-relative), layer}. One read-only query over kb-index.db,
+    loaded once per session client-side — no live query per keystroke."""
+    conn = _connect_ro(vault / ".claude" / "kb-index.db")
+    if conn is None:
+        return {"status": "empty", "items": []}
+    try:
+        rows = conn.execute("SELECT path, layer, title FROM docs ORDER BY title").fetchall()
+    except Exception:
+        return {"status": "empty", "items": []}
+    finally:
+        conn.close()
+    items = []
+    for path, layer, title in rows:
+        rel = _rel_key(vault, path)
+        items.append({"title": title or Path(rel).stem, "path": rel,
+                      "layer": layer or ""})
+    return {"status": "ok", "items": items}
 
 
 # --- Memory decide (TASK-27.18): the one deliberate write path in Atlas. ---
@@ -949,6 +1015,28 @@ def decide_memory(vault: Path, stem: str, decision: str) -> dict:
     new_status = _DECISIONS.get(decision)
     if new_status is None:
         raise DocError(400, f"onbekende beslissing: {decision!r} (approve|reject)")
+    # Gedeelde codepath (TASK-89): dezelfde _memory.decide() bedient Atlas,
+    # CLI, command en MCP, zodat de beslissemantiek (guards, crash-veilige
+    # volgorde, audit-log) maar één keer bestaat. Oudere vaults zonder
+    # decide() vallen terug op de inline-implementatie hieronder.
+    try:
+        mem = _load_vault_module(vault, "_memory_decide", "_memory.py")
+    except Exception:
+        mem = None
+    if mem is not None and hasattr(mem, "decide") and hasattr(mem, "ReviewError"):
+        # Guard: de helper resolvet de vault zelf via vault_root(). Alleen de
+        # gedeelde weg nemen als die resolutie op DEZE vault uitkomt, anders
+        # zou een afwijkende KENNISBANK_VAULT-env in een andere vault beslissen.
+        try:
+            same_vault = Path(mem.vault_root()).resolve() == Path(vault).resolve()
+        except Exception:
+            same_vault = False
+        if same_vault:
+            try:
+                res = mem.decide(stem, decision, via="atlas")
+            except mem.ReviewError as exc:
+                raise DocError(exc.code, str(exc))
+            return {"status": "ok", "stem": stem, "new_status": res["new_status"]}
     if not stem or "/" in stem or "\\" in stem or ".." in stem:
         raise DocError(400, "ongeldige stem")
     mem_root = (vault / "09-memory").resolve()

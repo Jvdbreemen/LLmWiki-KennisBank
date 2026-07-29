@@ -170,3 +170,65 @@ class TestOneHopNeighbor(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+class TestCouplingFactor(unittest.TestCase):
+    """Bibliographic-coupling-bonus (TASK-88): begrensd, nooit een straf."""
+
+    def test_zero_shared_is_neutral(self):
+        self.assertEqual(_rank.coupling_factor(0), 1.0)
+
+    def test_one_shared_boosts(self):
+        self.assertEqual(_rank.coupling_factor(1), _rank.COUPLING_BOOST_ONE)
+
+    def test_multi_shared_caps_at_multi(self):
+        self.assertEqual(_rank.coupling_factor(2), _rank.COUPLING_BOOST_MULTI)
+        self.assertEqual(_rank.coupling_factor(99), _rank.COUPLING_BOOST_MULTI)
+
+    def test_never_below_one_and_capped_at_usage_warmth(self):
+        for n in range(0, 5):
+            self.assertGreaterEqual(_rank.coupling_factor(n), 1.0)
+        self.assertLessEqual(_rank.COUPLING_BOOST_MULTI, _rank.USAGE_BOOST_RECENT)
+
+
+class TestRerankCoupling(unittest.TestCase):
+    def _hits(self):
+        return [
+            {"path": "a.md", "layer": "wiki", "score": 1.0},
+            {"path": "b.md", "layer": "wiki", "score": 1.0},
+            {"path": "c.md", "layer": "wiki", "score": 1.0},
+        ]
+
+    def test_without_sources_fn_identical(self):
+        """Regressie-vergrendeling: zonder sources_fn is de ranking bit-voor-bit
+        gelijk aan de aanroep zonder het argument."""
+        base = _rank.rerank(self._hits(), lambda p: {})
+        explicit = _rank.rerank(self._hits(), lambda p: {}, sources_fn=None)
+        self.assertEqual(base, explicit)
+        self.assertTrue(all(h["score"] == 1.0 for h in base))
+
+    def test_shared_source_within_candidate_set_boosts(self):
+        srcs = {"a.md": {"raw-sessie-x"}, "b.md": {"raw-sessie-x"}, "c.md": set()}
+        out = _rank.rerank(self._hits(), lambda p: {},
+                           sources_fn=lambda p: srcs.get(p, set()))
+        scores = {h["path"]: h["score"] for h in out}
+        self.assertAlmostEqual(scores["a.md"], _rank.COUPLING_BOOST_ONE)
+        self.assertAlmostEqual(scores["b.md"], _rank.COUPLING_BOOST_ONE)
+        self.assertEqual(scores["c.md"], 1.0)
+
+    def test_shared_with_two_others_gets_multi_boost(self):
+        srcs = {"a.md": {"s"}, "b.md": {"s"}, "c.md": {"s"}}
+        out = _rank.rerank(self._hits(), lambda p: {},
+                           sources_fn=lambda p: srcs.get(p, set()))
+        for h in out:
+            self.assertAlmostEqual(h["score"], _rank.COUPLING_BOOST_MULTI)
+
+    def test_own_source_without_overlap_is_neutral(self):
+        srcs = {"a.md": {"uniek-a"}, "b.md": {"uniek-b"}, "c.md": set()}
+        out = _rank.rerank(self._hits(), lambda p: {},
+                           sources_fn=lambda p: srcs.get(p, set()))
+        self.assertTrue(all(h["score"] == 1.0 for h in out))
+
+    def test_sources_fn_exception_failsoft(self):
+        def boom(p):
+            raise RuntimeError("kapot")
+        out = _rank.rerank(self._hits(), lambda p: {}, sources_fn=boom)
+        self.assertTrue(all(h["score"] == 1.0 for h in out))

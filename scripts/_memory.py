@@ -180,7 +180,8 @@ def render(title: str, body: str, *, status: str = DEFAULT_STATUS,
            created: str | None = None, updated: str | None = None,
            valid_from: str | None = None, valid_until: str | None = None,
            expires: str | None = None, superseded_by=None, tags=None,
-           memory_type: str = DEFAULT_MEMORY_TYPE, importance: int = 3) -> str:
+           memory_type: str = DEFAULT_MEMORY_TYPE, importance: int = 3,
+           model_id: str = "", prompt_version=None) -> str:
     if status not in STATUSES:
         raise ValueError(f"ongeldige status: {status!r} (verwacht een van {STATUSES})")
     if evidence_basis not in EVIDENCE_BASES:
@@ -208,6 +209,14 @@ def render(title: str, body: str, *, status: str = DEFAULT_STATUS,
         lines.append(f"expires: {expires}")
     if superseded_by:
         lines.append(f"superseded_by: {_yaml_list(superseded_by)}")
+    # Producent-provenance (TASK-90 E5): welk model en welke promptversie deze
+    # claim produceerde. Bi-temporeel dekt wanneer; dit dekt waardoor — zonder
+    # deze as zijn claims van een slechte promptversie niet selecteerbaar.
+    # Beide optioneel: mens-getypte memories hebben geen producent.
+    if model_id:
+        lines.append(f"model_id: {_yaml_scalar(model_id)}")
+    if prompt_version is not None:
+        lines.append(f"prompt_version: {int(prompt_version)}")
     lines.append(f"tags: {_yaml_list(tags or [])}")
     lines.append("---")
     lines.append("")
@@ -283,3 +292,151 @@ def set_status(path, status: str, superseded_by=None, valid_until: str | None = 
     except OSError:
         return False
     return True
+# --- Menselijke review van unverified memories (TASK-89) ---------------------
+#
+# Eén gesloten actieset, gedeeld door de Atlas-sidecar (POST /memory/decide),
+# de CLI (memory-doctor.py pending/decide), het /kennisbank:review-command en
+# de MCP-tools. "Systeem stelt voor, mens beslist" had buiten Atlas geen
+# ingang; TASK-23 (31 gestuwde unverified memories, opgeruimd met een one-off
+# script) is het bewijs dat die ingang nodig is.
+#
+# skip is een EXPLICIETE no-op (Mem0-patroon): zonder no-op-optie forceer je
+# de beslisser tot actie en krijg je ruis in plaats van uitgestelde oordelen.
+
+DECISIONS = {"approve": "current", "reject": "retracted", "skip": None}
+REVIEW_LOG_RELPATH = Path(".claude") / "memory-review-log.jsonl"
+
+
+class ReviewError(Exception):
+    """Reviewfout met HTTP-achtige code (400 invalid, 404 missing, 409 state,
+    500 write-failure) zodat Atlas hem 1-op-1 op DocError kan mappen en de
+    CLI hem als foutregel kan tonen."""
+
+    def __init__(self, code: int, message: str):
+        super().__init__(message)
+        self.code = int(code)
+
+
+def review_log_path() -> Path:
+    return vault_root() / REVIEW_LOG_RELPATH
+
+
+def pending_reviews(limit=None) -> list:
+    """Unverified memories, oudste eerst (created, dan stem). Puur lezen.
+
+    Velden per item: stem, title, created, age_days, memory_type, importance,
+    evidence_basis, snippet — genoeg voor een beslisregel in command of GUI
+    zonder het bestand nogmaals te openen.
+    """
+    from datetime import date, datetime
+    mdir = memory_dir()
+    if not mdir.exists():
+        return []
+    out = []
+    for f in sorted(mdir.glob("**/*.md")):
+        try:
+            fm, body = parse_frontmatter(f.read_text(encoding="utf-8", errors="replace"))
+        except Exception:
+            continue
+        if str(fm.get("status", "")).strip() != "unverified":
+            continue
+        created = str(fm.get("created", "")).strip()
+        try:
+            age_days = (date.today() - datetime.fromisoformat(created).date()).days
+        except Exception:
+            age_days = None
+        snippet = " ".join(body.split())[:240]
+        out.append({
+            "stem": f.stem,
+            "title": str(fm.get("title", "")).strip().strip("'\""),
+            "created": created,
+            "age_days": age_days,
+            "memory_type": coerce_memory_type(fm.get("memory_type")),
+            "importance": coerce_importance(fm.get("importance")),
+            "evidence_basis": str(fm.get("evidence_basis", "")).strip(),
+            "snippet": snippet,
+        })
+    out.sort(key=lambda x: (x["created"] or "9999", x["stem"]))
+    return out[:limit] if limit else out
+
+
+def _append_review_log(entry: dict) -> None:
+    """Audit-append, fail-soft: telemetrie mag een genomen besluit nooit
+    terugdraaien of blokkeren. De statuswijziging is dan al duurzaam."""
+    import json
+    try:
+        p = review_log_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with p.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
+def decide(stem: str, decision: str, via: str = "cli") -> dict:
+    """Voer één reviewbeslissing uit. Crash-veilige volgorde (llm_wiki #614):
+
+    1. valideer alles (beslissing, stem, bestand, status);
+    2. schrijf de statuswijziging DUURZAAM (set_status);
+    3. pas daarna de audit-regel en het succes-antwoord.
+
+    Elke fout vóór of tijdens stap 2 -> ReviewError, en het item blijft
+    unverified in de queue. Een review-flow die bij falen doet alsof de mens
+    besliste, ondermijnt de hele "mens beslist"-belofte.
+
+    skip schrijft niets aan het bestand (expliciete no-op) maar wordt wél
+    gelogd: uitgesteld oordeel is informatie voor de doctor-teller.
+    """
+    if decision not in DECISIONS:
+        opts = "|".join(DECISIONS)
+        raise ReviewError(400, f"onbekende beslissing: {decision!r} ({opts})")
+    if not stem or "/" in stem or "\\" in stem or ".." in stem:
+        raise ReviewError(400, "ongeldige stem")
+    mem_root = memory_dir().resolve()
+    target = (mem_root / f"{stem}.md").resolve()
+    if mem_root not in target.parents:
+        raise ReviewError(400, "pad buiten 09-memory")
+    if not target.is_file():
+        raise ReviewError(404, "memory-fragment niet gevonden")
+    current = read_status(target)
+    if current != "unverified":
+        raise ReviewError(409, f"status is {current}, alleen unverified is beslisbaar")
+
+    new_status = DECISIONS[decision]
+    if new_status is None:
+        result = {"status": "skipped", "stem": stem, "new_status": "unverified"}
+    else:
+        if not set_status(target, new_status):
+            raise ReviewError(500, "statuswijziging niet doorgevoerd (set_status faalde)")
+        result = {"status": "ok", "stem": stem, "new_status": new_status}
+
+    from datetime import datetime, timezone
+    _append_review_log({
+        "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "stem": stem, "decision": decision,
+        "new_status": result["new_status"], "via": via,
+    })
+    return result
+
+
+def review_counts(days: int = 30) -> dict:
+    """{approve, reject, skip} uit het audit-log binnen ``days``; fail-soft."""
+    import json
+    from datetime import datetime, timedelta, timezone
+    counts = {"approve": 0, "reject": 0, "skip": 0}
+    try:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        with review_log_path().open(encoding="utf-8") as fh:
+            for line in fh:
+                try:
+                    e = json.loads(line)
+                    ts = datetime.fromisoformat(str(e.get("ts", "")))
+                    if ts.tzinfo is None:
+                        ts = ts.replace(tzinfo=timezone.utc)
+                    if ts >= cutoff and e.get("decision") in counts:
+                        counts[e["decision"]] += 1
+                except Exception:
+                    continue
+    except OSError:
+        pass
+    return counts

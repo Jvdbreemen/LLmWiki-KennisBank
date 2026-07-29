@@ -8,5 +8,6 @@
   "usage_telemetry": true,
   "activity_llm_fallback": false,
   "checkpoints": false,
-  "orientation": false
+  "orientation": false,
+  "graph_retrieval": true
 }

@@ -212,3 +212,43 @@ body {
 .decide.reject:hover:not(:disabled) { background: #e07a7a22; }
 .decide:disabled { opacity: 0.4; cursor: default; }
 .chain-link { color: #4f9cf9; }
+
+/* --- Activiteits-heatmap (TASK-91 F1) --- */
+.heatmap { display: flex; flex-wrap: wrap; gap: 2px; max-width: 720px; }
+.heat { width: 10px; height: 10px; border-radius: 2px; background: #2a2f3a; }
+.heat.q1 { background: #1e4d2b; }
+.heat.q2 { background: #2e7d32; }
+.heat.q3 { background: #4caf50; }
+.heat.q4 { background: #81c784; }
+
+/* --- Cmd+K command palette (TASK-91 F2) --- */
+.palette-overlay {
+  position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding-top: 12vh; z-index: 1000;
+}
+.palette-box {
+  width: min(560px, 90vw); background: #1c2027; border: 1px solid #3a4150;
+  border-radius: 8px; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,.45);
+}
+.palette-input {
+  width: 100%; box-sizing: border-box; padding: 12px 14px; border: none;
+  border-bottom: 1px solid #3a4150; background: transparent; color: inherit;
+  font-size: 15px; outline: none;
+}
+.palette-list { max-height: 50vh; overflow-y: auto; }
+.palette-row {
+  display: flex; gap: 10px; align-items: center; padding: 8px 14px;
+  cursor: pointer;
+}
+.palette-row:hover, .palette-row.active { background: #2a3140; }
+.palette-tag {
+  font-size: 11px; opacity: .7; border: 1px solid #3a4150; border-radius: 4px;
+  padding: 1px 6px; min-width: 52px; text-align: center;
+}
+
+/* --- Recall facet-chips + JSON-export (TASK-91 F3/F5) --- */
+.facet-chips { display: flex; gap: 6px; margin: 6px 0; }
+.chip { font-size: 12px; padding: 2px 10px; border-radius: 12px; opacity: .75; }
+.chip.active { opacity: 1; outline: 1px solid #4caf50; }
+.copy-json { margin: 8px 0; }

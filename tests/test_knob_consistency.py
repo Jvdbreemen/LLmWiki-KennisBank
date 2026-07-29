@@ -122,3 +122,18 @@ class EmptyAgentHomeFallsBackTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+class CouplingKnobsMatchTheirDocsTest(unittest.TestCase):
+    """De coupling-boosts (TASK-88) zijn geen cosinus-drempels en horen dus
+    niet in kb-calibrate.CURRENT_KNOBS; hun documentatie-pinning gebeurt hier:
+    CONFIGURATION.md moet exact de waarden noemen die _rank.py gebruikt."""
+
+    def test_configuration_documents_the_rank_constants(self):
+        import _rank
+        docs = (REPO_ROOT / "CONFIGURATION.md").read_text(encoding="utf-8")
+        self.assertIn(f"COUPLING_BOOST_ONE = {_rank.COUPLING_BOOST_ONE}", docs)
+        self.assertIn(f"COUPLING_BOOST_MULTI = {_rank.COUPLING_BOOST_MULTI}", docs)
+
+    def test_boosts_stay_within_usage_warmth_cap(self):
+        import _rank
+        self.assertLessEqual(_rank.COUPLING_BOOST_MULTI, _rank.USAGE_BOOST_RECENT)
+        self.assertGreaterEqual(_rank.COUPLING_BOOST_ONE, 1.0)

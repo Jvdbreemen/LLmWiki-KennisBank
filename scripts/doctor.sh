@@ -419,6 +419,92 @@ else
   report_info "graphify graph" "geen graph.json; /brug, auto-crosslink en de graaf-lenzen vallen stil terug (externe graphify-skill vereist)"
 fi
 
+# 11c-ter. Graafretrieval (TASK-87). De stil-leeg-guard uit TASK-15: een
+# toggle die aan staat terwijl de graaf stale is levert maandenlang stil
+# GEEN buur — dat hoort een WARN te zijn, geen onzichtbaarheid. De teller
+# (buren geinjecteerd, 30d) toont of de expansie daadwerkelijk iets doet.
+if command -v python3 >/dev/null 2>&1 && [ -f "$SCRIPTS_DIR/_settings.py" ]; then
+  GRAPH_RETR="$(python3 -c 'import sys
+sys.path.insert(0, sys.argv[1])
+import _settings, _kbindex, _usage
+import sqlite3
+on = _settings.get("graph_retrieval", False)
+fresh = "n/a"
+try:
+    p = _kbindex.graph_index_path()
+    if p.exists():
+        conn = sqlite3.connect(f"file:{p.as_posix()}?mode=ro", uri=True)
+        from _vaultpath import vault_root
+        fresh = "fresh" if _kbindex.graph_is_current(conn, vault_root() / "graphify-out" / "graph.json") else "stale"
+        conn.close()
+    else:
+        fresh = "no-db"
+except Exception:
+    fresh = "error"
+print(f"{int(on)} {fresh} {_usage.neighbor_injected(30)}")' "$SCRIPTS_DIR" 2>/dev/null | tr -d '
+')"
+  GR_ON="$(printf '%s' "$GRAPH_RETR" | cut -d' ' -f1)"
+  GR_FRESH="$(printf '%s' "$GRAPH_RETR" | cut -d' ' -f2)"
+  GR_NB="$(printf '%s' "$GRAPH_RETR" | cut -d' ' -f3)"
+  case "$GR_ON" in
+    1)
+      if [ "$GR_FRESH" = "fresh" ]; then
+        report_pass "graph retrieval" "toggle aan, graaf vers, buren geinjecteerd (30d): ${GR_NB:-0}"
+      else
+        report_warn "graph retrieval" "toggle AAN maar graafindex ${GR_FRESH:-onbekend} — expansie levert stil niets; draai /graphify + build-graph-index.py"
+      fi
+      ;;
+    0)
+      report_info "graph retrieval" "toggle uit (legacy wikilink-expansie actief); buren geinjecteerd (30d): ${GR_NB:-0}"
+      ;;
+    *)
+      report_warn "graph retrieval" "status niet leesbaar (python3/_settings-fout)"
+      ;;
+  esac
+fi
+
+# 11c-quater. Provenance-dekking in de index (TASK-88). Het coupling-signaal
+# kan alleen wegen wat geindexeerd is; dekking 0 terwijl de knop aan staat is
+# de stil-leeg-faalvorm (TASK-15) en verdient een WARN.
+if command -v python3 >/dev/null 2>&1 && [ -f "$VAULT/.claude/kb-index.db" ]; then
+  PROV_COV="$(python3 -c 'import sqlite3, sys
+db = sys.argv[1]
+try:
+    conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    rows = conn.execute(
+        "SELECT d.layer, count(DISTINCT d.doc_id), "
+        "count(DISTINCT CASE WHEN s.doc_id IS NOT NULL THEN d.doc_id END) "
+        "FROM docs d LEFT JOIN doc_sources s ON s.doc_id = d.doc_id "
+        "GROUP BY d.layer").fetchall()
+    conn.close()
+    stats = {layer: (int(cov), int(tot)) for layer, tot, cov in rows}
+    w = stats.get("wiki", (0, 0)); m = stats.get("memory", (0, 0))
+    print(f"{w[0]} {w[1]} {m[0]} {m[1]}")
+except Exception:
+    print("ERR")' "$VAULT/.claude/kb-index.db" 2>/dev/null | tr -d '
+')"
+  if [ "$PROV_COV" = "ERR" ] || [ -z "$PROV_COV" ]; then
+    report_info "provenance coverage" "index nog zonder doc_sources-tabel; draai build-kb-index.py --rebuild voor de backfill"
+  else
+    PC_WC="$(printf '%s' "$PROV_COV" | cut -d' ' -f1)"
+    PC_WT="$(printf '%s' "$PROV_COV" | cut -d' ' -f2)"
+    PC_MC="$(printf '%s' "$PROV_COV" | cut -d' ' -f3)"
+    PC_MT="$(printf '%s' "$PROV_COV" | cut -d' ' -f4)"
+    COUPLING_ON="$(python3 -c 'import json, sys, os
+try:
+    cfg = json.loads(open(os.path.join(sys.argv[1], ".claude", "kennisbank-embed.json"), encoding="utf-8").read())
+    print(int(bool(cfg.get("rank_coupling", 0))))
+except Exception:
+    print(0)' "$VAULT" 2>/dev/null | tr -d '
+')"
+    if [ "$COUPLING_ON" = "1" ] && [ "${PC_WC:-0}" = "0" ] && [ "${PC_MC:-0}" = "0" ]; then
+      report_warn "provenance coverage" "rank_coupling staat AAN maar geen enkel doc heeft een bron in de index — het signaal weegt stil niets; draai build-kb-index.py --rebuild"
+    else
+      report_pass "provenance coverage" "wiki ${PC_WC:-0}/${PC_WT:-0}, memory ${PC_MC:-0}/${PC_MT:-0} docs met >=1 bron"
+    fi
+  fi
+fi
+
 # 11d. Temporele locale-vocabulaire. Toetst de GELADEN tabel, niet de
 # aanwezigheid van het bestand: een aanwezig-maar-onleesbaar activity-locales.json
 # faalt stil open en laat de datumparser met een lege Laag 1 achter.
@@ -465,6 +551,26 @@ EOF2
     report_warn "geheugen quarantaine" "$rot unverified memories ouder dan 48u (sweep/judge hangt?)"
   else
     report_pass "geheugen quarantaine" "geen rot"
+  fi
+  # Review-queue-teller (TASK-89): een queue die bestaat maar nooit gebruikt
+  # wordt is de TASK-23-faalvorm (31 gestuwde unverified, mens zag het niet).
+  REVIEW_STAT="$(python3 -c 'import sys
+sys.path.insert(0, sys.argv[1])
+import _memory
+pending = len(_memory.pending_reviews())
+c = _memory.review_counts(30)
+print(f"{pending} {c[\"approve\"]} {c[\"reject\"]} {c[\"skip\"]}")' "$SCRIPTS_DIR" 2>/dev/null | tr -d '\r')"
+  if [ -n "$REVIEW_STAT" ]; then
+    RV_P="$(printf '%s' "$REVIEW_STAT" | cut -d' ' -f1)"
+    RV_A="$(printf '%s' "$REVIEW_STAT" | cut -d' ' -f2)"
+    RV_R="$(printf '%s' "$REVIEW_STAT" | cut -d' ' -f3)"
+    RV_S="$(printf '%s' "$REVIEW_STAT" | cut -d' ' -f4)"
+    RV_TOT=$((${RV_A:-0} + ${RV_R:-0} + ${RV_S:-0}))
+    if [ "${RV_P:-0}" -ge 10 ] 2>/dev/null && [ "$RV_TOT" -eq 0 ] 2>/dev/null; then
+      report_warn "review-queue" "$RV_P unverified wachten en 0 beslissingen in 30d — draai /kennisbank:review"
+    else
+      report_pass "review-queue" "$RV_P wachtend; beslist (30d): $RV_A approve / $RV_R reject / $RV_S skip"
+    fi
   fi
 fi
 
