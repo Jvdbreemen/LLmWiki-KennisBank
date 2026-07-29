@@ -258,6 +258,33 @@ def main() -> int:
                               help="forceer buur-expansie uit (offline A/B)")
     args = parser.parse_args()
 
+    # Altijd, onvoorwaardelijk: een eval-run mag nooit als gebruik meetellen.
+    # Elk pad dat _usage.enabled() checkt (log_injected, mark_used) schrijft
+    # hierdoor per constructie niets. try/finally herstelt de vorige waarde,
+    # zodat ook een in-process aanroep (langlevend hostproces, tests) het
+    # normale leergedrag na afloop teruggeeft — de guard mag nooit blijven
+    # plakken buiten de duur van de eval zelf.
+    saved_disable = os.environ.get("KB_USAGE_DISABLE")
+    os.environ["KB_USAGE_DISABLE"] = "1"
+    # Meldingen naar stderr: --json-consumenten lezen stdout en mogen hier
+    # geen last van hebben.
+    print("kb-eval: usage-telemetrie UIT (KB_USAGE_DISABLE=1) — "
+          "deze eval telt niet mee als gebruik", file=sys.stderr)
+    try:
+        return _run_jobs(args)
+    finally:
+        if saved_disable is None:
+            os.environ.pop("KB_USAGE_DISABLE", None)
+            print("kb-eval: usage-telemetrie weer AAN — "
+                  "de KennisBank leert weer van gebruik", file=sys.stderr)
+        else:
+            os.environ["KB_USAGE_DISABLE"] = saved_disable
+            print("kb-eval: KB_USAGE_DISABLE stond al vóór deze run in de "
+                  "omgeving en blijft staan — usage-telemetrie blijft UIT "
+                  "(zie doctor.sh)", file=sys.stderr)
+
+
+def _run_jobs(args) -> int:
     # Bepaal welke (set, laag)-paren te draaien. Custom --set: één paar met de
     # opgegeven (of default wiki) laag. Zonder --set: beide standaardsets, elk
     # tegen zijn eigen laag — precies de twee blokken die de hook injecteert.

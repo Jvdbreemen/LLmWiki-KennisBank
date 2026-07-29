@@ -91,7 +91,13 @@ def _migrate(conn) -> None:
 
 
 def enabled() -> bool:
-    """Toggle-gate; fail-open naar True (telemetrie is passief en lokaal)."""
+    """Toggle-gate; fail-open naar True (telemetrie is passief en lokaal).
+
+    KB_USAGE_DISABLE overrides the settings toggle: an eval run (kb-eval
+    sets it unconditionally) must never count as usage, or the measurement
+    pollutes the ranking signal it is measuring."""
+    if os.environ.get("KB_USAGE_DISABLE"):
+        return False
     try:
         import _settings
         return bool(_settings.get("usage_telemetry", True))
