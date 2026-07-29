@@ -463,6 +463,17 @@ print(f"{int(on)} {fresh} {_usage.neighbor_injected(30)}")' "$SCRIPTS_DIR" 2>/de
   esac
 fi
 
+# 11c-ter-bis. Verdwaalde KB_USAGE_DISABLE in de omgeving (TASK-97).
+# kb-eval.py zet deze var alleen in zijn eigen proces; staat hij hier (shell-
+# profiel, systeem-env), dan leert de KennisBank stil niets meer van gebruik —
+# precies de stil-leeg-faalvorm (TASK-15) die zichtbaar hoort te zijn.
+if [ -n "${KB_USAGE_DISABLE:-}" ]; then
+  report_warn "usage telemetry" \
+    "KB_USAGE_DISABLE staat in de omgeving — de KennisBank leert nu NIET van gebruik. Bedoeld voor eval-runs; verwijder de export uit je shell-profiel/systeem-env."
+else
+  report_pass "usage telemetry" "geen verdwaalde KB_USAGE_DISABLE in de omgeving"
+fi
+
 # 11c-quater. Provenance-dekking in de index (TASK-88). Het coupling-signaal
 # kan alleen wegen wat geindexeerd is; dekking 0 terwijl de knop aan staat is
 # de stil-leeg-faalvorm (TASK-15) en verdient een WARN.

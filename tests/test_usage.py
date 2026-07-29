@@ -136,5 +136,72 @@ class TestUsageScan(UsageCase):
         self.assertEqual(self.scan_mod.scan("s-leeg", t), 0)
 
 
+class TestFrozenGuard(UsageCase):
+    """KB_USAGE_DISABLE (kb-eval --frozen): een eval-run mag nooit als
+    gebruik meetellen, anders vervuilt de meting het signaal dat ze meet."""
+
+    def setUp(self):
+        super().setUp()
+        self._saved_disable = os.environ.pop("KB_USAGE_DISABLE", None)
+        self.addCleanup(self._restore_disable)
+
+    def _restore_disable(self):
+        if self._saved_disable is None:
+            os.environ.pop("KB_USAGE_DISABLE", None)
+        else:
+            os.environ["KB_USAGE_DISABLE"] = self._saved_disable
+
+    def test_env_var_disables_all_writers(self):
+        os.environ["KB_USAGE_DISABLE"] = "1"
+        self.assertFalse(self.u.enabled())
+        self.assertEqual(self.u.log_injected(["a"], session_id="s1"), 0)
+        self.assertEqual(self.u.mark_used(["a"]), 0)
+        self.assertEqual(self.u.mark_noise(["a"]), 0)
+        self.assertEqual(self.u.pending_for("s1"), [])
+
+    def test_unset_env_var_keeps_default_on(self):
+        self.assertTrue(self.u.enabled())
+
+    def _run_eval_main(self, eval_mod):
+        # --set naar een niet-bestaand pad: main() faalt netjes (exit 1) nadat
+        # de guard gezet is, zonder model of index nodig te hebben.
+        argv_saved = sys.argv
+        sys.argv = ["kb-eval.py",
+                    "--set", str(Path(self.tmp.name) / "geen-set.json")]
+        try:
+            return eval_mod.main()
+        finally:
+            sys.argv = argv_saved
+
+    def test_kb_eval_freezes_during_run_and_restores_after(self):
+        # Geen vlag: een eval mag NOOIT als gebruik meetellen, dus de guard is
+        # onvoorwaardelijk actief TIJDENS de run — en na afloop hersteld, zodat
+        # ook een in-process aanroep het normale leergedrag teruggeeft.
+        eval_mod = load_script("kb-eval.py")
+        captured = {}
+        orig = eval_mod._run_jobs
+
+        def spy(args):
+            captured["during"] = os.environ.get("KB_USAGE_DISABLE")
+            return orig(args)
+
+        eval_mod._run_jobs = spy
+        try:
+            self._run_eval_main(eval_mod)
+        finally:
+            eval_mod._run_jobs = orig
+        self.assertEqual(captured.get("during"), "1")
+        self.assertNotIn("KB_USAGE_DISABLE", os.environ)
+        self.assertTrue(self.u.enabled())
+
+    def test_kb_eval_preserves_preexisting_disable(self):
+        # Stond de var al (bewust) in de omgeving, dan laat de eval hem staan:
+        # herstellen betekent "vorige staat terug", niet "altijd aan".
+        eval_mod = load_script("kb-eval.py")
+        os.environ["KB_USAGE_DISABLE"] = "handmatig"
+        self._run_eval_main(eval_mod)
+        self.assertEqual(os.environ.get("KB_USAGE_DISABLE"), "handmatig")
+
+
 if __name__ == "__main__":
     unittest.main()
