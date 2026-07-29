@@ -55,6 +55,13 @@ Detecteer semantisch overlappende artikelen die elkaars claims tegenspreken, laa
         - Overschrijf **nooit** stil met `--force`.
       - Verwijder **nooit** automatisch een artikel.
 
+3.5. Deterministische post-pass (TASK-90 E3) — draai op elk gecorrigeerd artikel:
+   ```
+   python3 $VAULT/.claude/scripts/kb-normalize.py <verliezer-pad>
+   ```
+   Normaliseert linkvorm en tags deterministisch (llm_wiki #576-les:
+   geïnstrueerde vormbehoud-regels falen, code niet).
+
 4. Voeg een auditlog-regel toe aan `$VAULT/02-wiki/reconciliation-log.md` (maak het bestand aan als het niet bestaat):
    ```
    - YYYY-MM-DD [[winnaar-stem]] over [[verliezer-stem]] — reden: <korte motivatie>

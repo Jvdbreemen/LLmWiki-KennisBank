@@ -51,19 +51,57 @@ export function renderRecallLens(host: HTMLElement, client: DataClient): Promise
       // final hits with factor breakdown (the "why")
       const rerankByPath = new Map(d.stages.rerank.map((r) => [r.path, r]));
       const finalBox = el("div", {}, [el("h3", {}, ["Eindresultaat — waarom (relevance × rerank-factoren)"])]);
+
+      // Facet-chips (TASK-91 F5): client-side filteren op de al-geladen
+      // resultaten — geen nieuwe query per klik. Drie onafhankelijke
+      // implementaties (Pratiyush, WUPHF, geronimo-iia) convergeerden hierop.
+      const layerOf = (h: { path: string; layer?: string }) =>
+        h.layer || (h.path.replace(/\\/g, "/").includes("09-memory/") ? "memory" : "wiki");
+      let facet = "alle";
       const list = el("ol", { class: "list" });
-      for (const h of d.final) {
-        const rr = rerankByPath.get(h.path);
-        const label = h.neighbor ? `graafbuur · ${base(h.path)}` : `${h.score.toFixed(5)} · ${base(h.path)}`;
-        const li = el("li", { class: "clickable" }, [
-          el("div", { class: "hit-path" }, [label]),
-          rr ? factorRow(rr) : el("span", {}, []),
-          el("div", { class: "hit-snippet" }, [h.snippet]),
-        ]);
-        li.addEventListener("click", () => void openInspect(client, h.path));
-        list.appendChild(li);
+      const renderList = () => {
+        list.replaceChildren();
+        for (const h of d.final) {
+          if (facet !== "alle" && layerOf(h) !== facet) continue;
+          const rr = rerankByPath.get(h.path);
+          const label = h.neighbor ? `graafbuur · ${base(h.path)}` : `${h.score.toFixed(5)} · ${base(h.path)}`;
+          const li = el("li", { class: "clickable" }, [
+            el("div", { class: "hit-path" }, [`[${layerOf(h)}] ${label}`]),
+            rr ? factorRow(rr) : el("span", {}, []),
+            el("div", { class: "hit-snippet" }, [h.snippet]),
+          ]);
+          li.addEventListener("click", () => void openInspect(client, h.path));
+          list.appendChild(li);
+        }
+      };
+      const chips = el("div", { class: "facet-chips" });
+      for (const f of ["alle", "wiki", "memory"]) {
+        const chip = el("button", { class: `chip${f === facet ? " active" : ""}` }, [f]);
+        chip.addEventListener("click", () => {
+          facet = f;
+          for (const c of chips.children) {
+            (c as HTMLElement).classList.toggle("active", (c as HTMLElement).textContent === f);
+          }
+          renderList();
+        });
+        chips.appendChild(chip);
       }
+      renderList();
+
+      // Machine-leesbare tweeling (TASK-91 F3, idee uit Pratiyush): de hele
+      // waterfall als JSON op het klembord — plakbaar in een bugrapport of
+      // te voeren aan een agent, zonder de UI na te hoeven tikken.
+      const copyBtn = el("button", { class: "copy-json" }, ["kopieer als JSON"]);
+      copyBtn.addEventListener("click", () => {
+        const payload = JSON.stringify(d, null, 2);
+        void navigator.clipboard.writeText(payload).then(
+          () => { copyBtn.textContent = "gekopieerd ✓"; },
+          () => { copyBtn.textContent = "kopiëren mislukt"; });
+      });
+
+      finalBox.appendChild(chips);
       finalBox.appendChild(list);
+      finalBox.appendChild(copyBtn);
 
       // the upstream stages: vector + FTS candidates -> RRF fusion
       const stages = el("div", { class: "stages-grid" }, [

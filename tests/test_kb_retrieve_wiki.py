@@ -208,6 +208,39 @@ class WikiBlockTest(unittest.TestCase):
                                   self._cfg(), [0.1, 0.2])
         self.assertEqual(text, "")
 
+    # --- Injectiepad end-to-end (TASK-86, claude-mem-les) ---
+
+    def test_main_injects_ranked_stems_into_hook_output(self):
+        """Wat de ranking teruggeeft moet ook echt in de hook-OUTPUT belanden.
+
+        Bij claude-mem viel een hele geheugencategorie maandenlang stil buiten
+        de contextinjectie zonder dat iemand het merkte (fix pas in v13.12.4):
+        de ranking was goed, de injectie niet, en niets mat het verschil. Deze
+        test parseert daarom de volledige stdout van main() en asserteert dat
+        de verwachte stem als [[wikilink]] in additionalContext staat — niet
+        alleen dat wiki_hits hem teruggaf.
+        """
+        self.emb.cosine = lambda a, b: 0.9
+        self.m.kb_recall.index_is_gated = Mock(return_value=True)
+        self.m.kb_recall.wiki_hits = Mock(
+            side_effect=lambda qv, query_text="", k=3, expand=False, min_cos=0.0: [
+                {"path": str(self.vault / "02-wiki" / "art.md"), "layer": "wiki",
+                 "title": "Art", "created": "2026-06-01", "score": 0.83,
+                 "snippet": "e2e-injectie-snippet"}])
+        prompt = "een relevante vraag over het artikel"
+        buf = io.StringIO()
+        with self._prompt_env():
+            with patch.object(sys, "stdin", io.StringIO(json.dumps({"prompt": prompt}))):
+                with patch.object(sys, "stdout", buf):
+                    self.m.main()
+        raw = buf.getvalue()
+        self.assertTrue(raw.strip(), "hook emitteerde niets terwijl er een hit was")
+        out = json.loads(raw)
+        ctx = out["hookSpecificOutput"]["additionalContext"]
+        self.assertEqual(out["hookSpecificOutput"]["hookEventName"], "UserPromptSubmit")
+        self.assertIn("[[art]]", ctx)
+        self.assertIn("e2e-injectie-snippet", ctx)
+
 
 if __name__ == "__main__":
     unittest.main()

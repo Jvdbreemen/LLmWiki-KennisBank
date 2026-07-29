@@ -13,15 +13,32 @@ Patroonherkenning over sessies heen — destilleer herbruikbare kennis als wiki-
 
 ## Stappen
 
-1. Scan raw logs in $VAULT/01-raw/sessies/
-   - Default: logs van de laatste 7 dagen
-   - Als $ARGUMENTS is opgegeven: alleen logs die dat onderwerp raken (grep op inhoud of filename)
+1. Draai de deterministische kandidaten-scan over de recente sessielogs in
+   $VAULT/01-raw/sessies/ (TASK-89: dit vervangt de vrije identificatie —
+   het systeem stelt voor, jij voert uit en rapporteert):
+   ```
+   python3 $VAULT/.claude/scripts/wiki-scan.py --days 7
+   ```
+   - Als $ARGUMENTS is opgegeven: voeg `--topic "$ARGUMENTS"` toe.
+   - De uitvoer is JSON: `candidates[]` met `topic`, `source_kind`
+     (marker|cluster|recurrent), `evidence` (bronpaden), `similar`
+     (find-similar-resultaat) en `suggested_action` ∈ herschrijf|nieuw|overslaan
+     met `reason`; plus `scanned_logs` en `window_days`.
+   - `scanned_logs: 0` betekent een configuratieprobleem (geen recente logs
+     gevonden) — meld dat expliciet; het is iets anders dan "geen kandidaten
+     uit N logs".
+   - Lege kandidatenlijst bij `scanned_logs > 0`: rapporteer "Geen
+     wiki-kandidaten in de laatste N dagen." en stop.
 
-2. Identificeer wiki-kandidaten:
-   - Expliciete markers "wiki-kandidaat: [onderwerp]" in de logs
-   - Onderwerpen die in minimaal 2 sessies terugkomen
-   - Technische oplossingen, workflows, configs die herbruikbaar zijn
-   - Begrippen, methoden of tools die nog geen eigen wiki-artikel hebben
+2. Volg per kandidaat de `suggested_action`:
+   - **herschrijf** → stap 3.5 (het `similar.path`-artikel bijwerken)
+   - **nieuw** → stap 4 (nieuw artikel via template; stap 3.5 hervalideert
+     eerst met find-similar als `similar` in de scan-uitvoer null was)
+   - **overslaan** → noteer voor de rapportage (stap 5), geen actie
+   - Afwijken van de suggestie mag uitsluitend gemotiveerd: noem de reden in
+     de rapportage. Voeg NOOIT eigen kandidaten toe buiten de scan om; ontbreekt
+     er structureel iets, dan is dat een verbetering aan `wiki-scan.py`, niet
+     aan deze stap.
 
 3. Check bestaande wiki in $VAULT/02-wiki/
    - Bestaat er al een artikel? Update het. Zo nee: schrijf nieuw artikel via template.
@@ -78,6 +95,17 @@ Patroonherkenning over sessies heen — destilleer herbruikbare kennis als wiki-
      reconstrueren kan niet. Komt een kernpunt uit meerdere sessies, geef dan
      meerdere links op één regel.
    - **`## Bronnen`:** alleen externe bronnen (APA7), geen sessieverwijzingen.
+
+4.4. Deterministische post-pass (TASK-90 E3) — draai na ELK geschreven of
+   herschreven artikel, vóór de lint:
+   ```
+   python3 $VAULT/.claude/scripts/kb-normalize.py <artikelpad>
+   ```
+   Dit normaliseert vorm, geen inhoud: padgeprefixte wikilinks worden kale
+   stems (05-bronnen-paden blijven staan), backslashes worden forward slashes,
+   een kale tags-regel wordt een lijst. Vertrouw hierop in plaats van het
+   zelf in de prompt "goed te doen" — deterministisch wint altijd van
+   geïnstrueerd (llm_wiki #576-les).
 
 4.5. Valideer de herkomst met de lint — FAIL-CLOSED op niet-herleidbare herkomst:
    ```

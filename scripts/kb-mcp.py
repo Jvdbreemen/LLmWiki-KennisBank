@@ -122,6 +122,43 @@ def capture_tool(title: str, body: str, memory_type: str = "feit",
         return f"Kon de memory niet vastleggen ({type(e).__name__}). Niets geschreven."
 
 
+def review_pending_tool(k: int = 10) -> str:
+    """Toon de unverified-memory-reviewwachtrij (TASK-89). Puur lezen."""
+    try:
+        import _memory
+        items = _memory.pending_reviews(limit=int(k))
+    except Exception:
+        return "Review-queue niet leesbaar (fout bij scannen)."
+    if not items:
+        return "Review-queue leeg: geen unverified memories."
+    lines = [f"Unverified memories ({len(items)} getoond, oudste eerst):"]
+    for it in items:
+        age = f"{it['age_days']}d" if it["age_days"] is not None else "?"
+        lines.append(f"- [[{it['stem']}]] [{it['memory_type']}/{it['importance']}] "
+                     f"({age}, {it['evidence_basis']}) {it['title']}: {it['snippet'][:120]}")
+    return "\n".join(lines)
+
+
+def review_decide_tool(stem: str, decision: str) -> str:
+    """Voer één menselijke reviewbeslissing uit: approve|reject|skip.
+
+    ALLEEN aanroepen nadat de gebruiker in het gesprek EXPLICIET per item
+    heeft beslist — de agent beslist nooit zelf ("mens beslist", TASK-89).
+    Crash-veilig: bij elke fout blijft het item unverified in de queue en
+    komt de foutmelding terug; er wordt nooit stil "afgehandeld" gemeld.
+    """
+    try:
+        import _memory
+        r = _memory.decide((stem or "").strip(), (decision or "").strip(), via="mcp")
+    except Exception as e:
+        code = getattr(e, "code", None)
+        tail = f" (code {code})" if code else ""
+        return f"Niet doorgevoerd: {e}{tail}. Het item blijft in de queue."
+    if r["status"] == "skipped":
+        return f"Overgeslagen: [[{r['stem']}]] blijft unverified in de queue."
+    return f"Beslist: [[{r['stem']}]] -> {r['new_status']}."
+
+
 def _activity_json(payload: dict) -> str:
     return json.dumps(payload, indent=2, ensure_ascii=False)
 
@@ -214,6 +251,10 @@ INSTRUCTIONS_TEXT = (
     "beslissing ontstaat die je in een volgende sessie terug wilt zien.\n"
     "- Roep `what_did_i_do`, `timeline`, `weeklog` of `topic_timeline` aan voor "
     "vragen over wat er op een datum, in een week of rond een onderwerp gebeurde.\n"
+    "- `review_pending` toont unverified memories die op menselijke review "
+    "wachten; `review_decide` voert een beslissing door — ALLEEN nadat de "
+    "gebruiker expliciet per item besliste (approve/reject/skip). Beslis nooit "
+    "zelf namens de gebruiker.\n"
     "- De KennisBank is lokaal en soeverein: er gaat niets naar de cloud."
 )
 
@@ -236,6 +277,19 @@ def build_server():
         """Leg een herbruikbaar feit/voorkeur/procedure/beslissing vast in je
         KennisBank. Landt als unverified; de sweep of jijzelf bevestigt 'm later."""
         return capture_tool(title, body, memory_type=memory_type, importance=importance)
+
+    @srv.tool()
+    def review_pending(k: int = 10) -> str:
+        """Toon de wachtrij van unverified memories die op menselijke review
+        wachten (oudste eerst). Puur lezen; beslist niets."""
+        return review_pending_tool(k=k)
+
+    @srv.tool()
+    def review_decide(stem: str, decision: str) -> str:
+        """Voer één reviewbeslissing uit (approve|reject|skip) — UITSLUITEND
+        nadat de gebruiker in het gesprek expliciet over dit item besliste.
+        Beslis nooit zelf; presenteer eerst review_pending en vraag per item."""
+        return review_decide_tool(stem, decision)
 
     @srv.tool()
     def what_did_i_do(date_or_period: str, topic: str = "", project: str = "",

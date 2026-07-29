@@ -34,6 +34,31 @@ EXTRACT_SYSTEM = (
 )
 
 
+#: Promptversie (TASK-90 E5): opgehoogd bij ELKE wijziging aan EXTRACT_SYSTEM.
+#: Wordt met het model-id in de memory-frontmatter gestempeld, zodat na een
+#: slechte promptversie alle getroffen claims selecteerbaar zijn.
+EXTRACT_PROMPT_VERSION = 1
+
+#: Weigering-/meta-patronen (TASK-90 E4, arkon#25): een model dat niet kan
+#: antwoorden mag dat NOOIT als kennis het archief in schrijven. "Ik kan deze
+#: vraag niet beantwoorden" met een titel en een plek in de index is de
+#: nachtmerrie-variant van confidently-wrong: volstrekt inhoudsloos en toch
+#: canoniek. Deterministische check, lowercase-substring — geen judge nodig.
+REFUSAL_MARKERS = (
+    "ik kan niet", "ik kan geen", "ik kan deze", "ik heb geen toegang",
+    "het spijt me", "mijn excuses", "als ai", "als taalmodel",
+    "i cannot", "i can't", "i am unable", "i'm unable", "i don't have access",
+    "as an ai", "as a language model", "i apologize", "i'm sorry",
+    "no relevant", "geen relevante kennis", "niet genoeg context",
+)
+
+
+def looks_like_refusal(text: str) -> bool:
+    """True als de tekst een weigering/meta-antwoord is i.p.v. kennis."""
+    low = " ".join(str(text or "").lower().split())
+    return any(m in low for m in REFUSAL_MARKERS)
+
+
 def extract_candidates(transcript_text: str, max_n: int = 8) -> list:
     if not (transcript_text or "").strip():
         return []
@@ -53,6 +78,10 @@ def extract_candidates(transcript_text: str, max_n: int = 8) -> list:
             continue
         title = str(item.get("title", "")).strip()
         body = str(item.get("body", "")).strip()
+        # Weigering-poort (E4): een refusal/meta-kandidaat wordt hier
+        # afgebroken, niet opgeslagen — geen latere lint repareert dat nog.
+        if looks_like_refusal(title) or looks_like_refusal(body):
+            continue
         if title and body:
             out.append({"title": title, "body": body,
                         "type": str(item.get("type", "")).strip().lower()})

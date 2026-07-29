@@ -113,3 +113,30 @@ def test_supersede_chain_normalises_wikilink_refs_and_flags_missing(vault_factor
     chain = r["supersede_chains"][0]
     assert chain["chain"] == ["old", "new", "gone"]
     assert chain["missing"] == ["gone"]
+def test_decide_uses_shared_memory_helper_when_deployed(vault_factory, monkeypatch):
+    """TASK-89: een vault met gedeployede scripts beslist via _memory.decide
+    (gedeelde codepath) — bewijs: het audit-log dat alleen de helper schrijft."""
+    import shutil
+    vault = vault_factory(memories=[{"stem": "u9", "status": "unverified"}])
+    repo_scripts = Path(__file__).resolve().parents[3] / "scripts"
+    dest = vault / ".claude" / "scripts"
+    dest.mkdir(parents=True, exist_ok=True)
+    for name in ("_memory.py", "_common.py", "_frontmatter.py", "_vaultpath.py"):
+        shutil.copy(repo_scripts / name, dest / name)
+    monkeypatch.setenv("KENNISBANK_VAULT", str(vault))
+    r = _client(vault).post("/memory/decide", json={"stem": "u9", "decision": "approve"})
+    assert r.status_code == 200
+    assert _status_of(vault, "u9") == "current"
+    log = vault / ".claude" / "memory-review-log.jsonl"
+    assert log.exists(), "gedeelde helper niet gebruikt: geen audit-log geschreven"
+    assert '"via": "atlas"' in log.read_text(encoding="utf-8")
+
+
+def test_decide_falls_back_inline_without_vault_scripts(vault_factory):
+    """Oudere vault zonder .claude/scripts: inline-fallback blijft werken en
+    schrijft geen audit-log (dat is helper-gedrag)."""
+    vault = vault_factory(memories=[{"stem": "u10", "status": "unverified"}])
+    r = _client(vault).post("/memory/decide", json={"stem": "u10", "decision": "approve"})
+    assert r.status_code == 200
+    assert _status_of(vault, "u10") == "current"
+    assert not (vault / ".claude" / "memory-review-log.jsonl").exists()

@@ -114,8 +114,30 @@ def noise_factor(noise: int, injected: int) -> float:
     return max(NOISE_FLOOR, 1.0 - NOISE_PENALTY * min(1.0, noise / injected))
 
 
+#: Bibliographic-coupling-bonus (TASK-88): kandidaten die >=1 bron delen met
+#: een ANDERE kandidaat in dezelfde resultaatset zijn coherenter met de vraag
+#: dan losse treffers (Kessler 1963). Begrensd op het niveau van de usage-
+#: warmte en nooit < 1.0 (coupling is een coherentie-bonus, geen straf).
+#: Startwaarden bewust conservatief en NIET llm_wiki's 4.0/3.0/1.5/1.0 —
+#: die gewichten zijn ongefundeerd handwerk; deze worden getuned via de
+#: kb-eval A/B op de >=100-vraag-sets (bewijsregel TASK-86) en gepind door
+#: tests/test_knob_consistency.py tegen CONFIGURATION.md.
+COUPLING_BOOST_ONE = 1.05    # deelt >=1 bron met een andere kandidaat
+COUPLING_BOOST_MULTI = 1.10  # deelt bronnen met >=2 andere kandidaten
+
+
+def coupling_factor(shared_with: int) -> float:
+    """Bonus op basis van het aantal ANDERE kandidaten met een gedeelde bron.
+    0 -> neutraal 1.0; nooit onder 1.0."""
+    if shared_with >= 2:
+        return COUPLING_BOOST_MULTI
+    if shared_with == 1:
+        return COUPLING_BOOST_ONE
+    return 1.0
+
+
 def rerank(hits: list, meta_fn, today: date | None = None,
-           last_used_fn=None, noise_fn=None) -> list:
+           last_used_fn=None, noise_fn=None, sources_fn=None) -> list:
     """Herweeg hits op relevance x recency x importance x usage, hersorteer.
 
     ``hits``: dicts met minstens ``path``, ``layer``, ``score``.
@@ -125,11 +147,34 @@ def rerank(hits: list, meta_fn, today: date | None = None,
     bewezen nuttig), recency/importance alleen voor de memory-laag.
     ``noise_fn(stem) -> (noise, injected)``: mens-gemarkeerde ruis (optioneel);
     drukt de score begrensd onder 1.0 (noise_factor).
+    ``sources_fn(path) -> set[str]``: provenance-sleutels (optioneel, TASK-88);
+    activeert het bibliographic-coupling-signaal BINNEN de kandidatenset.
+    Zonder sources_fn is de ranking bit-voor-bit identiek aan voorheen
+    (regressie-vergrendeling in tests/test_rank.py).
     Geeft een NIEUWE lijst terug.
     """
     today = today or date.today()
+
+    # Coupling vooraf berekenen: per hit het aantal ANDERE hits waarmee hij
+    # >=1 bron deelt. Eén pass over de kandidatenset, geen I/O hier — de
+    # aanroeper batcht de bron-lookup (kb-recall: één sources_for-query).
+    shared_counts = {}
+    if sources_fn is not None:
+        srcs = []
+        for h in hits:
+            try:
+                s = set(sources_fn(h.get("path", "")) or ())
+            except Exception:
+                s = set()
+            srcs.append(s)
+        for i, si in enumerate(srcs):
+            if not si:
+                continue
+            shared_counts[i] = sum(1 for j, sj in enumerate(srcs)
+                                   if j != i and sj and (si & sj))
+
     out = []
-    for h in hits:
+    for i, h in enumerate(hits):
         score = h.get("score", 0.0)
         if h.get("layer") == "memory":
             try:
@@ -153,6 +198,7 @@ def rerank(hits: list, meta_fn, today: date | None = None,
                 score *= noise_factor(*noise_fn(stem))
             except Exception:
                 pass
+        score *= coupling_factor(shared_counts.get(i, 0))
         out.append({**h, "score": score})
     out.sort(key=lambda x: x.get("score", 0.0), reverse=True)
     return out

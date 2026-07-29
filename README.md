@@ -392,6 +392,7 @@ The hooks are fail-open by design: an error means no injected context or a skipp
 | `/timeline` | date/period/topic | Chronological temporal activity timeline with strict range filtering |
 | `/watdeedik` | date/period/topic | Compact answer to "what did I do then?" with evidence links |
 | `/kennisbank:settings` | none | Show and flip the background-automation toggles |
+| `/kennisbank:review` | optional topic | Walk the unverified-memory queue; the human decides approve/reject/skip per item |
 | `/kennisbank:rebuild-index` | none | Rebuild the hybrid search index from the vault markdown |
 | `/kennisbank:rebuild-memory` | none | Re-extract ALL memory from archived transcripts (heavy; semantic dedup makes it near-idempotent) |
 | `/kennisbank-upgrade` | optional `--dry-run` | Upgrade the deployed vault to the latest release tag |
@@ -434,7 +435,7 @@ Upgrade and contribute are two halves of one loop: `contribute` sends your local
 
 ## Background automation toggles
 
-Seven background behaviours are individual toggles in `kennisbank-settings.json`, managed with `/kennisbank:settings`:
+Eleven background behaviours are individual toggles in `kennisbank-settings.json`, managed with `/kennisbank:settings`:
 
 | Toggle | Default | Controls |
 |--------|---------|----------|
@@ -445,6 +446,10 @@ Seven background behaviours are individual toggles in `kennisbank-settings.json`
 | `memory_capture` | on | Extract and judge memories into `09-memory/` |
 | `memory_recall` | on | Inject memories into context via hooks |
 | `usage_telemetry` | on | Track which injected knowledge gets used |
+| `activity_llm_fallback` | off | Local-LLM fallback for exotic date phrasing in temporal recall |
+| `checkpoints` | off | Auto-save a work-state stub at context compaction (PreCompact) |
+| `orientation` | off | Inject a compact vault orientation at session start |
+| `graph_retrieval` | on | Source the neighbor expansion from the weighted graph index (A/B-proven, TASK-87) |
 
 ## Measuring your retrieval
 

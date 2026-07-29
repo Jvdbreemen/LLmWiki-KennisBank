@@ -2,24 +2,38 @@
 
 A sovereign, local-first dashboard for the KennisBank vault: see and query your
 knowledge (wiki), memory (typed, bi-temporal), the knowledge graph, the activity
-timeline, and the live retrieval waterfall - all offline. Architecture:
+heatmap, and the live retrieval waterfall - all offline. Architecture:
 ADR-0004. It is a TypeScript frontend talking only to a local FastAPI sidecar on
-loopback; the sidecar reads the vault stores read-only and reuses the existing
-KennisBank modules (`_kbindex`, `_activity`, `_rank`, `_memory`, `kb-recall`,
-`kb-lint`). Nothing leaves the machine.
+loopback; the sidecar reads the vault stores read-only — with exactly one
+deliberate write path: `POST /memory/decide` flips the `status:` line of an
+unverified memory to current/retracted (the human review action, shared with
+`/kennisbank:review` since TASK-89). It reuses the existing KennisBank modules
+(`_kbindex`, `_activity`, `_rank`, `_memory`, `kb-recall`, `kb-lint`). Nothing
+leaves the machine.
+
+Press **Cmd/Ctrl+K** anywhere for the palette: jump to a lens or open any
+document by title (prebuilt index, no per-keystroke queries).
 
 ## Lenses
 
+The seven shipped lenses (Timeline and Provenance were dropped in TASK-27.18 —
+bare bar charts and a coverage percentage answered no question; provenance
+survives as a line in Overzicht, and the `/timeline` and `/provenance`
+endpoints remain for tooling):
+
+- **Overzicht** - one health page over the whole vault: counts, signals, the
+  365-day activity heatmap and wiki freshness buckets (TASK-91).
 - **Graph** - the wiki knowledge graph, coloured by community/status/kind or the
   provenance and memory-entry-points overlays; click a node to read the article.
   Toggle "memory-fragmenten" for the full two-layer graph.
+- **Graphify** - the graphify-out/graph.html page embedded in the viewer.
 - **Wordcloud** - concepts sized by importance (links + usage).
 - **Time-slider** - the graph as-of a date (capture-time vs valid-time).
 - **Memory Health** - lifecycle counts, quarantine queue, importance x recency
-  heatmap, warm/stale usage, supersede chains.
-- **Timeline** - weekly activity, event-time vs capture-time.
-- **Recall** - the live retrieval waterfall (vector -> FTS -> RRF -> rerank).
-- **Provenance** - kb-lint coverage; which knowledge lacks a source.
+  heatmap, warm/stale usage, supersede chains, approve/reject buttons.
+- **Recall** - the live retrieval waterfall (vector -> FTS -> RRF -> rerank),
+  with facet chips (alle/wiki/memory) and a copy-as-JSON export of the whole
+  waterfall.
 
 ## Requirements
 
