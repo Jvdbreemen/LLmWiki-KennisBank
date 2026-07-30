@@ -21,24 +21,35 @@ verified directly against `setup.sh`, `atlas/src-tauri/tauri.conf.json`,
 
 ## 1. Containers at a glance
 
-| # | Container | Real deployment unit? | One-line role |
-|---|---|---|---|
-| 1 | [KennisBank Script Layer](#2-container-kennisbank-script-layer) | **Yes**: Python/shell files copied into the vault | One-shot hook, CLI, and library processes: retrieval, ingest, memory capture, indexing, quality/graph, eval, adapters |
-| 2 | [Vault Data Store](#3-container-vault-data-store) | **Yes**: markdown tree + SQLite files on disk | The durable local state: 4 SQLite DBs, the markdown vault, JSON caches/locks |
-| 3 | [KennisBank MCP Server](#4-container-kennisbank-mcp-server) | **Yes**: `kb-mcp.py` as a long-lived stdio process | Universal outward tool surface for any local MCP client |
-| 4 | [Atlas Desktop Application](#5-container-atlas-desktop-application) | **Yes**: Tauri+WebView2+frozen-Python installer | Standalone visual cockpit over the same vault, no hot-path role |
-| 5 | [GitHub Actions CI Runner](#6-container-github-actions-ci-runner) | **Yes**, but not part of the running product | Ephemeral test gate on every push/PR; no CD |
-| n/a | Agent Harness (Claude Code / Codex CLI / OpenCode / GitHub Copilot CLI / other MCP clients) | External system | Spawns hook processes; owns the MCP server's lifetime; interprets slash-commands and skills |
-| n/a | Local Ollama daemon | External system | `localhost:11434`: embeddings (default) and local generation |
-| n/a | OpenRouter API | External system, opt-in only | Cloud LLM fallback, only when explicitly configured |
-| n/a | `copilot` CLI binary | External system | Launched as a pinned-env subprocess by the Script Layer |
-| n/a | GitHub (Actions, PRs, `gh` CLI, Copilot review) | External system | Release/contribute skills, CI hosting |
+### 1.1 The five real containers
 
-Sections 2–6 use the requested template (Name / Description / Type /
+| # | Container | Runtime / technology | Lifecycle: who starts it, when it exits | Responsibility | Components it holds (of the 7) |
+|---|---|---|---|---|---|
+| 1 | [KennisBank Script Layer](#2-container-kennisbank-script-layer) | Python 3.10+ (stdlib-first, `sqlite-vec`, `liteparse`, `dateparser`), plus `doctor.sh` (bash) | Started per-invocation: the Agent Harness spawns hooks at lifecycle events, a human or slash-command runs CLIs. Each process exits when its work is done. One exception: `index-launch.py`'s detached worker, started by the SessionStart hook, outlives it and exits on its own once its 6-job sequence completes or its lock goes stale (`STALE_SEC = 3600`) | One-shot hook, CLI, and library processes: retrieval, ingest, memory capture, indexing, quality/graph, eval, per-harness adapters | Agent Integration, Retrieval Engine, Knowledge Processing, Index Store, Measurement & Outward Integration (all but `kb-mcp.py`) |
+| 2 | [Vault Data Store](#3-container-vault-data-store) | Markdown + YAML frontmatter; SQLite (WAL, `sqlite-vec`, FTS5); flat JSON | No process, so nothing "starts" or "exits": the skeleton is `mkdir -p`'d by `setup.sh` at install time, the four SQLite files come into existence lazily on first write, and every file persists on disk until deleted regardless of whether any KennisBank process is running | The durable local state: 4 SQLite DBs, the markdown vault, JSON caches/locks | None directly (written by 3, read by all 7; see §3) |
+| 3 | [KennisBank MCP Server](#4-container-kennisbank-mcp-server) | Python 3, stdlib + optional `mcp` SDK, stdio only | Started and entirely owned by an external MCP client (Codex CLI, OpenCode, Copilot CLI, or any other local MCP client that registers it); exits when that client disconnects or kills it. Claude Code registers no MCP server from KennisBank at all, so on a Claude-only install this container is deployed to disk but never runs | Universal outward tool surface for any local MCP client | The `kb-mcp.py` slice of Measurement & Outward Integration only |
+| 4 | [Atlas Desktop Application](#5-container-atlas-desktop-application) | Rust (Tauri v2) + TypeScript/Vite frontend + Python 3.12/FastAPI sidecar (frozen, PyInstaller onedir) + WebView2 | Started by the user launching the installed app; the Rust shell spawns the sidecar as its child. Whole app exits when the user closes the window; `tauri-plugin-shell` kills the sidecar with it (no orphan) | Standalone visual cockpit over the same vault, no hot-path role | Atlas App (all 4 code elements: Rust shell, frontend, sidecar) |
+| 5 | [GitHub Actions CI Runner](#6-container-github-actions-ci-runner) | GitHub Actions workflow YAML + bash; Python 3.12; Node.js 22 (`atlas` job only) | Started by GitHub on every `push`/`pull_request`; a fresh `ubuntu-latest` VM per job, discarded when the job finishes. No KennisBank code manages this lifecycle | Ephemeral test gate on every push/PR; no CD | Distribution & Quality Gate's pytest suite (the only place that component actually runs) |
+
+### 1.2 External systems referenced (not KennisBank containers)
+
+| Container | Real deployment unit? | One-line role |
+|---|---|---|
+| Agent Harness (Claude Code / Codex CLI / OpenCode / GitHub Copilot CLI / other MCP clients) | External system | Spawns hook processes; owns the MCP server's lifetime; interprets slash-commands and skills |
+| Local Ollama daemon | External system | `localhost:11434`: embeddings (default) and local generation |
+| OpenRouter API | External system, opt-in only | Cloud LLM fallback, only when explicitly configured |
+| `copilot` CLI binary | External system | Launched as a pinned-env subprocess by the Script Layer |
+| GitHub (Actions, PRs, `gh` CLI, Copilot review) | External system | Release/contribute skills, CI hosting |
+
+Sections 2-6 use the requested template (Name / Description / Type /
 Technology / Deployment / Purpose / Components / Interfaces / Dependencies /
 Infrastructure) for each of the five real containers. Section 7 covers the
-external systems briefly. Section 8 explains two deliberate omissions.
-Section 9 is the container diagram.
+external systems briefly. Section 8 makes three boundary calls falsifiable:
+why Distribution & Quality Gate and slash-commands/skills are not
+containers at all (§8.1, §8.2), and why the detached maintenance worker and
+the vault filesystem each stay merged into a larger container rather than
+becoming containers of their own (§8.3). Section 9 is the container
+diagram.
 
 ---
 
@@ -76,6 +87,19 @@ them.
 | Knowledge Processing | [c4-component-knowledge-processing.md](./c4-component-knowledge-processing.md) | Ingest importers, `memory-sweep.py` + judge/extract, `kb-lint.py`, `safe-edit.py`, graph-enrichment scripts, `_usage.py`, `kb-checkpoint.py`, `doctor.sh` |
 | Index Store | [c4-component-index-store.md](./c4-component-index-store.md) | `index-launch.py` (detached worker), `build-*-index.py`, `_activity.py`, `_maintenance.py`, `_kbindex.py`, `_vaultpath.py`, `_settings.py`, `_frontmatter.py` |
 | Measurement & Outward Integration | [c4-component-measurement-and-integration.md](./c4-component-measurement-and-integration.md) | Everything **except** `kb-mcp.py`: `kb-eval.py`, `kb-eval-gen.py`, `kb-calibrate.py`, `kb-activity-eval.py`, `kb-activity.py`, `kb-okf-export.py`, `_llm.py`, `_reconcile.py`, `git-upstream-check.py`, `git-fetch-refresh.py`, `kennisbank-copilot.py`, `kb-copilot-capture.py`, `_copilot.py` |
+
+A note on the open component-ownership question the Component-level index
+itself flags: `c4-component.md`'s "Notes on component boundaries" leaves
+four modules (`_common.py`, `_migrations.py`, `_transcript.py`,
+`_liteparse.py`) unclaimed by name as owned code in any of the seven
+component documents, attributing that gap to an unpublished "Core Shared
+Foundation" component that never shipped as its own document. At Container
+level this open question has **zero consequence**: all four modules are
+`scripts/*.py` files, so all four deploy into this container via the same
+`copy_force` loop regardless of which of the five components housed here
+eventually claims them. The container boundary does not require the
+component boundary to be settled; only Component-level documentation would
+need the reconciliation the index describes as still open.
 
 A note on what is **not** in this container despite belonging to Agent
 Integration: slash-command Markdown (`commands/*.md`) and skill manifests
@@ -213,31 +237,32 @@ three components and read by all seven. Ownership by store:
 > **Correction: the markdown-vault row above lists nine of the ten
 > numbered folders, deliberately, not five.** An earlier pass at this table
 > named only six (`02-wiki`, `09-memory`, `01-raw`, `00-inbox`, `04-templates`,
-> `05-bronnen`) and silently dropped `03-projecten`, `07-media`, `08-archive`
->: all three are live folders with real consumers, not vestigial: `05-bronnen`
-> is `_liteparse.py`'s parse-output target and half of `kb-lint.py`'s
-> provenance contract; `08-archive` is checked by `kb-lint.py`, `doctor.sh`,
-> and `tests/test_kb_lint.py`; `03-projecten` is inside the graphify corpus
-> scope (`.graphifyignore`). The tenth numbered folder, `06-claude/`, is
-> deliberately **excluded** from this row (not omitted by oversight): it
-> holds JSON eval/calibration sets (`kb-eval-set.json`,
-> `kb-calibrate-set.json`, …), not vault knowledge markdown: see
-> [c4-code-vault-structure.md](./c4-code-vault-structure.md) §2.4. Two
-> further notes for anyone rendering this list literally: `03-projecten` and
-> `05-bronnen` are Dutch names, not "03-projects"/"05-sources": do not
-> anglicize them: and the full ten-folder-plus-non-numbered contract
-> (`setup.sh:176-178`) is `00-inbox`, `01-raw/{sessies,transcripts}`,
-> `02-wiki`, `03-projecten`, `04-templates`, `05-bronnen`, `06-claude`,
-> `07-media`, `08-archive`, `09-memory/archive`, `.claude/scripts`,
-> `graphify-out`, `CLAUDE.md`.
+> `05-bronnen`) and silently dropped `03-projecten`, `07-media`, and
+> `08-archive`. All three are live folders with real consumers, not
+> vestigial: `05-bronnen` is `_liteparse.py`'s parse-output target and half
+> of `kb-lint.py`'s provenance contract; `08-archive` is checked by
+> `kb-lint.py`, `doctor.sh`, and `tests/test_kb_lint.py`; `03-projecten` is
+> inside the graphify corpus scope (`.graphifyignore`). The tenth numbered
+> folder, `06-claude/`, is deliberately **excluded** from this row (not
+> omitted by oversight): it holds JSON eval/calibration sets
+> (`kb-eval-set.json`, `kb-calibrate-set.json`, …), not vault knowledge
+> markdown, see [c4-code-vault-structure.md](./c4-code-vault-structure.md)
+> §2.4. Two further notes for anyone rendering this list literally:
+> `03-projecten` and `05-bronnen` are Dutch names, not
+> "03-projects"/"05-sources" (do not anglicize them), and the full
+> ten-folder-plus-non-numbered contract (`setup.sh:176-178`) is `00-inbox`,
+> `01-raw/{sessies,transcripts}`, `02-wiki`, `03-projecten`, `04-templates`,
+> `05-bronnen`, `06-claude`, `07-media`, `08-archive`, `09-memory/archive`,
+> `.claude/scripts`, `graphify-out`, `CLAUDE.md`.
 
 > **Cross-doc correction, resolved in favour of the grep-verified claim.**
 > `c4-component-index-store.md` §5.2 lists the Atlas sidecar as a consumer
 > of `kb-graph.db`'s `graph_neighbors()`. `c4-component-atlas-app.md` §6.2
 > states, grep-verified against `atlas/sidecar/sources.py`, that Atlas
-> touches exactly `kb-index.db`, `kb-usage.db`, and `kb-activity.db`: **not**
-> `kb-graph.db`: and explicitly supersedes a contrary claim in one of its
-> own upstream code docs. This document follows the grep-verified source.
+> touches exactly `kb-index.db`, `kb-usage.db`, and `kb-activity.db`
+> (**not** `kb-graph.db`), and explicitly supersedes a contrary claim in one
+> of its own upstream code docs. This document follows the grep-verified
+> source.
 
 > **Rebuildability, precisely: three of four, not four of four.**
 > `kb-index.db`: one-command deterministic rebuild, `build-kb-index.py --rebuild`
@@ -354,8 +379,8 @@ and degradation behaviour: [apis/kb-mcp-tools.md](./apis/kb-mcp-tools.md).
   indirectly, through the modules it imports. It is *registered* (not
   configured) via the client's own MCP config file: `~/.codex/config.toml`
   (`[mcp_servers.kennisbank]`), `~/.config/opencode/opencode.json`
-  (`mcp.kennisbank`), `~/.copilot/mcp-config.json` (`mcpServers.kennisbank`)
- : each written by `install-agent-envs.py`/`_copilot.py` in the Script
+  (`mcp.kennisbank`), `~/.copilot/mcp-config.json` (`mcpServers.kennisbank`),
+  each written by `install-agent-envs.py`/`_copilot.py` in the Script
   Layer container.
 - **Lifecycle / process management**: entirely delegated to the parent MCP
   client. Verifiable facts only: `build_server()` returns `None` without
@@ -386,7 +411,7 @@ and degradation behaviour: [apis/kb-mcp-tools.md](./apis/kb-mcp-tools.md).
 | **Description** | A local-only Tauri v2 desktop application giving the vault's editor a seven-lens visual cockpit: vault health, knowledge graph, embedded Graphify view, wordcloud, time slider, memory-review cockpit, retrieval waterfall: over the same SQLite stores and markdown the Script Layer produces. |
 | **Type** | Single deployable unit (one Windows installer), three internal runtimes: a minimal Rust host process, a WebView2 frontend, and a spawned, frozen Python sidecar process. |
 | **Technology** | Rust (Tauri v2, edition 2021) + `tauri-plugin-shell`; TypeScript/ES2020 via Vite 5 (Vitest for tests); Python 3.12 + FastAPI + uvicorn + httpx + `sqlite-vec`, frozen with PyInstaller **onedir**; WebView2 (Windows). |
-| **Deployment** | Built **manually**, not by CI (see container 6): per `atlas/BUILD.md`: (1) `pyinstaller atlas-sidecar.spec` freezes the sidecar to `dist/atlas-sidecar/atlas-sidecar.exe` + `_internal/`; (2) both are copied into `atlas/src-tauri/binaries/` with the Rust target-triple suffix; (3) `npx @tauri-apps/cli@^2 build` builds the frontend (`beforeBuildCommand`) and produces MSI/NSIS installers under `target/release/bundle/`. Unlike the Script Layer, the **sidecar is fully self-contained**: end users need neither a system Python nor Node.js; only the frozen binary and the Rust/WebView2 shell. Unsigned by default (code signing out of scope, documented as a SmartScreen prompt on first run). |
+| **Deployment** | Built **manually**, not by CI (see container 5), per `atlas/BUILD.md`: (1) `pyinstaller atlas-sidecar.spec` freezes the sidecar to `dist/atlas-sidecar/atlas-sidecar.exe` + `_internal/`; (2) both are copied into `atlas/src-tauri/binaries/` with the Rust target-triple suffix; (3) `npx @tauri-apps/cli@^2 build` builds the frontend (`beforeBuildCommand`) and produces MSI/NSIS installers under `target/release/bundle/`. Unlike the Script Layer, the **sidecar is fully self-contained**: end users need neither a system Python nor Node.js; only the frozen binary and the Rust/WebView2 shell. Unsigned by default (code signing out of scope, documented as a SmartScreen prompt on first run). |
 
 ### Purpose
 
@@ -530,7 +555,7 @@ both read directly from source in the component doc's §4.
 | **Description** | Ephemeral, GitHub-hosted compute that runs KennisBank's automated test gate on every push and pull request. Not part of the running product: no end user's machine ever runs this container; it exists to protect what ships to their machine. |
 | **Type** | Ephemeral CI job runner, `ubuntu-latest`, provisioned per event and torn down after. |
 | **Technology** | GitHub Actions workflow YAML + bash; Python 3.12 (`test` job) and Python 3.12 + Node.js 22 (`atlas` job). |
-| **Deployment** | GitHub-managed: `.github/workflows/ci.yml` is the entire workflow surface in this repository (verified: no other files under `.github/workflows/`). Triggered on every `push` and `pull_request`, no branch/path filters. **There is no CD.** Release tagging is a separate manual/skill-driven process (`kennisbank-release` skill), and: critically for this container: the MSI/NSIS installer for the Atlas Desktop Application (container 5) is **not** produced here; the `atlas` job runs the sidecar's pytest suite plus `tsc --noEmit` and `vitest run` for the frontend, but has no Rust toolchain and does not invoke `tauri build`. |
+| **Deployment** | GitHub-managed: `.github/workflows/ci.yml` is the entire workflow surface in this repository (verified: no other files under `.github/workflows/`). Triggered on every `push` and `pull_request`, no branch/path filters. **There is no CD.** Release tagging is a separate manual/skill-driven process (`kennisbank-release` skill), and, critically for this container, the MSI/NSIS installer for the Atlas Desktop Application (container 4) is **not** produced here; the `atlas` job runs the sidecar's pytest suite plus `tsc --noEmit` and `vitest run` for the frontend, but has no Rust toolchain and does not invoke `tauri build`. |
 
 ### Purpose
 
@@ -608,7 +633,7 @@ The Distribution & Quality Gate component's pytest suite
 
 ---
 
-## 8. Two deliberate omissions
+## 8. Three deliberate boundary calls
 
 ### 8.1 Distribution & Quality Gate is not a container
 
@@ -624,7 +649,7 @@ this document instead:
   contract), not a container of its own.
 - `vault-structure/README.md` and the two templates are the **config file
   that defines** container 2's shape (§3, Infrastructure).
-- The pytest suite's actual execution is container 6, the CI Runner: the
+- The pytest suite's actual execution is container 5, the CI Runner: the
   one place this component genuinely runs.
 - ADRs, specs, and plans remain pure documentation with no runtime
   footprint anywhere in this system.
@@ -643,6 +668,47 @@ container (container 1) or shell out to `git`/`gh` directly. That reasoning
 loop happens **inside** the Agent Harness (external), not inside any
 KennisBank-owned container. Treating commands/skills as a fifth KennisBank
 container would misattribute where the actual computation happens.
+
+### 8.3 The detached worker is not a sixth container, and the DBs are not split from the vault
+
+Two boundary calls in this document are defensible rather than obvious, and
+each deserves its own argument rather than a silent merge.
+
+**The `index-launch.py` detached worker stays inside container 1, it does
+not become a container of its own.** The case *for* splitting it out is
+real and stated plainly in §2's Infrastructure: it is "the only thing in
+the entire KennisBank deployment with a lifetime independent of its
+spawning process." A worker that outlives the hook that launched it, holds
+its own lock file, and keeps running after `kb-session-start.py` has
+already returned looks, at first glance, like a process boundary worth
+naming. It is not treated as one here because every other test for a
+container boundary fails: it ships via the exact same `copy_force` loop as
+every other script in `scripts/` (no separate install step); it has no
+config file of its own beyond the shared `_hooks_manifest.py`; it is not
+independently registered with, or reachable from, anything outside the
+Script Layer; and its only externally visible artifact is a lock file
+(`.kb-index-worker.lock`), not a port, socket, or API. It is a **process
+mode** of container 1 (a detached child instead of a foreground one), not a
+unit with its own deployment path, config surface, or external interface.
+Compare this to container 3 (MCP Server), which shares container 1's exact
+deployment mechanism too but *is* split out, because it has an independent
+process owner (an external MCP client) and an external protocol surface
+(stdio) that container 1's other processes do not have. The worker has
+neither.
+
+**The four SQLite databases and the markdown vault stay merged into one
+container (Vault Data Store), they are not split into "database files" and
+"vault filesystem" as two containers.** Both halves are passive local
+files: no process, no server, no lifecycle of their own, opened per call by
+whichever script in container 1 or container 4 needs them. Both are
+materialized by the same `mkdir -p` / lazy-first-write contract in `setup.sh`
+and its builders. Splitting them would draw a container boundary where
+there is no process or deployment distinction behind it, only a difference
+in file format (markdown versus SQLite), which is a **Technology** field
+difference within one container, not a **Container** boundary by this
+document's own definition (a container is a separately deployable/
+executable runtime unit; neither markdown files nor SQLite files are
+executable, and neither is deployed independently of the other).
 
 ---
 
