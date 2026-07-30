@@ -597,8 +597,8 @@ Worker.
 
 By default, nothing produced or read by KennisBank leaves the machine.
 Local storage, local embeddings, local MCP. The exceptions above are every
-one of them opt-in and explicit: choosing OpenRouter for the memory judge,
-or choosing to install and use the Copilot CLI target (whose own model
+one of them opt-in and explicit: choosing OpenRouter or `claude-cli` for the
+memory judge, or choosing to install and use the Copilot CLI target (whose own model
 turns are cloud-backed by GitHub, by nature of the product). KennisBank
 deliberately does *not* offer to tunnel the local vault out to a hosted
 agent that cannot otherwise reach it: for a person who wants to use one
@@ -688,15 +688,29 @@ level, that a values document would only restate less precisely:
 
 ### One boundary that is deliberately porous, not absolute
 
-OpenRouter is the one place cloud generation is possible at all, and the
-opt-in is not silent. `setup.sh`'s interactive backend prompt prints, in
+Cloud generation is possible through two providers, not one:
+`CLOUD_PROVIDERS = {"openrouter", "claude-cli"}` (`scripts/_llm.py:30`).
+Neither opt-in is silent, but they are warned about very differently. `setup.sh`'s interactive backend prompt prints, in
 Dutch, `"LET OP: OpenRouter is een externe cloud-API; memory-sweep content
 verlaat je machine."` ("NOTE: OpenRouter is an external cloud API;
 memory-sweep content leaves your machine") before it will finish
 configuring the provider (`setup.sh:225`). That is a configuration-time
-warning, verified directly in code. Whether a comparable warning also
-appears at the moment of each individual OpenRouter call, versus only once
-at setup, was not checked in this pass and is not asserted here: it is a
+warning, verified directly in code.
+
+A per-call warning also exists, and it is the broader of the two.
+`scripts/_llm.py:164-168` writes `"⚠ LLM-router: provider '{prov}' is
+CLOUD — content verlaat je machine"` to stderr before every cloud call, for
+any provider in `CLOUD_PROVIDERS`. The coverage of the two warnings is
+inverted from what the setup-time one suggests: `setup.sh:225` fires only
+for OpenRouter and only interactively (`configure_llm_backend` returns early
+under `ASSUME_YES=1` or a non-tty, `setup.sh:203-205`), while the per-call
+warning is universal. That matters most for `claude-cli`, which the
+interactive prompt never offers (`setup.sh:207-210` and
+`install-agent-envs.py:1095` list only ollama and openrouter): it is
+reachable solely through `kennisbank-llm.json` or `KB_LLM_PROVIDERS`, so the
+per-call warning is the only one a user of that provider ever sees.
+
+One wording caveat about the value itself: it is a
 claim `VALUES.md`'s Privacy value makes ("an explicit, up-front warning and
 your opt-in"), reported as the project's own stated intent rather than as
 an independently verified runtime behaviour.

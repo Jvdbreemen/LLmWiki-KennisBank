@@ -12,7 +12,7 @@ scaffold, and `.github/workflows/ci.yml`: not a generic cloud-native
 vocabulary applied where it doesn't fit.
 
 This document was synthesized from all seven C4 Component-level documents in
-this directory (`c4-component.md` and the six `c4-component-*.md` files) and
+this directory (`c4-component.md` and the seven `c4-component-*.md` files) and
 verified directly against `setup.sh`, `atlas/src-tauri/tauri.conf.json`,
 `atlas/src-tauri/src/main.rs`, `atlas/sidecar/atlas-sidecar.spec`,
 `atlas/sidecar/app.py`, `atlas/sidecar/sources.py`,
@@ -25,7 +25,7 @@ verified directly against `setup.sh`, `atlas/src-tauri/tauri.conf.json`,
 
 | # | Container | Runtime / technology | Lifecycle: who starts it, when it exits | Responsibility | Components it holds (of the 7) |
 |---|---|---|---|---|---|
-| 1 | [KennisBank Script Layer](#2-container-kennisbank-script-layer) | Python 3.10+ (stdlib-first, `sqlite-vec`, `liteparse`, `dateparser`), plus `doctor.sh` (bash) | Started per-invocation: the Agent Harness spawns hooks at lifecycle events, a human or slash-command runs CLIs. Each process exits when its work is done. One exception: `index-launch.py`'s detached worker, started by the SessionStart hook, outlives it and exits on its own once its 6-job sequence completes or its lock goes stale (`STALE_SEC = 3600`) | One-shot hook, CLI, and library processes: retrieval, ingest, memory capture, indexing, quality/graph, eval, per-harness adapters | Agent Integration, Retrieval Engine, Knowledge Processing, Index Store, Measurement & Outward Integration (all but `kb-mcp.py`) |
+| 1 | [KennisBank Script Layer](#2-container-kennisbank-script-layer) | Python 3.10+ (stdlib-first, `sqlite-vec`, `liteparse`, `dateparser`), plus `doctor.sh` (bash) | Started per-invocation: the Agent Harness spawns hooks at lifecycle events, a human or slash-command runs CLIs. Each process exits when its work is done. One exception: `index-launch.py`'s detached worker, started by the SessionStart hook, outlives it and exits on its own when its 6-job sequence completes. The worker never re-reads the lock: `STALE_SEC` is consulted only by `acquire_lock()` on the non-worker path (`scripts/index-launch.py:105`), where it lets a later launch reclaim a lock left behind by a killed worker | One-shot hook, CLI, and library processes: retrieval, ingest, memory capture, indexing, quality/graph, eval, per-harness adapters | Agent Integration, Retrieval Engine, Knowledge Processing, Index Store, Measurement & Outward Integration (all but `kb-mcp.py`) |
 | 2 | [Vault Data Store](#3-container-vault-data-store) | Markdown + YAML frontmatter; SQLite (WAL, `sqlite-vec`, FTS5); flat JSON | No process, so nothing "starts" or "exits": the skeleton is `mkdir -p`'d by `setup.sh` at install time, the four SQLite files come into existence lazily on first write, and every file persists on disk until deleted regardless of whether any KennisBank process is running | The durable local state: 4 SQLite DBs, the markdown vault, JSON caches/locks | None directly (written by 3, read by all 7; see §3) |
 | 3 | [KennisBank MCP Server](#4-container-kennisbank-mcp-server) | Python 3, stdlib + optional `mcp` SDK, stdio only | Started and entirely owned by an external MCP client (Codex CLI, OpenCode, Copilot CLI, or any other local MCP client that registers it); exits when that client disconnects or kills it. Claude Code registers no MCP server from KennisBank at all, so on a Claude-only install this container is deployed to disk but never runs | Universal outward tool surface for any local MCP client | The `kb-mcp.py` slice of Measurement & Outward Integration only |
 | 4 | [Atlas Desktop Application](#5-container-atlas-desktop-application) | Rust (Tauri v2) + TypeScript/Vite frontend + Python 3.12/FastAPI sidecar (frozen, PyInstaller onedir) + WebView2 | Started by the user launching the installed app; the Rust shell spawns the sidecar as its child. Whole app exits when the user closes the window; `tauri-plugin-shell` kills the sidecar with it (no orphan) | Standalone visual cockpit over the same vault, no hot-path role | Atlas App (all 4 code elements: Rust shell, frontend, sidecar) |
@@ -666,7 +666,7 @@ Agent Harness's own LLM reasoning loop reads a command/skill file and, as
 one of its own steps, may choose to invoke a script from the Script Layer
 container (container 1) or shell out to `git`/`gh` directly. That reasoning
 loop happens **inside** the Agent Harness (external), not inside any
-KennisBank-owned container. Treating commands/skills as a fifth KennisBank
+KennisBank-owned container. Treating commands/skills as a sixth KennisBank
 container would misattribute where the actual computation happens.
 
 ### 8.3 The detached worker is not a sixth container, and the DBs are not split from the vault
@@ -684,7 +684,10 @@ already returned looks, at first glance, like a process boundary worth
 naming. It is not treated as one here because every other test for a
 container boundary fails: it ships via the exact same `copy_force` loop as
 every other script in `scripts/` (no separate install step); it has no
-config file of its own beyond the shared `_hooks_manifest.py`; it is not
+config file of its own, and it is not even listed in `_hooks_manifest.py`,
+which covers hook scripts only (`scripts/_hooks_manifest.py:12-22`): its
+entire configuration surface is one settings read,
+`_settings.get("memory_capture")` (`index-launch.py:119-127`); it is not
 independently registered with, or reachable from, anything outside the
 Script Layer; and its only externally visible artifact is a lock file
 (`.kb-index-worker.lock`), not a port, socket, or API. It is a **process
