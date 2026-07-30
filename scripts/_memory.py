@@ -231,11 +231,34 @@ def render(title: str, body: str, *, status: str = DEFAULT_STATUS,
     return "\n".join(lines)
 
 
-def write(title: str, body: str, **kw) -> Path:
+def write_capture(title: str, body: str, **kw) -> "tuple[Path, bool]":
+    """Schrijf een nieuwe memory. Geeft (pad, bestond_al) terug.
+
+    Route ALTIJD via unique_memory_path. Deze functie berekende eerder zelf
+    memory_path(title) en schreef onvoorwaardelijk, waardoor een tweede capture
+    met een botsende slug een door een mens goedgekeurde memory overschreef:
+    status terug naar unverified, de goedgekeurde tekst weg, geen backup, geen
+    regel in de review-log, en de aanroeper kreeg 'gelukt' terug. Dat is de
+    vernietigingskant van de mens-is-autoriteit-grens, en er is geen prompt
+    injection voor nodig: twee keer capturen op hetzelfde onderwerp in een
+    sessie is het gewone geval.
+
+    bestond_al=True betekent: byte-identieke inhoud stond er al, er is NIETS
+    geschreven, en het bestaande pad komt terug. Een afwijkende body op een
+    bezette slug krijgt -2/-3/..., zoals unique_memory_path al deed.
+    """
     created = kw.get("created")
-    p = memory_path(title, created)
+    p, bestond_al = unique_memory_path(title, created, body)
     p.parent.mkdir(parents=True, exist_ok=True)
+    if bestond_al:
+        return p, True
     p.write_text(render(title, body, **kw), encoding="utf-8")
+    return p, False
+
+
+def write(title: str, body: str, **kw) -> Path:
+    """Zie write_capture. Blijft alleen het pad teruggeven voor bestaande aanroepers."""
+    p, _ = write_capture(title, body, **kw)
     return p
 
 

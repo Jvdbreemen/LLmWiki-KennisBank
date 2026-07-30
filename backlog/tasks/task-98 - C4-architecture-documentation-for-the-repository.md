@@ -1,10 +1,10 @@
 ---
 id: TASK-98
 title: C4 architecture documentation for the repository
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-29 21:11'
-updated_date: '2026-07-29 22:41'
+updated_date: '2026-07-30 19:49'
 labels: []
 dependencies: []
 ordinal: 101700
@@ -36,3 +36,15 @@ REAL ERROR 1: the Copilot capture kill switch is KENNISBANK_COPILOT_NO_CAPTURE (
 
 Open point carried forward from the component synthesis: four shared modules (_common.py, _migrations.py, _transcript.py, _liteparse.py) are consumed by several components but claimed as owned code by none. Documented as an open question in c4-component.md rather than silently assigned.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+The complete C4 set shipped in v0.26.0: 21 code-level documents, seven component documents plus the master index, a container document mapping the seven components onto five containers, a context document with personas, journeys and external systems, and an OpenAPI specification for the Atlas sidecar under C4-Documentation/apis/. All five acceptance criteria were already met and checked; this closes a status that stayed In Progress after the work landed.
+
+Two things worth carrying forward rather than leaving buried in the diff.
+
+The set was corrected in v0.26.1 (TASK-111 through TASK-114) after an independent verification pass against source found six factual errors and one internal contradiction, the most consequential being that claude-cli had been dropped from the documented consent boundary even though it is a cloud provider. Generated architecture documentation reads as authoritative precisely where it is least verified, so the verification pass was not optional polish.
+
+The set also contains a known open point, recorded in c4-component.md's own boundary note: four modules (_common.py, _migrations.py, _transcript.py, _liteparse.py) are consumed by several components and claimed as owned code by none. That is documented honestly rather than resolved by assertion, and remains available for a future reconciliation pass.
+<!-- SECTION:FINAL_SUMMARY:END -->
