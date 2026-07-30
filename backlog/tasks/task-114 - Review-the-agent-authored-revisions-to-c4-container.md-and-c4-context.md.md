@@ -1,10 +1,11 @@
 ---
 id: TASK-114
 title: Review the agent-authored revisions to c4-container.md and c4-context.md
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-07-30 05:44'
-updated_date: '2026-07-30 05:45'
+updated_date: '2026-07-30 05:52'
 labels:
   - docs
   - c4

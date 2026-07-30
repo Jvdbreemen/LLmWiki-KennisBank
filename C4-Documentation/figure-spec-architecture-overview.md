@@ -48,9 +48,10 @@ must be present to say so. Do not "fix" this by moving the harness inside.
 - No company logos or wordmarks, and no imitation of one. Product names are
   plain text only.
 - No 3-D, isometric projection, gradients, drop shadows, or photographic elements.
-- No numbers other than those given in Part D. Do not invent metrics.
-- Exactly the elements in Part C. Seven component boxes inside the boundary is
-  the whole system.
+- No numbers other than those given in Parts B and C. Do not invent metrics.
+- Exactly the elements in Part C. Seven components is the whole system: six are
+  drawn inside the boundary (`H1`, `D1`–`D4`, `R2`) and the seventh, `M1`, is
+  drawn outside it because it never runs inside a session.
 
 ---
 
@@ -222,7 +223,8 @@ Band label:
 
 `S1` text:
 - title: `Markdown in an Obsidian vault`
-- sublabel: `numbered folders: 00-inbox · 01-raw · 02-wiki · 04-templates · 09-memory`
+- sublabel, two lines, 15 px: `ten numbered folders:` /
+  `00-inbox · 01-raw · 02-wiki · 03-projecten · 04-templates · 05-bronnen · 06-claude · 07-media · 08-archive · 09-memory`
 - note (italic): `the durable layer — readable and editable without any of this software`
 
 `S2` text:
@@ -232,7 +234,7 @@ Band label:
   `kb-graph.db — knowledge graph`
   `kb-activity.db — what happened when`
   `kb-usage.db — which knowledge got used`
-- note (italic): `derived — delete them and they rebuild`
+- note (italic): `three rebuild from the markdown — kb-usage.db does not`
 
 The shape difference between `S1` and `S2` is load-bearing: source of truth
 versus derived artefact. Do not render both as plain rectangles.
@@ -248,8 +250,13 @@ versus derived artefact. Do not render both as plain rectangles.
 | id | title | sublabels |
 | --- | --- | --- |
 | `R1` | `Local language model` | `Ollama, on this machine` / `embeddings for search` / `optional local generation` |
-| `R2` | `Atlas` | `optional desktop app (Tauri)` / `7 lenses: health · graph · timeline ·` / `memory review · retrieval waterfall · …` / note italic: `reads the same vault, read-only` |
+| `R2` | `Atlas` | `optional desktop app (Tauri)` / `7 lenses: overview · graph · wordcloud · time slider ·` / `memory health · recall · graphify` / note italic: `reads the same vault, read-only` |
 | `R3` | `Other MCP clients` | `any local MCP client` / `pull-style access to the same knowledge` / note italic: `stdio only — nothing listens on a port` |
+
+The seven lens names in `R2` are the ones the application actually ships. There is
+no Timeline lens: `c4-code-atlas-frontend-src-lenses.md:37` records that it was
+dropped (TASK-27.18), leaving its route, client method and bucket type behind as
+documented dead code. Do not reinstate the name from an older draft of this plate.
 
 ### C8. Band 5 — shipping and verification (below the boundary)
 
@@ -297,7 +304,7 @@ with no gap or bridge symbol.
 | id | class | from | to | waypoints | label | label position |
 | --- | --- | --- | --- | --- | --- | --- |
 | `C4` | dashed | `H1` bottom (1032, 524) | `S1` top (1032, 956) | (1032,524) → (1032,956) | `read` | chip at (1074, 700) |
-| `C5` | dashed | `H1` bottom (1493, 524) | `S2` top (1493, 956) | (1493,524) → (1493,956) | `read` | chip at (1535, 700) |
+| `C5` | dashed | `H1` bottom (1476, 524) | `S2` top (1476, 956) | (1476,524) → (1476,956) | `read` | chip at (1518, 700) |
 | `C6` | thin | `D2` bottom (803, 830) | `S1` top (803, 956) | (803,830) → (803,956) | `write` | chip at (845, 900) |
 | `C7` | thin | `D3` bottom (1300, 830) | `S2` top (1300, 956) | (1300,830) → (1300,956) | `write` | chip at (1342, 900) |
 
@@ -351,7 +358,7 @@ Row of four items, each an 80 px line sample followed by 8 px gap and its text,
 
 | id | type | x | y | text |
 | --- | --- | --- | --- | --- |
-| `Z1` | caption, italic 14 px, `#8A8A8A` | 92 | 1418 | `Current state, July 2026 — seven components, four local indexes, one machine. Derived from the C4 component model of the repository.` |
+| `Z1` | caption, italic 14 px, `#8A8A8A` | 92 | 1404 | `Current state, July 2026 — seven components, four local indexes, one machine. Derived from the C4 component model of the repository.` |
 
 ---
 
@@ -365,8 +372,11 @@ system, not a style preference.
 2. **`R2` (Atlas) is optional and never on the hot path.** It must not be drawn
    as the primary interface, must not touch `H1`, and its only connector is the
    dashed read-only `C12`.
-3. **`S1` is the source of truth; `S2` is derived.** Their shapes must differ and
-   `S2`'s note must state it is rebuildable.
+3. **`S1` is the source of truth; `S2` is derived.** Their shapes must differ.
+   `S2`'s note must not claim that all four databases rebuild: `kb-index.db`,
+   `kb-activity.db` and `kb-graph.db` do, but `kb-usage.db` is behavioural
+   telemetry with no markdown ancestor and no rebuild path. Deleting it loses
+   the history for good.
 4. **The MCP server is inside `D4`, not a separate top-level box.** It is one way
    in, not the main one: the hook-driven push path (`C1`/`C2`) is primary, MCP is
    the pull alternative for clients without hook support.
@@ -389,9 +399,9 @@ system, not a style preference.
 Check the rendered plate against this list; each item is a yes/no.
 
 - [ ] Canvas 16:9, light background, nothing outside the 36 px margin.
-- [ ] Exactly seven component boxes inside the boundary: `H1`, `D1`–`D4`, `R2`,
-      and `S1`+`S2` counted as the storage layer (`R1` and `R3` are external, not
-      components).
+- [ ] Exactly seven component boxes: six inside the boundary (`H1`, `D1`–`D4`,
+      `R2`) plus `M1` below it. `S1`, `S2`, `R1` and `R3` are external systems in
+      the C4 component model, not components, and are not counted.
 - [ ] `H1` is visually the loudest box: thickest stroke, warm red, tinted band.
 - [ ] `C1` and `C2` are the only 5 px connectors and form a symmetric loop.
 - [ ] The boundary is dashed green with the padlock label tab on its top edge.
@@ -425,7 +435,7 @@ flowchart TB
         D3["Index Store<br/>index builders · detached worker"]
         D4["Measurement & Outward Access<br/>eval harness · MCP server (8 tools) · export"]
         S1["Markdown in an Obsidian vault<br/>source of truth"]
-        S2[("Local SQLite indexes<br/>kb-index · kb-graph · kb-activity · kb-usage<br/>derived, rebuildable")]
+        S2[("Local SQLite indexes<br/>kb-index · kb-graph · kb-activity · kb-usage<br/>derived; three rebuild, kb-usage does not")]
         R1{{"Local language model<br/>Ollama, on this machine"}}
         R2["Atlas — optional desktop app<br/>7 lenses, read-only"]
         R3["Other MCP clients<br/>stdio only"]
