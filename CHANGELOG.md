@@ -7,6 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.1] - 2026-07-30
+
+The C4 documentation set that shipped in 0.26.0 carried six factual errors and
+one internal contradiction. This release corrects them. Nothing else changed:
+no code, no schema, no output contract.
+
+### Fixed
+
+- **The architecture plate described a vault that does not exist.** Its storage
+  box named five numbered folders where `setup.sh` creates ten, so anyone
+  drawing the plate from the specification would have drawn half the vault.
+  All ten are now named.
+- **It claimed all four SQLite databases rebuild from the markdown.** Three do.
+  `kb-usage.db` holds behavioural telemetry with no markdown ancestor and no
+  rebuild path, so deleting it loses that history for good. Anyone who read the
+  old note as permission to delete the derived stores was being told something
+  untrue about one of them.
+- **It named an Atlas lens that does not exist.** The Timeline lens was dropped
+  under TASK-27.18, and the repository's own code-level documentation already
+  recorded it as removed along with the route, client method and bucket type
+  left behind as dead code. The plate contradicted the rest of the documentation
+  set. The seven shipped lenses are now named, with a citation so the stale name
+  cannot drift back.
+- **`claude-cli` was missing from the documented consent boundary.**
+  `CLOUD_PROVIDERS` is `{openrouter, claude-cli}` (`scripts/_llm.py:30`), and
+  `claude-cli` shells out to the `claude` binary. The context document had
+  narrowed the boundary to OpenRouter alone and asserted it was the only route
+  to cloud generation. That was wrong in the direction that matters: neither
+  `setup.sh` nor `install-agent-envs.py` offers `claude-cli`, so it is reachable
+  only through `kennisbank-llm.json` or `KB_LLM_PROVIDERS` and receives no
+  configuration-time warning at all. It is now back in the consent statement.
+- **The per-call cloud warning is documented instead of left open.**
+  `scripts/_llm.py:164-168` warns on stderr before every cloud call for any
+  cloud provider. Its coverage is broader than the setup-time warning at
+  `setup.sh:225`, which fires only for OpenRouter and only interactively. For a
+  `claude-cli` user it is the only warning there is. Also noted: `VALUES.md`
+  calls this a warning gate, but neither site gates; both only echo.
+- **Two supporting facts about the detached index worker were wrong.** It does
+  not exit on a stale lock: `STALE_SEC` is read only by `acquire_lock()` on the
+  non-worker path, where it lets a later launch reclaim a lock left by a killed
+  worker. And `_hooks_manifest.py` is not its config file; that manifest lists
+  hook scripts only, and the worker's entire configuration surface is one
+  `_settings.get("memory_capture")` read.
+- **Two geometry errors in the plate specification.** Connector `C5` claimed to
+  leave the Retrieval Engine box at an x that sits 13 px outside it, and the
+  caption sat 14 px past the specification's own declared safe margin. A
+  renderer following the coordinates literally would have drawn both wrong.
+- **Two counting errors**, both in text that contradicted itself a few lines
+  later: six versus seven component documents, and a fifth versus sixth
+  container.
+
+### Changed
+
+- **The plate no longer quotes an exact test count.** It said 1099; the suite
+  now collects 1112, and it will keep moving. A drawing does not need the
+  number to make its point, so it now says "the full pytest suite".
+
 ## [0.26.0] - 2026-07-30
 
 The MCP tool surface tells clients what it is, the server stops failing
@@ -1189,7 +1246,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.26.0...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.26.1...HEAD
+[0.26.1]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.26.0...v0.26.1
 [0.26.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.25.0...v0.26.0
 [0.25.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.24.1...v0.25.0
 [0.24.1]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.24.0...v0.24.1

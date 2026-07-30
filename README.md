@@ -73,7 +73,19 @@ Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: 
 
 The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
 
-## Feature highlights (v0.26.0)
+## Feature highlights (v0.26.1)
+
+### New in v0.26.1
+
+- **The C4 documentation set now matches the code it describes.** The
+  architecture plate specification named five vault folders where there are
+  ten, claimed all four SQLite databases rebuild from the markdown when
+  `kb-usage.db` cannot, and named an Atlas lens that was removed some time ago.
+- **`claude-cli` is back in the documented consent boundary.** It is a cloud
+  provider alongside OpenRouter, and the one that neither installer offers, so
+  it is the one a reader most needs told about. The per-call cloud warning, and
+  how its coverage differs from the setup-time one, is documented rather than
+  left as an open question.
 
 ### New in v0.26.0
 
