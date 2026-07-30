@@ -66,12 +66,158 @@ class KbMcpTest(unittest.TestCase):
         self.emb.embed = lambda *a, **k: None
         self.assertIn("geen", self.m.recall_tool("iets").lower())
 
-    def test_build_server_none_without_mcp(self):
-        # in deze omgeving is mcp niet geinstalleerd -> build_server geeft None
-        if self.m.MCPServer is None:
-            self.assertIsNone(self.m.build_server())
-        else:
+    def test_build_server_registers_eight_annotated_tools(self):
+        """Vervangt test_build_server_none_without_mcp, dat op 'MCPServer is None'
+        aftakte en in BEIDE takken slaagde: die kon niets bewijzen.
+
+        Deze test bouwt de server met een stub-SDK, dus hij draait ook zonder het
+        mcp-pakket en faalt echt wanneer een tool zijn annotatie verliest. De
+        annotaties zijn niet cosmetisch: Claude Code leidt isReadOnly() en
+        isConcurrencySafe() af uit readOnlyHint en zet beide op false als de hint
+        ontbreekt, dus een read-only tool zonder hint vraagt bevestiging en
+        draait serieel."""
+        registered = {}
+
+        class StubServer:
+            def __init__(self, name, **kw):
+                self.name, self.kwargs = name, kw
+
+            def tool(self, **kw):
+                def deco(fn):
+                    registered[fn.__name__] = kw
+                    return fn
+                return deco
+
+            def resource(self, _uri):
+                def deco(fn):
+                    return fn
+                return deco
+
+        class StubAnn(dict):
+            def __init__(self, **kw):
+                super().__init__(**kw)
+
+        orig_srv, orig_ann = self.m.MCPServer, self.m.ToolAnnotations
+        self.m.MCPServer = StubServer
+        self.m.ToolAnnotations = StubAnn
+        try:
+            srv = self.m.build_server()
+        finally:
+            self.m.MCPServer, self.m.ToolAnnotations = orig_srv, orig_ann
+
+        self.assertIsNotNone(srv)
+        self.assertEqual(set(registered), {
+            "recall", "capture", "review_pending", "review_decide",
+            "what_did_i_do", "timeline", "weeklog", "topic_timeline"})
+
+        read_only = {"recall", "review_pending", "what_did_i_do", "timeline",
+                     "weeklog", "topic_timeline"}
+        for name in read_only:
+            ann = registered[name]["annotations"]
+            self.assertTrue(ann["readOnlyHint"], f"{name} hoort read-only te zijn")
+            self.assertFalse(ann["openWorldHint"], f"{name} bevraagt een gesloten wereld")
+        self.assertFalse(registered["capture"]["annotations"]["readOnlyHint"])
+        self.assertFalse(registered["capture"]["annotations"]["destructiveHint"],
+                         "capture maakt alleen een NIEUW bestand aan")
+        self.assertTrue(registered["review_decide"]["annotations"]["destructiveHint"],
+                        "review_decide flipt een status die daarna niet terug kan")
+        for name, kw in registered.items():
+            self.assertIn("title", kw["annotations"], f"{name} mist een leesbaar label")
+
+    def test_build_server_survives_an_sdk_without_instructions_kwarg(self):
+        """Een SDK die instructions= niet kent mag de server niet onderuit halen."""
+        class PickyServer:
+            def __init__(self, name, **kw):
+                if kw:
+                    raise TypeError("unexpected keyword argument")
+                self.name = name
+
+            def tool(self, **_kw):
+                return lambda fn: fn
+
+            def resource(self, _uri):
+                return lambda fn: fn
+
+        orig = self.m.MCPServer
+        self.m.MCPServer = PickyServer
+        try:
             self.assertIsNotNone(self.m.build_server())
+        finally:
+            self.m.MCPServer = orig
+
+
+class KbMcpSdkFailureModeTest(unittest.TestCase):
+    """Een ontbrekend mcp-pakket en een kapotte mcp-installatie zijn NIET
+    hetzelfde. Het eerste is een keuze van de gebruiker (stil, exit 0), het
+    tweede een defect (luid, exit non-zero). Tot deze test vielen ze samen en
+    was een stil dode MCP-server niet van succes te onderscheiden."""
+
+    def setUp(self):
+        self.m = _load()
+
+    def _main_with_stderr(self):
+        import io
+        from contextlib import redirect_stderr
+        buf = io.StringIO()
+        with redirect_stderr(buf):
+            rc = self.m.main()
+        return rc, buf.getvalue()
+
+    def test_absent_package_exits_zero_and_names_the_package(self):
+        self.m.MCPServer = None
+        self.m.SDK_ABSENT = True
+        self.m.SDK_ERROR = "ModuleNotFoundError: No module named 'mcp'"
+        rc, err = self._main_with_stderr()
+        self.assertEqual(rc, 0)
+        self.assertIn("mcp", err)
+        self.assertIn("not installed", err)
+
+    def test_incompatible_sdk_exits_nonzero_and_names_the_exception(self):
+        self.m.MCPServer = None
+        self.m.SDK_ABSENT = False
+        self.m.SDK_ERROR = ("mcp.server.mcpserver -> ModuleNotFoundError: no module; "
+                            "mcp.server.fastmcp -> ModuleNotFoundError: no module")
+        rc, err = self._main_with_stderr()
+        self.assertNotEqual(rc, 0, "een kapotte SDK mag niet als succes eindigen")
+        self.assertIn("did NOT start", err)
+        self.assertIn("ModuleNotFoundError", err,
+                      "de echte exception hoort in de melding te staan")
+
+    def test_the_two_failure_paths_differ(self):
+        self.m.MCPServer = None
+        self.m.SDK_ABSENT, self.m.SDK_ERROR = True, "x"
+        absent = self._main_with_stderr()
+        self.m.SDK_ABSENT, self.m.SDK_ERROR = False, "y: broken"
+        broken = self._main_with_stderr()
+        self.assertNotEqual(absent[0], broken[0])
+        self.assertNotEqual(absent[1], broken[1])
+
+    def test_import_state_is_internally_consistent(self):
+        """Precies een van de drie uitkomsten geldt, wat er ook geinstalleerd is.
+
+        Deze assert kan niet vacuum slagen: hij dwingt dat het importblok zijn
+        uitkomst ECHT vastlegt in plaats van alles tot None samen te vouwen."""
+        m = _load()
+        usable = m.MCPServer is not None
+        if usable:
+            self.assertFalse(m.SDK_ABSENT)
+            self.assertEqual(m.SDK_ERROR, "")
+        elif m.SDK_ABSENT:
+            self.assertNotEqual(m.SDK_ERROR, "", "afwezigheid hoort ook vastgelegd")
+        else:
+            self.assertNotEqual(m.SDK_ERROR, "",
+                                "onbruikbare SDK zonder reden = de oude stille fout")
+
+    def test_module_is_importable_without_writing_to_stdout(self):
+        """stdio-contract: de server MAG niets op stdout zetten dat geen MCP-bericht
+        is. Het importvenster is het onze; een print() in een geimporteerde module
+        corrumpeert de JSON-RPC-stroom."""
+        import io
+        from contextlib import redirect_stdout
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            _load()
+        self.assertEqual(buf.getvalue(), "", f"stdout vervuild bij import: {buf.getvalue()!r}")
 
 
 class KbMcpTemporalToolTest(unittest.TestCase):

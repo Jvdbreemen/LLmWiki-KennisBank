@@ -548,7 +548,9 @@ lokale LibreOffice-/ImageMagick-tooling vereisen, zoals LiteParse rapporteert.
 
 ## KennisBank gebruiken vanuit andere agents (Codex, OpenCode, Copilot, ChatGPT)
 
-De kluis is niet alleen voor Claude Code. `scripts/kb-mcp.py` is een lokale **MCP-server** die zeven primitieven blootstelt: zes tools - `recall` (zoek geheugen + wiki), `capture` (sla een nieuwe herinnering op), en de temporele set `what_did_i_do`, `timeline`, `weeklog`, `topic_timeline` - plus een `instructions`-resource (een duwtje om te trekken vóór je extern zoekt). MCP is het ene protocol dat elke moderne agent al spreekt, dus elke client die **op deze machine** draait kan de kluis gebruiken.
+De kluis is niet alleen voor Claude Code. `scripts/kb-mcp.py` is een lokale **MCP-server** die negen primitieven blootstelt: acht tools - `recall` (zoek geheugen + wiki), `capture` (sla een nieuwe herinnering op), `review_pending` en `review_decide` (de menselijke reviewwachtrij), en de temporele set `what_did_i_do`, `timeline`, `weeklog`, `topic_timeline` - plus een `instructions`-resource (een duwtje om te trekken vóór je extern zoekt). MCP is het ene protocol dat elke moderne agent al spreekt, dus elke client die **op deze machine** draait kan de kluis gebruiken.
+
+Elke tool draagt MCP-annotaties, en dat is niet cosmetisch: een client leidt uit `readOnlyHint` af of een aanroep bevestiging nodig heeft en of hij parallel mag draaien, en zet beide op "nee" als de hint ontbreekt. De zes read-only retrieval-tools zijn als zodanig gemarkeerd; `capture` is een niet-destructieve schrijver, `review_decide` een destructieve. Het pull-duwtje reist via drie dragers, omdat geen enkele op zichzelf elke client bereikt: het `instructions`-veld van de protocol-handshake, de `kennisbank://instructions`-resource, en de managed block in `.github/copilot-instructions.md`.
 
 **De harde grens: alleen lokaal.** De MCP-server bindt niets aan het netwerk
 (stdio-transport); de kluis verlaat nooit je machine. Claude Code, Codex,

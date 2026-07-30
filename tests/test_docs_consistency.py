@@ -131,14 +131,24 @@ class CodeDerivedFactTest(unittest.TestCase):
                       if t in doctor}
         self.assertEqual(len(real_tiers), 4, "doctor.sh emit niet meer vier tiers")
 
+        # Scope: a lowercase tier marker only lies when it is presented AS
+        # doctor output, i.e. inside a fenced block that shows a doctor run.
+        # The old check fired on any document mentioning doctor.sh anywhere
+        # that also contained "[warn]" anywhere -- which flagged truthful
+        # documentation of build-karpathy-index.py, a script that really does
+        # print [warn]/[error] to stderr. The fabricated footer is different:
+        # "Done. 0 errors" is doctor-shaped wherever it appears.
         offenders = []
         for path in _markdown_files():
             text = path.read_text(encoding="utf-8")
-            if "doctor.sh" not in text:
-                continue
-            for invented in ("[ok]", "[warn]", "[error]", "Done. 0 errors"):
-                if invented in text:
-                    offenders.append(f"{path.relative_to(REPO_ROOT)}: {invented!r}")
+            if "Done. 0 errors" in text:
+                offenders.append(f"{path.relative_to(REPO_ROOT)}: 'Done. 0 errors'")
+            for block in re.findall(r"```.*?```", text, re.S):
+                if "doctor.sh" not in block:
+                    continue
+                for invented in ("[ok]", "[warn]", "[error]"):
+                    if invented in block:
+                        offenders.append(f"{path.relative_to(REPO_ROOT)}: {invented!r}")
         self.assertEqual(
             offenders, [],
             "documentatie citeert doctor-uitvoer die het script niet emit; "
@@ -160,12 +170,18 @@ class CodeDerivedFactTest(unittest.TestCase):
             "COPILOT_PROVIDER_BASE_URL",
             "COPILOT_PROVIDER_API_KEY",
             "COPILOT_PROVIDER_WIRE_API",
+            "COPILOT_CUSTOM_INSTRUCTIONS_DIRS",   # standalone Copilot CLI, ADR-0003
+            "COPILOT_OFFLINE",                    # idem: disables its network access
         }
         # "Code" is hier breder dan Python: de skills en slash-commands zijn
         # uitvoerbare instructies en lezen env-vars in hun shell-blokken.
         sources = list(SCRIPTS.glob("*.py")) + list(SCRIPTS.glob("*.sh"))
         sources += sorted((REPO_ROOT / "skills").rglob("*.md"))
         sources += sorted((REPO_ROOT / "commands").rglob("*.md"))
+        # Tests are code too. Opt-in tier knobs (KB_INTEGRATION,
+        # KB_COPILOT_LIVE) are read only by the suite, so leaving tests/ out
+        # made the guard call a documented, working knob a ghost.
+        sources += sorted((REPO_ROOT / "tests").glob("*.py"))
         code = "\n".join(p.read_text(encoding="utf-8", errors="replace") for p in sources)
         code += (REPO_ROOT / "setup.sh").read_text(encoding="utf-8")
         documented = set()
