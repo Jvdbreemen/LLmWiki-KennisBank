@@ -531,7 +531,9 @@ reports.
 
 ## Using KennisBank from other agents (Codex, OpenCode, Copilot, ChatGPT)
 
-The vault is not Claude-Code-only. `scripts/kb-mcp.py` is a local **MCP server** exposing seven primitives: six tools - `recall` (search memory + wiki), `capture` (save a new memory), and the temporal set `what_did_i_do`, `timeline`, `weeklog`, `topic_timeline` - plus an `instructions` resource (a nudge to pull before searching externally). MCP is the one protocol every modern agent already speaks, so any client running **on this machine** can use the vault.
+The vault is not Claude-Code-only. `scripts/kb-mcp.py` is a local **MCP server** exposing nine primitives: eight tools - `recall` (search memory + wiki), `capture` (save a new memory), `review_pending` and `review_decide` (the human review queue), and the temporal set `what_did_i_do`, `timeline`, `weeklog`, `topic_timeline` - plus an `instructions` resource (a nudge to pull before searching externally). MCP is the one protocol every modern agent already speaks, so any client running **on this machine** can use the vault.
+
+Every tool carries MCP annotations, which is not cosmetic: a client derives from `readOnlyHint` whether a call needs confirmation and whether it may run in parallel, and defaults both to "no" when the hint is absent. The six read-only retrieval tools are marked as such; `capture` is a non-destructive writer, `review_decide` a destructive one. The pull nudge travels on three carriers, because none of them reaches every client on its own: the `instructions` field of the protocol handshake, the `kennisbank://instructions` resource, and the managed block in `.github/copilot-instructions.md`.
 
 **The hard boundary: local only.** The MCP server binds nothing to the network
 (stdio transport); the vault never leaves your machine. Claude Code, Codex,

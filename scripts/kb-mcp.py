@@ -14,10 +14,16 @@ Primitieven:
                            later promoot (mens = update-autoriteit).
   - what_did_i_do/timeline/weeklog/topic_timeline (tools): temporal activity
                            recall over de lokale activity index.
-  - instructions (resource): de pull-nudge die een client zonder push-hook toch
-                           naar recall stuurt. NB: GitHub Copilot ondersteunt
-                           GEEN MCP-resources, alleen tools -> zet de nudge daar
-                           in .github/copilot-instructions.md (zie README).
+  - instructions: de pull-nudge die een client zonder push-hook toch naar recall
+                           stuurt. Drie dragers, want clients verschillen: de
+                           `instructions=`-constructorparameter (protocolniveau),
+                           de `kennisbank://instructions`-resource, en de
+                           managed block in .github/copilot-instructions.md.
+                           Beide Copilot-oppervlakken roepen resources/list en
+                           resources/read wel aan; VS Code biedt resources aan
+                           als door de gebruiker aan te hangen context in plaats
+                           van model-aanroepbaar, dus de copilot-instructions
+                           blijft nodig.
 
 Soevereiniteitsgrens (HARD): local-only. stdio-transport, geen netwerk-bind. De
 vault verlaat de machine nooit. Remote/gehoste agents (cloud-ChatGPT) kunnen een
@@ -38,15 +44,47 @@ from pathlib import Path
 os.environ.setdefault("KENNISBANK_VAULT", str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Optionele MCP-SDK (nieuwe naam MCPServer, oudere FastMCP). Afwezig -> None.
+# Optionele MCP-SDK. Twee uitkomsten die NIET hetzelfde zijn en dus apart
+# vastgelegd worden: het pakket ontbreekt (de gebruiker koos ervoor de server
+# niet te draaien -> stil, exit 0), of het pakket is er maar de server-API is
+# onbruikbaar (kapotte installatie -> luid, exit non-zero). Sinds SDK 2.0.0 is
+# mcp.server.fastmcp verdwenen; die situatie samenvouwen tot "afwezig" gaf een
+# stil dode MCP-server die van succes niet te onderscheiden was.
 MCPServer = None
+SDK_ABSENT = False          # pakket niet geinstalleerd
+SDK_ERROR = ""              # niet-leeg: pakket aanwezig, API onbruikbaar
 try:
+    import mcp as _mcp_pkg  # noqa: F401  - alleen aanwezigheidscheck
+except ImportError as exc:
+    SDK_ABSENT = True
+    SDK_ERROR = f"{type(exc).__name__}: {exc}"
+else:
     try:
         from mcp.server.mcpserver import MCPServer as MCPServer  # type: ignore
-    except Exception:
-        from mcp.server.fastmcp import FastMCP as MCPServer  # type: ignore
+    except Exception as exc_v2:
+        try:
+            from mcp.server.fastmcp import FastMCP as MCPServer  # type: ignore
+        except Exception as exc_v1:
+            MCPServer = None
+            SDK_ERROR = (f"mcp.server.mcpserver -> {type(exc_v2).__name__}: {exc_v2}; "
+                         f"mcp.server.fastmcp -> {type(exc_v1).__name__}: {exc_v1}")
+
+# Tool-annotaties. Clients leiden hier gedrag uit af: Claude Code berekent
+# isReadOnly() EN isConcurrencySafe() uit annotations.readOnlyHint en zet beide
+# op false als annotaties ontbreken. Zonder deze hints vragen onze read-only
+# tools dus onnodig bevestiging en draaien ze serieel. Los importeren en
+# fail-open, zodat de module bruikbaar blijft zonder het pakket.
+try:
+    from mcp.types import ToolAnnotations  # type: ignore
 except Exception:
-    MCPServer = None
+    ToolAnnotations = None
+
+
+def _ann(**kw):
+    """ToolAnnotations of None. Het label gaat in annotations.title en niet in de
+    title=-kwarg: oudere SDK's kennen die kwarg niet en zouden een TypeError
+    geven, terwijl annotations.title overal wordt gehonoreerd."""
+    return ToolAnnotations(**kw) if ToolAnnotations is not None else None
 
 # kb-recall via importlib (hyphen); module-globaal zodat tests het kunnen patchen.
 kb_recall = None
@@ -239,23 +277,23 @@ def topic_timeline_tool(topic: str, period: str = "afgelopen 90 dagen",
         return _activity_json({"ok": False, "warnings": [f"topic_timeline failed: {type(e).__name__}"], "events": []})
 
 
-# Pull-nudge voor MCP-clients zonder push-hook (zie module-docstring). Aangeboden
-# als resource; clients die resources ondersteunen tonen
-# 'm. Copilot ondersteunt geen resources -> README verwijst naar copilot-instructions.md.
+# Pull-nudge voor MCP-clients zonder push-hook (zie module-docstring). Drie
+# dragers naast elkaar, omdat geen enkele op zichzelf elke client bereikt: de
+# instructions=-parameter van de constructor, deze tekst als resource, en de
+# managed block in .github/copilot-instructions.md.
 INSTRUCTIONS_TEXT = (
-    "Je hebt een lokale KennisBank (persoonlijk geheugen + gecureerde wiki) via de "
-    "MCP-tools `recall` en `capture`.\n\n"
-    "- Roep `recall` aan VOORDAT je extern zoekt of een aanname doet: je eigen "
-    "eerdere lessen, beslissingen en bugfixes staan er mogelijk al in.\n"
-    "- Roep `capture` aan wanneer er een herbruikbaar feit, voorkeur, procedure of "
-    "beslissing ontstaat die je in een volgende sessie terug wilt zien.\n"
-    "- Roep `what_did_i_do`, `timeline`, `weeklog` of `topic_timeline` aan voor "
-    "vragen over wat er op een datum, in een week of rond een onderwerp gebeurde.\n"
-    "- `review_pending` toont unverified memories die op menselijke review "
-    "wachten; `review_decide` voert een beslissing door — ALLEEN nadat de "
-    "gebruiker expliciet per item besliste (approve/reject/skip). Beslis nooit "
-    "zelf namens de gebruiker.\n"
-    "- De KennisBank is lokaal en soeverein: er gaat niets naar de cloud."
+    "You have a local KennisBank (personal memory + curated wiki) available "
+    "through the MCP tools `recall` and `capture`.\n\n"
+    "- Call `recall` BEFORE searching externally or making an assumption: your "
+    "own earlier lessons, decisions and bug fixes may already be in there.\n"
+    "- Call `capture` whenever a reusable fact, preference, procedure or "
+    "decision appears that you want back in a later session.\n"
+    "- Call `what_did_i_do`, `timeline`, `weeklog` or `topic_timeline` for "
+    "questions about what happened on a date, in a week, or around a topic.\n"
+    "- `review_pending` lists unverified memories awaiting human review; "
+    "`review_decide` applies a decision - ONLY after the user explicitly "
+    "decided per item (approve/reject/skip). Never decide on their behalf.\n"
+    "- The KennisBank is local and sovereign: nothing goes to the cloud."
 )
 
 
@@ -263,60 +301,71 @@ def build_server():
     """Bouw de MCP-server met recall + capture + instructions. None als mcp ontbreekt."""
     if MCPServer is None:
         return None
-    srv = MCPServer("kennisbank-geheugen")
+    # instructions= is de protocol-drager van de pull-nudge. Guarded, want een
+    # SDK die de kwarg niet kent mag de server niet onderuit halen.
+    try:
+        srv = MCPServer("kennisbank-geheugen", instructions=INSTRUCTIONS_TEXT)
+    except TypeError:
+        srv = MCPServer("kennisbank-geheugen")
 
-    @srv.tool()
+    @srv.tool(annotations=_ann(title="Recall knowledge", readOnlyHint=True, openWorldHint=False))
     def recall(query: str, k: int = 5) -> str:
-        """Doorzoek je eigen KennisBank (geheugen + wiki) op relevante kennis
-        vóór je extern zoekt. Geef een korte query; krijg de beste treffers terug."""
+        """Search your own KennisBank (personal memory + curated wiki) BEFORE
+        searching externally or making an assumption. Give a short query; get the
+        best-matching entries back."""
         return recall_tool(query, k=k)
 
-    @srv.tool()
+    @srv.tool(annotations=_ann(title="Capture a memory", readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False))
     def capture(title: str, body: str, memory_type: str = "feit",
                 importance: int = 3) -> str:
-        """Leg een herbruikbaar feit/voorkeur/procedure/beslissing vast in je
-        KennisBank. Landt als unverified; de sweep of jijzelf bevestigt 'm later."""
+        """Record a reusable fact, preference, procedure or decision in the
+        KennisBank. It lands as unverified: the sweep or the user promotes it
+        later. The user stays the update authority."""
         return capture_tool(title, body, memory_type=memory_type, importance=importance)
 
-    @srv.tool()
+    @srv.tool(annotations=_ann(title="List memories awaiting review", readOnlyHint=True, openWorldHint=False))
     def review_pending(k: int = 10) -> str:
-        """Toon de wachtrij van unverified memories die op menselijke review
-        wachten (oudste eerst). Puur lezen; beslist niets."""
+        """List unverified memories waiting for human review, oldest first.
+        Read-only: it decides nothing."""
         return review_pending_tool(k=k)
 
-    @srv.tool()
+    @srv.tool(annotations=_ann(title="Decide one review item", readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=False))
     def review_decide(stem: str, decision: str) -> str:
-        """Voer één reviewbeslissing uit (approve|reject|skip) — UITSLUITEND
-        nadat de gebruiker in het gesprek expliciet over dit item besliste.
-        Beslis nooit zelf; presenteer eerst review_pending en vraag per item."""
+        """Apply one review decision (approve|reject|skip) - ONLY after the user
+        explicitly decided about this specific item in the conversation. Never
+        decide on their behalf: show review_pending first and ask per item."""
         return review_decide_tool(stem, decision)
 
-    @srv.tool()
+    @srv.tool(annotations=_ann(title="What happened on a date", readOnlyHint=True, openWorldHint=False))
     def what_did_i_do(date_or_period: str, topic: str = "", project: str = "",
                       max_events: int = 25) -> str:
-        """Beantwoord wat er lokaal gebeurde op een datum of in een periode.
-        Geeft JSON met events, source_refs, waarschuwingen en summary."""
+        """Answer what happened locally on a given date or in a period. Returns
+        the events with their source references, any warnings, and a summary."""
         return what_did_i_do_tool(date_or_period, topic=topic, project=project,
                                   max_events=max_events)
 
-    @srv.tool()
+    @srv.tool(annotations=_ann(title="Activity timeline", readOnlyHint=True, openWorldHint=False))
     def timeline(period: str, topic: str = "", project: str = "",
                  max_events: int = 50) -> str:
-        """Geef een chronologische activity timeline voor een periode/topic."""
+        """List the INDIVIDUAL activity events in chronological order for a
+        period, optionally filtered by topic or project. Prefer weeklog when an
+        aggregated summary is wanted instead of every single event."""
         return timeline_tool(period, topic=topic, project=project,
                              max_events=max_events)
 
-    @srv.tool()
+    @srv.tool(annotations=_ann(title="Week overview", readOnlyHint=True, openWorldHint=False))
     def weeklog(period: str = "vorige week", topic: str = "", project: str = "",
                 max_events: int = 100) -> str:
-        """Geef een weekoverzicht met deterministic rollup en bronrefs."""
+        """Summarise a week into an AGGREGATED rollup per day, with source
+        references. Prefer timeline when the individual events are wanted."""
         return weeklog_tool(period=period, topic=topic, project=project,
                             max_events=max_events)
 
-    @srv.tool()
+    @srv.tool(annotations=_ann(title="Topic through time", readOnlyHint=True, openWorldHint=False))
     def topic_timeline(topic: str, period: str = "afgelopen 90 dagen",
                        project: str = "", max_events: int = 80) -> str:
-        """Volg een onderwerp/entity door de tijd via activity events."""
+        """Follow one topic or entity through time across activity events, to see
+        how it developed."""
         return topic_timeline_tool(topic, period=period, project=project,
                                    max_events=max_events)
 
@@ -335,14 +384,28 @@ def build_server():
 def main() -> int:
     srv = build_server()
     if srv is None:
-        sys.stderr.write("kb-mcp: 'pip install mcp' nodig om de MCP-server te draaien.\n")
-        return 0
+        if SDK_ABSENT:
+            # Legitieme keuze: geen MCP-pakket, dus geen MCP-server. Stil en 0.
+            sys.stderr.write(
+                "kb-mcp: the 'mcp' package is not installed, so the MCP server is "
+                "not available. Install it with 'pip install \"mcp>=2.0.0,<3\"'.\n")
+            return 0
+        # Pakket aanwezig maar onbruikbaar: dat is een defect, geen keuze.
+        sys.stderr.write(
+            "kb-mcp: the 'mcp' package is installed but its server API could not be "
+            f"imported, so the MCP server did NOT start.\n  {SDK_ERROR}\n"
+            "  Expected 'mcp>=2.0.0,<3'. Reinstall with "
+            "'pip install --upgrade \"mcp>=2.0.0,<3\"'.\n")
+        return 1
     srv.run()  # stdio-transport (default)
     return 0
 
 
 if __name__ == "__main__":
+    # Geen blanket 'except Exception: exit(0)': dat maakte elke startfout
+    # onzichtbaar. Een gesloten pipe of Ctrl-C is normale beeindiging; al het
+    # andere hoort met een traceback en een non-zero exit naar buiten te komen.
     try:
         sys.exit(main())
-    except Exception:
+    except (KeyboardInterrupt, BrokenPipeError):
         sys.exit(0)
