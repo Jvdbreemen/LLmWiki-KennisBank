@@ -1,6 +1,7 @@
 import json
 import os
 import shutil
+import re
 import subprocess
 import sys
 import tempfile
@@ -93,7 +94,7 @@ def _installeer_eenmalig():
     env["USERPROFILE"] = _bash_path(tmp)
     env["KENNISBANK_VAULT"] = _bash_path(vault)
     result = subprocess.run(
-        [_find_bash(), "setup.sh", "--yes", "--skip-model-check"],
+        [_find_bash(), "setup.sh", "--yes", "--agents", "claude", "--skip-model-check"],
         cwd=REPO_ROOT, env=env, check=False, capture_output=True, text=True,
     )
     if result.returncode != 0:
@@ -146,7 +147,7 @@ class SetupDeployTest(unittest.TestCase):
         env["KENNISBANK_VAULT"] = _bash_path(vault)
         bash = _find_bash()
         result = subprocess.run(
-            [bash, "setup.sh", "--yes", "--skip-model-check"],
+            [bash, "setup.sh", "--yes", "--agents", "claude", "--skip-model-check"],
             cwd=REPO_ROOT, env=env, check=False,
             capture_output=True, text=True,
         )
@@ -267,10 +268,15 @@ class SetupDeployTest(unittest.TestCase):
         env["USERPROFILE"] = _bash_path(tmp)
         env["KENNISBANK_VAULT"] = _bash_path(vault)
         bash = _find_bash()
-        subprocess.run(
-            [bash, "setup.sh", "--yes", "--skip-model-check"],
-            cwd=REPO_ROOT, env=env, check=True,
+        result = subprocess.run(
+            [bash, "setup.sh", "--yes", "--agents", "claude", "--skip-model-check"],
+            cwd=REPO_ROOT, env=env, check=False,
             capture_output=True, text=True,
+        )
+        self.assertEqual(
+            result.returncode,
+            0,
+            f"setup.sh failed with {result.returncode}\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}",
         )
         return tmp, vault
 
@@ -463,3 +469,35 @@ class SetupDeployTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SetupInvocationGuardTest(unittest.TestCase):
+    """TASK-116: houdt het wall-clock-budget uit dit bestand.
+
+    Elke setup.sh-aanroep hier moet --agents claude meegeven. Zonder dat draait
+    install-agent-envs.py validate_mcp_runtime(), de enige harde tijdslimiet in
+    het hele pad (15 s, install-agent-envs.py:783). Die start een geneste
+    stdio-handshake waarbij een Python-client een Python MCP-server spawnt en
+    kost idle al 10 van de 15 seconden. Onder belasting gaat hij eroverheen,
+    main() geeft 1 terug, set -e breekt setup.sh af en de test faalt op iets dat
+    niets met de test te maken heeft.
+
+    --skip-model-check dekt dit NIET: dat mapt op --skip-models en gate alleen
+    validate_models (regel 1134), niet de MCP-validatie op 1133.
+
+    Deze guard is structureel met opzet. Het defect is intermitterend, dus een
+    groene run bewijst niets; de afwezigheid van het budget wel.
+    """
+
+    def test_every_setup_invocation_pins_the_agent_set(self):
+        bron = Path(__file__).read_text(encoding="utf-8")
+        # Alleen argumentlijsten: "setup.sh" gevolgd door een komma. Regel 367
+        # LEEST setup.sh als bestand ("setup.sh").read_text() en is geen aanroep;
+        # die moet hier niet in, anders faalt de guard op iets dat geen subprocess is.
+        aanroepen = re.findall(r'"setup\.sh",(.*?)\]', bron, re.S)
+        self.assertGreaterEqual(len(aanroepen), 4, "setup.sh-aanroepen niet gevonden")
+        for args in aanroepen:
+            self.assertIn(
+                '"--agents"', args,
+                "een setup.sh-aanroep pint de agent-set niet vast en haalt daarmee "
+                "de 15 s MCP-handshake terug in dit bestand (TASK-116)")

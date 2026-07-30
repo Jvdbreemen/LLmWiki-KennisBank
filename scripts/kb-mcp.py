@@ -147,13 +147,16 @@ def capture_tool(title: str, body: str, memory_type: str = "feit",
     try:
         import _memory
         mt = _memory.coerce_memory_type(memory_type) if hasattr(_memory, "coerce_memory_type") else memory_type
-        path = _memory.write(
+        path, bestond_al = _memory.write_capture(
             t, b,
             status="unverified",
             evidence_basis="agent",
             memory_type=mt,
             importance=_memory.coerce_importance(importance) if hasattr(_memory, "coerce_importance") else importance,
         )
+        if bestond_al:
+            return (f"Stond er al, ongewijzigd gelaten: {Path(path).name}. "
+                    f"Identieke inhoud, dus niets overschreven.")
         return (f"Vastgelegd als unverified memory: {Path(path).name}. "
                 f"De volgende sweep of jij bevestigt 'm (mens = autoriteit).")
     except Exception as e:
