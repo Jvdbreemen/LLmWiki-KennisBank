@@ -7,6 +7,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-07-30
+
+The MCP tool surface tells clients what it is, the server stops failing
+silently, and the repository gains a C4 architecture documentation set. The
+`mcp>=2` dependency bump is deliberately **not** here: see below.
+
+### Changed
+
+- **Every MCP tool now carries annotations, and this is not cosmetic.** A client
+  derives from `annotations.readOnlyHint` whether a call needs confirmation and
+  whether it may run in parallel, and defaults both to "no" when the hint is
+  absent. Claude Code computes `isReadOnly()` and `isConcurrencySafe()` exactly
+  that way, so the six read-only retrieval tools were presenting as
+  possibly-destructive and non-parallelisable: needless confirmation prompts and
+  serialisation on the interactive path. The values are earned rather than
+  guessed — `capture` writes but is not destructive because it only ever creates
+  a new unverified file, while `review_decide` is destructive because the write
+  path refuses the memory once its status has moved.
+- **The pull nudge now travels on three carriers**, because none of them reaches
+  every client on its own: the `instructions` field of the protocol handshake,
+  the `kennisbank://instructions` resource, and the managed block in
+  `.github/copilot-instructions.md`.
+- **Tool descriptions are English** per the repository language policy, and
+  `timeline` and `weeklog` now point at each other. They read almost identically
+  before, which made tool selection a coin flip. Tool and parameter names are
+  byte-identical, so no deployed client configuration breaks.
+
+### Fixed
+
+- **A broken `mcp` installation no longer looks like success.** `pip install mcp`
+  now resolves to 2.x, where `mcp.server.fastmcp` no longer exists. The old
+  import block collapsed that into "no SDK", printed an advisory line and exited
+  0, so a fresh install produced a silently dead MCP server indistinguishable
+  from a healthy one. An absent package is still a user choice and stays quiet
+  with exit 0; a package that is present but whose server API will not import is
+  a defect and now exits non-zero, naming the exception on stderr. The blanket
+  `except Exception: sys.exit(0)` is gone.
+- **Two false claims removed from the source and the README.** Both stated that
+  GitHub Copilot supports no MCP resources; verification showed both Copilot
+  surfaces call `resources/list` and `resources/read`. The README also advertised
+  "seven primitives: six tools" while omitting `review_pending` and
+  `review_decide` — it is nine primitives, eight tools.
+- **Two documentation guards were over- and under-reaching.** One flagged any
+  document that mentioned `doctor.sh` and also contained `[warn]` anywhere, which
+  condemned truthful documentation of `build-karpathy-index.py` — a script that
+  really does print those markers. It now inspects only fenced blocks that
+  actually show a doctor run. The other excluded `tests/` from its notion of
+  "code", so opt-in tier knobs read only by the suite counted as ghost variables.
+
+### Added
+
+- **C4 architecture documentation** under `C4-Documentation/`: 20 code-level
+  documents, seven components with a master index and relationship diagram, a
+  container level with an OpenAPI specification for the Atlas sidecar and an MCP
+  tool contract, and a context level with personas and user journeys. Plus a
+  fully dimensioned specification for a single high-level architecture plate.
+- **A wire-level MCP test harness** (`tests/test_kb_mcp_wire.py`) that spawns the
+  server and speaks newline-delimited JSON-RPC to it, asserting the handshake,
+  the exact tool names as a contract, the annotations and instructions as
+  delivered, and that every byte on stdout parses as JSON-RPC. It replaces a
+  guard that branched on "is the SDK present" and passed in either branch.
+
+### Not in this release, on purpose
+
+The `mcp>=2` pin bump is gated rather than scheduled. Measured: a modern-only
+server dies against every client currently in use with
+`McpError: Method not found: initialize`, because their first frame is
+`initialize` and they never probe `server/discover`. The 2026-07-28 revision
+protects a non-migrated server through its own stdio fallback rule, so waiting
+costs nothing and migrating early can only lose. The gate is a client observed
+actually speaking the new revision, plus a post-GA patch release of the SDK. The
+full analysis, including the refuted alternative of hand-rolling the transport,
+is in `docs/superpowers/plans/mcp-2026-07-28-migration.md`.
+
 ## [0.25.0] - 2026-07-29
 
 The eval harness no longer pollutes the signal it measures, and a stray kill
@@ -1115,7 +1189,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.25.0...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.26.0...HEAD
+[0.26.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.25.0...v0.26.0
 [0.25.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.24.1...v0.25.0
 [0.24.1]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.24.0...v0.24.1
 [0.24.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.23.0...v0.24.0
