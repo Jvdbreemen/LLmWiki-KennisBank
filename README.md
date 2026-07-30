@@ -73,7 +73,23 @@ Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: 
 
 The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
 
-## Feature highlights (v0.25.0)
+## Feature highlights (v0.26.0)
+
+### New in v0.26.0
+
+- **MCP tools now say what they are.** Every tool carries annotations, so a
+  client knows which calls are read-only and may run in parallel. Six
+  retrieval tools previously presented as possibly-destructive, costing
+  confirmation prompts and serialisation on the interactive path.
+- **A broken `mcp` install no longer looks healthy.** `pip install mcp` now
+  lands on 2.x, where the old server API is gone; that used to produce a
+  silently dead MCP server that exited 0. It now fails loudly and says why.
+- **C4 architecture documentation** under `C4-Documentation/`: code,
+  component, container and context levels, plus a dimensioned specification
+  for a single high-level architecture plate.
+- **The `mcp>=2` bump is deliberately not included.** A modern-only server
+  breaks every client in use today; the upgrade is gated on a measurement.
+  See `docs/superpowers/plans/mcp-2026-07-28-migration.md`.
 
 ### New in v0.25.0
 

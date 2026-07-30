@@ -76,7 +76,23 @@ Geheugensystemen van leveranciers (Mem0, Zep, Letta, Cognee) zijn krachtig maar 
 
 De ontwerpvoorkeur is overal dezelfde: **deterministisch waar mogelijk, LLM alleen waar het oordeelsvermogen toevoegt, fail-open overal**. Een dood model blokkeert nooit een sessie, verliest nooit een transcript, en verwijdert nooit geverifieerde kennis.
 
-## Functie-highlights (v0.25.0)
+## Functie-highlights (v0.26.0)
+
+### Nieuw in v0.26.0
+
+- **MCP-tools vertellen nu wat ze zijn.** Elke tool draagt annotaties, dus een
+  client weet welke aanroepen read-only zijn en parallel mogen draaien. Zes
+  retrieval-tools presenteerden zich eerder als mogelijk destructief, wat
+  bevestigingsprompts en serialisatie op de interactieve weg kostte.
+- **Een kapotte `mcp`-installatie ziet er niet meer gezond uit.** `pip install
+  mcp` landt nu op 2.x, waar de oude server-API weg is; dat gaf eerder een stil
+  dode MCP-server die met exit 0 eindigde. Hij faalt nu luid en zegt waarom.
+- **C4-architectuurdocumentatie** onder `C4-Documentation/`: code-, component-,
+  container- en contextniveau, plus een gedimensioneerde specificatie voor één
+  hoog-over architectuurplaat.
+- **De `mcp>=2`-bump zit er bewust niet in.** Een modern-only server breekt
+  vandaag elke client in gebruik; de upgrade is gated op een meting. Zie
+  `docs/superpowers/plans/mcp-2026-07-28-migration.md`.
 
 ### Nieuw in v0.25.0
 
