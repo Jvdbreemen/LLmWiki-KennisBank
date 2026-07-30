@@ -165,5 +165,63 @@ class MemoryFormatTest(unittest.TestCase):
         self.assertEqual(yaml.safe_load(blok).get("superseded_by"), ["[[nieuw-artikel]]"])
 
 
+class SetStatusFenceTest(unittest.TestCase):
+    """Een '---' in een waarde mag de frontmatter niet doen splitsen.
+
+    set_status splitste met raw.split("---", 2), dat elke "---" als fence las.
+    Een titel met streepjes -- en titels komen uit LLM-extractie over
+    transcripts -- leverde dan: status ONGEWIJZIGD, bestand beschadigd, en True
+    als returnwaarde omdat er wel iets veranderd was. memory-sweep telde daarop
+    een supersession die niet plaatsvond en haalde het item uit de pool, zodat
+    een gesuperseerde memory in elke prompt bleef terugkomen."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="kb-fence-"))
+        (self.tmp / "09-memory").mkdir(parents=True)
+        self._saved = os.environ.get("KENNISBANK_VAULT")
+        os.environ["KENNISBANK_VAULT"] = str(self.tmp)
+        self.addCleanup(self._restore)
+
+    def _restore(self):
+        import shutil
+        if self._saved is None:
+            os.environ.pop("KENNISBANK_VAULT", None)
+        else:
+            os.environ["KENNISBANK_VAULT"] = self._saved
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _write(self, title):
+        p = self.tmp / "09-memory" / "proef.md"
+        p.write_text(_memory.render(title=title, body="proef", memory_type="feit",
+                                    importance=3), encoding="utf-8")
+        return p
+
+    def test_status_really_changes_with_dashes_in_the_title(self):
+        p = self._write("TASK-12 --- rollback")
+        self.assertTrue(_memory.set_status(p, "superseded",
+                                           superseded_by=["ander"],
+                                           valid_until="2026-07-02"))
+        self.assertEqual(_memory.read_status(p), "superseded")
+
+    def test_document_still_parses_and_body_survives(self):
+        p = self._write("TASK-12 --- rollback")
+        _memory.set_status(p, "superseded", superseded_by=["ander"])
+        fm, body = parse_frontmatter(p.read_text(encoding="utf-8"))
+        self.assertEqual(fm.get("status"), "superseded")
+        self.assertEqual(fm.get("superseded_by"), ["[[ander]]"])
+        self.assertEqual(body.strip(), "proef")
+
+    def test_sanitiser_defangs_the_fence_it_never_covered(self):
+        """De sanitizer hoort te dekken wat de parser aanneemt."""
+        self.assertNotIn("---", _memory._yaml_scalar("a --- b"))
+
+    def test_a_no_op_reports_false_instead_of_success(self):
+        """Zonder status-regel verandert er niets, en dat hoort False te zijn.
+        Succes melden op een no-op was de kern van de bug."""
+        p = self.tmp / "09-memory" / "geen-status.md"
+        p.write_text('---\ntitle: "x"\ntype: memory\n---\n\nbody\n', encoding="utf-8")
+        self.assertFalse(_memory.set_status(p, "superseded"))
+
+
 if __name__ == "__main__":
     unittest.main()

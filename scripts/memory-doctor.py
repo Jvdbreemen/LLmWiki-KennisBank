@@ -67,6 +67,22 @@ def cloud_warnings() -> list:
         if ep and not _is_local_endpoint(ep):
             out.append(f"Ollama-endpoint is niet lokaal ({ep}) - embeddings/generatie "
                        f"verlaten je machine (#4)")
+    # De EMBED-keten is een tweede, losse configuratie (kennisbank-embed.json) en
+    # werd hier niet gecontroleerd. Juist die staat op de hot path: kb-retrieve
+    # stuurt elke prompt door emb.embed(). Een niet-lokaal endpoint daar is
+    # precies het lek dat deze functie hoort te melden.
+    try:
+        import _embeddings as _emb
+        prov, _model, ep, _key = _emb._resolve()
+    except Exception:
+        prov, ep = "", ""
+    if prov and ep:
+        if prov in _emb.LOCAL_ONLY_PROVIDERS and not _is_local_endpoint(ep):
+            out.append(f"Embed-endpoint is niet lokaal ({ep}) bij provider '{prov}' "
+                       f"- elke prompt en de hele vault verlaten je machine (#4)")
+        elif prov not in _emb.LOCAL_ONLY_PROVIDERS:
+            out.append(f"Embed-provider '{prov}' is cloud - tekst verlaat je "
+                       f"machine (#4)")
     return out
 
 

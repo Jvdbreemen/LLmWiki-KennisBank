@@ -63,6 +63,18 @@ def _emit(ctx: str) -> None:
         }))
 
 
+#: Onderscheidt "de index kon niets leveren" van "de index leverde niets".
+#: Het eerste hoort de gebruiker te bereiken, het tweede juist niet.
+_NO_INDEX = object()
+
+_NO_INDEX_NOTICE = (
+    "KennisBank: geen kennis opgehaald bij deze prompt. De zoekindex is "
+    "afwezig of wordt op dit moment herbouwd. Dat gebeurt na een upgrade of "
+    "een modelwissel en duurt meestal een halve minuut; daarna komt de "
+    "context er vanzelf weer bij."
+)
+
+
 def _emit_notice(text: str) -> None:
     """Meld een gemiste injectie ZICHTBAAR, in plaats van stil terug te keren.
 
@@ -217,71 +229,23 @@ def _wiki_block(prompt, emb, vault_root, cfg, qvec):
                     lines.append(f"- [[{stem}]]{label}: {h.get('snippet', '')}")
                 return "\n".join(lines)
         except Exception:
-            pass  # val terug op het cache-pad hieronder
+            return _NO_INDEX  # index onbruikbaar: melden, niet stil leeg
 
-    # Terugvalweg: ontbrekende, ongeldige of nog niet genormaliseerde index.
-    # Parseert de volledige embedding-cache (tientallen MB) en scoort in pure
-    # Python -- traag, maar het houdt een vault met kapotte index werkend.
-    cache = emb.load_cache()
-    if not cache:
-        return ""
-    eid = emb.embed_id()
-    wiki_prefix = str(vault_root() / "02-wiki")
-    candidates = [
-        (k, v) for k, v in cache.items()
-        if k.startswith(wiki_prefix) and v.get("id") == eid and v.get("embedding")
-    ]
-    if not candidates:
-        return ""
-    # cosine-signaal (ongewijzigde semantische gate) + de cosine-cache-fallback-lijst
-    scored = []
-    for k, v in candidates:
-        if v.get("dim") and v["dim"] != len(qvec):
-            continue
-        s = emb.cosine(qvec, v["embedding"])
-        scored.append((s, k))
-    scored.sort(reverse=True)
-    cosine_relevant = bool(scored) and scored[0][0] >= threshold
-
-    # FTS-signaal (exacte termen die vector mist)
-    fts_relevant = False
-    if kb_recall is not None:
-        try:
-            fts_relevant = kb_recall.has_fts_match(prompt, layer="wiki")
-        except Exception:
-            fts_relevant = False
-
-    if not (cosine_relevant or fts_relevant):
-        return ""
-
-    # Selectie: hybride via kb-index; fallback naar cosine-cache-top-N.
-    # Graafbuur-expansie (één hop langs wikilinks) staat default aan;
-    # uitschakelen met KB_RETRIEVE_EXPAND=0 of "retrieve_expand": 0 in config.
-    hits = []
-    if kb_recall is not None:
-        try:
-            # Zelfde drempel als de poort hierboven: wat de gate niet zou
-            # openen, hoort ook niet als losse treffer geinjecteerd te worden.
-            hits = kb_recall.wiki_hits(qvec, query_text=prompt, k=top_n,
-                                       expand=expand, min_cos=threshold)
-        except Exception:
-            hits = []
-    lines = ["KennisBank-wiki (semantisch gematcht op je prompt; raadpleeg bij twijfel):"]
-    if hits:
-        for h in hits:
-            stem = Path(h.get("path", "")).stem
-            label = " (buur)" if h.get("neighbor") else f" ({h.get('score', 0.0):.2f})"
-            lines.append(f"- [[{stem}]]{label}: {h.get('snippet', '')}")
-    else:
-        # fallback: oude cosine-cache-selectie (alleen treffers >= drempel)
-        relevant = [(s, k) for s, k in scored if s >= threshold][:top_n]
-        if not relevant:
-            return ""
-        for s, k in relevant:
-            p = Path(k)
-            snippet = emb.doc_text(p, cap=280).replace("\n", " ").strip()
-            lines.append(f"- [[{p.stem}]] ({s:.2f}): {snippet}")
-    return "\n".join(lines)
+    # GEEN terugvalweg meer. Hier stond een pad dat de volledige
+    # embedding-cache parseerde en in pure Python scoorde. Gemeten op de echte
+    # vault: 170,8 MB JSON, 4745 ms alleen json.loads, 6766 ms voor dit blok, en
+    # 186 MB resident geheugen -- op een pad met een budget van 2,0 s.
+    #
+    # Erger dan de kosten was WANNEER het vuurde: build-kb-index unlinkt de
+    # index en herbouwt hem in de losgekoppelde worker, dus tijdens dat hele
+    # venster viel elke prompt hierop terug. De cliff landde precies na een
+    # upgrade of modelwissel, wanneer de gebruiker zit te typen.
+    #
+    # Sneller maken zou een tweede retrieval-implementatie in leven houden.
+    # De hook heeft al het juiste mechanisme voor "deze beurt geen kennis":
+    # _emit_notice, dezelfde weg als bij een koud model. Een misser hoort
+    # zichtbaar te zijn, niet traag.
+    return _NO_INDEX
 
 
 def _provenance_tag(path: str) -> str:
@@ -383,6 +347,9 @@ def main() -> None:
         return
 
     wiki_text = _wiki_block(prompt, emb, vault_root, cfg, qvec)
+    no_index = wiki_text is _NO_INDEX
+    if no_index:
+        wiki_text = ""
 
     mem_text = ""
     try:
@@ -394,6 +361,14 @@ def main() -> None:
         mem_text = _memory_block(qvec, prompt, cfg)
 
     parts = [t for t in (wiki_text, mem_text) if t]
+    if not parts and no_index:
+        # Een misser hoort zichtbaar te zijn. Hooguit een melding per run:
+        # het memory-blok deelt dezelfde index en zou hetzelfde zeggen.
+        try:
+            _emit_notice(_NO_INDEX_NOTICE)
+        except Exception:
+            pass
+        return
     if parts:
         ctx = "\n\n".join(parts)
         _emit(ctx)

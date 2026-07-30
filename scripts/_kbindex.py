@@ -18,6 +18,7 @@ import math
 import os
 import re
 import sqlite3
+import struct
 import sys
 from pathlib import Path
 
@@ -34,14 +35,41 @@ def index_path() -> Path:
     return vault_root() / ".claude" / "kb-index.db"
 
 
+_VEC0_PATH = None
+
+
+def vec0_extension() -> str:
+    """Pad naar de meegeleverde sqlite-vec loadable extension.
+
+    Bewust find_spec in plaats van `import sqlite_vec`: het __init__ van dat
+    pakket eindigt op `import numpy.typing` voor een optionele helper die wij
+    nooit aanroepen. Gemeten met -X importtime op de deploy-interpreter kost dat
+    355 ms, waarvan 319 ms numpy.typing -- betaald bij de eerste index-open van
+    ELKE prompt. find_spec lokaliseert het pakket zonder het uit te voeren
+    (0,6 ms) en numpy komt niet in sys.modules.
+
+    Ontbreekt het pakket, dan is dit een ImportError, net als voorheen; alle
+    bestaande `except Exception` rond connect/_open_ro degradeert dus
+    ongewijzigd (stdlib-first).
+    """
+    global _VEC0_PATH
+    if _VEC0_PATH is None:
+        import importlib.util
+        spec = importlib.util.find_spec("sqlite_vec")
+        if spec is None or not spec.origin:
+            raise ImportError("sqlite-vec is niet geinstalleerd")
+        _VEC0_PATH = os.path.normpath(
+            os.path.join(os.path.dirname(spec.origin), "vec0"))
+    return _VEC0_PATH
+
+
 def connect(path=None) -> sqlite3.Connection:
-    import sqlite_vec
     p = str(path) if path is not None else str(index_path())
     if path is None:
         index_path().parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(p)
     conn.enable_load_extension(True)
-    sqlite_vec.load(conn)
+    conn.load_extension(vec0_extension())
     conn.enable_load_extension(False)
     conn.execute("PRAGMA journal_mode=WAL")
     return conn
@@ -112,8 +140,13 @@ def unit(vector):
 
 
 def _serialize(vector):
-    from sqlite_vec import serialize_float32
-    return serialize_float32(list(vector))
+    """Vector naar het float32-blob-formaat dat vec0 verwacht.
+
+    Identiek aan sqlite_vec.serialize_float32, maar zonder het pakket te
+    importeren -- zie vec0_extension() voor waarom dat 355 ms scheelt.
+    """
+    v = list(vector)
+    return struct.pack("%sf" % len(v), *v)
 
 
 def indexed_hash(conn: sqlite3.Connection, path: str) -> "str | None":

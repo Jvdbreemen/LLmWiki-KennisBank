@@ -22,13 +22,14 @@ Frontmatter-contract (spec fase 1, bi-temporeel uitgebreid):
 from __future__ import annotations
 
 import os
+import re
 import sys
 from pathlib import Path
 
 os.environ.setdefault("KENNISBANK_VAULT", str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _common import slugify, _today_iso  # noqa: E402
-from _frontmatter import parse_frontmatter  # noqa: E402
+from _frontmatter import parse_frontmatter, split_frontmatter  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402
 
 STATUSES = ("unverified", "current", "superseded", "retracted", "expired")
@@ -163,8 +164,14 @@ def unique_memory_path(title: str, created: str | None = None,
 def _yaml_scalar(s) -> str:
     """Veilige double-quoted scalar voor de minimale frontmatter-parser.
     Sanitize i.p.v. escape (de parser kent geen escapes): embedded quotes ->
-    enkele quote, newlines -> spatie."""
+    enkele quote, newlines -> spatie, en "---" -> em-dash.
+
+    Die laatste hoort erbij: de sanitizer moet dekken wat een parser aanneemt.
+    Een titel met "---" liet set_status het bestand op de verkeerde plek
+    splitsen, met stille corruptie tot gevolg. Titels komen uit LLM-extractie
+    over transcripts, dus dat is geen theoretisch geval."""
     s = str(s).replace('"', "'").replace("\n", " ").replace("\r", " ").strip()
+    s = re.sub(r"-{3,}", "—", s)
     return f'"{s}"'
 
 
@@ -255,10 +262,16 @@ def set_status(path, status: str, superseded_by=None, valid_until: str | None = 
         raw = p.read_text(encoding="utf-8")
     except OSError:
         return False
-    parts = raw.split("---", 2)
-    if len(parts) < 3:
+    # split_frontmatter i.p.v. raw.split("---", 2): die laatste ziet ELKE "---"
+    # als fence, ook een die in een waarde staat. _yaml_scalar sanitizet quotes
+    # en newlines maar niet "---", en titels komen uit LLM-extractie over
+    # transcripts -- dus dat gebeurt in de praktijk. Gevolg was: de status werd
+    # niet gewijzigd, het bestand raakte beschadigd, en de functie gaf True
+    # terug omdat er WEL iets veranderd was. _FENCE_RE is verankerd op ^---$,
+    # precies om dit uit te sluiten.
+    fm, body = split_frontmatter(raw)
+    if not fm:
         return False
-    fm = parts[1]
     # Replacement altijd via een lambda: een string-replacement interpreteert
     # backslashes als regex-escapes (re.PatternError op bv. een pad of "\x").
     new_fm = re.sub(r"^status:.*$", lambda _m: f"status: {status}",
@@ -284,7 +297,13 @@ def set_status(path, status: str, superseded_by=None, valid_until: str | None = 
                             new_fm, count=1, flags=re.MULTILINE)
         else:
             new_fm = new_fm.rstrip("\n") + f"\nvalid_until: {valid_until}\n"
-    new_raw = parts[0] + "---" + new_fm + "---" + parts[2]
+    if new_fm == fm:
+        # Geen status-regel gevonden en niets toegevoegd: dan is er niets
+        # gebeurd, en dat hoort False te zijn. Succes melden op een no-op was
+        # de kern van de bug: memory-sweep telde een supersession die nooit
+        # plaatsvond en haalde het item uit de reconcile-pool.
+        return False
+    new_raw = "---\n" + new_fm.strip("\n") + "\n---\n" + body
     if new_raw == raw:
         return False
     try:

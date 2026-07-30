@@ -20,3 +20,6 @@ kb-memory-eval-set.json
 kb-activity-eval-set.json
 *.draft.json
 06-claude/
+
+# Output van /comprehensive-review:full-review (lokale review-sessie)
+.full-review/

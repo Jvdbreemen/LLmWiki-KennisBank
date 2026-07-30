@@ -105,6 +105,7 @@ class WikiBlockTest(unittest.TestCase):
         self.emb.warm_async.assert_called_once_with()
 
     def test_cosine_relevant_injects_hybrid(self):
+        self.m.kb_recall.index_is_gated = Mock(return_value=True)
         self.emb.cosine = lambda a, b: 0.9  # boven drempel -> gate slaagt
         # Mock i.p.v. kale lambda: assert_called bewijst dat het hybride pad
         # DAADWERKELIJK is gelopen. Zonder die guard kan een signatuur-drift de
@@ -120,41 +121,54 @@ class WikiBlockTest(unittest.TestCase):
         self.assertIsNotNone(qvec)
         wiki_hits.assert_called()
 
-    def test_fts_only_triggers_when_cosine_low(self):
-        self.emb.cosine = lambda a, b: 0.1  # onder drempel -> alleen FTS kan triggeren
-        has_fts = Mock(side_effect=lambda q, layer="wiki": True)
+    def test_fts_gate_is_the_indexs_job_not_the_blocks(self):
+        """De FTS-poort zat in het cache-pad; de index doet die nu zelf.
+
+        Vroeger raadpleegde dit blok has_fts_match om te beslissen of een lage
+        cosine alsnog mocht injecteren. Dat hoorde bij de terugvalweg. Op de
+        gated weg past search() de drempel EN de FTS-fusie zelf toe, dus het
+        blok hoort die vraag niet nog eens te stellen."""
+        self.m.kb_recall.index_is_gated = Mock(return_value=True)
+        has_fts = Mock(return_value=True)
+        self.m.kb_recall.has_fts_match = has_fts
         wiki_hits = Mock(side_effect=lambda qv, query_text="", k=3, expand=False, min_cos=0.0: [
             {"path": "/v/02-wiki/art.md", "layer": "wiki", "title": "Art",
              "created": "2026-06-01", "score": 0.5, "snippet": "exacte-term-treffer"}])
-        self.m.kb_recall.has_fts_match = has_fts
         self.m.kb_recall.wiki_hits = wiki_hits
-        qvec = self.emb.embed("FunctieNaamXYZ aanroep")
-        text = self.m._wiki_block("FunctieNaamXYZ aanroep",
-                                  self.emb, self.vault_root, self._cfg(), qvec)
+        text = self.m._wiki_block("FunctieNaamXYZ aanroep", self.emb,
+                                  self.vault_root, self._cfg(), [0.1, 0.2])
         self.assertIn("exacte-term-treffer", text)
-        has_fts.assert_called()   # FTS-gate is echt geraadpleegd
-        wiki_hits.assert_called()  # en het hits-pad is echt gelopen
+        wiki_hits.assert_called()
+        has_fts.assert_not_called()
 
-    def test_irrelevant_no_injection(self):
-        self.emb.cosine = lambda a, b: 0.1
-        has_fts = Mock(side_effect=lambda q, layer="wiki": False)
-        self.m.kb_recall.has_fts_match = has_fts
-        qvec = self.emb.embed("totaal iets anders zonder match")
-        text = self.m._wiki_block("totaal iets anders zonder match",
-                                  self.emb, self.vault_root, self._cfg(), qvec)
-        self.assertEqual(text, "")
-        has_fts.assert_called()  # de FTS-gate is echt geraadpleegd (geen stille skip)
+    def test_missing_index_returns_the_sentinel_not_an_empty_block(self):
+        """Zonder bruikbare index is "niets gevonden" een LEUGEN.
 
-    def test_fallback_to_cosine_when_hybrid_empty(self):
-        self.emb.cosine = lambda a, b: 0.9  # gate slaagt
-        wiki_hits = Mock(side_effect=lambda qv, query_text="", k=3, expand=False, min_cos=0.0: [])  # index leeg
-        self.m.kb_recall.wiki_hits = wiki_hits
-        qvec = self.emb.embed("relevante vraag over het artikel")
-        text = self.m._wiki_block("relevante vraag over het artikel",
-                                  self.emb, self.vault_root, self._cfg(), qvec)
-        # fallback naar cosine-cache-selectie: het wiki-artikel staat er
-        self.assertIn("[[art]]", text)
-        wiki_hits.assert_called()  # hybride is echt geprobeerd voordat de fallback liep
+        Hier stond een terugvalweg die de volledige embedding-cache parseerde:
+        gemeten 6766 ms en 186 MB op een pad met een budget van 2,0 s, en hij
+        vuurde juist tijdens een index-herbouw. Het blok geeft nu een sentinel
+        terug zodat main() het verschil kan maken tussen "de index leverde
+        niets" en "er was geen index"."""
+        self.m.kb_recall.index_is_gated = Mock(return_value=False)
+        out = self.m._wiki_block("een vraag", self.emb, self.vault_root,
+                                 self._cfg(), [0.1, 0.2])
+        self.assertIs(out, self.m._NO_INDEX)
+
+    def test_a_broken_index_also_returns_the_sentinel(self):
+        """Een exception op de gated weg mag niet stil als 'geen treffers' lezen."""
+        self.m.kb_recall.index_is_gated = Mock(side_effect=RuntimeError("db stuk"))
+        out = self.m._wiki_block("een vraag", self.emb, self.vault_root,
+                                 self._cfg(), [0.1, 0.2])
+        self.assertIs(out, self.m._NO_INDEX)
+
+    def test_the_json_cache_is_never_read_even_without_an_index(self):
+        """De 170 MB cache mag nergens meer op de hot path staan."""
+        self.m.kb_recall.index_is_gated = Mock(return_value=False)
+        load_cache = Mock(side_effect=AssertionError("load_cache op de hot path"))
+        self.emb.load_cache = load_cache
+        self.m._wiki_block("een vraag", self.emb, self.vault_root,
+                           self._cfg(), [0.1, 0.2])
+        load_cache.assert_not_called()
 
     # --- JSON-cache van de hot path (TASK-62) ---
 
@@ -187,18 +201,22 @@ class WikiBlockTest(unittest.TestCase):
         text = self.m._wiki_block("een vraag", self.emb, self.vault_root, self._cfg(), [0.1, 0.2])
         self.assertIn("nog steeds gevonden", text)
 
-    def test_ungated_index_still_uses_the_cache_gate(self):
-        """Index van vóór de normalisatie: de oude poort moet blijven werken.
+    def test_ungated_index_never_injects_unfiltered(self):
+        """Index van vóór de normalisatie mag nooit onvoorwaardelijk injecteren.
 
-        Zonder deze terugval zou een niet-herbouwde index onvoorwaardelijk gaan
-        injecteren -- slechter dan het gedrag van vóór deze wijziging.
+        Dat was de reden dat de terugvalweg bestond. Die weg is weg, maar de
+        eis blijft: een ongated index levert geen tekst, hij levert de sentinel
+        waarop main() een zichtbare melding doet.
         """
         self.m.kb_recall.index_is_gated = Mock(return_value=False)
-        self.emb.cosine = lambda a, b: 0.1               # onder drempel
-        self.m.kb_recall.has_fts_match = Mock(return_value=False)
-        text = self.m._wiki_block("totaal iets anders", self.emb, self.vault_root,
-                                  self._cfg(), [0.1, 0.2])
-        self.assertEqual(text, "")
+        wiki_hits = Mock(return_value=[{"path": "/v/02-wiki/art.md", "layer": "wiki",
+                                        "title": "Art", "created": "2026-06-01",
+                                        "score": 0.5, "snippet": "ongefilterd"}])
+        self.m.kb_recall.wiki_hits = wiki_hits
+        out = self.m._wiki_block("totaal iets anders", self.emb, self.vault_root,
+                                 self._cfg(), [0.1, 0.2])
+        self.assertIs(out, self.m._NO_INDEX)
+        wiki_hits.assert_not_called()
 
     def test_gated_index_without_hits_injects_nothing(self):
         self.m.kb_recall.index_is_gated = Mock(return_value=True)

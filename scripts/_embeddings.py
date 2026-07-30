@@ -128,12 +128,78 @@ def _http_json(url: str, payload: dict, headers: dict, timeout: float) -> dict:
         return json.loads(resp.read().decode("utf-8"))
 
 
+#: Providers waarvan de naam een belofte is: draait lokaal, dus het endpoint
+#: hoort loopback te zijn. "ollama" met een extern endpoint is geen configuratie
+#: maar een lek.
+LOCAL_ONLY_PROVIDERS = ("ollama",)
+
+
+def is_local_endpoint(ep: str) -> bool:
+    """True als ep naar loopback wijst.
+
+    Strikte hostname-parsing plus ipaddress.is_loopback, zodat een subdomein
+    dat op "localhost" lijkt of een loopback-adres in de query-string niet
+    doorglipt. test_hostname_spoofs_do_not_pass_as_local bewaakt die gevallen
+    met de letterlijke vormen; hier staan ze bewust niet, omdat de no-cloud-scan
+    op broncode kijkt en een voorbeeld-URL in een docstring niet van een echte
+    te onderscheiden is.
+    """
+    import ipaddress
+    import urllib.parse
+    try:
+        hostname = urllib.parse.urlparse(ep).hostname or ""
+    except Exception:
+        return False
+    if hostname == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(hostname).is_loopback
+    except ValueError:
+        return False
+
+
+def endpoint_allowed(prov: str, endpoint: str) -> bool:
+    """Poort tussen de config en het netwerk. Weigert luid i.p.v. stil te lekken.
+
+    Waarom dit hier staat en niet in een test: het endpoint komt uit
+    kennisbank-embed.json, en de ollama-tak van embed() draait VOOR de
+    API-key-check. Eén schrijfactie in dat bestand -- iets wat een agent met
+    Write kan doen op instructie uit opgehaalde kennis -- stuurde daarmee elke
+    prompt en, bij de volgende indexbouw, de hele vault naar een willekeurige
+    host. Zonder sleutel en zonder waarschuwing.
+
+    KB_EMBED_ALLOW_REMOTE is de expliciete ontsnapping voor wie een ollama op
+    een andere machine draait; dat is een bewuste keuze, geen stille.
+    """
+    if prov in LOCAL_ONLY_PROVIDERS and not is_local_endpoint(endpoint):
+        if os.environ.get("KB_EMBED_ALLOW_REMOTE", "").strip():
+            sys.stderr.write(
+                f"KennisBank: embed-provider '{prov}' wijst naar {endpoint} "
+                f"(niet-lokaal), toegestaan via KB_EMBED_ALLOW_REMOTE.\n")
+            sys.stderr.flush()
+            return True
+        sys.stderr.write(
+            f"KennisBank: embed-provider '{prov}' hoort lokaal te zijn maar het "
+            f"endpoint is {endpoint!r} -- GEWEIGERD, er is niets verstuurd. "
+            f"Zet KB_EMBED_ALLOW_REMOTE=1 als dit bewust is.\n")
+        sys.stderr.flush()
+        return False
+    if prov not in LOCAL_ONLY_PROVIDERS:
+        sys.stderr.write(
+            f"KennisBank: embed-provider '{prov}' is CLOUD -- tekst verlaat je "
+            f"machine.\n")
+        sys.stderr.flush()
+    return True
+
+
 def embed(text: str, timeout: float = 30.0):
     """Return an embedding vector for text, or None on any failure (fail-soft)."""
     text = (text or "").strip()
     if not text:
         return None
     prov, model, endpoint, api_key_env = _resolve()
+    if not endpoint_allowed(prov, endpoint):
+        return None
     try:
         if prov == "ollama":
             r = _http_json(

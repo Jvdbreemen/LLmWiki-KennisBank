@@ -18,7 +18,7 @@ from pathlib import Path
 os.environ.setdefault("KENNISBANK_VAULT", str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _embeddings as emb  # noqa: E402
-from _frontmatter import parse_frontmatter  # noqa: E402
+from _frontmatter import parse_frontmatter, split_frontmatter  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402
 
 
@@ -293,12 +293,17 @@ def cluster_promote_pass(threshold: float = 0.80, min_neighbors: int = 2,
             continue
         if "promote_candidate:" in raw:
             continue
-        parts = raw.split("---", 2)
-        if len(parts) < 3:
+        # split_frontmatter, niet raw.split("---", 2): dat tweede ziet een
+        # "---" IN een waarde ook als fence. Een memory-titel met streepjes
+        # raakte daardoor stil beschadigd terwijl deze pass succes rapporteerde.
+        # Zelfde fout als in _memory.set_status; beide call-sites zijn hiermee
+        # gesloten.
+        fm, body = split_frontmatter(raw)
+        if not fm:
             continue
-        new_fm = parts[1].rstrip("\n") + "\npromote_candidate: true\n"
+        new_fm = fm.rstrip("\n") + "\npromote_candidate: true"
         try:
-            p.write_text(parts[0] + "---" + new_fm + "---" + parts[2], encoding="utf-8")
+            p.write_text("---\n" + new_fm + "\n---\n" + body, encoding="utf-8")
             done += 1
         except OSError:
             continue
