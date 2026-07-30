@@ -32,7 +32,12 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = REPO_ROOT / "scripts"
 
 # Mappen die geen productclaims dragen of bewust historisch zijn.
-EXCLUDED_DIRS = {"backlog", "atlas", "node_modules", ".git", "pip", ".superpowers"}
+EXCLUDED_DIRS = {"backlog", "atlas", "node_modules", ".git", "pip", ".superpowers",
+                 # Lokale, gitignorede uitvoer van /comprehensive-review. Die
+                 # documenten BESCHRIJVEN bevindingen over env-vars (inclusief
+                 # verouderde), en zijn geen gebruikersdocumentatie waarop deze
+                 # guard uitspraken hoort te doen.
+                 ".full-review"}
 EXCLUDED_FILES = {"CHANGELOG.md"}
 
 CODE_SPAN = re.compile(r"`([^`\n]+)`")

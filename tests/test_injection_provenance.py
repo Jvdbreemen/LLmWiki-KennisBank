@@ -182,7 +182,14 @@ class _FakeRecall:
     def has_fts_match(self, *a, **k):
         return False
 
-    def wiki_hits(self, qvec, query_text="", k=3, expand=False):
+    def index_is_gated(self):
+        # Sinds de JSON-terugvalweg weg is, is dit de enige weg door _wiki_block.
+        # Een fake zonder deze methode kreeg een AttributeError, die als
+        # "geen bruikbare index" leest -- het blok geeft dan de sentinel terug
+        # en de test faalt op een TypeError in plaats van op zijn eigen bewering.
+        return True
+
+    def wiki_hits(self, qvec, query_text="", k=3, expand=False, min_cos=0.0):
         return [{"path": "/vault/02-wiki/foo.md", "score": 0.9,
                  "snippet": "wiki snippet"}]
 
