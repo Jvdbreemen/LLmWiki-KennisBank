@@ -76,7 +76,20 @@ Geheugensystemen van leveranciers (Mem0, Zep, Letta, Cognee) zijn krachtig maar 
 
 De ontwerpvoorkeur is overal dezelfde: **deterministisch waar mogelijk, LLM alleen waar het oordeelsvermogen toevoegt, fail-open overal**. Een dood model blokkeert nooit een sessie, verliest nooit een transcript, en verwijdert nooit geverifieerde kennis.
 
-## Functie-highlights (v0.26.0)
+## Functie-highlights (v0.26.1)
+
+### Nieuw in v0.26.1
+
+- **De C4-documentatieset klopt weer met de code die hij beschrijft.** De
+  specificatie voor de architectuurplaat noemde vijf vaultmappen terwijl er tien
+  zijn, beweerde dat alle vier de SQLite-databases uit de markdown herbouwen
+  terwijl `kb-usage.db` dat niet kan, en noemde een Atlas-lens die al een tijd
+  verwijderd is.
+- **`claude-cli` staat weer in de gedocumenteerde consent-grens.** Het is een
+  cloud-provider naast OpenRouter, en juist degene die geen van beide
+  installers aanbiedt, dus degene waar een lezer het meest over ingelicht moet
+  worden. De waarschuwing per aanroep, en hoe de dekking daarvan verschilt van
+  die bij setup, staat nu beschreven in plaats van als open vraag.
 
 ### Nieuw in v0.26.0
 

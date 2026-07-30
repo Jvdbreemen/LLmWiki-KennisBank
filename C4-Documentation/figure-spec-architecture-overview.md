@@ -266,7 +266,7 @@ documented dead code. Do not reinstate the name from an older draft of this plat
 
 `M1` text, single centred line at 18 px / 600 plus one sublabel line at 15 px:
 - title: `Shipping and verification — not part of a running session`
-- sublabel: `installer copies the script layer into the vault · versioned releases · 1099-test suite and CI gate every change · decisions recorded as ADRs`
+- sublabel: `installer copies the script layer into the vault · versioned releases · the full pytest suite and CI gate every change · decisions recorded as ADRs`
 
 `M1` must read as subordinate: thinner stroke, no fill, smaller type than any box
 inside the boundary.
@@ -441,7 +441,7 @@ flowchart TB
         R3["Other MCP clients<br/>stdio only"]
     end
 
-    M1["Shipping and verification — not runtime<br/>installer · releases · 1099-test suite · CI · ADRs"]
+    M1["Shipping and verification — not runtime<br/>installer · releases · full pytest suite · CI · ADRs"]
 
     A2 ==>|"UserPromptSubmit hook"| H1
     H1 ==>|"injected context block"| A2
