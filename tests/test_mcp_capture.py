@@ -68,9 +68,19 @@ class CaptureToolTest(unittest.TestCase):
         self.assertTrue(out)
 
     def test_instructions_text_mentions_recall_and_capture(self):
-        self.assertIn("recall", self.mcp.INSTRUCTIONS_TEXT)
-        self.assertIn("capture", self.mcp.INSTRUCTIONS_TEXT)
-        self.assertIn("lokaal", self.mcp.INSTRUCTIONS_TEXT.lower())
+        """De nudge moet beide kerntools noemen en de soevereiniteitsclaim maken.
+
+        Toetst de INHOUD en niet een specifiek woord: de tekst was Nederlands en
+        is Engels geworden (repo-taalbeleid), waarop een assert op 'lokaal' brak.
+        Een taalwissel mag deze test niet laten falen, het wegvallen van de claim
+        wel."""
+        text = self.mcp.INSTRUCTIONS_TEXT.lower()
+        self.assertIn("recall", text)
+        self.assertIn("capture", text)
+        self.assertTrue(any(w in text for w in ("local", "lokaal")),
+                        "de nudge hoort te zeggen dat de KennisBank lokaal is")
+        self.assertTrue(any(w in text for w in ("cloud", "sovereign", "soeverein")),
+                        "de nudge hoort de soevereiniteitsgrens te benoemen")
 
 
 if __name__ == "__main__":
