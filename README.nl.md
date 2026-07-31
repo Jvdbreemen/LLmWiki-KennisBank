@@ -76,7 +76,29 @@ Geheugensystemen van leveranciers (Mem0, Zep, Letta, Cognee) zijn krachtig maar 
 
 De ontwerpvoorkeur is overal dezelfde: **deterministisch waar mogelijk, LLM alleen waar het oordeelsvermogen toevoegt, fail-open overal**. Een dood model blokkeert nooit een sessie, verliest nooit een transcript, en verwijdert nooit geverifieerde kennis.
 
-## Functie-highlights (v0.26.1)
+## Functie-highlights (v0.27.0)
+
+### Nieuw in v0.27.0
+
+- **Het embedding-endpoint kan niet meer buiten je machine wijzen zonder dat je
+  dat zegt.** Het werd letterlijk uit `kennisbank-embed.json` overgenomen en
+  gebruikt vóór de API-sleutelcontrole, dus één configwijziging stuurde elke
+  prompt — en bij de volgende rebuild de hele vault — naar een willekeurige
+  host, terwijl de no-cloud-waarschuwing niets meldde. Localiteit wordt nu
+  afgedwongen op het punt waar de aanvraag vertrekt. Draai je Ollama op een
+  andere machine, zet dan `KB_EMBED_ALLOW_REMOTE=1`.
+- **Capture kan geen memory meer wissen die jij hebt goedgekeurd.** Twee titels
+  die naar dezelfde bestandsnaam sluggen landden op hetzelfde bestand, dus een
+  tweede capture overschreef een goedgekeurde memory — status teruggezet, tekst
+  weg, geen backup, en een succesmelding. Botsende titels landen nu naast
+  elkaar.
+- **Een ontbrekende index kost geen zeven seconden per prompt meer.** Tijdens
+  een index-rebuild viel elke prompt terug op het parsen van een JSON-cache van
+  170 MB in pure Python (6766 ms, 186 MB). Die fallback is verwijderd; je krijgt
+  dezelfde zichtbare melding die de hook al toont bij een koud model, en de hot
+  path blijft op ~1,2 s.
+- **`setup.sh --skip-doctor`** voor tests en CI die `doctor.sh` zelf draaien.
+  Een gewone installatie draait de afsluitende gate nog steeds.
 
 ### Nieuw in v0.26.1
 

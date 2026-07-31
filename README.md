@@ -73,7 +73,26 @@ Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: 
 
 The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
 
-## Feature highlights (v0.26.1)
+## Feature highlights (v0.27.0)
+
+### New in v0.27.0
+
+- **The embedding endpoint can no longer be pointed off-box without you saying
+  so.** It was taken verbatim from `kennisbank-embed.json` and used before the
+  API-key check, so a single config write sent every prompt — and the whole
+  vault at the next rebuild — to an arbitrary host, with the no-cloud warning
+  still reporting nothing. Locality is now enforced at the sink. If you run
+  Ollama on another machine, set `KB_EMBED_ALLOW_REMOTE=1`.
+- **Capture can no longer erase a memory you approved.** Two titles that
+  slugified to the same filename landed on the same file, so a second capture
+  overwrote an approved memory — status reset, text gone, no backup, and a
+  success message. Colliding titles now land beside each other.
+- **A missing index no longer costs seven seconds per prompt.** During an index
+  rebuild every prompt fell back to parsing a 170 MB JSON cache in pure Python
+  (6766 ms, 186 MB). That fallback is gone; you get the same visible notice the
+  hook already shows for a cold model, and the hot path stays at ~1.2 s.
+- **`setup.sh --skip-doctor`** for tests and CI that run `doctor.sh`
+  themselves. A normal install still runs the closing gate.
 
 ### New in v0.26.1
 

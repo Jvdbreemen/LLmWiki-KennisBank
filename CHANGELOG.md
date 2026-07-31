@@ -7,6 +7,88 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-08-01
+
+A security audit of the script layer produced two Critical and six High
+findings; this release closes the four heaviest, plus a memory defect that
+could destroy a decision you had made. Three of them change behaviour you can
+observe, which is why this is a minor and not a patch: a remote embedding
+endpoint is now refused unless you opt in, a missing index no longer triggers a
+slow fallback, and capture stops reporting success for work it did not do.
+
+### Security
+
+- **The embedding endpoint was attacker-controllable, and nothing noticed.**
+  `_embeddings.embed` took the endpoint verbatim from `kennisbank-embed.json`,
+  and the ollama branch ran *before* the API-key check. One config write sent
+  every prompt, and at the next index rebuild the entire vault, to an arbitrary
+  host with no credential and no warning. Reproduced against a loopback
+  listener: the full prompt text arrived and `memory-doctor.cloud_warnings()`
+  returned `[]`. Locality is now enforced at the sink — a non-loopback endpoint
+  for a local-only provider is refused before any request is issued.
+  **If you run Ollama on another machine, set `KB_EMBED_ALLOW_REMOTE=1`**;
+  without it that configuration now fails closed instead of silently shipping
+  your vault off-box.
+- **The guard that should have caught this asserted nothing.** It scanned
+  `kb-recall.py` and `_kbindex.py`, which contain zero URLs between them, so its
+  assertion loop had never once executed. It now scans the modules that actually
+  open sockets and carries a meta-assertion, so a URL-free file list can no
+  longer pass silently.
+
+### Fixed
+
+- **Capture could erase a memory you had approved.** `_memory.write()` computed
+  the path from the title and wrote unconditionally, so a second capture whose
+  title slugified to the same stem overwrote the first. If you had approved that
+  memory in between, the approval was destroyed: status back to `unverified`,
+  your approved text gone, no backup, no entry in `memory-review-log.jsonl` —
+  and the tool reported success. No prompt injection was needed; capturing twice
+  on one topic in a session is the ordinary case. Writes now route through
+  `unique_memory_path`, so a colliding title lands beside the existing memory
+  instead of on top of it.
+- **`_memory.set_status` corrupted the file and returned `True`.** It split
+  frontmatter with `raw.split("---", 2)`, which treats a `---` inside a value as
+  the closing fence. With such a title the status stayed unchanged, the file was
+  left with an unterminated title line, and the success return made
+  memory-sweep count a supersession that never happened — leaving a superseded
+  memory injected into every prompt. Both call sites now use the anchored
+  frontmatter parser, and a no-op returns `False`.
+- **A missing index cost 6766 ms and 186 MB on every prompt.**
+  `build-kb-index` unlinks the index before rebuilding, so for that entire
+  window each prompt fell back to parsing a 170 MB JSON cache in pure Python —
+  landing exactly after an upgrade or a model switch. The fallback is deleted
+  rather than optimised: keeping it alive meant keeping a second retrieval
+  implementation alive. **A missing index now returns a sentinel and the hook
+  prints the same visible notice it already uses for a cold model**, so you see
+  why there is no context instead of waiting seven seconds for it. Measured
+  after: 1198 ms, essentially all of it the embedding call.
+- **MCP capture reported "Vastgelegd" for a re-capture that wrote nothing.** A
+  byte-identical capture now says so instead of claiming success for work that
+  did not happen.
+
+### Performance
+
+- **Loading sqlite-vec dragged in numpy on every prompt.** The package's
+  `__init__` imports `numpy.typing` for an optional helper that is never called:
+  355 ms measured, 319 ms of it numpy. `find_spec` locates the extension without
+  executing the module (0.6 ms) and `struct.pack` replaces `serialize_float32`.
+  Serialisation is byte-identical and `vec_version` is unchanged at v0.1.9.
+- **`setup.sh --skip-doctor` keeps the local gate affordable.** The closing
+  doctor gate costs 15 s of a 35 s setup run, and the suite paid it six times
+  for validation no test asserts on. The flag is for tests and CI that run
+  `doctor.sh` themselves; a normal install should still run the gate, and the
+  closing summary no longer claims doctor ran when it was skipped. Measured on
+  `tests/test_setup_deploy.py`: 314.87 s to 221.94 s. This is a Windows-side
+  win — the same suite takes 62 s on the Linux CI runner, where process startup
+  is cheap.
+
+### Notes
+
+- The Copilot review was **unavailable, not skipped**: the bot reports that the
+  requesting account has reached its quota limit, the same condition recorded
+  for 0.26.1. This release rests on green CI, the full local suite (1123 passed,
+  2 skipped) and per-finding reproduction before and after each fix.
+
 ## [0.26.1] - 2026-07-30
 
 The C4 documentation set that shipped in 0.26.0 carried six factual errors and
@@ -1246,7 +1328,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.26.1...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.27.0...HEAD
+[0.27.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.26.1...v0.27.0
 [0.26.1]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.26.0...v0.26.1
 [0.26.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.25.0...v0.26.0
 [0.25.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.24.1...v0.25.0
