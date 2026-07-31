@@ -440,6 +440,7 @@ bash setup.sh --yes --agents claude,codex      # default non-interactive target 
 bash setup.sh --yes --agents all               # Claude Code + Codex + OpenCode + Copilot
 bash setup.sh --yes --agents codex             # Codex only
 bash setup.sh --yes --skip-model-check         # CI/offline validation without Ollama smoke tests
+bash setup.sh --yes --skip-doctor              # skip the closing doctor gate (tests/CI that run doctor.sh themselves)
 ```
 
 Voor OpenRouter schrijft setup alleen niet-geheime config naar

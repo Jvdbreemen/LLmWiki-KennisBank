@@ -18,6 +18,7 @@
 #   --agents LIST      agentdoelen: claude,codex,opencode,copilot,all (default: claude,codex)
 #   --no-codex         alias voor --agents claude
 #   --skip-model-check sla Ollama model-smoke-tests over in de post-install validatie
+#   --skip-doctor      sla de afsluitende doctor-gate over (voor tests/CI)
 #   -f, --force        overschrijf bestaande bestanden
 #   -h, --help         toon usage en stop
 
@@ -39,6 +40,7 @@ FORCE=0
 AGENTS="claude,codex"
 AGENTS_SET=0
 SKIP_MODEL_CHECK=0
+SKIP_DOCTOR=0
 
 usage() {
   cat <<'USAGE'
@@ -52,6 +54,8 @@ Opties:
   --agents LIST      installeer agent-integraties voor LIST: claude,codex,opencode,copilot,all
   --no-codex         installeer alleen Claude Code-integratie (compatibiliteitsalias)
   --skip-model-check sla lokale Ollama model-smoke-tests over tijdens post-install validatie
+  --skip-doctor      sla de afsluitende doctor-gate over (bedoeld voor tests/CI die
+                     doctor.sh apart draaien; een gewone installatie hoort hem te draaien)
   -f, --force        overschrijf bestaande bestanden (scripts, templates, commands, skill, CLAUDE.md)
   -h, --help         toon deze hulp en stop
 
@@ -92,6 +96,9 @@ while [ $# -gt 0 ]; do
       ;;
     --skip-model-check)
       SKIP_MODEL_CHECK=1
+      ;;
+    --skip-doctor)
+      SKIP_DOCTOR=1
       ;;
     -f|--force)
       FORCE=1
@@ -465,7 +472,16 @@ fi
 
 # doctor.sh blijft read-only, maar setup gebruikt hem als afsluitende gate:
 # eerst repareren/configureren, dan diagnosticeren.
-if [ -f "$VAULT/.claude/scripts/doctor.sh" ]; then
+#
+# --skip-doctor bestaat voor aanroepers die doctor.sh zelf al draaien. Gemeten:
+# deze gate kost 15 s van een setup-run van 35 s, en de testsuite draait setup
+# zes keer -- 90 s voor een controle waar geen enkele test op assert. Een
+# gewone installatie hoort de gate wel te draaien; de vlag staat daarom niet in
+# de korte usage-voorbeelden.
+if [ "$SKIP_DOCTOR" = "1" ]; then
+  echo "  doctor overgeslagen (--skip-doctor)"
+  DOCTOR_RC=0
+elif [ -f "$VAULT/.claude/scripts/doctor.sh" ]; then
   KENNISBANK_VAULT="$VAULT" bash "$VAULT/.claude/scripts/doctor.sh"
   DOCTOR_RC=$?
 else
@@ -489,7 +505,13 @@ fi
 
 echo ""
 echo "Klaar. Volgende stappen:"
-echo "0. Installatie en upgrade-validatie zijn uitgevoerd door setup.sh (doctor + agent/model checks)."
+if [ "$SKIP_DOCTOR" = "1" ]; then
+  # Niet liegen in de slotregel: met --skip-doctor is de helft van de
+  # post-install validatie niet gedraaid.
+  echo "0. Agent/model-checks zijn uitgevoerd; de doctor-gate is overgeslagen (--skip-doctor). Draai bash scripts/doctor.sh om dat alsnog te doen."
+else
+  echo "0. Installatie en upgrade-validatie zijn uitgevoerd door setup.sh (doctor + agent/model checks)."
+fi
 echo "1. Vault: $VAULT"
 echo "2. Bewerk $VAULT/CLAUDE.md wanneer je naam/projecten wilt bijwerken."
 echo "3. Agentdoelen geconfigureerd: $AGENTS"

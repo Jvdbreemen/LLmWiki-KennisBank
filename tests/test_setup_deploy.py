@@ -86,6 +86,12 @@ def _installeer_eenmalig():
     Los van SetupDeployTest.run_setup omdat die per test een eigen installatie
     maakt en assertEqual op self gebruikt. Hier is er geen test-instantie: dit
     draait bij de eerste aanvraag en het resultaat wordt hergebruikt.
+
+    Dit is de ENIGE aanroep zonder --skip-doctor, met opzet. setup.sh geeft 1
+    terug als de doctor-gate faalt en deze functie eist returncode 0, dus een
+    kapotte doctor laat de suite hier vallen -- en omdat veertien tests deze
+    installatie delen, valt hij luid. De overige aanroepen slaan de gate over
+    en besparen zes keer 15 s.
     """
     tmp = Path(tempfile.mkdtemp(prefix="kb-home-gedeeld-"))
     vault = tmp / "KennisBank"
@@ -137,6 +143,14 @@ class SetupDeployTest(unittest.TestCase):
         return cls._gedeeld
 
     def run_setup(self):
+        """Verse installatie voor een test die de installatie MUTEERT.
+
+        Draait met --skip-doctor: de afsluitende doctor-gate kost 15 s van de
+        35 s die setup.sh nodig heeft, en geen enkele test hier assert op die
+        afsluitende uitvoer -- de doctor-tests roepen doctor.sh zelf aan via
+        run_doctor_in. De gedeelde installatie draait de gate WEL, dus een
+        doctor die stukgaat laat deze suite nog steeds vallen.
+        """
         tmp = Path(tempfile.mkdtemp(prefix="kb-home-"))
         vault = tmp / "KennisBank"
         env = dict(os.environ)
@@ -147,7 +161,8 @@ class SetupDeployTest(unittest.TestCase):
         env["KENNISBANK_VAULT"] = _bash_path(vault)
         bash = _find_bash()
         result = subprocess.run(
-            [bash, "setup.sh", "--yes", "--agents", "claude", "--skip-model-check"],
+            [bash, "setup.sh", "--yes", "--agents", "claude", "--skip-model-check",
+             "--skip-doctor"],
             cwd=REPO_ROOT, env=env, check=False,
             capture_output=True, text=True,
         )
@@ -261,7 +276,11 @@ class SetupDeployTest(unittest.TestCase):
 
 
     def run_setup_in(self, tmp):
-        """Run setup.sh --yes against an existing temp HOME (for re-run tests)."""
+        """Run setup.sh --yes against an existing temp HOME (for re-run tests).
+
+        Zelfde --skip-doctor-afweging als run_setup(): deze aanroepers kijken
+        naar settings.json en gedeployede bestanden, niet naar doctor-output.
+        """
         vault = tmp / "KennisBank"
         env = dict(os.environ)
         env["HOME"] = _bash_path(tmp)
@@ -269,7 +288,8 @@ class SetupDeployTest(unittest.TestCase):
         env["KENNISBANK_VAULT"] = _bash_path(vault)
         bash = _find_bash()
         result = subprocess.run(
-            [bash, "setup.sh", "--yes", "--agents", "claude", "--skip-model-check"],
+            [bash, "setup.sh", "--yes", "--agents", "claude", "--skip-model-check",
+             "--skip-doctor"],
             cwd=REPO_ROOT, env=env, check=False,
             capture_output=True, text=True,
         )
@@ -437,7 +457,8 @@ class SetupDeployTest(unittest.TestCase):
             # Geen --yes; stdin: default LLM backend, default model,
             # n=commands, n=skills, n=hooks
             result = subprocess.run(
-                [bash, "setup.sh", "--agents", "claude", "--skip-model-check"],
+                [bash, "setup.sh", "--agents", "claude", "--skip-model-check",
+                 "--skip-doctor"],
                 cwd=REPO_ROOT, env=env, check=False,
                 capture_output=True, text=True,
                 input="\n\nn\nn\nn\n",
@@ -489,15 +510,45 @@ class SetupInvocationGuardTest(unittest.TestCase):
     groene run bewijst niets; de afwezigheid van het budget wel.
     """
 
-    def test_every_setup_invocation_pins_the_agent_set(self):
+    @staticmethod
+    def _setup_aanroepen():
+        """De argumentlijsten van elke setup.sh-aanroep in dit bestand.
+
+        Alleen argumentlijsten: "setup.sh" gevolgd door een komma. De regel die
+        setup.sh als bestand LEEST (("setup.sh").read_text()) is geen aanroep;
+        die moet hier niet in, anders faalt de guard op iets dat geen subprocess
+        is.
+        """
         bron = Path(__file__).read_text(encoding="utf-8")
-        # Alleen argumentlijsten: "setup.sh" gevolgd door een komma. Regel 367
-        # LEEST setup.sh als bestand ("setup.sh").read_text() en is geen aanroep;
-        # die moet hier niet in, anders faalt de guard op iets dat geen subprocess is.
-        aanroepen = re.findall(r'"setup\.sh",(.*?)\]', bron, re.S)
+        return re.findall(r'"setup\.sh",(.*?)\]', bron, re.S)
+
+    def test_every_setup_invocation_pins_the_agent_set(self):
+        aanroepen = self._setup_aanroepen()
         self.assertGreaterEqual(len(aanroepen), 4, "setup.sh-aanroepen niet gevonden")
         for args in aanroepen:
             self.assertIn(
                 '"--agents"', args,
                 "een setup.sh-aanroep pint de agent-set niet vast en haalt daarmee "
                 "de 15 s MCP-handshake terug in dit bestand (TASK-116)")
+
+    def test_exactly_one_invocation_still_runs_the_doctor_gate(self):
+        """TASK-124: de gate mag goedkoop zijn, maar niet ongedekt.
+
+        setup.sh sluit af met doctor.sh: 15 s van een run van 35 s. Dit bestand
+        riep setup zes keer aan en betaalde die gate dus zes keer, terwijl geen
+        enkele test op de afsluitende doctor-output assert -- de doctor-tests
+        roepen doctor.sh apart aan via run_doctor_in.
+
+        Daarom draagt elke aanroep --skip-doctor, op de gedeelde installatie na.
+        Die ene aanroep houdt het pad gedekt waarin setup zichzelf valideert:
+        setup.sh geeft 1 terug bij DOCTOR_RC != 0 en _installeer_eenmalig eist 0.
+        Zakt dat aantal naar nul, dan is de gate stil uit de suite verdwenen en
+        merkt niemand het tot een gebruiker een kapotte installatie krijgt.
+        """
+        aanroepen = self._setup_aanroepen()
+        volledig = [a for a in aanroepen if '"--skip-doctor"' not in a]
+        self.assertEqual(
+            len(volledig), 1,
+            "precies een setup.sh-aanroep hoort de doctor-gate te draaien "
+            "(de gedeelde installatie); gevonden aanroepen zonder --skip-doctor: "
+            f"{len(volledig)}")
