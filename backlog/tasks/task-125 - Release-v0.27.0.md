@@ -1,12 +1,17 @@
 ---
 id: TASK-125
 title: Release v0.27.0
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-31 21:42'
+updated_date: '2026-08-01 08:55'
 labels:
   - release
 dependencies: []
+modified_files:
+  - CHANGELOG.md
+  - README.md
+  - README.nl.md
 priority: high
 ordinal: 121700
 ---
@@ -29,11 +34,23 @@ Known deviation: the Copilot review is unavailable, not skipped — the bot repo
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Full suite green on the code being released, before the documentation edits
-- [ ] #2 CHANGELOG.md has a dated 0.27.0 section and both compare links updated
-- [ ] #3 README.md and README.nl.md highlight sections updated in the same commit, both languages
-- [ ] #4 Documentation test subset green after the doc edits
-- [ ] #5 PR opened against origin, CI green, review status recorded honestly
-- [ ] #6 Tag v0.27.0 placed on a SHA verified to be on origin/main after the merge
-- [ ] #7 GitHub release published and its body verified non-empty
+- [x] #1 Full suite green on the code being released, before the documentation edits
+- [x] #2 CHANGELOG.md has a dated 0.27.0 section and both compare links updated
+- [x] #3 README.md and README.nl.md highlight sections updated in the same commit, both languages
+- [x] #4 Documentation test subset green after the doc edits
+- [x] #5 PR opened against origin, CI green, review status recorded honestly
+- [x] #6 Tag v0.27.0 placed on a SHA verified to be on origin/main after the merge
+- [x] #7 GitHub release published and its body verified non-empty
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+v0.27.0 released. Tag v0.27.0 on 3d536c2ef8132e42a51eb8c690000362fb12a3dd, verified equal to origin/main after merging PR #95; `git rev-list -n1 v0.27.0` matched the SHA before publishing. Release body published and verified non-empty at 5001 characters.
+
+Gate: full suite on the released code (56f69ec) 1123 passed, 2 skipped; documentation subset after the doc edits 56 passed; CI on PR #95 green (atlas 26 s, test 1 m 0 s).
+
+Version rationale: minor rather than patch because three observable contracts changed — a non-loopback embedding endpoint for a local provider is now refused unless KB_EMBED_ALLOW_REMOTE is set, a missing index returns a sentinel plus the cold-model notice instead of the 6766 ms / 186 MB JSON fallback, and MCP capture no longer reports success for a byte-identical re-capture.
+
+Copilot review was unavailable rather than skipped: the bot reported the requesting account has reached its quota limit on both PR #94 and PR #95, the same condition recorded for v0.26.1 (TASK-122) and TASK-115. The release rests on green CI, the local full suite, and per-finding reproduction before and after each fix.
+<!-- SECTION:FINAL_SUMMARY:END -->

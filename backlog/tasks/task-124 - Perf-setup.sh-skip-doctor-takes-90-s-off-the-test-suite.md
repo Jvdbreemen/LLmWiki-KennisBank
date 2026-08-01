@@ -1,10 +1,10 @@
 ---
 id: TASK-124
 title: 'Perf: setup.sh --skip-doctor takes 90 s off the test suite'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-31 20:48'
-updated_date: '2026-07-31 21:23'
+updated_date: '2026-08-01 08:56'
 labels:
   - perf
   - tests
@@ -64,3 +64,15 @@ Measurement notes for whoever picks up the follow-ups:
 - The full suite does NOT show this in a single before/after pair (550 s -> 560 s). Run-to-run spread swamps it: unchanged main measured 621.47 s and 549.82 s. Measure per file, not per suite, when judging the follow-ups.
 - One full-suite run reported 45 failures. That was two concurrent pytest runs colliding, not a regression: run alone, the same commit is green at 1123 passed, 2 skipped. Do not run two suites against this repo at once.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Merged as PR #94 (56f69ec) and shipped in v0.27.0.
+
+setup.sh gained --skip-doctor. The per-test invocations pass it; _installeer_eenmalig deliberately does not, so the self-validating path stays covered and SetupInvocationGuardTest pins that count at exactly one.
+
+Measured back to back on the same machine, tests/test_setup_deploy.py alone: main 314.87 s (23 tests) -> branch 221.94 s (24 tests), -92.9 s, matching the predicted 6 x 15 s. The full suite does not show it in a single pair (550 s -> 560 s) because run-to-run spread is larger than the saving; unchanged main measured 621.47 s and 549.82 s.
+
+The saving is Windows-side. The same suite takes 62 s on the Linux CI runner, where process startup is cheap, so this does not shorten CI.
+<!-- SECTION:FINAL_SUMMARY:END -->
