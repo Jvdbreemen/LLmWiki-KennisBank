@@ -102,9 +102,14 @@ def provider() -> str:
 
 
 def embed_id() -> str:
-    """Stable identity of the active backend for cache-keying: "provider:model"."""
+    """Stable identity of the active backend for cache-keying: "provider:model".
+
+    De documentprefix hoort erbij: dezelfde tekst met een andere prefix levert
+    een andere vector, dus hergebruik over een prefixwissel heen is net zo fout
+    als hergebruik over een modelwissel heen."""
     prov, model, _, _ = _resolve()
-    return f"{prov}:{model}"
+    dp = _prefix("doc")
+    return f"{prov}:{model}" + (f"+{dp}" if dp else "")
 
 
 def cosine(a, b) -> float:
@@ -192,11 +197,44 @@ def endpoint_allowed(prov: str, endpoint: str) -> bool:
     return True
 
 
-def embed(text: str, timeout: float = 30.0):
-    """Return an embedding vector for text, or None on any failure (fail-soft)."""
+def _prefix(kind: str) -> str:
+    """Model-specifieke instructieprefix voor query- of documentzijde.
+
+    Niet cosmetisch: e5-instruct is GETRAIND met "Instruct: ...\\nQuery: " aan
+    de queryzijde en "passage: "-achtige markers aan de documentzijde. Embed je
+    zonder, dan meet je een ander model dan het model dat je denkt te meten.
+    Qwen3 verliest 1-5% zonder queryprefix; bge-m3 en gte willen er juist geen.
+    Default is leeg, dus zonder config verandert er niets aan het gedrag.
+
+    Config: query_prefix / doc_prefix in kennisbank-embed.json, of de env vars
+    KB_EMBED_QUERY_PREFIX / KB_EMBED_DOC_PREFIX.
+
+    Bewust NIET via _setting(): die strip() de waarde, en juist de afsluitende
+    spatie van "query: " hoort bij de prefix. Wegstrippen levert "query:vraag",
+    een andere tokenisatie dan waarop het model getraind is.
+    """
+    name, env = {"query": ("query_prefix", "KB_EMBED_QUERY_PREFIX"),
+                 "doc": ("doc_prefix", "KB_EMBED_DOC_PREFIX")}.get(kind, ("", ""))
+    if not name:
+        return ""
+    v = os.environ.get(env)
+    if v:
+        return v
+    v = _config().get(name)
+    return v if isinstance(v, str) else ""
+
+
+def embed(text: str, timeout: float = 30.0, kind: str = ""):
+    """Return an embedding vector for text, or None on any failure (fail-soft).
+
+    ``kind`` is "query", "doc" of leeg. Bepaalt welke instructieprefix voor de
+    tekst komt (zie _prefix); leeg = geen prefix, het historische gedrag."""
     text = (text or "").strip()
     if not text:
         return None
+    pre = _prefix(kind) if kind else ""
+    if pre:
+        text = pre.replace("\\n", "\n") + text
     prov, model, endpoint, api_key_env = _resolve()
     if not endpoint_allowed(prov, endpoint):
         return None
@@ -349,7 +387,7 @@ def get_cached(path, cache: dict, recompute: bool = True):
     text = doc_text(path)
     if not text:
         return None
-    vec = embed(text)
+    vec = embed(text, kind="doc")
     if vec:
         cache[key] = {"hash": h, "id": eid, "dim": len(vec), "embedding": vec}
     return vec

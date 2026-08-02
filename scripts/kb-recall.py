@@ -266,7 +266,19 @@ def recall_hits(query_vector, query_text: str = "", k: int = 3,
 # Memories zijn kort en atomair; hun cosinus tegen een prompt ligt structureel
 # lager dan die van een wiki-artikel. Daarom een EIGEN drempel, geen overerving
 # van retrieve_threshold -- dat zou het memory-blok stilzwijgend dichtzetten.
-MEMORY_MIN_COS = 0.60
+#
+# KB_MEMORY_THRESHOLD overschrijft de default. Nodig om embedmodellen eerlijk
+# te vergelijken: elk model heeft zijn eigen cosinus-schaal, dus een vaste 0.60
+# meet "hoe qwen3-achtig scoort dit model" in plaats van hoe goed het rankt.
+# Zet hem op 0.0 voor een rang-only meting (zie scripts/embed-sweep.py).
+def _memory_min_cos_default() -> float:
+    try:
+        return float(os.environ.get("KB_MEMORY_THRESHOLD", "").strip() or 0.60)
+    except ValueError:
+        return 0.60
+
+
+MEMORY_MIN_COS = _memory_min_cos_default()
 
 
 def memory_hits(query_vector, query_text: str = "", k: int = 3,
