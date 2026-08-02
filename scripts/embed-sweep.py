@@ -155,6 +155,30 @@ def _snapshot_dir(vault: Path, model: str, prefixes: dict) -> Path:
     return vault / "snapshots" / tag
 
 
+def _unlink_stubborn(p: Path, tries: int = 30, wait: float = 1.0) -> None:
+    """Verwijder p, en wacht als Windows het bestand nog vasthoudt.
+
+    Op Windows blijft een sqlite-bestand vergrendeld zolang enig proces er een
+    handle op heeft; een net beeindigde indexbouwer laat die handle nog even
+    staan. Hard falen zou de hele sweep afbreken op iets wat binnen een seconde
+    vanzelf oplost. Na `tries` pogingen wijkt hij uit naar hernoemen: de sweep
+    mag niet stranden op een bestand dat een vreemd proces blijft vasthouden."""
+    for i in range(tries):
+        if not p.exists():
+            return
+        try:
+            p.unlink()
+            return
+        except PermissionError:
+            time.sleep(wait)
+    try:
+        p.rename(p.with_name(p.name + f".stale.{os.getpid()}"))
+    except OSError as exc:
+        raise RuntimeError(
+            f"{p} blijft vergrendeld en kan ook niet hernoemd worden: {exc}. "
+            f"Draait er nog een indexbouwer op deze vault?") from exc
+
+
 def _swap_in(vault: Path, snap: Path) -> None:
     """Zet de gesnapshotte cache/index terug, of ruim de vorige op. Zonder dit
     staat er nog een index van het VORIGE model klaar; build-kb-index gooit die
@@ -164,8 +188,7 @@ def _swap_in(vault: Path, snap: Path) -> None:
     db = vault / ".claude" / "kb-index.db"
     for f in (cache, db):
         for p in (f, Path(str(f) + "-wal"), Path(str(f) + "-shm")):
-            if p.exists():
-                p.unlink()
+            _unlink_stubborn(p)
     if (snap / "embeddings-cache.json").exists():
         shutil.copy2(snap / "embeddings-cache.json", cache)
     if (snap / "kb-index.db").exists():
@@ -279,7 +302,14 @@ def main() -> int:
     prefixes = {"query": args.query_prefix, "doc": args.doc_prefix}
     models = [m.strip() for m in args.models.split(",") if m.strip()]
     for model in models:
-        res = sweep_model(vault, model, prefixes, args.reps, args.build_timeout)
+        # Een model dat omvalt (niet gepulld, oninleesbare index, lock) mag de
+        # rest van de sweep niet meenemen: dan ben je een uur meten kwijt aan
+        # een fout die bij een model hoort, niet bij de run.
+        try:
+            res = sweep_model(vault, model, prefixes, args.reps, args.build_timeout)
+        except Exception as exc:
+            print(f"  !! {model} overgeslagen: {exc}", flush=True)
+            res = {"model": model, "prefixes": prefixes, "error": str(exc)}
         key = (res["model"], tuple(sorted(res["prefixes"].items())))
         results = [r for r in results
                    if (r["model"], tuple(sorted(r.get("prefixes", {}).items()))) != key]
