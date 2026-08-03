@@ -1,7 +1,7 @@
 ---
 id: TASK-127
 title: Remove the cozempic claim from /sessiestart
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-02 18:02'
 updated_date: '2026-08-02 18:03'
@@ -27,9 +27,9 @@ Deliberately out of scope:
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 commands/sessiestart.md no longer claims a relationship to cozempic
-- [ ] #2 The surrounding context-layer explanation still reads as a whole
-- [ ] #3 Documentation test subset green
+- [x] #1 commands/sessiestart.md no longer claims a relationship to cozempic
+- [x] #2 The surrounding context-layer explanation still reads as a whole
+- [x] #3 Documentation test subset green
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -37,3 +37,16 @@ Deliberately out of scope:
 <!-- SECTION:NOTES:BEGIN -->
 Parked before the edit: the session redirected to TASK-126. Nothing was changed in commands/sessiestart.md yet; the analysis in the description stands.
 <!-- SECTION:NOTES:END -->
+
+
+## Final Summary
+
+Removed the sentence from `commands/sessiestart.md`; the context-layer explanation now closes with
+what the levels cost the reader instead of what they complement. A deployed command should not
+assert a relationship to third-party tooling it neither ships nor checks for.
+
+Left in place on purpose: `scripts/build-karpathy-index.py` still routes a `cozempic` tag to the
+Claude Code category. No vault article carries that tag, so it is dead routing rather than a wrong
+claim, and removing it would only matter if someone had tagged an article that way. The June design
+documents under `docs/superpowers/` keep their references: they record what was decided at the time,
+and rewriting them would falsify the record.
