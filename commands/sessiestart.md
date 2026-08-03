@@ -23,7 +23,7 @@ Diepere niveaus op verzoek:
 - `--level 2 --query "<onderwerp>"` voegt relevante wiki-artikelen toe (L2).
 - `--level 3 --query "<onderwerp>"` voegt ook de volledige artikelteksten toe (L3).
 
-Dit vult de cozempic-context-hygiëne aan, het vervangt die niet.
+Elk niveau laadt bewust meer context; kies het laagste dat de vraag beantwoordt.
 
 ## Stap 1: Lees vault-context
 ```bash
