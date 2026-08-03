@@ -6,11 +6,14 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-08-03 21:56'
+updated_date: '2026-08-03 22:42'
 labels:
   - atlas
   - dev-experience
   - windows
 dependencies: []
+modified_files:
+  - atlas/launch.py
 priority: low
 ordinal: 126700
 ---
@@ -27,7 +30,16 @@ Two small dev-workflow rough edges found while measuring TASK-91 AC#8 (2026-08-0
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 launcher prints flush immediately (visible in a redirected/piped log within ~1s of being printed)
+- [x] #1 launcher prints flush immediately (visible in a redirected/piped log within ~1s of being printed)
 - [ ] #2 Reproduce the orphaned-children case under a real Ctrl-C and confirm the Job Object DOES clean up there (isolates whether the bug is Job-Object-specific or stop-mechanism-specific)
 - [ ] #3 Investigate why the external-stop path leaves children alive; either fix or document as a known limitation with a manual-cleanup note in atlas/README.md
 <!-- AC:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-08-03 22:42
+---
+2026-08-03: AC#1 done -- flush=True added to the three launcher print()s. Verified by relaunching and tailing the redirected log: the sidecar/vite lines now appear within ~2s (previously absent even after 70s+), and OPEN appears once the health probe succeeds. AC#2/#3 (the Job Object not reaping children on an external stop) deliberately left open -- reproduced a third time this session (ports 33875/33876 stayed bound after TaskStop, force-killed by PID again) but investigating why the Job Object doesn't fire is a real Windows-specific dig that does not belong bundled into this session's sweep. Left as To Do for that specific remaining piece.
+---
+<!-- COMMENTS:END -->
