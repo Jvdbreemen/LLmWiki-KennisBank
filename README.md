@@ -398,7 +398,7 @@ The design bias throughout: **deterministic where possible, LLM only where it ad
 - At least one local agent client: [Claude Code](https://claude.ai/code), Codex, OpenCode, or the [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli)
 - Python 3.10+
 - [Ollama](https://ollama.com) with:
-  - `qwen3-embedding:8b` (embeddings; multilingual default. English-only vaults can use the lighter `nomic-embed-text`)
+  - `qwen3-embedding:4b` (embeddings; multilingual default. English-only vaults can use the lighter `nomic-embed-text`)
   - a chat model for the memory judge/extraction (default `gemma4:latest`; pin another via `<vault>/.claude/kennisbank-llm.json`)
 
 Ollama is optional in the sense that everything fails open without it, but the memory sweep, semantic retrieval, and deduplication are the heart of the system: install it. For the **LLM judge/extraction only**, setup can also configure OpenRouter as an explicit cloud opt-in. Embeddings remain local by default.

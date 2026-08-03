@@ -20,7 +20,7 @@ Settings:
 
 Providers:
   ollama  Local Ollama HTTP API (POST {endpoint}/api/embeddings). Default
-          endpoint http://localhost:11434, default model qwen3-embedding:8b.
+          endpoint http://localhost:11434, default model qwen3-embedding:4b.
           Honors the legacy OLLAMA_EMBED_MODEL var for backward-compat.
   openai  Any OpenAI-compatible /embeddings endpoint (OpenAI proper, a
           self-hosted gateway, or a third party that implements the same shape).
@@ -55,7 +55,7 @@ from _frontmatter import split_frontmatter  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402
 
 _DEFAULTS = {
-    "ollama": {"endpoint": "http://localhost:11434", "model": "qwen3-embedding:8b"},
+    "ollama": {"endpoint": "http://localhost:11434", "model": "qwen3-embedding:4b"},
     "openai": {"endpoint": "https://api.openai.com/v1", "model": "text-embedding-3-small"},
     "voyage": {"endpoint": "https://api.voyageai.com/v1", "model": "voyage-3"},
 }
@@ -275,7 +275,7 @@ def embed(text: str, timeout: float = 30.0, kind: str = ""):
 # --- model warm-up (kills cold-load latency on the hot path) -----------------
 #
 # The interactive retrieval hook must never block on a cold model load. A big
-# local model (e.g. qwen3-embedding:8b, ~8GB) can take tens of seconds to load
+# local model (e.g. qwen3-embedding:4b, ~6GB resident) can take seconds to load
 # into VRAM after eviction/idle; the incremental index build at SessionStart
 # does NOT load it when nothing changed, so the first prompt otherwise pays the
 # full cold-load. These helpers let a caller fire a detached load so the NEXT

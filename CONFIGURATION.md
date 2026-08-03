@@ -150,7 +150,7 @@ override the config file; both override the built-in defaults.
   API; Voyage is their recommended path. OpenRouter's embeddings support is
   thin/unconfirmed, so verify a gateway serves `/embeddings` before pointing
   `provider=openai` at it.
-- **Model** (`KB_EMBED_MODEL`, default per provider; ollama → `qwen3-embedding:8b`,
+- **Model** (`KB_EMBED_MODEL`, default per provider; ollama → `qwen3-embedding:4b`,
   multilingual, 119 languages). For `ollama` the legacy `OLLAMA_EMBED_MODEL` var is
   still honored when `KB_EMBED_MODEL` is unset.
 - **Endpoint** (`KB_EMBED_ENDPOINT`): base-URL override (default per provider).
@@ -204,7 +204,8 @@ override the config file; both override the built-in defaults.
 
 - **Effect**: embeds the user's prompt and injects the top matching wiki articles (above a threshold) as `additionalContext`. Registered as a global `UserPromptSubmit` hook so the wiki is consulted in every session, in any project. Fail-open: any error, or a trivial/short/slash-command prompt, injects nothing.
 - **`KB_RETRIEVE_TOP_N`** (config `retrieve_top_n`, default `3`): max articles injected.
-- **`KB_RETRIEVE_THRESHOLD`** (config `retrieve_threshold`, default `0.60`): minimum cosine to inject. Model-specific; empirical on `qwen3-embedding:8b`: true match 0.73-0.80, noise <= 0.51. Re-tune after a model switch.
+- **`KB_RETRIEVE_THRESHOLD`** (config `retrieve_threshold`, default `0.50`): minimum cosine to inject. Model-specific, so re-tune after a model switch. Measured on the current default `qwen3-embedding:4b` over 329 wiki eval questions, all of them retrieved in the top 5: true-match cosine min 0.387, p10 0.648, p50 0.761. Recall@5 by floor — `0.50` keeps 327 of 329, `0.55` keeps 325, `0.60` keeps 316. The previous default of `0.60` was calibrated for `qwen3-embedding:8b` (true match 0.73-0.80, noise <= 0.51) and drops 13 genuine hits on the new model. See `docs/research/embedding-model-sweep-2026-08.md`.
+- **`KB_MEMORY_THRESHOLD`** (`MEMORY_MIN_COS` in `kb-recall.py`, default `0.45`): the memory layer's own floor. Memories are short and atomic, so their cosine against a prompt sits structurally lower than a wiki article's. Measured on `qwen3-embedding:4b` over 1224 memory questions, 806 of them retrievable in the top 5: min 0.340, p10 0.484, p50 0.615. A `0.60` floor discarded 366 of those 806; `0.45` discards 42. Set it to `0.0` for rank-only measurement.
 - **`KB_RETRIEVE_TIMEOUT`** (config `retrieve_timeout`, default `2`s): requested
   embed-call timeout. Cold or unavailable models fail open instead of holding
   the prompt until the client kills the hook.

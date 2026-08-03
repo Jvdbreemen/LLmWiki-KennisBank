@@ -268,14 +268,27 @@ def recall_hits(query_vector, query_text: str = "", k: int = 3,
 # van retrieve_threshold -- dat zou het memory-blok stilzwijgend dichtzetten.
 #
 # KB_MEMORY_THRESHOLD overschrijft de default. Nodig om embedmodellen eerlijk
-# te vergelijken: elk model heeft zijn eigen cosinus-schaal, dus een vaste 0.60
-# meet "hoe qwen3-achtig scoort dit model" in plaats van hoe goed het rankt.
-# Zet hem op 0.0 voor een rang-only meting (zie scripts/embed-sweep.py).
+# te vergelijken: elk model heeft zijn eigen cosinus-schaal, dus een vaste
+# drempel meet "hoe qwen3-achtig scoort dit model" in plaats van hoe goed het
+# rankt. Zet hem op 0.0 voor een rang-only meting (zie scripts/embed-sweep.py).
+#
+# 0.45 is gemeten, niet geerfd. Op qwen3-embedding:4b over 1224 memory-vragen
+# (806 vindbaar in de top 5) ligt de cosinus van een echte treffer op min 0.340,
+# p10 0.484, p50 0.615 -- structureel lager dan bij wiki-artikelen, precies zoals
+# de alinea hierboven voorspelt. Wat elke drempel wegsnijdt:
+#
+#     0.40 -> 6 van 806 verloren        0.50 -> 111 verloren
+#     0.45 -> 42 van 806 verloren       0.60 -> 366 verloren
+#
+# De vorige waarde 0.60 kostte 45% van alles wat de index kon leveren. 0.45 houdt
+# de ruisband van 0.51 (gemeten op de 8b) buiten de deur en haalt 324 van die 366
+# treffers terug. Herijk na een modelwissel: een enkele pass die per vraag de
+# cosinus van de verwachte treffer bewaart levert de hele curve.
 def _memory_min_cos_default() -> float:
     try:
-        return float(os.environ.get("KB_MEMORY_THRESHOLD", "").strip() or 0.60)
+        return float(os.environ.get("KB_MEMORY_THRESHOLD", "").strip() or 0.45)
     except ValueError:
-        return 0.60
+        return 0.45
 
 
 MEMORY_MIN_COS = _memory_min_cos_default()

@@ -99,10 +99,34 @@ def unload_others(keep: str = "") -> list:
     return stopped
 
 
+def gpu_state() -> str:
+    """Bezet VRAM, of leeg als nvidia-smi er niet is.
+
+    Hoort bij elke rij in het rapport. Een meting op een volle kaart meet de
+    evictie-volgorde en niet het model, en dat verschil is achteraf niet meer
+    uit de getallen te halen -- tenzij de kaartstand ernaast staat.
+    """
+    try:
+        out = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.used,memory.total",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=10)
+        if out.returncode == 0 and out.stdout.strip():
+            used, total = [int(x) for x in out.stdout.strip().split("\n")[0].split(",")]
+            return f"{used}/{total} MiB"
+    except Exception:
+        pass
+    return ""
+
+
 def latency_probe(model: str, reps: int = 40) -> dict:
     """Koude load apart, daarna warme metingen. De koude load hoort NIET in de
     warme percentielen: hij gebeurt eenmalig per eviction en wordt in productie
-    door warm_async() van het hot path gehaald."""
+    door warm_async() van het hot path gehaald.
+
+    Evicteer ALLES voor deze probe, ook het kandidaat-model zelf. Blijft dat
+    resident, dan is "koud" hier niet koud: cold_ms meet dan een tweede warme
+    call en ziet er ten onrechte goed uit."""
     cold_ms, vec = ollama_embed(model, "koude load")
     if not vec:
         return {"error": "geen vector terug"}
@@ -210,8 +234,13 @@ def sweep_model(vault: Path, model: str, prefixes: dict, reps: int,
           flush=True)
 
     print("  [1/3] latency-probe ...", flush=True)
-    out["unloaded_first"] = unload_others(keep=model)
+    # Alles eruit, ook het kandidaat-model: anders is de koude load geen koude
+    # load. De kaartstand gaat mee in het rapport, want een rij die op een volle
+    # kaart is gemeten hoort herkenbaar te zijn.
+    out["unloaded_first"] = unload_others()
+    out["gpu_before"] = gpu_state()
     out["latency"] = latency_probe(model, reps=reps)
+    out["gpu_after_load"] = gpu_state()
     print(f"        {out['latency']}", flush=True)
     if out["latency"].get("error"):
         return out

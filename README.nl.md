@@ -418,7 +418,7 @@ De ontwerpvoorkeur is overal dezelfde: **deterministisch waar mogelijk, LLM alle
 - Minimaal één lokale agent-client: [Claude Code](https://claude.ai/code), Codex, OpenCode, of de [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli)
 - Python 3.10+
 - [Ollama](https://ollama.com) met:
-  - `qwen3-embedding:8b` (embeddings; meertalige standaard. Kluizen met alleen Engels kunnen het lichtere `nomic-embed-text` gebruiken)
+  - `qwen3-embedding:4b` (embeddings; meertalige standaard. Kluizen met alleen Engels kunnen het lichtere `nomic-embed-text` gebruiken)
   - een chatmodel voor de geheugenbeoordeling/-extractie (standaard `gemma4:latest`; pin een ander via `<vault>/.claude/kennisbank-llm.json`)
 
 Ollama is optioneel in de zin dat alles fail-open werkt zonder, maar de geheugen-sweep, semantische retrieval, en deduplicatie zijn het hart van het systeem: installeer het. Alleen voor de **LLM-beoordeling/-extractie** kan setup ook OpenRouter configureren als expliciete cloud-opt-in. Embeddings blijven standaard lokaal.
