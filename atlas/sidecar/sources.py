@@ -641,6 +641,32 @@ def resolve_asset(vault: Path, rel_path: str) -> tuple[Path, str]:
     return target, _ASSET_TYPES[ext]
 
 
+def _recall_neighbor_entry(kbrecall, emb, hits: list, final: list) -> "dict | None":
+    """Graph-neighbour entry for the Recall Inspector waterfall.
+
+    Ported from the deleted _rank.one_hop_neighbor (TASK-93) to
+    kb-recall.graph_neighbor, the graph-based replacement it already shares
+    with the production recall path -- the PR review on the TASK-93 branch
+    caught this call site still pointing at the deleted function (silently
+    swallowed by the surrounding except). kbrecall/emb are the already
+    vault-loaded modules so this stays hermetically testable with fakes.
+    Fail-open: any error -> None."""
+    try:
+        nb = kbrecall.graph_neighbor(hits)
+        stem = nb["stem"] if nb else None
+        npath = Path(nb["path"]) if nb else None
+        if not stem or npath is None or any(Path(h["path"]).stem == stem for h in final):
+            return None
+        snippet = emb.doc_text(npath, cap=200).replace("\n", " ").strip()
+        return {
+            "final": {"path": str(npath), "score": 0.0, "snippet": snippet, "neighbor": True},
+            "rerank": {"path": f"02-wiki/{stem}.md", "score": 0.0,
+                       "factors": {"final": 0.0}, "neighbor": True},
+        }
+    except Exception:
+        return None
+
+
 def recall_waterfall(vault: Path, query: str, k: int = 8) -> dict:
     """The live retrieval waterfall for the Recall Inspector (TASK-27.8).
 
@@ -754,19 +780,12 @@ def recall_waterfall(vault: Path, query: str, k: int = 8) -> dict:
         rerank_stage.sort(key=lambda x: x["score"], reverse=True)
         final.sort(key=lambda x: x["score"], reverse=True)
 
-        # graph-neighbour expansion: the most-referenced wiki neighbour of the
-        # top hits, appended as an extra entry (reuses _rank.one_hop_neighbor).
-        try:
-            stem = rank.one_hop_neighbor(hits, vault.resolve())
-            if stem and not any(Path(h["path"]).stem == stem for h in final):
-                npath = (vault / "02-wiki" / f"{stem}.md")
-                snippet = emb.doc_text(npath, cap=200).replace("\n", " ").strip()
-                final.append({"path": str(npath), "score": 0.0, "snippet": snippet,
-                              "neighbor": True})
-                rerank_stage.append({"path": f"02-wiki/{stem}.md", "score": 0.0,
-                                     "factors": {"final": 0.0}, "neighbor": True})
-        except Exception:
-            pass
+        # graph-neighbour expansion: the weighted graph neighbour of the top
+        # hits, appended as an extra entry.
+        nb_entry = _recall_neighbor_entry(kbrecall, emb, hits, final)
+        if nb_entry:
+            final.append(nb_entry["final"])
+            rerank_stage.append(nb_entry["rerank"])
 
         status = "ok" if final else "empty"
         return {"status": status, "query": query,

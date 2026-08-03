@@ -9,6 +9,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from atlas.sidecar.app import create_app
+from atlas.sidecar import sources
 
 
 def test_recall_passes_query_and_preserves_final_order(tmp_path: Path):
@@ -71,3 +72,55 @@ def test_recall_fail_open_on_recall_error(tmp_path: Path):
 
     assert body["status"] in {"degraded", "empty"}
     assert body["final"] == []
+
+
+class _FakeKbRecall:
+    """Stands in for the vault-loaded kb-recall.py module. Deliberately has
+    NO one_hop_neighbor attribute: if recall_waterfall's neighbour block ever
+    calls that again instead of graph_neighbor, this raises AttributeError
+    immediately instead of silently doing nothing (the bug the TASK-93 PR
+    review caught: rank.one_hop_neighbor was deleted but a caller in this
+    file still pointed at it, swallowed by a broad except)."""
+
+    def __init__(self, neighbor):
+        self._neighbor = neighbor
+
+    def graph_neighbor(self, hits):
+        return self._neighbor
+
+
+class _FakeEmb:
+    def doc_text(self, path, cap=200):
+        return "neighbour snippet text"
+
+
+def test_recall_neighbor_entry_uses_graph_neighbor(tmp_path: Path):
+    npath = tmp_path / "02-wiki" / "neighbor.md"
+    npath.parent.mkdir(parents=True)
+    npath.write_text("inhoud", encoding="utf-8")
+    hits = [{"path": str(tmp_path / "02-wiki" / "hit.md"), "layer": "wiki"}]
+
+    entry = sources._recall_neighbor_entry(
+        _FakeKbRecall({"path": str(npath), "stem": "neighbor"}), _FakeEmb(), hits, [])
+
+    assert entry is not None
+    assert entry["final"] == {"path": str(npath), "score": 0.0,
+                              "snippet": "neighbour snippet text", "neighbor": True}
+    assert entry["rerank"] == {"path": "02-wiki/neighbor.md", "score": 0.0,
+                               "factors": {"final": 0.0}, "neighbor": True}
+
+
+def test_recall_neighbor_entry_none_when_graph_has_no_neighbor(tmp_path: Path):
+    assert sources._recall_neighbor_entry(_FakeKbRecall(None), _FakeEmb(), [], []) is None
+
+
+def test_recall_neighbor_entry_skips_a_stem_already_in_final(tmp_path: Path):
+    npath = tmp_path / "02-wiki" / "neighbor.md"
+    npath.parent.mkdir(parents=True)
+    npath.write_text("inhoud", encoding="utf-8")
+    final = [{"path": str(npath)}]
+
+    entry = sources._recall_neighbor_entry(
+        _FakeKbRecall({"path": str(npath), "stem": "neighbor"}), _FakeEmb(), [], final)
+
+    assert entry is None

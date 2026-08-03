@@ -205,9 +205,11 @@ def recall_hits(query_vector, query_text: str = "", k: int = 3,
     recency (halfwaardetijd per memory_type) en importance (judge, 1-5);
     wiki blijft ongewogen (zie _rank).
 
-    ``expand=True`` voegt na de directe hits de meest-verwezen wiki-buur toe
-    (wikilink-expansie, één hop) als extra entry met ``neighbor: True`` —
-    altijd ACHTERAAN, verdringt nooit een directe hit.
+    ``expand=True`` voegt na de directe hits de gewogen graafbuur toe (via
+    ``_neighbor_entry`` / ``graph_neighbor``, TASK-87/93) als extra entry met
+    ``neighbor: True`` — altijd ACHTERAAN, verdringt nooit een directe hit.
+    ``graph_retrieval`` uit levert dan GEEN buur (TASK-93: de legacy
+    wikilink-expansie-terugval is verwijderd, geen source-select meer).
     """
     if not query_vector:
         return []
