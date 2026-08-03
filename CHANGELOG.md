@@ -36,9 +36,12 @@ Roughly eleven minutes for 1500 documents. A vault that pins `model` in
   on the project's eval sets it scores wiki MRR 0.967 against 0.961 and memory
   MRR 0.540 against 0.530, at 322 ms warm p50 against 347 ms, holding 6.2 GB
   resident instead of 8.4 GB on a 16 GB card.
-- **`retrieve_threshold` is 0.50** (was 0.60). Measured over 329 wiki eval
+- **`retrieve_threshold` is 0.50** (was 0.60), in the shipped example config and
+  in the runtime fallback in `kb-retrieve.py`. Measured over 329 wiki eval
   questions on the new default: true-match cosine p50 0.761, and the old floor
-  discarded 13 of 329 genuine hits.
+  discarded 13 of 329 genuine hits. **An existing vault keeps whatever its own
+  `kennisbank-embed.json` says** — config beats the default — so a vault
+  installed before this release still runs 0.60 until that value is edited.
 - **`MEMORY_MIN_COS` is 0.45** (was 0.60), overridable with
   `KB_MEMORY_THRESHOLD`. Memories are short and atomic, so their cosine sits
   structurally below an article's: p50 0.615 against 0.761. The old floor

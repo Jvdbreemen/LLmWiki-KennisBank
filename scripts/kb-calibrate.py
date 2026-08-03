@@ -3,7 +3,7 @@
 
 Het systeem hangt aan elkaar van cosine-drempels die getuned zijn op een
 specifiek embeddingmodel (qwen3-embedding:8b): dedup (0.92, _sweeputil),
-rewrite (find-similar), retrieve (0.60), reconcile (0.75, _reconcile),
+rewrite (find-similar), retrieve (0.50), reconcile (0.75, _reconcile),
 conflict (0.62, conflict-scan). Een modelwissel maakt die kalibratie
 stilletjes ongeldig. Dit harnas maakt de herijking mechanisch: het embedt
 een handgelabelde set tekstparen met het ACTIEVE model en stelt per
@@ -53,7 +53,7 @@ CURRENT_KNOBS = [
     ("rewrite (find-similar)",             0.62, "related"),
     ("reconcile-band ondergrens (_reconcile)", 0.75, "related"),
     ("conflict (KB_CONFLICT_SIM)",         0.62, "related"),
-    ("retrieve (retrieve_threshold)",      0.60, "related"),
+    ("retrieve (retrieve_threshold)",      0.50, "related"),
 ]
 
 

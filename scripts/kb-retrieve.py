@@ -177,7 +177,7 @@ def retrieve_params(cfg: dict) -> dict:
     """
     return {
         "top_n": int(_num("KB_RETRIEVE_TOP_N", cfg, "retrieve_top_n", 3)),
-        "min_cos": _num("KB_RETRIEVE_THRESHOLD", cfg, "retrieve_threshold", 0.60),
+        "min_cos": _num("KB_RETRIEVE_THRESHOLD", cfg, "retrieve_threshold", 0.50),
         "expand": bool(int(_num("KB_RETRIEVE_EXPAND", cfg, "retrieve_expand", 1))),
     }
 
