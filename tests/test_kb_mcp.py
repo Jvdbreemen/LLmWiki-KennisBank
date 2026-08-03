@@ -247,13 +247,27 @@ class KbMcpTemporalToolTest(unittest.TestCase):
     def tearDown(self):
         self.m.activity = self.orig
 
-    def test_temporal_tool_wrappers_return_json(self):
-        out = json.loads(self.m.what_did_i_do_tool("2026-07-03"))
+    def test_temporal_tool_wrappers_return_dicts(self):
+        """MCP migration step 3: the four tools return dict[str, Any] directly
+        (activity.*()'s own return value, unwrapped) so structuredContent comes
+        free from the SDK's return-annotation auto-detection."""
+        expected = {"ok": True, "mode": "what_did_i_do",
+                    "events": [{"id": "e1", "source_ref": "x#L1"}]}
+        out = self.m.what_did_i_do_tool("2026-07-03")
+        self.assertIsInstance(out, dict)
+        self.assertEqual(out, expected)
         self.assertTrue(out["ok"])
         self.assertEqual(out["events"][0]["source_ref"], "x#L1")
-        self.assertEqual(json.loads(self.m.timeline_tool("vorige week"))["mode"], "timeline")
-        self.assertEqual(json.loads(self.m.weeklog_tool())["mode"], "weeklog")
-        self.assertEqual(json.loads(self.m.topic_timeline_tool("Codex MCP"))["mode"], "topic_timeline")
+        # Pins the migration's byte-identity claim: the SDK derives `content`
+        # from the returned dict via these exact json.dumps kwargs, so the
+        # dict must stay serialisable under them without loss or reordering.
+        self.assertEqual(
+            json.dumps(out, indent=2, ensure_ascii=False),
+            json.dumps(expected, indent=2, ensure_ascii=False),
+        )
+        self.assertEqual(self.m.timeline_tool("vorige week")["mode"], "timeline")
+        self.assertEqual(self.m.weeklog_tool()["mode"], "weeklog")
+        self.assertEqual(self.m.topic_timeline_tool("Codex MCP")["mode"], "topic_timeline")
 
 
 if __name__ == "__main__":
