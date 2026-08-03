@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-07-28 08:00'
-updated_date: '2026-08-03 21:57'
+updated_date: '2026-08-03 22:40'
 labels:
   - atlas
   - ui
@@ -57,6 +57,15 @@ AC#8 (2026-08-03) is PARTIALLY evidenced, box left unchecked -- three sub-measur
 
 AC#8 stays unchecked: 1 of 3 sub-claims fully evidenced, 1 measured-but-failing-with-mitigation-recorded, 1 blocked on browser access this session. Whoever picks this up next with a working Chrome extension: open the printed atlas/launch.py URL, record overview first-paint and Cmd+K-to-first-result timing, then check this box.
 <!-- SECTION:NOTES:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-08-03 22:40
+---
+2026-08-03 follow-up: TASK-130 fixed the real root cause (kb-lint's collect_session_stems rglob'd a 58k-file Evernote-archive directory for nothing, ~12s of it). build_provenance()/kb-lint now run in ~250ms on the real vault, not ~12.2s -- so /overview's cold first-render should now genuinely be near the <500ms target, not just the TTL-cached repeat views. NOT yet re-measured through the sidecar: _load_vault_module loads kb-lint.py from the DEPLOYED vault copy (vault/.claude/scripts/), not this repo's edited copy, and deploying is a separate deliberate step (setup.sh / /kennisbank-upgrade) this sweep did not take. Whoever deploys this branch's kb-lint.py next: re-run the cold /overview timing and update AC#8 -- it is very likely met now, but say so only after actually measuring the deployed copy, not the repo copy.
+---
+<!-- COMMENTS:END -->
 
 ## Notes (2026-07-29)
 
