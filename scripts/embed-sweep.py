@@ -1,33 +1,33 @@
 #!/usr/bin/env python3
-"""embed-sweep.py - vergelijk embedmodellen op kwaliteit EN hot-path-latency.
+"""embed-sweep.py - compare embedding models on quality AND hot-path latency.
 
-Waarom dit bestaat: de keuze van een embedmodel is een Pareto-afweging tussen
-recall en latency, en geen enkele publieke benchmark meet die op DEZE vault.
-MTEB-NL en BEIR-NL geven de relatieve ordening van modellen op Nederlands,
-maar de marges daar (2-4 punten) zijn kleiner dan de spreiding tussen corpora.
-Dit harnas meet beide assen op de eigen eval-sets, per model, reproduceerbaar.
+Why this exists: choosing an embedding model is a Pareto trade-off between
+recall and latency, and no public benchmark measures that on THIS vault.
+MTEB-NL and BEIR-NL give the relative ordering of models on Dutch, but the
+margins there (2-4 points) are smaller than the spread between corpora. This
+harness measures both axes on the vault's own eval sets, per model, repeatably.
 
-Wat het per model doet:
+What it does per model:
 
-  1. latency-probe   koude load + warme p50/p95 over N queries, rechtstreeks op
-                     de provider (dus zonder index- of recall-overhead). Dit is
-                     het getal dat het hot-path-budget van de prompt-hook haalt
-                     of niet haalt.
-  2. indexbouw       build-kb-index.py tegen een SCRATCH-vault, nooit de echte:
-                     een modelwissel invalideert de embedcache per constructie,
-                     en dat mag de werkende installatie niet raken.
-  3. eval            kb-eval.py --json over beide lagen met drempel 0.0. De
-                     drempels in productie (0.60) zijn gekalibreerd op qwen3;
-                     ze meeschalen zou "hoe qwen3-achtig is de cosinusschaal
-                     van dit model" meten in plaats van hoe goed het rankt.
-                     De drempel voor de winnaar kalibreer je daarna apart.
+  1. latency probe   cold load plus warm p50/p95 over N queries, straight at the
+                     provider (so without index or recall overhead). This is the
+                     number that either fits the prompt hook's hot-path budget
+                     or does not.
+  2. index build     build-kb-index.py against a SCRATCH vault, never the real
+                     one: a model switch invalidates the embed cache by
+                     construction, and that must not touch a working install.
+  3. eval            kb-eval.py --json over both layers with floor 0.0. The
+                     production floors are calibrated on qwen3; scaling them
+                     along would measure "how qwen3-like is this model's cosine
+                     scale" instead of how well it ranks. Calibrate the floor
+                     for the winner separately afterwards.
 
-Cache en index worden per model gesnapshot onder <scratch>/snapshots/<slug>/,
-zodat een tweede run van hetzelfde model niets opnieuw embed.
+Cache and index are snapshotted per model under <scratch>/snapshots/<slug>/, so
+a second run of the same model re-embeds nothing.
 
-Gebruik:
+Usage:
     python embed-sweep.py --vault <scratch-vault> --models qwen3-embedding:8b,...
-    python embed-sweep.py --vault <scratch-vault> --report      # alleen tabel
+    python embed-sweep.py --vault <scratch-vault> --report      # table only
 
 Stdlib only.
 """
@@ -45,9 +45,9 @@ from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parent
 
-#: Vragen voor de latency-probe. Bewust echte NL-vragen uit de eval-set: de
-#: tokenlengte van een query bepaalt de embed-tijd mede, dus een synthetische
-#: korte string zou het budget te rooskleurig meten.
+#: Queries for the latency probe. Deliberately real Dutch questions from the
+#: eval set: query token length is part of what determines embed time, so a
+#: synthetic short string would measure the budget too optimistically.
 PROBE_QUERIES = [
     "Waarom crasht mijn ESP32-S3 als ik BLE active scan aanzet tijdens runtime?",
     "Hoe zet ik inkomende WireGuard-toegang op als mijn MikroTik achter CGNAT zit?",
@@ -79,13 +79,13 @@ def ollama_embed(model: str, text: str, timeout: float = 300.0):
 
 
 def unload_others(keep: str = "") -> list:
-    """Zet alle andere geladen ollama-modellen uit de VRAM.
+    """Evict every other loaded ollama model from VRAM.
 
-    Zonder dit meet de probe niet het model maar de VRAM-druk van dat moment:
-    op een 16GB-kaart waar al 7GB bezet is, wordt een 8.4GB-model tussen twee
-    calls door geevicteerd en schiet p95 van 0,5s naar 47s. Dat is een echt
-    productieprobleem, maar het hoort in de vergelijking als een APARTE
-    observatie, niet als ruis over alle modellen heen."""
+    Without this the probe measures the VRAM pressure of the moment rather than
+    the model: on a 16 GB card with 7 GB already taken, an 8.4 GB model gets
+    evicted between two calls and p95 jumps from 0.5 s to 47 s. That is a real
+    production problem, but it belongs in the comparison as a SEPARATE
+    observation, not as noise smeared over every model."""
     stopped = []
     try:
         r = subprocess.run(["ollama", "ps"], capture_output=True, text=True, timeout=30)
@@ -100,11 +100,12 @@ def unload_others(keep: str = "") -> list:
 
 
 def gpu_state() -> str:
-    """Bezet VRAM, of leeg als nvidia-smi er niet is.
+    """VRAM in use, or empty when nvidia-smi is unavailable.
 
-    Hoort bij elke rij in het rapport. Een meting op een volle kaart meet de
-    evictie-volgorde en niet het model, en dat verschil is achteraf niet meer
-    uit de getallen te halen -- tenzij de kaartstand ernaast staat.
+    Belongs with every row in the report. A measurement on a full card records
+    eviction order rather than the model, and that difference cannot be
+    recovered from the numbers afterwards -- unless the card state sits next to
+    them.
     """
     try:
         out = subprocess.run(
@@ -120,16 +121,16 @@ def gpu_state() -> str:
 
 
 def latency_probe(model: str, reps: int = 40) -> dict:
-    """Koude load apart, daarna warme metingen. De koude load hoort NIET in de
-    warme percentielen: hij gebeurt eenmalig per eviction en wordt in productie
-    door warm_async() van het hot path gehaald.
+    """Cold load separately, then warm measurements. The cold load does NOT
+    belong in the warm percentiles: it happens once per eviction, and in
+    production warm_async() keeps it off the hot path.
 
-    Evicteer ALLES voor deze probe, ook het kandidaat-model zelf. Blijft dat
-    resident, dan is "koud" hier niet koud: cold_ms meet dan een tweede warme
-    call en ziet er ten onrechte goed uit."""
-    cold_ms, vec = ollama_embed(model, "koude load")
+    Evict EVERYTHING before this probe, the candidate model included. If it
+    stays resident, "cold" here is not cold: cold_ms then measures a second warm
+    call and flatters the model."""
+    cold_ms, vec = ollama_embed(model, "cold load")
     if not vec:
-        return {"error": "geen vector terug"}
+        return {"error": "no vector returned"}
     warm = []
     for i in range(reps):
         ms, v = ollama_embed(model, PROBE_QUERIES[i % len(PROBE_QUERIES)] + f" ({i})")
@@ -156,8 +157,8 @@ def _env(vault: Path, model: str, prefixes: dict) -> dict:
     e["KENNISBANK_VAULT"] = str(vault)
     e["KB_EMBED_PROVIDER"] = "ollama"
     e["KB_EMBED_MODEL"] = model
-    # Rang-only meten: geen enkele drempel, want de cosinusschaal verschilt per
-    # model en een vaste drempel meet dat verschil in plaats van de kwaliteit.
+    # Rank-only measurement: no floor at all, because the cosine scale differs
+    # per model and a fixed floor measures that difference instead of quality.
     e["KB_RETRIEVE_THRESHOLD"] = "0.0"
     e["KB_MEMORY_THRESHOLD"] = "0.0"
     e["KB_USAGE_DISABLE"] = "1"
@@ -180,13 +181,13 @@ def _snapshot_dir(vault: Path, model: str, prefixes: dict) -> Path:
 
 
 def _unlink_stubborn(p: Path, tries: int = 30, wait: float = 1.0) -> None:
-    """Verwijder p, en wacht als Windows het bestand nog vasthoudt.
+    """Delete p, waiting while Windows still holds the file.
 
-    Op Windows blijft een sqlite-bestand vergrendeld zolang enig proces er een
-    handle op heeft; een net beeindigde indexbouwer laat die handle nog even
-    staan. Hard falen zou de hele sweep afbreken op iets wat binnen een seconde
-    vanzelf oplost. Na `tries` pogingen wijkt hij uit naar hernoemen: de sweep
-    mag niet stranden op een bestand dat een vreemd proces blijft vasthouden."""
+    On Windows a sqlite file stays locked as long as any process holds a handle
+    on it, and an index builder that just exited keeps that handle for a moment.
+    Failing hard would abort the whole sweep over something that resolves itself
+    within a second. After `tries` attempts it falls back to renaming: the sweep
+    must not strand on a file some foreign process keeps holding."""
     for i in range(tries):
         if not p.exists():
             return
@@ -199,15 +200,15 @@ def _unlink_stubborn(p: Path, tries: int = 30, wait: float = 1.0) -> None:
         p.rename(p.with_name(p.name + f".stale.{os.getpid()}"))
     except OSError as exc:
         raise RuntimeError(
-            f"{p} blijft vergrendeld en kan ook niet hernoemd worden: {exc}. "
-            f"Draait er nog een indexbouwer op deze vault?") from exc
+            f"{p} stays locked and cannot be renamed either: {exc}. "
+            f"Is an index builder still running against this vault?") from exc
 
 
 def _swap_in(vault: Path, snap: Path) -> None:
-    """Zet de gesnapshotte cache/index terug, of ruim de vorige op. Zonder dit
-    staat er nog een index van het VORIGE model klaar; build-kb-index gooit die
-    weg bij embed_id-mismatch, maar de 180MB-cache erbij laten staan kost alleen
-    maar leestijd."""
+    """Restore the snapshotted cache/index, or clear the previous one. Without
+    this an index from the PREVIOUS model is still in place; build-kb-index
+    discards it on an embed_id mismatch, but leaving the 180 MB cache beside it
+    only costs read time."""
     cache = vault / ".claude" / "embeddings-cache.json"
     db = vault / ".claude" / "kb-index.db"
     for f in (cache, db):
@@ -233,10 +234,10 @@ def sweep_model(vault: Path, model: str, prefixes: dict, reps: int,
     print(f"\n=== {model} " + (f"(prefix {prefixes})" if any(prefixes.values()) else ""),
           flush=True)
 
-    print("  [1/3] latency-probe ...", flush=True)
-    # Alles eruit, ook het kandidaat-model: anders is de koude load geen koude
-    # load. De kaartstand gaat mee in het rapport, want een rij die op een volle
-    # kaart is gemeten hoort herkenbaar te zijn.
+    print("  [1/3] latency probe ...", flush=True)
+    # Everything out, the candidate included: otherwise the cold load is not a
+    # cold load. The card state goes into the report, because a row measured on
+    # a full card has to stay identifiable afterwards.
     out["unloaded_first"] = unload_others()
     out["gpu_before"] = gpu_state()
     out["latency"] = latency_probe(model, reps=reps)
@@ -300,14 +301,14 @@ def report(results: list) -> str:
             f"{g(w,['recall','@3']):>7} {g(w,['mrr']):>8} "
             f"{g(m,['recall','@3']):>7} {g(m,['mrr']):>7}")
     lines.append("")
-    lines.append("p50/p95/cold in ms, pure embed-call (geen index/recall). "
+    lines.append("p50/p95/cold in ms, pure embed call (no index/recall). "
                  "recall en MRR rang-only (drempel 0.0). * = instructieprefix aan.")
     return "\n".join(lines)
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--vault", required=True, help="scratch-vault (NIET de echte)")
+    ap.add_argument("--vault", required=True, help="scratch vault (NOT the real one)")
     ap.add_argument("--models", default="", help="komma-lijst; leeg = alleen rapport")
     ap.add_argument("--query-prefix", default="", help="instructieprefix queryzijde")
     ap.add_argument("--doc-prefix", default="", help="instructieprefix documentzijde")
@@ -318,7 +319,7 @@ def main() -> int:
 
     vault = Path(args.vault).resolve()
     if not (vault / "02-wiki").exists():
-        print(f"embed-sweep: {vault} ziet er niet uit als een vault", file=sys.stderr)
+        print(f"embed-sweep: {vault} does not look like a vault", file=sys.stderr)
         return 1
     out_path = Path(args.out) if args.out else vault / "sweep-results.json"
     results = []
@@ -331,9 +332,9 @@ def main() -> int:
     prefixes = {"query": args.query_prefix, "doc": args.doc_prefix}
     models = [m.strip() for m in args.models.split(",") if m.strip()]
     for model in models:
-        # Een model dat omvalt (niet gepulld, oninleesbare index, lock) mag de
-        # rest van de sweep niet meenemen: dan ben je een uur meten kwijt aan
-        # een fout die bij een model hoort, niet bij de run.
+        # A model that falls over (not pulled, unreadable index, lock) must not
+        # take the rest of the sweep with it: otherwise an hour of measurement is
+        # lost to a fault that belongs to one model, not to the run.
         try:
             res = sweep_model(vault, model, prefixes, args.reps, args.build_timeout)
         except Exception as exc:

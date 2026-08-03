@@ -211,11 +211,33 @@ when someone next works on dedup.
 
 ## Reproducing
 
+Three tools, because the questions are separable. `embed-sweep.py` takes
+latency and hybrid recall per model; `recall-ablation.py` splits the dense and
+lexical halves on an index that already exists; `rerank-eval.py` answers what a
+cross-encoder would add on top.
+
 ```bash
-python3 scripts/embed-sweep.py --list-prefixes
-python3 scripts/embed-sweep.py --models qwen3-embedding:4b,bge-m3 \
-    --vector-only --warm-calls 12 --json results.json
+# Latency + hybrid recall, per model, against a scratch vault (never the real one)
+python3 scripts/embed-sweep.py --vault /tmp/kb-sweep \
+    --models qwen3-embedding:4b,bge-m3,embeddinggemma:300m --reps 40
+
+# Models that want an instruction prefix take it per side
+python3 scripts/embed-sweep.py --vault /tmp/kb-sweep --models nomic-embed-text \
+    --query-prefix "search_query: " --doc-prefix "search_document: "
+
+# The dense-versus-lexical split, on the index the sweep just built
+python3 scripts/recall-ablation.py --vault /tmp/kb-sweep \
+    --model qwen3-embedding:4b --layer memory
+
+# Existing results table without re-running anything
+python3 scripts/embed-sweep.py --vault /tmp/kb-sweep --report
 ```
+
+The vector-only column in the tables above came from a one-off arm that scored
+each model with `query_text=""`, which skips the FTS branch. `recall-ablation.py`
+does the same separation more thoroughly — three conditions rather than two —
+but per index rather than per sweep, so reproducing the full column means one
+ablation run per model.
 
 Close anything else holding VRAM first. On this machine the biggest competitor
 was KennisBank itself: the UserPromptSubmit hook embeds every prompt and keeps

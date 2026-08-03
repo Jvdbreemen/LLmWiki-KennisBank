@@ -102,11 +102,15 @@ def provider() -> str:
 
 
 def embed_id() -> str:
-    """Stable identity of the active backend for cache-keying: "provider:model".
+    """Stable identity of the active backend for cache-keying.
 
-    De documentprefix hoort erbij: dezelfde tekst met een andere prefix levert
-    een andere vector, dus hergebruik over een prefixwissel heen is net zo fout
-    als hergebruik over een modelwissel heen."""
+    Format: "provider:model", plus "+<doc_prefix>" when a document prefix is
+    configured.
+
+    The document prefix belongs in the identity: the same text under a
+    different prefix yields a different vector, so reusing a cached vector
+    across a prefix change is exactly as wrong as reusing it across a model
+    change."""
     prov, model, _, _ = _resolve()
     dp = _prefix("doc")
     return f"{prov}:{model}" + (f"+{dp}" if dp else "")
@@ -198,27 +202,31 @@ def endpoint_allowed(prov: str, endpoint: str) -> bool:
 
 
 def _prefix(kind: str) -> str:
-    """Model-specifieke instructieprefix voor query- of documentzijde.
+    """Model-specific instruction prefix for the query or the document side.
 
-    Niet cosmetisch: e5-instruct is GETRAIND met "Instruct: ...\\nQuery: " aan
-    de queryzijde en "passage: "-achtige markers aan de documentzijde. Embed je
-    zonder, dan meet je een ander model dan het model dat je denkt te meten.
-    Qwen3 verliest 1-5% zonder queryprefix; bge-m3 en gte willen er juist geen.
-    Default is leeg, dus zonder config verandert er niets aan het gedrag.
+    Not cosmetic: e5-instruct is TRAINED with "Instruct: ...\\nQuery: " on the
+    query side and passage-style markers on the document side. Embed without
+    them and you measure a different model than the one you meant to measure.
+    Qwen3 loses 1-5% without a query prefix; bge-m3 and gte want none at all.
+    The default is empty, so behaviour is unchanged when nothing is configured.
 
-    Config: query_prefix / doc_prefix in kennisbank-embed.json, of de env vars
+    Config: query_prefix / doc_prefix in kennisbank-embed.json, or the env vars
     KB_EMBED_QUERY_PREFIX / KB_EMBED_DOC_PREFIX.
 
-    Bewust NIET via _setting(): die strip() de waarde, en juist de afsluitende
-    spatie van "query: " hoort bij de prefix. Wegstrippen levert "query:vraag",
-    een andere tokenisatie dan waarop het model getraind is.
+    Deliberately NOT routed through _setting(): that strips the value, and the
+    trailing space of "query: " is part of the prefix. Stripping it yields
+    "query:question", a different tokenisation than the model was trained on.
     """
     name, env = {"query": ("query_prefix", "KB_EMBED_QUERY_PREFIX"),
                  "doc": ("doc_prefix", "KB_EMBED_DOC_PREFIX")}.get(kind, ("", ""))
     if not name:
         return ""
     v = os.environ.get(env)
-    if v:
+    if v is not None:
+        # An explicitly empty value disables the prefix. Treating "" as unset
+        # would make KB_EMBED_QUERY_PREFIX= fall through to the config, so a
+        # configured prefix could not be switched off for one run -- and the
+        # embed_id() suffix would silently keep tracking the config value.
         return v
     v = _config().get(name)
     return v if isinstance(v, str) else ""
@@ -227,8 +235,9 @@ def _prefix(kind: str) -> str:
 def embed(text: str, timeout: float = 30.0, kind: str = ""):
     """Return an embedding vector for text, or None on any failure (fail-soft).
 
-    ``kind`` is "query", "doc" of leeg. Bepaalt welke instructieprefix voor de
-    tekst komt (zie _prefix); leeg = geen prefix, het historische gedrag."""
+    ``kind`` is "query", "doc" or empty. It selects which instruction prefix is
+    placed before the text (see _prefix); empty means no prefix, which is the
+    historical behaviour."""
     text = (text or "").strip()
     if not text:
         return None

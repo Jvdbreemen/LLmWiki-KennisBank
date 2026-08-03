@@ -1,10 +1,11 @@
-"""Instructieprefixen aan de query- en documentzijde van de embed-backend.
+"""Instruction prefixes on the query and document side of the embed backend.
 
-Waarom dit getest wordt: e5-instruct is getraind met "Instruct: ...\\nQuery: "
-voor de vraag; embed je zonder, dan meet en gebruik je een ander model dan je
-denkt. Tegelijk mag de prefix nooit stilzwijgend aanstaan -- dat zou elke
-bestaande vector in de cache ongeldig maken zonder dat iemand het merkt. De
-twee eisen samen: default uit, en zodra hij aanstaat verandert embed_id() mee.
+Why this is tested: e5-instruct is trained with "Instruct: ...\\nQuery: " in
+front of the question; embed without it and you measure and use a different
+model than you think. At the same time the prefix must never switch on
+silently -- that would invalidate every vector already in the cache without
+anyone noticing. The two requirements together: off by default, and the moment
+it is on, embed_id() moves with it.
 """
 import os
 import sys
@@ -40,45 +41,56 @@ class TestEmbedPrefix(unittest.TestCase):
                 os.environ[k] = v
 
     def test_default_is_no_prefix(self):
-        """Zonder config gaat de tekst ongewijzigd de backend in."""
-        emb.embed("een vraag", kind="query")
-        self.assertEqual(self.sent[0]["prompt"], "een vraag")
+        """Without config the text reaches the backend unchanged."""
+        emb.embed("a question", kind="query")
+        self.assertEqual(self.sent[0]["prompt"], "a question")
 
     def test_query_prefix_applies_only_to_queries(self):
         os.environ["KB_EMBED_QUERY_PREFIX"] = "Query: "
-        emb.embed("een vraag", kind="query")
-        emb.embed("een document", kind="doc")
-        emb.embed("kaal", kind="")
-        self.assertEqual(self.sent[0]["prompt"], "Query: een vraag")
-        self.assertEqual(self.sent[1]["prompt"], "een document")
-        self.assertEqual(self.sent[2]["prompt"], "kaal")
+        emb.embed("a question", kind="query")
+        emb.embed("a document", kind="doc")
+        emb.embed("bare", kind="")
+        self.assertEqual(self.sent[0]["prompt"], "Query: a question")
+        self.assertEqual(self.sent[1]["prompt"], "a document")
+        self.assertEqual(self.sent[2]["prompt"], "bare")
 
     def test_doc_prefix_applies_only_to_docs(self):
         os.environ["KB_EMBED_DOC_PREFIX"] = "passage: "
-        emb.embed("een vraag", kind="query")
-        emb.embed("een document", kind="doc")
-        self.assertEqual(self.sent[0]["prompt"], "een vraag")
-        self.assertEqual(self.sent[1]["prompt"], "passage: een document")
+        emb.embed("a question", kind="query")
+        emb.embed("a document", kind="doc")
+        self.assertEqual(self.sent[0]["prompt"], "a question")
+        self.assertEqual(self.sent[1]["prompt"], "passage: a document")
+
+    def test_empty_env_var_disables_a_configured_prefix(self):
+        """An explicitly empty value means "no prefix", not "unset".
+
+        Treating "" as unset would make KB_EMBED_QUERY_PREFIX= fall through to
+        the configured value, so a prefix could not be switched off for a single
+        run -- and embed_id() would keep tracking the config behind your back.
+        """
+        os.environ["KB_EMBED_QUERY_PREFIX"] = ""
+        emb.embed("a question", kind="query")
+        self.assertEqual(self.sent[0]["prompt"], "a question")
 
     def test_escaped_newline_in_prefix_becomes_a_real_newline(self):
-        """e5 wil een echte regelovergang tussen instructie en vraag, maar een
-        env-var kan er geen bevatten; \\n in de config moet dus vertaald worden."""
-        os.environ["KB_EMBED_QUERY_PREFIX"] = "Instruct: zoek\\nQuery: "
-        emb.embed("een vraag", kind="query")
-        self.assertEqual(self.sent[0]["prompt"], "Instruct: zoek\nQuery: een vraag")
+        """e5 wants a real line break between instruction and question, but an
+        env var cannot hold one, so \\n in the config has to be translated."""
+        os.environ["KB_EMBED_QUERY_PREFIX"] = "Instruct: search\\nQuery: "
+        emb.embed("a question", kind="query")
+        self.assertEqual(self.sent[0]["prompt"], "Instruct: search\nQuery: a question")
 
     def test_doc_prefix_changes_embed_id_so_the_cache_invalidates(self):
-        """Dezelfde tekst met een andere documentprefix levert een andere vector.
-        Hergebruik daaroverheen is net zo fout als hergebruik over een
-        modelwissel heen, dus embed_id() moet meebewegen."""
+        """The same text under a different document prefix yields a different
+        vector. Reusing across that is exactly as wrong as reusing across a
+        model change, so embed_id() has to move with it."""
         plain = emb.embed_id()
         os.environ["KB_EMBED_DOC_PREFIX"] = "passage: "
         self.assertNotEqual(plain, emb.embed_id())
 
     def test_query_prefix_does_not_change_embed_id(self):
-        """De cache bevat alleen documentvectoren; de queryprefix raakt die
-        niet, en zou anders bij elke A/B-run een volledige herberekening van
-        de hele vault forceren."""
+        """The cache holds document vectors only; the query prefix does not
+        touch them, and folding it in would force a full re-embed of the vault
+        on every A/B run."""
         plain = emb.embed_id()
         os.environ["KB_EMBED_QUERY_PREFIX"] = "Query: "
         self.assertEqual(plain, emb.embed_id())

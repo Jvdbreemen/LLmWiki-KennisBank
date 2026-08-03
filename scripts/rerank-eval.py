@@ -1,33 +1,33 @@
 #!/usr/bin/env python3
-"""rerank-eval.py - meet wat een cross-encoder reranker toevoegt aan de recall.
+"""rerank-eval.py - measure what a cross-encoder reranker adds to recall.
 
-De vraag die dit beantwoordt: haalt een reranker vragen binnen die de huidige
-route mist, en wat kost dat op het hot path?
+The question it answers: does a reranker pull in questions the current route
+misses, and what does that cost on the hot path?
 
-Meetopzet. De recall-route levert per vraag DEPTH kandidaten (default 20) in
-plaats van de 5 die de eval normaal beoordeelt. Die kandidaten gaan door een
-cross-encoder, die -- anders dan een bi-encoder -- vraag en document SAMEN
-door het model haalt en dus woordvolgorde en ontkenningen ziet. De top-5 na
-herordening wordt tegen dezelfde eval-set gescoord als de top-5 ervoor.
+Setup. The recall route returns DEPTH candidates per question (default 20)
+instead of the 5 the eval normally judges. Those candidates go through a
+cross-encoder, which -- unlike a bi-encoder -- runs question and document
+through the model TOGETHER and therefore sees word order and negation. The
+top 5 after reordering is scored against the same eval set as the top 5 before.
 
-Drie getallen maken het interpreteerbaar:
+Three numbers make it interpretable:
 
-  voor     recall@k van de huidige route (de nulmeting)
-  na       recall@k na herordening van dezelfde kandidaten
-  plafond  recall@DEPTH -- wat er hooguit te winnen valt, want een reranker
-           kan alleen herordenen wat de recall al heeft opgehaald. Zit het
-           plafond dicht op "voor", dan is de bottleneck de recall zelf en
-           helpt geen enkele reranker.
+  before   recall@k of the current route (the baseline)
+  after    recall@k after reordering the same candidates
+  ceiling  recall@DEPTH -- the most that can be won, because a reranker can
+           only reorder what recall already retrieved. If the ceiling sits
+           close to "before", the bottleneck is recall itself and no reranker
+           will help.
 
-Latency wordt apart gerapporteerd: DEPTH paren door een 568M-model is een
-andere orde dan een enkele embed-call, en dat verschil beslist of dit op het
-hot path kan of alleen offline.
+Latency is reported separately: DEPTH pairs through a 568M model is a different
+order of magnitude than a single embed call, and that difference decides whether
+this can run on the hot path or only offline.
 
-Vereist torch + transformers (NIET stdlib -- dit is meetgereedschap, geen
-productiecode; de KennisBank-scripts zelf blijven stdlib-only).
+Requires torch + transformers (NOT stdlib -- this is measurement tooling, not
+production code; the KennisBank scripts themselves stay stdlib-only).
 
-Gebruik:
-    python rerank-eval.py --vault <vault> --model <ollama-embedmodel> \\
+Usage:
+    python rerank-eval.py --vault <vault> --model <ollama embedding model> \
         --reranker BAAI/bge-reranker-v2-m3 --depth 20
 """
 from __future__ import annotations
@@ -71,6 +71,11 @@ def _rank_of(stems, expect) -> int:
 
 def _report(ranks: list, types: list, ks=KS) -> dict:
     n = len(ranks)
+    if not n:
+        # Every entry skipped -- an unreachable embedding backend does this to
+        # the whole set at once. Report the emptiness instead of dividing by it.
+        return {"n": 0, "recall": {f"@{k}": None for k in ks}, "mrr": None,
+                "by_type": {}, "note": "no scored entries"}
     rep = {
         "n": n,
         "recall": {f"@{k}": round(sum(1 for r in ranks if 0 < r <= k) / n, 3) for k in ks},
@@ -86,11 +91,11 @@ def _report(ranks: list, types: list, ks=KS) -> dict:
 
 
 class CrossEncoder:
-    """Dunne wrapper om een sequence-classification reranker.
+    """Thin wrapper around a sequence-classification reranker.
 
-    fp16 op GPU: de score is een ordening, geen kansverdeling die tot achter de
-    komma moet kloppen, dus halve precisie kost hier niets en halveert zowel
-    het geheugen als de tijd."""
+    fp16 on GPU: the score is an ordering, not a probability that has to be
+    right to the last decimal, so half precision costs nothing here and halves
+    both memory and time."""
 
     def __init__(self, name: str, max_length: int = 512, batch_size: int = 16):
         import torch
@@ -139,9 +144,9 @@ def run_layer(entries: list, layer: str, depth: int, ce, doc_cap: int,
         t2 = time.perf_counter()
         stems = [Path(r["path"]).stem for r in rows]
         if ce is None:
-            # Plafondmeting: geen cross-encoder, alleen "zit het antwoord er
-            # ueberhaupt bij". Het beantwoordt of herordenen zin heeft voordat
-            # je er 31k modelaanroepen tegenaan gooit.
+            # Ceiling measurement: no cross-encoder, only "is the answer in
+            # there at all". It settles whether reordering is worth anything
+            # before you throw 31k model calls at it.
             t3 = t2
             reranked = stems
         else:
@@ -186,22 +191,22 @@ def run_layer(entries: list, layer: str, depth: int, ce, doc_cap: int,
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--vault", required=True)
-    ap.add_argument("--model", required=True, help="ollama-embedmodel voor de recall")
+    ap.add_argument("--model", required=True, help="ollama embedding model used for recall")
     ap.add_argument("--reranker", default="BAAI/bge-reranker-v2-m3")
     ap.add_argument("--depth", type=int, default=20)
     ap.add_argument("--doc-cap", type=int, default=4000,
-                    help="tekens document die de reranker ziet. Default gelijk aan "
-                         "wat de bi-encoder zag (emb.doc_text), zodat het verschil "
-                         "in de MODELLEN zit en niet in de invoer. De tokenizer kapt "
-                         "daarna alsnog op max_length; die asymmetrie is echt en "
-                         "hoort in de conclusie.")
+                    help="document characters the reranker sees. Default matches "
+                         "what the bi-encoder saw (emb.doc_text), so the difference "
+                         "lies in the MODELS and not in the input. The tokenizer "
+                         "still truncates at max_length afterwards; that asymmetry "
+                         "is real and belongs in the conclusion.")
     ap.add_argument("--batch-size", type=int, default=16)
     ap.add_argument("--max-length", type=int, default=512)
     ap.add_argument("--limit", type=int, default=0, help="max vragen per laag (0=alle)")
     ap.add_argument("--sets", default="wiki,memory")
     ap.add_argument("--ceiling-only", action="store_true",
-                    help="alleen recall@depth meten (geen cross-encoder): wat "
-                         "valt er hoogstens te winnen met herordenen?")
+                    help="measure recall@depth only (no cross-encoder): what "
+                         "is the most reordering could win?")
     ap.add_argument("--out", default="")
     args = ap.parse_args()
 

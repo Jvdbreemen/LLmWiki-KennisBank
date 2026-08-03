@@ -1,34 +1,33 @@
 #!/usr/bin/env python3
-"""recall-ablation.py - hoeveel van de recall komt van welke helft?
+"""recall-ablation.py - how much of the recall comes from which half?
 
-De recall-route is hybride: `_kbindex.search` voegt een dense cosine-ranglijst
-en een FTS-ranglijst samen met RRF. Zolang je alleen hele modellen tegen elkaar
-zet, blijft onzichtbaar hoeveel elk deel bijdraagt -- en dat bepaalt hoeveel een
-betere (of slechtere) embedder ueberhaupt kan uitmaken. Als FTS de meeste
-vragen al alleen oplost, is de spreiding tussen embedmodellen klein om een
-reden die niets met die modellen te maken heeft.
+The recall route is hybrid: `_kbindex.search` fuses a dense cosine ranking and
+an FTS ranking with RRF. As long as you only compare whole models, how much
+each half contributes stays invisible -- and that determines how much a better
+(or worse) embedder can matter at all. If FTS already answers most questions on
+its own, the spread between embedding models is small for a reason that has
+nothing to do with those models.
 
-Drie condities over dezelfde index en dezelfde eval-set:
+Three conditions over the same index and the same eval set:
 
-  hybride     de productieroute: dense + FTS
-  alleen-fts  alleen de lexicale ranglijst gaat de RRF-fusie in
-  alleen-dens alleen de vectorranglijst gaat de RRF-fusie in
+  hybrid      the production route: dense + FTS
+  fts-only    only the lexical ranking enters the RRF fusion
+  dense-only  only the vector ranking enters the RRF fusion
 
-De arm wordt uitgeschakeld door `_kbindex._rrf` te vervangen door een variant
-die een van de twee ranglijsten negeert. Een eerdere poging voedde in plaats
-daarvan een willekeurige eenheidsvector als query, in de veronderstelling dat
-het dense deel dan ruis zou zijn. Dat werkte niet: de dense arm haalt
-`min(max(k*4, 20, total), 4096)` documenten op -- bij dit corpus dus ALLE
-documenten -- zodat een ruisvector een complete willekeurige ranglijst
-oplevert die RRF gewoon meeweegt. De spreiding over vijf trekkingen was 0,10
-tot 0,30 op recall, en dat is precies het bewijs dat die opzet niets ableerde.
+An arm is switched off by replacing `_kbindex._rrf` with a variant that ignores
+one of the two rankings. An earlier attempt instead fed a random unit vector as
+the query, assuming the dense half would then be noise. That did not work: the
+dense arm retrieves `min(max(k*4, 20, total), 4096)` documents -- on this corpus
+that is ALL of them -- so a noise vector produces a complete random ranking that
+RRF happily weighs in. The spread over five draws was 0.10 to 0.30 recall, which
+is precisely the evidence that the setup ablated nothing.
 
-Alles na de fusie (statusfilter, _rank.rerank met recency en importance,
-buur-expansie) blijft in alle drie de condities identiek, zodat het verschil
-toe te schrijven is aan de arm en niet aan de nabewerking.
+Everything after the fusion (status filter, _rank.rerank with recency and
+importance, neighbour expansion) stays identical across all three conditions, so
+the difference is attributable to the arm and not to the post-processing.
 
-Stdlib only (behalve de index zelf). Alle condities vereisen een bereikbare
-embedbackend, ook alleen-fts: de route berekent de queryvector sowieso.
+Stdlib only (apart from the index itself). All conditions need a reachable embed
+backend, fts-only included: the route computes the query vector regardless.
 """
 from __future__ import annotations
 
@@ -63,23 +62,24 @@ def _rank_of(stems, expect) -> int:
 
 def _metrics(ranks: list) -> dict:
     n = len(ranks)
+    if not n:
+        return {**{f"@{k}": None for k in KS}, "mrr": None, "n": 0}
     return {**{f"@{k}": round(sum(1 for r in ranks if 0 < r <= k) / n, 3) for k in KS},
             "mrr": round(sum(1.0 / r for r in ranks if r) / n, 3), "n": n}
 
 
 class ArmSwitch:
-    """Context manager die een van de twee ranglijsten uit de RRF-fusie haalt.
+    """Context manager that removes one of the two rankings from the RRF fusion.
 
-    `_kbindex.search` bouwt `rankings = [vec_ranking]` en hangt daar de
-    FTS-ranglijst achter als de query een bruikbare FTS-expressie oplevert.
-    Door `_rrf` te vervangen kunnen we precies een arm doorlaten zonder de
-    zoekfunctie zelf te dupliceren -- die dupliceren zou betekenen dat de
-    ablatie na de eerstvolgende wijziging stilletjes iets anders meet dan
-    productie.
+    `_kbindex.search` builds `rankings = [vec_ranking]` and appends the FTS
+    ranking when the query yields a usable FTS expression. Replacing `_rrf`
+    lets exactly one arm through without duplicating the search function --
+    duplicating it would mean the ablation silently measures something other
+    than production after the next change to it.
 
-    keep="fts" op een query zonder FTS-expressie levert een lege fusie en dus
-    geen treffers; dat is de juiste uitkomst (er is dan geen lexicaal signaal),
-    geen fout."""
+    keep="fts" on a query without an FTS expression yields an empty fusion and
+    therefore no hits; that is the correct outcome (there is no lexical signal
+    in that case), not an error."""
 
     def __init__(self, kbindex, keep: str):
         self.kbindex = kbindex
@@ -107,11 +107,11 @@ class ArmSwitch:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--vault", required=True)
-    ap.add_argument("--model", required=True, help="embedmodel waarmee de index gebouwd is")
+    ap.add_argument("--model", required=True, help="embedding model the index was built with")
     ap.add_argument("--layer", choices=("wiki", "memory"), default="wiki")
     ap.add_argument("--set", dest="set_path", default="")
     ap.add_argument("--limit", type=int, default=0)
-    ap.add_argument("--conditions", default="hybride,alleen-fts,alleen-dens")
+    ap.add_argument("--conditions", default="hybrid,fts-only,dense-only")
     args = ap.parse_args()
 
     os.environ["KENNISBANK_VAULT"] = args.vault
@@ -130,7 +130,7 @@ def main() -> int:
     if args.limit:
         entries = entries[:args.limit]
     conds = [c.strip() for c in args.conditions.split(",") if c.strip()]
-    print(f"ablatie [{args.layer}] {len(entries)} vragen uit {path.name}, "
+    print(f"ablation [{args.layer}] {len(entries)} questions from {path.name}, "
           f"index={args.model}", flush=True)
 
     kmax = max(KS)
@@ -138,16 +138,16 @@ def main() -> int:
            "set": path.name, "conditions": {}}
 
     if emb.embed("ping") is None:
-        print("embedding-backend onbereikbaar", file=sys.stderr)
+        print("embedding backend unreachable", file=sys.stderr)
         return 1
 
-    # Queryvectoren eenmalig: de drie condities stellen dezelfde vragen, en
-    # opnieuw embedden zou alleen meetruis en wachttijd toevoegen.
+    # Query vectors once: the three conditions ask the same questions, and
+    # re-embedding would only add measurement noise and waiting time.
     vecs = {}
     for e in entries:
         if e["q"] not in vecs:
             vecs[e["q"]] = emb.embed(e["q"], kind="query")
-    print(f"  {len(vecs)} queryvectoren berekend", flush=True)
+    print(f"  {len(vecs)} query vectors computed", flush=True)
 
     def run(keep):
         ranks = []
@@ -158,16 +158,16 @@ def main() -> int:
                 ranks.append(_rank_of([Path(r["path"]).stem for r in rows], e["expect"]))
         return ranks
 
-    for cond, keep in (("hybride", "beide"), ("alleen-fts", "fts"),
-                       ("alleen-dens", "dense")):
+    for cond, keep in (("hybrid", "both"), ("fts-only", "fts"),
+                       ("dense-only", "dense")):
         if cond not in conds:
             continue
         out["conditions"][cond] = _metrics(run(keep))
         print(f"  {cond:12} {out['conditions'][cond]}", flush=True)
 
-    dest = vault / f"ablatie-{args.layer}-{args.model.replace(':','-').replace('/','_')}.json"
+    dest = vault / f"ablation-{args.layer}-{args.model.replace(':','-').replace('/','_')}.json"
     dest.write_text(json.dumps(out, indent=2, ensure_ascii=False), encoding="utf-8")
-    print(f"\nruw: {dest}")
+    print(f"\nraw: {dest}")
     return 0
 
 
