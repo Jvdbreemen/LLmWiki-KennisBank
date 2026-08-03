@@ -73,7 +73,35 @@ Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: 
 
 The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
 
-## Feature highlights (v0.27.0)
+## Feature highlights (v0.28.0)
+
+### New in v0.28.0
+
+> **Upgrading:** run `ollama pull qwen3-embedding:4b` first. `setup.sh`
+> validates with `ollama show` and does not pull, so a vault without the model
+> fails the install loudly. The first index build afterwards re-embeds the whole
+> vault, because the model identity gates cache reuse.
+
+- **A measured default instead of an inherited one.** Nine embedding models
+  were run against this project's own eval sets, because published benchmarks
+  rank models on public corpora and the margins here are two to four points.
+  `qwen3-embedding:4b` wins on both layers while being faster (322 ms against
+  347 ms warm p50) and holding 2.2 GB less on the card.
+- **The memory layer was discarding a third of its own index.** Its similarity
+  floor of 0.60 was calibrated on article-length text; memory fragments score
+  structurally lower. Re-measured on the previous model too, so this was a
+  standing fault rather than migration fallout. The floor is now 0.45.
+- **Lexical search no longer drags the memory layer down.** RRF weighs its two
+  rankings equally, which only pays off when they are comparably strong. On
+  wiki they are, and the fusion beats both arms. On memory it beat neither, so
+  the lexical half is gone there: recall@5 goes from 0.658 to 0.794.
+- **Instruction prefixes per side**, so e5, embeddinggemma, arctic-embed and
+  nomic can be run the way they were trained. Off by default; the document
+  prefix is part of the cache identity.
+- **Three measurement harnesses** — `embed-sweep.py` (models against a scratch
+  vault), `recall-ablation.py` (dense versus lexical), `rerank-eval.py`
+  (what a cross-encoder would add). Method and full results in
+  `docs/research/embedding-model-sweep-2026-08.md`.
 
 ### New in v0.27.0
 

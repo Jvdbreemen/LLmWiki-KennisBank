@@ -76,7 +76,37 @@ Geheugensystemen van leveranciers (Mem0, Zep, Letta, Cognee) zijn krachtig maar 
 
 De ontwerpvoorkeur is overal dezelfde: **deterministisch waar mogelijk, LLM alleen waar het oordeelsvermogen toevoegt, fail-open overal**. Een dood model blokkeert nooit een sessie, verliest nooit een transcript, en verwijdert nooit geverifieerde kennis.
 
-## Functie-highlights (v0.27.0)
+## Functie-highlights (v0.28.0)
+
+### Nieuw in v0.28.0
+
+> **Upgraden:** draai eerst `ollama pull qwen3-embedding:4b`. `setup.sh`
+> valideert met `ollama show` en pullt niet, dus een vault zonder het model
+> laat de installatie luid vallen. De eerste index-build daarna embedt de hele
+> vault opnieuw, omdat de modelidentiteit bepaalt of de cache herbruikbaar is.
+
+- **Een gemeten default in plaats van een geërfde.** Negen embedding-modellen
+  zijn tegen de eigen eval-sets van dit project gedraaid, omdat publieke
+  benchmarks op publieke corpora ranken en de marges hier twee tot vier punten
+  zijn. `qwen3-embedding:4b` wint op beide lagen én is sneller (322 ms tegen
+  347 ms warme p50) bij 2,2 GB minder beslag op de kaart.
+- **De memory-laag gooide een derde van zijn eigen index weg.** Zijn
+  gelijkenisdrempel van 0,60 was geijkt op tekst van artikellengte;
+  memory-fragmenten scoren structureel lager. Ook op het vorige model
+  nagemeten, dus dit was een staande fout en geen migratiegevolg. De drempel
+  staat nu op 0,45.
+- **Lexicaal zoeken trekt de memory-laag niet langer omlaag.** RRF weegt zijn
+  twee ranglijsten gelijk, en dat loont alleen als ze vergelijkbaar sterk zijn.
+  Op wiki zijn ze dat en verslaat de fusie beide armen. Op memory verslaat hij
+  er geen, dus de lexicale helft is daar weg: recall@5 gaat van 0,658 naar
+  0,794.
+- **Instructieprefixen per zijde**, zodat e5, embeddinggemma, arctic-embed en
+  nomic draaien zoals ze getraind zijn. Standaard uit; de documentprefix hoort
+  bij de cache-identiteit.
+- **Drie meetharnassen** — `embed-sweep.py` (modellen tegen een scratch-vault),
+  `recall-ablation.py` (dens versus lexicaal), `rerank-eval.py` (wat een
+  cross-encoder toevoegt). Methode en volledige resultaten in
+  `docs/research/embedding-model-sweep-2026-08.md`.
 
 ### Nieuw in v0.27.0
 
