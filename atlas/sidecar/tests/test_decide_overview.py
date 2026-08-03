@@ -29,6 +29,21 @@ def test_approve_promotes_unverified_to_current(vault_factory):
     assert _status_of(vault, "u1") == "current"
 
 
+def test_approve_is_reflected_on_the_next_overview_fetch(vault_factory):
+    """TASK-91 AC#8: /overview is TTL-cached (sources._OVERVIEW_CACHE); a
+    decide must invalidate it or the dashboard would serve stale counts for
+    up to the TTL after an approve/reject."""
+    vault = vault_factory(memories=[{"stem": "u1b", "status": "unverified"}])
+    client = _client(vault)
+    before = client.get("/overview").json()
+    assert before["memory"]["unverified"] == 1
+    assert before["memory"].get("active", 0) == 0
+    client.post("/memory/decide", json={"stem": "u1b", "decision": "approve"})
+    after = client.get("/overview").json()
+    assert after["memory"]["unverified"] == 0
+    assert after["memory"]["active"] == 1
+
+
 def test_reject_retracts_unverified(vault_factory):
     vault = vault_factory(memories=[{"stem": "u2", "status": "unverified"}])
     r = _client(vault).post("/memory/decide", json={"stem": "u2", "decision": "reject"})

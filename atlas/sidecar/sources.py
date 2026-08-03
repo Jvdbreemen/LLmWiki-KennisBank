@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import time
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -923,7 +924,46 @@ def _activity_heatmap(vault: Path, *, days: int = 365,
     return [{"day": d, "n": n} for d, n in pairs if d >= cutoff]
 
 
+_OVERVIEW_CACHE: dict[str, tuple[float, dict]] = {}
+_OVERVIEW_TTL_S = 30.0
+
+
+def _invalidate_overview_cache(vault: Path) -> None:
+    """Drop the cached /overview payload for this vault (TASK-91 AC#8).
+
+    Called after the one write path (decide_memory) so an approve/reject
+    is reflected on the very next dashboard fetch, not up to TTL later."""
+    _OVERVIEW_CACHE.pop(str(vault), None)
+
+
 def build_overview(vault: Path, *, today: date | None = None) -> dict:
+    """Cached wrapper around ``_build_overview_uncached`` (TASK-91 AC#8).
+
+    Measured on the real vault (2026-08-03): build_provenance ~12.2s of a
+    ~13-14.6s total (it re-runs kb-lint's lint_vault() from scratch, whose
+    collect_session_stems() does one root.rglob() over the ENTIRE vault
+    tree, not just 01-raw); build_memory_health ~0.65s (one read+parse pass
+    over 09-memory's ~1400+ files); _activity_heatmap ~34ms (the single SQL
+    GROUP BY it was designed around, per its own docstring, is not the
+    problem). Whichever the split, the total is 27-30x over the <500ms
+    dashboard target and exactly the "relations computed at view time"
+    anti-pattern this endpoint's own F1 heatmap was written to avoid. A
+    short in-process TTL cache is a stopgap that fits a long-lived sidecar
+    process without touching kb-lint; the real fix is kb-lint scoping its
+    rglob to 01-raw or caching collect_session_stems(), tracked separately.
+    Repeat views inside the TTL drop to low-ms; the first, cold view still
+    pays the full cost below -- this does not move the first-render number."""
+    cache_key = str(vault)
+    now = time.monotonic()
+    cached = _OVERVIEW_CACHE.get(cache_key)
+    if cached is not None and (now - cached[0]) < _OVERVIEW_TTL_S:
+        return cached[1]
+    result = _build_overview_uncached(vault, today=today)
+    _OVERVIEW_CACHE[cache_key] = (now, result)
+    return result
+
+
+def _build_overview_uncached(vault: Path, *, today: date | None = None) -> dict:
     """Aggregate vault-wide health metrics: wiki-article statuses, memory
     lifecycle counts, raw-log volumes, inbox backlog (input waiting),
     provenance as a single coverage line, graph staleness, plus the activity
@@ -1036,6 +1076,7 @@ def decide_memory(vault: Path, stem: str, decision: str) -> dict:
                 res = mem.decide(stem, decision, via="atlas")
             except mem.ReviewError as exc:
                 raise DocError(exc.code, str(exc))
+            _invalidate_overview_cache(vault)
             return {"status": "ok", "stem": stem, "new_status": res["new_status"]}
     if not stem or "/" in stem or "\\" in stem or ".." in stem:
         raise DocError(400, "ongeldige stem")
@@ -1055,4 +1096,5 @@ def decide_memory(vault: Path, stem: str, decision: str) -> dict:
     if n != 1:
         raise DocError(409, "geen status-regel in frontmatter")
     target.write_text(new_text, encoding="utf-8")
+    _invalidate_overview_cache(vault)
     return {"status": "ok", "stem": stem, "new_status": new_status}
