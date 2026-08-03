@@ -12,6 +12,7 @@ ving omdat elke plek op zichzelf klopte:
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import sys
@@ -137,3 +138,35 @@ class CouplingKnobsMatchTheirDocsTest(unittest.TestCase):
         import _rank
         self.assertLessEqual(_rank.COUPLING_BOOST_MULTI, _rank.USAGE_BOOST_RECENT)
         self.assertGreaterEqual(_rank.COUPLING_BOOST_ONE, 1.0)
+
+
+class RetrieveThresholdIsOneNumberEverywhereTest(unittest.TestCase):
+    """Every surface that names the wiki floor has to name the same number.
+
+    The v0.28.0 release shipped a review comment's worth of proof that this
+    needs a guard: the example config and CONFIGURATION.md moved to 0.50 while
+    kb-retrieve.py still fell back to 0.60, and the existing consistency test
+    did not notice because it compared kb-retrieve.py against kb-calibrate.py
+    -- both of which were still 0.60. Internally consistent, externally wrong.
+    kb-search.py and the C4 documentation carried the stale number too.
+    """
+
+    ROOT = Path(__file__).resolve().parent.parent
+
+    def _hook_default(self) -> str:
+        source = (self.ROOT / "scripts" / "kb-retrieve.py").read_text(encoding="utf-8")
+        m = re.search(r'"retrieve_threshold",\s*([0-9.]+)', source)
+        self.assertIsNotNone(m, "kb-retrieve.py has no retrieve_threshold default")
+        return m.group(1)
+
+    def test_the_shipped_example_config_matches_the_hook(self):
+        cfg = json.loads((self.ROOT / "kennisbank-embed.example.json").read_text(encoding="utf-8"))
+        self.assertEqual(float(cfg["retrieve_threshold"]), float(self._hook_default()),
+                         "example config and hook default disagree")
+
+    def test_the_search_cli_matches_the_hook(self):
+        source = (self.ROOT / "scripts" / "kb-search.py").read_text(encoding="utf-8")
+        found = set(re.findall(r'KB_RETRIEVE_THRESHOLD[^0-9]{0,40}([0-9]+\.[0-9]+)', source))
+        self.assertTrue(found, "kb-search.py names no threshold default")
+        self.assertEqual(found, {self._hook_default()},
+                         f"kb-search.py defaults {found} against hook {self._hook_default()}")
