@@ -77,7 +77,7 @@ Check local model availability when model validation is expected:
 ollama list
 ```
 
-The default embedding model is `qwen3-embedding:8b`. The local judge/extraction
+The default embedding model is `qwen3-embedding:4b`. The local judge/extraction
 model should match `<vault>/.claude/kennisbank-llm.json`; on Robert's machine it
 is normally pinned to `gemma4:12b`.
 

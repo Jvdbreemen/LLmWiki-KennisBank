@@ -70,7 +70,7 @@ class TestProductionParity(unittest.TestCase):
         import _embeddings as emb
         self.emb = emb
         self._orig_embed = emb.embed
-        emb.embed = lambda text, timeout=20.0: [0.1, 0.2]
+        emb.embed = lambda text, timeout=20.0, kind="": [0.1, 0.2]
         self.addCleanup(lambda: setattr(self.emb, "embed", self._orig_embed))
         self.real_retrieve = load_script("kb-retrieve.py")
 

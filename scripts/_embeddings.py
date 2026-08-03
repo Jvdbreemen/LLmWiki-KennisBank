@@ -20,7 +20,7 @@ Settings:
 
 Providers:
   ollama  Local Ollama HTTP API (POST {endpoint}/api/embeddings). Default
-          endpoint http://localhost:11434, default model qwen3-embedding:8b.
+          endpoint http://localhost:11434, default model qwen3-embedding:4b.
           Honors the legacy OLLAMA_EMBED_MODEL var for backward-compat.
   openai  Any OpenAI-compatible /embeddings endpoint (OpenAI proper, a
           self-hosted gateway, or a third party that implements the same shape).
@@ -55,7 +55,7 @@ from _frontmatter import split_frontmatter  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402
 
 _DEFAULTS = {
-    "ollama": {"endpoint": "http://localhost:11434", "model": "qwen3-embedding:8b"},
+    "ollama": {"endpoint": "http://localhost:11434", "model": "qwen3-embedding:4b"},
     "openai": {"endpoint": "https://api.openai.com/v1", "model": "text-embedding-3-small"},
     "voyage": {"endpoint": "https://api.voyageai.com/v1", "model": "voyage-3"},
 }
@@ -102,9 +102,18 @@ def provider() -> str:
 
 
 def embed_id() -> str:
-    """Stable identity of the active backend for cache-keying: "provider:model"."""
+    """Stable identity of the active backend for cache-keying.
+
+    Format: "provider:model", plus "+<doc_prefix>" when a document prefix is
+    configured.
+
+    The document prefix belongs in the identity: the same text under a
+    different prefix yields a different vector, so reusing a cached vector
+    across a prefix change is exactly as wrong as reusing it across a model
+    change."""
     prov, model, _, _ = _resolve()
-    return f"{prov}:{model}"
+    dp = _prefix("doc")
+    return f"{prov}:{model}" + (f"+{dp}" if dp else "")
 
 
 def cosine(a, b) -> float:
@@ -192,11 +201,49 @@ def endpoint_allowed(prov: str, endpoint: str) -> bool:
     return True
 
 
-def embed(text: str, timeout: float = 30.0):
-    """Return an embedding vector for text, or None on any failure (fail-soft)."""
+def _prefix(kind: str) -> str:
+    """Model-specific instruction prefix for the query or the document side.
+
+    Not cosmetic: e5-instruct is TRAINED with "Instruct: ...\\nQuery: " on the
+    query side and passage-style markers on the document side. Embed without
+    them and you measure a different model than the one you meant to measure.
+    Qwen3 loses 1-5% without a query prefix; bge-m3 and gte want none at all.
+    The default is empty, so behaviour is unchanged when nothing is configured.
+
+    Config: query_prefix / doc_prefix in kennisbank-embed.json, or the env vars
+    KB_EMBED_QUERY_PREFIX / KB_EMBED_DOC_PREFIX.
+
+    Deliberately NOT routed through _setting(): that strips the value, and the
+    trailing space of "query: " is part of the prefix. Stripping it yields
+    "query:question", a different tokenisation than the model was trained on.
+    """
+    name, env = {"query": ("query_prefix", "KB_EMBED_QUERY_PREFIX"),
+                 "doc": ("doc_prefix", "KB_EMBED_DOC_PREFIX")}.get(kind, ("", ""))
+    if not name:
+        return ""
+    v = os.environ.get(env)
+    if v is not None:
+        # An explicitly empty value disables the prefix. Treating "" as unset
+        # would make KB_EMBED_QUERY_PREFIX= fall through to the config, so a
+        # configured prefix could not be switched off for one run -- and the
+        # embed_id() suffix would silently keep tracking the config value.
+        return v
+    v = _config().get(name)
+    return v if isinstance(v, str) else ""
+
+
+def embed(text: str, timeout: float = 30.0, kind: str = ""):
+    """Return an embedding vector for text, or None on any failure (fail-soft).
+
+    ``kind`` is "query", "doc" or empty. It selects which instruction prefix is
+    placed before the text (see _prefix); empty means no prefix, which is the
+    historical behaviour."""
     text = (text or "").strip()
     if not text:
         return None
+    pre = _prefix(kind) if kind else ""
+    if pre:
+        text = pre.replace("\\n", "\n") + text
     prov, model, endpoint, api_key_env = _resolve()
     if not endpoint_allowed(prov, endpoint):
         return None
@@ -237,7 +284,7 @@ def embed(text: str, timeout: float = 30.0):
 # --- model warm-up (kills cold-load latency on the hot path) -----------------
 #
 # The interactive retrieval hook must never block on a cold model load. A big
-# local model (e.g. qwen3-embedding:8b, ~8GB) can take tens of seconds to load
+# local model (e.g. qwen3-embedding:4b, ~6GB resident) can take seconds to load
 # into VRAM after eviction/idle; the incremental index build at SessionStart
 # does NOT load it when nothing changed, so the first prompt otherwise pays the
 # full cold-load. These helpers let a caller fire a detached load so the NEXT
@@ -349,7 +396,7 @@ def get_cached(path, cache: dict, recompute: bool = True):
     text = doc_text(path)
     if not text:
         return None
-    vec = embed(text)
+    vec = embed(text, kind="doc")
     if vec:
         cache[key] = {"hash": h, "id": eid, "dim": len(vec), "embedding": vec}
     return vec

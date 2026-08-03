@@ -172,7 +172,7 @@ Operational rules:
 - Always set or preserve `KENNISBANK_VAULT={vault_s}` for KennisBank scripts, hooks, MCP servers, skills, and commands.
 - Do not use `C:\\Users\\rvdbr\\KennisBank` or `~/KennisBank` as the active vault on this machine unless the user explicitly changes the vault.
 - Prefer the local KennisBank MCP server before external search when the task may depend on prior local knowledge.
-- The local LLM backend is Ollama with `gemma4:12b`; embeddings use `qwen3-embedding:8b` unless the vault config says otherwise.
+- The local LLM backend is Ollama with `gemma4:12b`; embeddings use `qwen3-embedding:4b` unless the vault config says otherwise.
 - KennisBank hooks must fail open: missing Ollama, missing embeddings, or a script error may skip context injection, but must not block the agent.
 
 Client: {client}
@@ -960,7 +960,7 @@ def _resolve_embed_config(vault: Path) -> dict:
     cfg = _json_file(vault / ".claude" / "kennisbank-embed.json")
     return {
         "provider": os.environ.get("KB_EMBED_PROVIDER") or cfg.get("provider") or "ollama",
-        "model": os.environ.get("KB_EMBED_MODEL") or cfg.get("model") or "qwen3-embedding:8b",
+        "model": os.environ.get("KB_EMBED_MODEL") or cfg.get("model") or "qwen3-embedding:4b",
         "endpoint": os.environ.get("KB_EMBED_ENDPOINT") or cfg.get("endpoint") or "http://localhost:11434",
     }
 

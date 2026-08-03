@@ -266,7 +266,38 @@ def recall_hits(query_vector, query_text: str = "", k: int = 3,
 # Memories zijn kort en atomair; hun cosinus tegen een prompt ligt structureel
 # lager dan die van een wiki-artikel. Daarom een EIGEN drempel, geen overerving
 # van retrieve_threshold -- dat zou het memory-blok stilzwijgend dichtzetten.
-MEMORY_MIN_COS = 0.60
+#
+# KB_MEMORY_THRESHOLD overrides the default. Needed to compare embedding models
+# fairly: every model has its own cosine scale, so a fixed floor measures "how
+# qwen3-like does this model score" instead of how well it ranks. Set it to 0.0
+# for a rank-only measurement (see scripts/embed-sweep.py).
+#
+# 0.45 is measured, not inherited. Across 1224 memory questions the cosine of a
+# true hit sits at min 0.340, p10 0.484, p50 0.615 on qwen3-embedding:4b, and at
+# min 0.330, p10 0.528, p50 0.638 on qwen3-embedding:8b -- structurally below
+# wiki articles (p50 0.761), exactly as the paragraph above predicts. What each
+# floor discards of what the index could return:
+#
+#            4b (806 retrievable)   8b (798 retrievable)
+#     0.40      6 lost                 2 lost
+#     0.45     42 lost                13 lost
+#     0.50    111 lost                45 lost
+#     0.60    366 lost (45%)         260 lost (33%)
+#
+# So 0.60 did NOT become wrong through a model switch: it was already too high
+# on the model it was once chosen for, discarding a third of the retrievable
+# memories there. The switch merely made it visible. 0.45 keeps the noise band
+# of 0.51 (measured on the 8b) out. Recalibrate after a model switch: a single
+# pass that records the cosine of the expected hit per question yields the whole
+# curve.
+def _memory_min_cos_default() -> float:
+    try:
+        return float(os.environ.get("KB_MEMORY_THRESHOLD", "").strip() or 0.45)
+    except ValueError:
+        return 0.45
+
+
+MEMORY_MIN_COS = _memory_min_cos_default()
 
 
 def memory_hits(query_vector, query_text: str = "", k: int = 3,
