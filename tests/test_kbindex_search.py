@@ -217,6 +217,59 @@ class Vec0PoolCeilingTest(unittest.TestCase):
         self.assertEqual(len(res), 3)
         self.assertEqual(res[0]["path"], "doc_00000.md")
 
+class MemoryLayerSkipsLexicalArmTest(unittest.TestCase):
+    """RRF weighs both rankings equally, which only pays off when they are
+    comparably strong.
+
+    Measured over one index and the project's own eval sets (recall@5 / MRR):
+    on wiki, dense 0.997/0.967 and fts 0.991/0.946 fuse to 1.000/0.984 -- the
+    fusion beats both arms. On memory, dense 0.794/0.539 and fts 0.461/0.266
+    fuse to 0.658/0.479 -- the fusion beats neither, because the weak lexical
+    ranking pushes good dense hits out of the top k. Hence: no lexical arm on
+    the memory layer, restorable with KB_MEMORY_FTS=1 for re-measurement.
+    """
+
+    def setUp(self):
+        self.conn = _kbindex.connect(":memory:")
+        _kbindex.ensure_schema(self.conn, dim=DIM, embed_id="ollama:test")
+        # Lexically an exact hit for "vogelbekdier", but far away in vector
+        # space. Only a lexical arm can put this first.
+        _kbindex.upsert(self.conn, path="lexical.md", layer="memory", status="current",
+                        body="vogelbekdier", vector=[0.90, 0.90, 0.90, 0.90],
+                        file_hash="h1", created="2026-06-01")
+        _kbindex.upsert(self.conn, path="dense.md", layer="memory", status="current",
+                        body="niets gemeenschappelijks", vector=[0.10, 0.20, 0.30, 0.40],
+                        file_hash="h2", created="2026-06-02")
+        self._saved = os.environ.get("KB_MEMORY_FTS")
+        os.environ.pop("KB_MEMORY_FTS", None)
+
+    def tearDown(self):
+        if self._saved is None:
+            os.environ.pop("KB_MEMORY_FTS", None)
+        else:
+            os.environ["KB_MEMORY_FTS"] = self._saved
+        self.conn.close()
+
+    def _paths(self, **kw):
+        return [r["path"] for r in _kbindex.search(
+            self.conn, query_vector=[0.10, 0.20, 0.30, 0.40], k=5, **kw)]
+
+    def test_memory_only_query_ignores_the_lexical_ranking(self):
+        paths = self._paths(query_text="vogelbekdier", layers=("memory",))
+        self.assertEqual(paths[0], "dense.md",
+                         "a term match outranked the vector hit on the memory layer")
+
+    def test_the_lexical_arm_still_runs_for_other_layers(self):
+        paths = self._paths(query_text="vogelbekdier", layers=("wiki", "memory"))
+        self.assertIn("lexical.md", paths,
+                      "a mixed-layer query lost its lexical half")
+
+    def test_env_override_restores_the_lexical_arm(self):
+        os.environ["KB_MEMORY_FTS"] = "1"
+        rows = _kbindex.search(self.conn, query_vector=[0.10, 0.20, 0.30, 0.40],
+                               k=5, query_text="vogelbekdier", layers=("memory",))
+        self.assertTrue(any(r.get("fts") for r in rows),
+                        "KB_MEMORY_FTS=1 did not bring the lexical arm back")
 
 if __name__ == "__main__":
     unittest.main()

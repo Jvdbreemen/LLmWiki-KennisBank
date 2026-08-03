@@ -290,7 +290,20 @@ def search(conn: sqlite3.Connection, *, query_vector, query_text: str = "",
     cos_by_id = {r[0]: _cosine_from_l2(r[1]) for r in vec_rows}
     rankings = [vec_ranking]
     fts_ids: set = set()
-    expr = fts_expr(query_text)
+    # No lexical arm on the memory layer. RRF weighs both rankings equally,
+    # which pays off only when they are comparably strong: a weak ranking pushes
+    # good hits out of the top k. On wiki the two arms are close and the fusion
+    # beats both, so it stays. On memory they differ by nearly a factor two in
+    # MRR and the fusion beats neither -- memories are short and atomic, so a
+    # term match says far less about relevance there than in a long article.
+    # Measured both rank-only and at the production floor, so it is the fusion
+    # and not the threshold. Numbers and method: TASK-128 and
+    # docs/research/embedding-model-sweep-2026-08.md.
+    #
+    # KB_MEMORY_FTS=1 restores the old behaviour for re-measurement.
+    memory_only = tuple(layers or ()) == ("memory",)
+    fts_allowed = (not memory_only) or os.environ.get("KB_MEMORY_FTS", "") == "1"
+    expr = fts_expr(query_text) if fts_allowed else ""
     if expr:
         try:
             fts_ranking = [r[0] for r in conn.execute(
