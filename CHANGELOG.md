@@ -7,6 +7,97 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-08-03
+
+Nine embedding models were measured on one real vault against its owner's own
+eval sets. The default changes, and two similarity floors turn out to have been
+wrong for longer than the model switch — one of them was discarding a third of
+the memory layer's own index.
+
+### Upgrading
+
+**Pull the new model first.** `setup.sh` validates with `ollama show` and does
+not pull, so a vault without it fails the install loudly rather than degrading
+quietly:
+
+```bash
+ollama pull qwen3-embedding:4b
+```
+
+The first index build after the upgrade re-embeds the whole vault, because
+`embed_id()` changes with the model and cross-model vectors are never reused.
+Roughly eleven minutes for 1500 documents. A vault that pins `model` in
+`kennisbank-embed.json` keeps its own choice — config beats the default.
+
+### Changed
+
+- **Default embedding model is now `qwen3-embedding:4b`** (was
+  `qwen3-embedding:8b`). It is not a compromise for size: measured vector-only
+  on the project's eval sets it scores wiki MRR 0.967 against 0.961 and memory
+  MRR 0.540 against 0.530, at 322 ms warm p50 against 347 ms, holding 6.2 GB
+  resident instead of 8.4 GB on a 16 GB card.
+- **`retrieve_threshold` is 0.50** (was 0.60), in the shipped example config and
+  in the runtime fallback in `kb-retrieve.py`. Measured over 329 wiki eval
+  questions on the new default: true-match cosine p50 0.761, and the old floor
+  discarded 13 of 329 genuine hits. **An existing vault keeps whatever its own
+  `kennisbank-embed.json` says** — config beats the default — so a vault
+  installed before this release still runs 0.60 until that value is edited.
+- **`MEMORY_MIN_COS` is 0.45** (was 0.60), overridable with
+  `KB_MEMORY_THRESHOLD`. Memories are short and atomic, so their cosine sits
+  structurally below an article's: p50 0.615 against 0.761. The old floor
+  discarded 366 of 806 retrievable memory hits.
+- **The memory layer no longer runs a lexical arm.** RRF weighs both rankings
+  equally, which pays off only when they are comparably strong. On wiki they are
+  (fusion beats both arms, so it stays); on memory they differ by nearly a
+  factor two in MRR and the fusion beat neither. Measured on the production
+  route, memory recall@5 goes from 0.658 to 0.794. `KB_MEMORY_FTS=1` restores
+  the old behaviour.
+- `/sessiestart` no longer claims its context layers complement third-party
+  tooling the installation neither ships nor checks for.
+
+### Fixed
+
+- **The memory floor was over-filtering before the model switch, not because of
+  it.** Re-measured against a `qwen3-embedding:8b` index, the 0.60 floor
+  discarded 260 of 798 retrievable hits there too — a third of the layer. The
+  two models' distributions are close (memory p50 0.638 against 0.615), so the
+  switch made an existing fault visible rather than causing it. Anyone who ran
+  the previous defaults was affected.
+
+### Added
+
+- **Instruction prefixes per side.** e5, embeddinggemma, arctic-embed and nomic
+  expect a task prefix, and a different one on the query side than on the
+  document side. Configure `query_prefix` / `doc_prefix` in
+  `kennisbank-embed.json`, or `KB_EMBED_QUERY_PREFIX` / `KB_EMBED_DOC_PREFIX`.
+  Default empty, so nothing changes unless you set it. `embed_id()` folds in the
+  document prefix, because the same text under a different prefix is a different
+  vector and reusing across that is as wrong as reusing across a model change.
+- **`scripts/embed-sweep.py`** — compares embedding models on quality and
+  hot-path latency against a scratch vault, never the live one. Evicts every
+  model before a probe and reports the load call separately from the warm
+  percentiles.
+- **`scripts/recall-ablation.py`** — splits recall into hybrid, dense-only and
+  fts-only over one index, so the contribution of each half is measurable.
+- **`scripts/rerank-eval.py`** — measures what a cross-encoder reranker would
+  add, including the ceiling that reordering cannot exceed.
+- `docs/research/embedding-model-sweep-2026-08.md` — method, all nine models,
+  the traps (a 512-token context collapses whole-article embedding; an
+  English-only model scores 0.984 on a Dutch wiki through lexical rescue alone),
+  and what was deliberately not decided.
+
+### Notes
+
+- The 47-second p95 recorded for the old default was VRAM contention, not the
+  model. The retrieval hook keeps its model resident for 30 minutes, so a second
+  model loaded beside it evicted the first mid-measurement. Under
+  evict-load-warmup-measure, nothing in the sweep exceeded 1017 ms p95.
+- Precision was not measured. Lowering a floor admits weaker matches and there
+  is no labelled set to quantify that; `retrieve_top_n` caps the effect at three
+  documents.
+- The semantic-tiling thresholds (0.85 / 0.62) are still calibrated for the old
+  model. They run off the hot path and were left alone.
+
 ## [0.27.0] - 2026-08-01
 
 A security audit of the script layer produced two Critical and six High
@@ -1328,7 +1419,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.27.0...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.28.0...HEAD
+[0.28.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.27.0...v0.28.0
 [0.27.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.26.1...v0.27.0
 [0.26.1]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.26.0...v0.26.1
 [0.26.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.25.0...v0.26.0
