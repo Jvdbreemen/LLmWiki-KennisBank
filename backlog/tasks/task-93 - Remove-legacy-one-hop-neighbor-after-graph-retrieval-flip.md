@@ -4,7 +4,7 @@ title: Remove legacy one_hop_neighbor one release after the graph_retrieval flip
 status: Done
 assignee: []
 created_date: '2026-07-29 00:45'
-updated_date: '2026-08-03 21:26'
+updated_date: '2026-08-03 22:27'
 labels:
   - retrieval
   - cleanup
@@ -32,6 +32,15 @@ tests, update CONFIGURATION/settings docs.
 - [x] #2 one_hop_neighbor + legacy branch + tests removed; _neighbor_entry graph-only
 - [x] #3 Docs updated (CONFIGURATION, settings surfaces); suite green
 <!-- AC:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-08-03 22:27
+---
+2026-08-03: Copilot's review on PR #101 caught a real gap this task's own grep missed -- atlas/sidecar/sources.py's recall_waterfall() had its own direct call to the deleted _rank.one_hop_neighbor, unrelated to kb-recall.py's _neighbor_entry() this task refactored. Silently broken (AttributeError swallowed by a broad except) rather than crashing, so nothing in the original PR surfaced it. Fixed on the same branch: ported to kb-recall.graph_neighbor via a new, unit-tested _recall_neighbor_entry() helper. Lesson for next time a shared function is deleted: grep the WHOLE repo for the symbol, not just the module doing the refactor -- atlas/ is a separate call site that a scripts/-scoped search does not surface.
+---
+<!-- COMMENTS:END -->
 
 ## Final Summary
 
