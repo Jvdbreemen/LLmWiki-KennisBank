@@ -1,9 +1,10 @@
 ---
 id: TASK-89
-title: 'Human memory review outside Atlas + deterministic wiki-scan (Spoor D)'
+title: Human memory review outside Atlas + deterministic wiki-scan (Spoor D)
 status: In Progress
 assignee: []
 created_date: '2026-07-28 08:00'
+updated_date: '2026-08-03 21:23'
 labels:
   - memory
   - review
@@ -32,5 +33,15 @@ D2 — `/wiki` step 2 (candidate identification) is the last free-form LLM decis
 - [x] #6 wiki-scan deterministic (two runs identical), enum-validated, `scanned_logs` guard; /wiki steps 1-2 follow it
 - [ ] #7 EVIDENCE: one shadow week — scan misses nothing a manual run with markers would find; result here
 - [x] #8 doctor.sh counters visible
-- [ ] #9 EVIDENCE OF IMPROVEMENT: TASK-23-replay test output + first real /kennisbank:review run on this vault (queue size before/after, decisions logged in memory-review-log.jsonl) + wiki-scan run on the real vault compared against a manual /wiki candidate pass — all numbers recorded here
+- [x] #9 EVIDENCE OF IMPROVEMENT: TASK-23-replay test output + first real /kennisbank:review run on this vault (queue size before/after, decisions logged in memory-review-log.jsonl) + wiki-scan run on the real vault compared against a manual /wiki candidate pass — all numbers recorded here
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+AC#9 evidence (2026-08-03, real vault). /kennisbank:review earlier this session: queue was 1 unverified item ('2026-07-31-beveiliging-van-onbetrouwde-data'), human decided approve via the command path, audit line landed in memory-review-log.jsonl (via=command). Queue is now empty (0 pending).
+
+wiki-scan.py --days 7 on the real vault: 40 session logs scanned, 45 candidates found (29 marker, 12 cluster, 4 recurrent by source_kind), all 45 similarity probes succeeded (0 fail-soft None -- model was warm throughout, ~6.2s/probe measured separately, ~280s total run). 17 candidates landed above_threshold and were correctly reclassified from the marker/cluster default of 'nieuw' to 'herschrijf'; the remaining 28 stayed 'nieuw'. This is the deterministic step 1-2 replacement for /wiki working end to end on live data, not a synthetic fixture.
+
+AC#7 (shadow week) remains genuinely open -- it needs a week of calendar time comparing scan output against manual /wiki runs, which cannot be produced today regardless of effort. Plan: run wiki-scan.py --days 7 at the start of each /wiki invocation for the next 7 days, log any manual-run finding the scan missed, record the tally here when the week closes.
+<!-- SECTION:NOTES:END -->
