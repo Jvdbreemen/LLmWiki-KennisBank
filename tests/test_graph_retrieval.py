@@ -3,8 +3,11 @@
 Fixture-graaf via _kbindex.graph_connect + replace_graph + set_graph_fingerprint;
 geen model, geen embedding-index. De harde eisen:
 
-- toggle uit  -> legacy one_hop_neighbor-pad, gedrag exact als voorheen;
 - toggle aan  -> buur uit kb-graph.db, gewogen, wiki-only, nooit een hit-stem;
+- toggle uit  -> geen buur (TASK-93: de legacy one_hop_neighbor-terugval is
+                 verwijderd nadat vier releases met de graaf-default AAN geen
+                 regressie meldden; uit is nu puur een schakelaar, geen
+                 source-select meer);
 - fail-open   -> stale vingerafdruk, ontbrekende db of ontbrekende bestanden
                  geven GEEN buur en NOOIT een exceptie.
 """
@@ -129,29 +132,22 @@ class GraphNeighborTest(unittest.TestCase):
 
     # --- toggle-branch (_neighbor_entry) ---
 
-    def test_toggle_off_uses_legacy_path(self):
+    def test_toggle_off_yields_no_entry(self):
+        """TASK-93: uit betekent geen buur, geen terugval meer op een
+        tweede implementatie."""
         self._default_graph()
-        with patch.object(self.kb._rank, "one_hop_neighbor",
-                          return_value="lichte-buur") as legacy:
-            import _settings
-            with patch.object(_settings, "get",
-                              side_effect=lambda k, d: False if k == "graph_retrieval" else d):
-                entry = self.kb._neighbor_entry(self._hits())
-        legacy.assert_called_once()
-        self.assertIsNotNone(entry)
-        self.assertEqual(entry["title"], "lichte-buur")
-        self.assertTrue(entry["neighbor"])
-        self.assertEqual(entry["score"], 0.0)
+        import _settings
+        with patch.object(_settings, "get",
+                          side_effect=lambda k, d: False if k == "graph_retrieval" else d):
+            entry = self.kb._neighbor_entry(self._hits())
+        self.assertIsNone(entry)
 
     def test_toggle_on_uses_graph_path(self):
         self._default_graph()
-        with patch.object(self.kb._rank, "one_hop_neighbor",
-                          side_effect=AssertionError("legacy-pad aangeroepen")) as legacy:
-            import _settings
-            with patch.object(_settings, "get",
-                              side_effect=lambda k, d: True if k == "graph_retrieval" else d):
-                entry = self.kb._neighbor_entry(self._hits())
-        legacy.assert_not_called()
+        import _settings
+        with patch.object(_settings, "get",
+                          side_effect=lambda k, d: True if k == "graph_retrieval" else d):
+            entry = self.kb._neighbor_entry(self._hits())
         self.assertIsNotNone(entry)
         self.assertEqual(entry["title"], "zware-buur")
         self.assertTrue(entry["neighbor"])

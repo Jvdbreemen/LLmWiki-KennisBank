@@ -187,37 +187,5 @@ class ProvenanceRingTest(unittest.TestCase):
         self.assertNotIn('Path.home() / "KennisBank"', bron)
 
 
-class RankIsolatieTest(unittest.TestCase):
-    """AC #4: provenance mag nooit boven een directe treffer uitkomen.
-
-    Dat is hier geen weging maar een structurele eigenschap, en die is het
-    waard om vast te leggen: one_hop_neighbor accepteert alleen targets die als
-    artikel in 02-wiki/ bestaan. Een sessie in 01-raw kan er per constructie
-    niet uitkomen. Zou iemand die filter ooit verruimen, dan valt deze test om.
-    """
-
-    def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="kb-rank-prov-"))
-        (self.tmp / "02-wiki").mkdir(parents=True)
-        (self.tmp / "01-raw" / "sessies").mkdir(parents=True)
-
-    def tearDown(self):
-        shutil.rmtree(self.tmp, ignore_errors=True)
-
-    def test_one_hop_neighbor_geeft_nooit_een_sessie_terug(self):
-        rank = load_script("_rank.py") if (Path(__file__).resolve().parent.parent
-                                           / "scripts" / "_rank.py").exists() else None
-        self.assertIsNotNone(rank, "_rank.py hoort te bestaan")
-        artikel = self.tmp / "02-wiki" / "artikel.md"
-        artikel.write_text("zie [[raw-sessie-a]] en [[ander-artikel]]", encoding="utf-8")
-        (self.tmp / "02-wiki" / "ander-artikel.md").write_text("x", encoding="utf-8")
-        (self.tmp / "01-raw" / "sessies" / "raw-sessie-a.md").write_text("x", encoding="utf-8")
-        buur = rank.one_hop_neighbor(
-            [{"path": str(artikel), "layer": "wiki"}], self.tmp)
-        self.assertNotEqual(buur, "raw-sessie-a")
-        self.assertEqual(buur, "ander-artikel",
-                         "alleen een bestaand wiki-artikel mag als buur terugkomen")
-
-
 if __name__ == "__main__":
     unittest.main()

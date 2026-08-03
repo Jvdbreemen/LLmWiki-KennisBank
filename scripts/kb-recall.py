@@ -165,27 +165,26 @@ def _coupling_sources_fn(conn, rows):
 def _neighbor_entry(out) -> "dict | None":
     """Bouw de (buur)-expansie-entry voor een hits-lijst; None = geen buur.
 
-    TASK-87: de toggle ``graph_retrieval`` kiest de BRON van de buur — de
-    gewogen graaf (kb-graph.db, submilliseconde) of de legacy regex-expansie
-    (_rank.one_hop_neighbor). ``expand`` blijft de master-switch in
-    recall_hits; toggle uit = gedrag exact als voorheen, rollback is één
-    setting. Fail-open: elke fout -> None.
+    TASK-93: de legacy regex-expansie (_rank.one_hop_neighbor) is verwijderd
+    nadat vier releases met graph_retrieval default AAN geen regressie
+    meldden. ``graph_retrieval`` gaat daarmee van source-select (graaf vs.
+    legacy) naar een zuivere aan/uit-schakelaar voor de graafbuur — uit
+    betekent geen buur, niet meer een terugval op de oude implementatie.
+    ``expand`` blijft de master-switch in recall_hits. Fail-open: elke
+    fout -> None.
     """
     try:
         use_graph = False
         try:
             import _settings
-            use_graph = bool(_settings.get("graph_retrieval", False))
+            use_graph = bool(_settings.get("graph_retrieval", True))
         except Exception:
             use_graph = False
-        root = _vault_root()
-        if use_graph:
-            nb = graph_neighbor(out)
-            stem = nb["stem"] if nb else None
-            p = Path(nb["path"]) if nb else None
-        else:
-            stem = _rank.one_hop_neighbor(out, root)
-            p = (root / "02-wiki" / f"{stem}.md") if stem else None
+        if not use_graph:
+            return None
+        nb = graph_neighbor(out)
+        stem = nb["stem"] if nb else None
+        p = Path(nb["path"]) if nb else None
         if not stem or p is None:
             return None
         snippet = emb.doc_text(p, cap=280).replace("\n", " ").strip()
