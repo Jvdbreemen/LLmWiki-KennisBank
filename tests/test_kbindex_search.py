@@ -217,11 +217,6 @@ class Vec0PoolCeilingTest(unittest.TestCase):
         self.assertEqual(len(res), 3)
         self.assertEqual(res[0]["path"], "doc_00000.md")
 
-
-if __name__ == "__main__":
-    unittest.main()
-
-
 class MemoryLayerSkipsLexicalArmTest(unittest.TestCase):
     """RRF weighs both rankings equally, which only pays off when they are
     comparably strong.
@@ -275,3 +270,6 @@ class MemoryLayerSkipsLexicalArmTest(unittest.TestCase):
                                k=5, query_text="vogelbekdier", layers=("memory",))
         self.assertTrue(any(r.get("fts") for r in rows),
                         "KB_MEMORY_FTS=1 did not bring the lexical arm back")
+
+if __name__ == "__main__":
+    unittest.main()

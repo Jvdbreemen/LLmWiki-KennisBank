@@ -45,7 +45,7 @@ Method and raw numbers: `scripts/embed-sweep.py --vector-only`, results in the T
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [x] #1 The hybrid-versus-vector-only gap on the memory layer is reproduced on a second eval set or a regenerated one
-- [x] #2 The effect is measured again with the production threshold (0.60) rather than rank-only
+- [x] #2 The effect is measured again with the production memory floor rather than rank-only (0.45 since TASK-126; the criterion was written when it was still 0.60)
 - [x] #3 Root cause established: RRF weighting, the sparsity of memory fragments, or an artefact of the eval set
 - [x] #4 A decision is recorded: layer-dependent fusion weight, no FTS on memory, or leave as is with the reason
 <!-- AC:END -->
