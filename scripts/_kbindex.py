@@ -290,7 +290,28 @@ def search(conn: sqlite3.Connection, *, query_vector, query_text: str = "",
     cos_by_id = {r[0]: _cosine_from_l2(r[1]) for r in vec_rows}
     rankings = [vec_ranking]
     fts_ids: set = set()
-    expr = fts_expr(query_text)
+    # RRF weegt beide ranglijsten gelijk. Dat is winst zolang ze vergelijkbaar
+    # sterk zijn, en verlies zodra ze dat niet zijn: de zwakke lijst duwt goede
+    # treffers van de sterke lijst uit de top-k. Gemeten over dezelfde index en
+    # dezelfde eval-sets (recall@5 / MRR):
+    #
+    #                wiki                     memory
+    #   dense-only   0.997 / 0.967            0.794 / 0.539
+    #   fts-only     0.991 / 0.946            0.461 / 0.266
+    #   hybrid       1.000 / 0.984  <- wint   0.658 / 0.479  <- verliest
+    #
+    # Op wiki liggen de armen dicht bij elkaar en verslaat de fusie ze allebei,
+    # precies waarvoor RRF bedoeld is. Op memory scheelt het bijna een factor
+    # twee in MRR, en dan kost fuseren 13,6 punten recall@5 ten opzichte van
+    # alleen de dense arm. Memories zijn kort en atomair: een termmatch zegt
+    # daar veel minder over relevantie dan in een artikel van duizend woorden.
+    #
+    # Vandaar geen lexicale arm op de memory-laag. Bij min_cos 0.45 (productie)
+    # is het beeld gelijk, dus het is de fusie en niet de drempel. Terug te
+    # draaien met KB_MEMORY_FTS=1 voor wie het opnieuw wil meten.
+    memory_only = tuple(layers or ()) == ("memory",)
+    fts_allowed = (not memory_only) or os.environ.get("KB_MEMORY_FTS", "") == "1"
+    expr = fts_expr(query_text) if fts_allowed else ""
     if expr:
         try:
             fts_ranking = [r[0] for r in conn.execute(

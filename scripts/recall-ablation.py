@@ -112,6 +112,10 @@ def main() -> int:
     ap.add_argument("--set", dest="set_path", default="")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--conditions", default="hybrid,fts-only,dense-only")
+    ap.add_argument("--min-cos", type=float, default=0.0,
+                    help="similarity floor. 0.0 is rank-only, which compares the "
+                         "arms without a threshold deciding the answer; pass the "
+                         "production floor to see what users actually get.")
     args = ap.parse_args()
 
     os.environ["KENNISBANK_VAULT"] = args.vault
@@ -135,7 +139,7 @@ def main() -> int:
 
     kmax = max(KS)
     out = {"layer": args.layer, "model": args.model, "n": len(entries),
-           "set": path.name, "conditions": {}}
+           "set": path.name, "min_cos": args.min_cos, "conditions": {}}
 
     if emb.embed("ping") is None:
         print("embedding backend unreachable", file=sys.stderr)
@@ -154,7 +158,8 @@ def main() -> int:
         with ArmSwitch(kb_recall._kbindex, keep):
             for e in entries:
                 rows = kb_recall.recall_hits(vecs[e["q"]], query_text=e["q"],
-                                             k=kmax, layers=(args.layer,), min_cos=0.0)
+                                             k=kmax, layers=(args.layer,),
+                                             min_cos=args.min_cos)
                 ranks.append(_rank_of([Path(r["path"]).stem for r in rows], e["expect"]))
         return ranks
 
@@ -165,7 +170,9 @@ def main() -> int:
         out["conditions"][cond] = _metrics(run(keep))
         print(f"  {cond:12} {out['conditions'][cond]}", flush=True)
 
-    dest = vault / f"ablation-{args.layer}-{args.model.replace(':','-').replace('/','_')}.json"
+    dest = vault / (f"ablation-{args.layer}-"
+                    f"{args.model.replace(':','-').replace('/','_')}"
+                    f"-min{args.min_cos}.json")
     dest.write_text(json.dumps(out, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"\nraw: {dest}")
     return 0
