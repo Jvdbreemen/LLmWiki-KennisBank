@@ -272,18 +272,24 @@ def recall_hits(query_vector, query_text: str = "", k: int = 3,
 # drempel meet "hoe qwen3-achtig scoort dit model" in plaats van hoe goed het
 # rankt. Zet hem op 0.0 voor een rang-only meting (zie scripts/embed-sweep.py).
 #
-# 0.45 is gemeten, niet geerfd. Op qwen3-embedding:4b over 1224 memory-vragen
-# (806 vindbaar in de top 5) ligt de cosinus van een echte treffer op min 0.340,
-# p10 0.484, p50 0.615 -- structureel lager dan bij wiki-artikelen, precies zoals
-# de alinea hierboven voorspelt. Wat elke drempel wegsnijdt:
+# 0.45 is gemeten, niet geerfd. Over 1224 memory-vragen ligt de cosinus van een
+# echte treffer op qwen3-embedding:4b op min 0.340, p10 0.484, p50 0.615; op
+# qwen3-embedding:8b op min 0.330, p10 0.528, p50 0.638 -- structureel lager dan
+# bij wiki-artikelen (p50 0.761), precies zoals de alinea hierboven voorspelt.
+# Wat elke drempel wegsnijdt van wat de index kon leveren:
 #
-#     0.40 -> 6 van 806 verloren        0.50 -> 111 verloren
-#     0.45 -> 42 van 806 verloren       0.60 -> 366 verloren
+#            4b (806 vindbaar)      8b (798 vindbaar)
+#     0.40      6 verloren             2 verloren
+#     0.45     42 verloren            13 verloren
+#     0.50    111 verloren            45 verloren
+#     0.60    366 verloren (45%)     260 verloren (33%)
 #
-# De vorige waarde 0.60 kostte 45% van alles wat de index kon leveren. 0.45 houdt
-# de ruisband van 0.51 (gemeten op de 8b) buiten de deur en haalt 324 van die 366
-# treffers terug. Herijk na een modelwissel: een enkele pass die per vraag de
-# cosinus van de verwachte treffer bewaart levert de hele curve.
+# De 0.60 was dus NIET fout geworden door een modelwissel: hij stond al te hoog
+# op het model waarvoor hij ooit gekozen is, en gooide daar een derde van de
+# ophaalbare memories weg. De wissel maakte het zichtbaar. 0.45 houdt de ruisband
+# van 0.51 (gemeten op de 8b) buiten de deur. Herijk na een modelwissel: een
+# enkele pass die per vraag de cosinus van de verwachte treffer bewaart levert
+# de hele curve.
 def _memory_min_cos_default() -> float:
     try:
         return float(os.environ.get("KB_MEMORY_THRESHOLD", "").strip() or 0.45)

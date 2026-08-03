@@ -175,6 +175,27 @@ True-match cosines: wiki min 0.387, p10 0.648, p50 0.761; memory min 0.340,
 p10 0.484, p50 0.615. Memories sit structurally lower, which is what the
 comment above `MEMORY_MIN_COS` predicted years before anyone measured it.
 
+### The floor was already wrong before the switch
+
+The obvious objection is that a new model needs a new floor and nothing is
+broken. That was worth fifty minutes of GPU to refute: the same curves, run
+against an 8b index on a scratch vault so the live one kept its 4b index.
+
+| memory recall@5 | floor 0.0 | floor 0.60 | discarded |
+|---|---|---|---|
+| qwen3-embedding:8b | 0.652 | 0.440 | 260 of 798 (33%) |
+| qwen3-embedding:4b | 0.658 | 0.359 | 366 of 806 (45%) |
+
+The two distributions are close (8b memory p50 0.638 against the 4b's 0.615),
+so the framing "the 4b compresses the scale" is wrong. `MEMORY_MIN_COS = 0.60`
+was too high from the start: on the model it was chosen for, it was discarding a
+third of the memories the index could return. The model switch made it visible
+and made it somewhat worse. On the wiki layer the same holds in miniature — the
+0.60 floor cost 12 of 328 hits on the 8b and 13 of 329 on the 4b.
+
+Anyone running the previous defaults is affected, which makes this a fix rather
+than a migration detail.
+
 New defaults: `retrieve_threshold` 0.50 (loses 2 of 329 instead of 13) and
 `MEMORY_MIN_COS` 0.45 (loses 42 of 806 instead of 366). Both stay above the
 noise band of 0.51 documented for the 8b.
