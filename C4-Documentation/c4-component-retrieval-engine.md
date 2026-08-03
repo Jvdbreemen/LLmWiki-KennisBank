@@ -81,7 +81,7 @@ Not every file in that document sits on the sub-second hot path — the doc itse
 - **Description:** the primary recall surface over `kb-index.db` + `kb-graph.db`. Read-only.
 - **Operations:**
   - `recall_hits(query_vector, query_text="", k=3, layers=("wiki","memory"), expand=False, min_cos=0.0) -> list[dict]` — `kb-recall.py:199`. Returns hit dicts with `path, layer, title, created, score, cos, fts, snippet` (+ `neighbor: True` on the appended expansion entry). **The primary public entry** — also called cross-component by `kb-mcp.py:78` and `kb-eval.py:196,200`.
-  - `wiki_hits(...)` / `memory_hits(...)` — `kb-recall.py:330` / `:272` — thin `layers=("wiki",)` / `("memory",)` wrappers. `memory_hits` uses its own threshold, `MEMORY_MIN_COS = 0.60`, not the wiki `retrieve_threshold`.
+  - `wiki_hits(...)` / `memory_hits(...)` — `kb-recall.py:330` / `:272` — thin `layers=("wiki",)` / `("memory",)` wrappers. `memory_hits` uses its own threshold, `MEMORY_MIN_COS = 0.45`, not the wiki `retrieve_threshold`.
   - `index_is_gated() -> bool` — `kb-recall.py:279`. True only when the index matches the live `embed_id()` **and** `unit_norm == "1"`; the precondition that lets `kb-retrieve` trust the fast path.
   - `has_fts_match(query_text: str, layer="wiki") -> bool` — `kb-recall.py:304`. Keyword-only signal used to open the JSON-cache-fallback gate.
   - `graph_neighbor(hits) -> dict | None` — `kb-recall.py:76`. Weighted best neighbour from `kb-graph.db`; stale graph → `None`, never a wrong neighbour.

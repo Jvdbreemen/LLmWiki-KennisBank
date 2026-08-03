@@ -116,7 +116,7 @@ Functions:
 - **`retrieve_params(cfg: dict) -> dict`** — `kb-retrieve.py:157`
   **Public / cross-module.** Returns `{"top_n": int, "min_cos": float,
   "expand": bool}` from `KB_RETRIEVE_TOP_N`/`retrieve_top_n` (default 3),
-  `KB_RETRIEVE_THRESHOLD`/`retrieve_threshold` (default 0.60), and
+  `KB_RETRIEVE_THRESHOLD`/`retrieve_threshold` (default 0.50), and
   `KB_RETRIEVE_EXPAND`/`retrieve_expand` (default 1 → True).
   Single source of truth: `kb-eval.py:184` imports it so the eval harness
   measures the same gate/expansion as production (TASK-86).
@@ -290,7 +290,7 @@ Import-time side effects (`kb-recall.py:23-30`): `KENNISBANK_VAULT` setdefault t
   Called by: `kb-retrieve.py` (via the wrappers), `kb-presearch.py:132`,
   `kb-ask.py:66`, `kb-mcp.py:78`, `kb-eval.py:196,200`.
 
-- **`MEMORY_MIN_COS = 0.60`** — `kb-recall.py:269`
+- **`MEMORY_MIN_COS = 0.45`** — `kb-recall.py`, overridable with `KB_MEMORY_THRESHOLD`
   A *separate* threshold for memory, not inherited from `retrieve_threshold`.
   Memories are short and atomic, so their cosine against a prompt sits
   structurally lower; inheriting the wiki threshold would silently close the
@@ -504,7 +504,7 @@ and exit 0 on any failure.
 - **`_collapse(text: str, cap: int = 200) -> str`** — `kb-search.py:87` — whitespace-collapse and truncate.
 - **`main() -> None`** — `kb-search.py:92`
   `argparse`: positional `query`, `--top` (default `KB_RETRIEVE_TOP_N` or 3),
-  `--threshold` (default `KB_RETRIEVE_THRESHOLD` or 0.60). Loads the cache;
+  `--threshold` (default `KB_RETRIEVE_THRESHOLD` or 0.50). Loads the cache;
   builds candidates from `<vault>/02-wiki` entries whose `id == embed_id()`,
   skipping `index.md` and `log.md`; embeds the query **live** (one-off, on
   purpose) with the default 30 s timeout; ranks; prints
@@ -769,7 +769,7 @@ flowchart TD
     JC --> FTS["kb_recall.has_fts_match :304"]
     FTS --> WH
 
-    MB --> MH["kb_recall.memory_hits :272<br/>MEMORY_MIN_COS 0.60"]
+    MB --> MH["kb_recall.memory_hits :272<br/>MEMORY_MIN_COS 0.45"]
     PRE --> RH0["kb_recall.recall_hits k=4<br/>layers = wiki + memory"]
 
     WH --> RH["kb_recall.recall_hits :199"]
@@ -903,7 +903,7 @@ observed failure:
    `graph_is_current` fingerprint check in `graph_neighbor`.
 5. **Neighbours are additive only** — appended last, `score 0.0`, never ranked
    above a direct hit.
-6. **Memory has its own threshold** (`MEMORY_MIN_COS = 0.60`); inheriting
+6. **Memory has its own threshold** (`MEMORY_MIN_COS = 0.45`); inheriting
    `retrieve_threshold` would silently close the memory block.
 7. **Read-only on the read path.** `_open_graph_ro` exists specifically because
    `_kbindex.graph_connect` creates directories and sets WAL.

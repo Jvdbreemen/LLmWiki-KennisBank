@@ -16,7 +16,7 @@ Output: JSON array of objects {"path": ..., "score": ..., "snippet": ...}
 
 Defaults:
     --top        env KB_RETRIEVE_TOP_N  default 3
-    --threshold  env KB_RETRIEVE_THRESHOLD  default 0.60
+    --threshold  env KB_RETRIEVE_THRESHOLD  default 0.50
 
 Candidates come from the cached wiki embeddings (recompute=False). Uncached
 articles are silently skipped — the SessionStart hook (build-embed-index.py)
@@ -106,9 +106,9 @@ def main() -> None:
     parser.add_argument(
         "--threshold",
         type=float,
-        default=_num_env("KB_RETRIEVE_THRESHOLD", 0.60),
+        default=_num_env("KB_RETRIEVE_THRESHOLD", 0.50),
         metavar="T",
-        help="Minimum cosine score (default: env KB_RETRIEVE_THRESHOLD or 0.60)",
+        help="Minimum cosine score (default: env KB_RETRIEVE_THRESHOLD or 0.50)",
     )
     args = parser.parse_args()
 

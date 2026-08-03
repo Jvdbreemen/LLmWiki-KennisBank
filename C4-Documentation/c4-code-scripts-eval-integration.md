@@ -450,7 +450,7 @@ locale layer. `_HAS_DP` (`:237`) gates `LAYER2_CASES` (`:238`), the optional
 |---|---|---|
 | `scripts/_vaultpath.py` | `kb-eval.py:58`, `kb-eval-gen.py:45`, `kb-calibrate.py:41`, `kb-okf-export.py:48`, `_llm.py:27`, `kennisbank-copilot.py:82`, `_copilot.py:777` | `vault_root()` — the only sanctioned vault resolution (ADR-0002). |
 | `scripts/_embeddings.py` | `kb-eval.py:179`, `kb-calibrate.py:140`, `kb-mcp.py:75`, `_reconcile.py:47` | `embed()`, `cosine()`, `embed_id()`. |
-| `scripts/kb-recall.py` (via `importlib`) | `kb-eval.py:180`, `kb-mcp.py:52-59` | `recall_hits(query_vector, query_text, k, layers, expand, min_cos)` (`kb-recall.py:199`), `MEMORY_MIN_COS = 0.60` (`kb-recall.py:269`). |
+| `scripts/kb-recall.py` (via `importlib`) | `kb-eval.py:180`, `kb-mcp.py:52-59` | `recall_hits(query_vector, query_text, k, layers, expand, min_cos)` (`kb-recall.py:199`), `MEMORY_MIN_COS = 0.45` (`kb-recall.py`). |
 | `scripts/kb-retrieve.py` (via `importlib`) | `kb-eval.py:181-184` | `load_embed_cfg(vault_root)` (`kb-retrieve.py:173`), `retrieve_params(cfg)` (`kb-retrieve.py:157`) — the single source of truth for `(top_n, min_cos, expand)`, so the eval measures the same gate/expansion the hook uses. |
 | `scripts/_activity.py` | `kb-activity.py:14`, `kb-activity-eval.py:14`, `kb-mcp.py:61-65`, `test_activity_temporal.py:23` | `timeline`, `what_did_i_do`, `weeklog`, `topic_timeline`, `index_status`, `eval_queries`, `format_markdown`, `parse_period`, `vault_root`, `_clean_topic`, `_get_dateparser`, and the LLM-layer seams. |
 | `scripts/_memory.py` | `kb-mcp.py:110`, `:130`, `:151` | `write()`, `pending_reviews()`, `decide()`, `coerce_memory_type()`, `coerce_importance()`. |
