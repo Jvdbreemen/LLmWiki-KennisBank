@@ -294,6 +294,51 @@ def _warm_marker() -> Path:
     return CACHE_FILE.parent / ".embed-warm.marker"
 
 
+def _pid_alive(pid: int) -> bool:
+    """Check a process without sending it a signal (including on Windows)."""
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+    if os.name == "nt":
+        try:
+            import ctypes
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            handle = kernel32.OpenProcess(0x1000, False, pid)  # QUERY_LIMITED_INFORMATION
+            if not handle:
+                return False
+            kernel32.CloseHandle(handle)
+            return True
+        except Exception:
+            return False
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def warm_in_progress(max_age: float = 60.0) -> bool:
+    """Return whether the detached warm-up child is still alive.
+
+    Older markers were empty files, so they are treated as an unknown/stale
+    attempt rather than as proof that a process is alive. The marker is only a
+    rate-limit record; it must not make a user-facing hook claim that work is
+    running when the child already exited.
+    """
+    try:
+        import time as _time
+        marker = _warm_marker()
+        age = _time.time() - marker.stat().st_mtime
+        if age < 0 or age >= max_age:
+            return False
+        data = json.loads(marker.read_text(encoding="utf-8"))
+        pid = data.get("pid") if isinstance(data, dict) else None
+        if not isinstance(pid, int) or pid <= 0:
+            return False
+        return _pid_alive(pid)
+    except Exception:
+        return False
+
+
 def warm(timeout: float = 120.0) -> bool:
     """Load/refresh the model with one throwaway embed. Blocks up to timeout.
     Returns True if a vector came back. Meant for detached/off-path use."""
@@ -329,10 +374,13 @@ def warm_async(min_interval: float = 60.0) -> None:
             kwargs["creationflags"] = 0x00000008 | 0x08000000
         else:
             kwargs["start_new_session"] = True
-        subprocess.Popen([sys.executable, os.path.abspath(__file__), "--warm"], **kwargs)
+        proc = subprocess.Popen([sys.executable, os.path.abspath(__file__), "--warm"], **kwargs)
         try:
             marker.parent.mkdir(parents=True, exist_ok=True)
-            marker.write_text("", encoding="utf-8")
+            marker.write_text(
+                json.dumps({"pid": proc.pid, "started_at": _time.time()}) + "\n",
+                encoding="utf-8",
+            )
         except Exception:
             pass
     except Exception:

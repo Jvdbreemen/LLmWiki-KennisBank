@@ -11,6 +11,7 @@ SessionStart-output-contract: {"hookSpecificOutput": {"hookEventName":
 from __future__ import annotations
 
 import json
+import importlib.util
 import os
 import sys
 from datetime import datetime, timezone
@@ -23,6 +24,21 @@ import _sweepstate  # noqa: E402
 
 HEARTBEAT = "memory-sweep-status.json"
 _STALE_HOURS = 26
+
+
+def _worker_running(vault: Path) -> bool:
+    """Return whether the detached index/sweep worker still owns its lock."""
+    try:
+        script = Path(__file__).with_name("index-launch.py")
+        spec = importlib.util.spec_from_file_location("index_launch", script)
+        if spec is None or spec.loader is None:
+            return False
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        lock = vault / ".claude" / module.LOCK_NAME
+        return lock.exists() and not module.is_stale(lock)
+    except Exception:
+        return False
 
 
 def _rot(hb: dict) -> "tuple[int, int] | None":
@@ -51,14 +67,19 @@ def _rot(hb: dict) -> "tuple[int, int] | None":
 
 def notice() -> str:
     msgs = []
-    hb_path = vault_root() / ".claude" / HEARTBEAT
+    vault = vault_root()
+    worker_running = _worker_running(vault)
+    hb_path = vault / ".claude" / HEARTBEAT
     hb = {}
     if hb_path.exists():
         try:
             hb = json.loads(hb_path.read_text(encoding="utf-8")) or {}
         except Exception:
             hb = {}
-    if hb.get("model_unreachable"):
+    # The heartbeat describes the last completed run. While the detached
+    # worker is active, that old failure is not current evidence and should not
+    # surface as a fresh SessionStart warning.
+    if hb.get("model_unreachable") and not worker_running:
         msgs.append("geheugen-sweep: LLM/embed was onbereikbaar - capture gepauzeerd "
                     "(transcripts blijven wachten).")
     if isinstance(hb.get("errors"), int) and hb["errors"] > 0:
@@ -84,7 +105,7 @@ def notice() -> str:
                 stale = age_hours > _STALE_HOURS
             except Exception:
                 stale = True
-        if stale:
+        if stale and not worker_running:
             n = len(pending)
             ts = last_run or "geen heartbeat"
             msgs.append(

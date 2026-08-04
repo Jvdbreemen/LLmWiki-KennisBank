@@ -105,9 +105,21 @@ _WARM_SENTINEL_WINDOW = 60.0
 def _warm_already_running(emb) -> bool:
     """True als er binnen het sentinel-venster al een warm-up gestart is."""
     try:
+        in_progress = getattr(emb, "warm_in_progress", None)
+        if callable(in_progress):
+            return bool(in_progress(max_age=_WARM_SENTINEL_WINDOW))
+    except Exception:
+        pass
+    try:
         import time as _time
         marker = emb._warm_marker()
-        return marker.exists() and (_time.time() - marker.stat().st_mtime) < _WARM_SENTINEL_WINDOW
+        # Compatibility for older embedding modules during an upgrade. An
+        # empty marker is no longer evidence of a live warm-up child.
+        if not marker.exists() or (_time.time() - marker.stat().st_mtime) >= _WARM_SENTINEL_WINDOW:
+            return False
+        # The compatibility path deliberately does not probe old markers:
+        # os.kill(pid, 0) is not a safe liveness check on Windows.
+        return False
     except Exception:
         return False
 

@@ -90,14 +90,15 @@ class ColdNoticeTest(unittest.TestCase):
                 raise RuntimeError("stuk")
         self.assertFalse(self.mod._warm_already_running(Kapot()))
 
-    def test_warm_detectie_leest_de_marker(self):
+    def test_warm_detectie_verwerpt_lege_of_oude_marker(self):
         marker = self.tmp / "marker"
         marker.write_text("", encoding="utf-8")
 
         class Emb:
             def _warm_marker(_self):
                 return marker
-        self.assertTrue(self.mod._warm_already_running(Emb()))
+        # An empty legacy marker is not proof that a detached worker is alive.
+        self.assertFalse(self.mod._warm_already_running(Emb()))
         os.utime(marker, (0, 0))  # ver in het verleden -> buiten het venster
         self.assertFalse(self.mod._warm_already_running(Emb()))
 
