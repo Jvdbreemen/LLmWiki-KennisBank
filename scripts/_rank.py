@@ -12,17 +12,18 @@ Generative-Agents-stijl re-ranking voor de recall-route (kb-recall):
 Alleen de MEMORY-laag krijgt recency/importance-weging. De wiki-laag is
 gecureerd (stale-check bewaakt veroudering daar) en blijft ongewogen.
 
-Derde signaal: one_hop_neighbor() kiest de meest-verwezen wiki-buur
-(wikilink) vanuit de hit-artikelen, zodat de evidence pack een coherente
+Derde signaal: de graafbuur (kb-recall.graph_neighbor, TASK-87) kiest de
+best-gewogen wiki-buur uit kb-graph.db, zodat de evidence pack een coherente
 kennisbuurt wordt in plaats van losse hits. Buren worden ALLEEN toegevoegd,
-nooit boven directe hits gerangschikt.
+nooit boven directe hits gerangschikt. De vroegere regex-scan hier
+(one_hop_neighbor, N x read_text per call) is verwijderd nadat vier releases
+zonder regressie op de graaf-default bevestigden dat hij overbodig was
+(TASK-93).
 
 Pure functies, stdlib; de frontmatter-reader is injecteerbaar voor tests.
 """
 from __future__ import annotations
 
-import re
-from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
 
@@ -32,8 +33,6 @@ HALF_LIFE_DAYS = {"feit": 365, "voorkeur": 180, "procedure": 365, "beslissing": 
 DEFAULT_HALF_LIFE = 365
 #: Vloer op het recency-verval: oud-maar-relevant blijft vindbaar.
 RECENCY_FLOOR = 0.6
-
-_WIKILINK_RE = re.compile(r"\[\[([^\[\]|#]+)")
 
 
 def _age_days(iso_date: str, today: date) -> int:
@@ -202,36 +201,3 @@ def rerank(hits: list, meta_fn, today: date | None = None,
         out.append({**h, "score": score})
     out.sort(key=lambda x: x.get("score", 0.0), reverse=True)
     return out
-
-
-def one_hop_neighbor(hits: list, root: Path, read_fn=None) -> str | None:
-    """Meest-verwezen wiki-buur vanuit de wiki-hits die zelf geen hit is.
-
-    Telt wikilinks in de hit-artikelen; alleen targets die als artikel in
-    ``02-wiki/`` bestaan tellen (raw-sessies en memories zijn herkomst of
-    verbanden, geen buur). Deterministische tie-break op naam. None als er
-    geen kandidaat is.
-    """
-    read = read_fn or (lambda p: Path(p).read_text(encoding="utf-8", errors="replace"))
-    wiki_dir = Path(root) / "02-wiki"
-    hit_stems = {Path(h.get("path", "")).stem for h in hits}
-    counts: Counter = Counter()
-    for h in hits:
-        if h.get("layer") != "wiki":
-            continue
-        try:
-            text = read(h["path"])
-        except Exception:
-            continue
-        for t in _WIKILINK_RE.findall(text):
-            stem = t.strip().replace("\\", "/").rsplit("/", 1)[-1]
-            if stem.endswith(".md"):
-                stem = stem[:-3]
-            if not stem or stem in hit_stems:
-                continue
-            if not (wiki_dir / f"{stem}.md").exists():
-                continue
-            counts[stem] += 1
-    if not counts:
-        return None
-    return sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[0][0]

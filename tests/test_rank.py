@@ -5,7 +5,6 @@ Pure functies; frontmatter-reader en file-reader geinjecteerd.
 from __future__ import annotations
 
 import sys
-import tempfile
 import unittest
 from datetime import date
 from pathlib import Path
@@ -124,52 +123,6 @@ class TestRerank(unittest.TestCase):
         self.assertEqual(out[0]["score"], 0.8)
 
 
-class TestOneHopNeighbor(unittest.TestCase):
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name)
-        self.wiki = self.root / "02-wiki"
-        self.wiki.mkdir(parents=True)
-
-    def _art(self, stem: str, body: str = "") -> Path:
-        p = self.wiki / f"{stem}.md"
-        p.write_text(body, encoding="utf-8")
-        return p
-
-    def test_most_referenced_neighbor_wins(self):
-        a = self._art("a", "[[buur]] en [[zeldzaam]]")
-        b = self._art("b", "[[buur]]")
-        self._art("buur")
-        self._art("zeldzaam")
-        hits = [{"path": str(a), "layer": "wiki"}, {"path": str(b), "layer": "wiki"}]
-        self.assertEqual(_rank.one_hop_neighbor(hits, self.root), "buur")
-
-    def test_hits_excluded_as_neighbor(self):
-        a = self._art("a", "[[b]]")
-        b = self._art("b", "[[a]]")
-        hits = [{"path": str(a), "layer": "wiki"}, {"path": str(b), "layer": "wiki"}]
-        self.assertIsNone(_rank.one_hop_neighbor(hits, self.root))
-
-    def test_nonexistent_target_ignored(self):
-        a = self._art("a", "[[bestaat-niet]] en [[raw-sessie-2026-01-01-x]]")
-        hits = [{"path": str(a), "layer": "wiki"}]
-        self.assertIsNone(_rank.one_hop_neighbor(hits, self.root))
-
-    def test_memory_hits_not_expanded(self):
-        a = self._art("a", "[[buur]]")
-        self._art("buur")
-        hits = [{"path": str(a), "layer": "memory"}]
-        self.assertIsNone(_rank.one_hop_neighbor(hits, self.root))
-
-    def test_no_links_returns_none(self):
-        a = self._art("a", "geen links hier")
-        hits = [{"path": str(a), "layer": "wiki"}]
-        self.assertIsNone(_rank.one_hop_neighbor(hits, self.root))
-
-
-if __name__ == "__main__":
-    unittest.main()
 class TestCouplingFactor(unittest.TestCase):
     """Bibliographic-coupling-bonus (TASK-88): begrensd, nooit een straf."""
 
@@ -232,3 +185,7 @@ class TestRerankCoupling(unittest.TestCase):
             raise RuntimeError("kapot")
         out = _rank.rerank(self._hits(), lambda p: {}, sources_fn=boom)
         self.assertTrue(all(h["score"] == 1.0 for h in out))
+
+
+if __name__ == "__main__":
+    unittest.main()

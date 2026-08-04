@@ -36,10 +36,10 @@ om de server te DRAAIEN; ontbreekt het pakket, dan blijven de *_tool-functies
 bruikbaar. Stdlib + optioneel mcp.
 """
 import importlib.util
-import json
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 os.environ.setdefault("KENNISBANK_VAULT", str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -200,84 +200,76 @@ def review_decide_tool(stem: str, decision: str) -> str:
     return f"Beslist: [[{r['stem']}]] -> {r['new_status']}."
 
 
-def _activity_json(payload: dict) -> str:
-    return json.dumps(payload, indent=2, ensure_ascii=False)
-
-
-def _activity_unavailable() -> str:
-    return _activity_json({
+def _activity_unavailable() -> dict[str, Any]:
+    return {
         "ok": False,
         "warnings": ["Temporal Activity Recall module is niet beschikbaar."],
         "events": [],
-    })
+    }
 
 
 def what_did_i_do_tool(date_or_period: str, topic: str = "", project: str = "",
-                       max_events: int = 25) -> str:
-    """Temporal activity recall voor een datum/periode, als JSON."""
+                       max_events: int = 25) -> dict[str, Any]:
+    """Temporal activity recall voor een datum/periode."""
     if activity is None:
         return _activity_unavailable()
     try:
-        result = activity.what_did_i_do(
+        return activity.what_did_i_do(
             date_or_period or "today",
             topic=topic or "",
             project=project or "",
             max_events=int(max_events),
         )
-        return _activity_json(result)
     except Exception as e:
-        return _activity_json({"ok": False, "warnings": [f"what_did_i_do failed: {type(e).__name__}"], "events": []})
+        return {"ok": False, "warnings": [f"what_did_i_do failed: {type(e).__name__}"], "events": []}
 
 
 def timeline_tool(period: str, topic: str = "", project: str = "",
-                  max_events: int = 50) -> str:
-    """Chronologische temporal activity timeline, als JSON."""
+                  max_events: int = 50) -> dict[str, Any]:
+    """Chronologische temporal activity timeline."""
     if activity is None:
         return _activity_unavailable()
     try:
-        result = activity.timeline(
+        return activity.timeline(
             period or "today",
             topic=topic or "",
             project=project or "",
             max_events=int(max_events),
         )
-        return _activity_json(result)
     except Exception as e:
-        return _activity_json({"ok": False, "warnings": [f"timeline failed: {type(e).__name__}"], "events": []})
+        return {"ok": False, "warnings": [f"timeline failed: {type(e).__name__}"], "events": []}
 
 
 def weeklog_tool(period: str = "vorige week", topic: str = "", project: str = "",
-                 max_events: int = 100) -> str:
-    """Weekoverzicht met rollup en source_refs, als JSON."""
+                 max_events: int = 100) -> dict[str, Any]:
+    """Weekoverzicht met rollup en source_refs."""
     if activity is None:
         return _activity_unavailable()
     try:
-        result = activity.weeklog(
+        return activity.weeklog(
             period or "vorige week",
             topic=topic or "",
             project=project or "",
             max_events=int(max_events),
         )
-        return _activity_json(result)
     except Exception as e:
-        return _activity_json({"ok": False, "warnings": [f"weeklog failed: {type(e).__name__}"], "events": []})
+        return {"ok": False, "warnings": [f"weeklog failed: {type(e).__name__}"], "events": []}
 
 
 def topic_timeline_tool(topic: str, period: str = "afgelopen 90 dagen",
-                        project: str = "", max_events: int = 80) -> str:
-    """Volg een onderwerp of entity door de tijd, als JSON."""
+                        project: str = "", max_events: int = 80) -> dict[str, Any]:
+    """Volg een onderwerp of entity door de tijd."""
     if activity is None:
         return _activity_unavailable()
     try:
-        result = activity.topic_timeline(
+        return activity.topic_timeline(
             topic or "",
             period_text=period or "afgelopen 90 dagen",
             project=project or "",
             max_events=int(max_events),
         )
-        return _activity_json(result)
     except Exception as e:
-        return _activity_json({"ok": False, "warnings": [f"topic_timeline failed: {type(e).__name__}"], "events": []})
+        return {"ok": False, "warnings": [f"topic_timeline failed: {type(e).__name__}"], "events": []}
 
 
 # Pull-nudge voor MCP-clients zonder push-hook (zie module-docstring). Drie
@@ -341,7 +333,7 @@ def build_server():
 
     @srv.tool(annotations=_ann(title="What happened on a date", readOnlyHint=True, openWorldHint=False))
     def what_did_i_do(date_or_period: str, topic: str = "", project: str = "",
-                      max_events: int = 25) -> str:
+                      max_events: int = 25) -> dict[str, Any]:
         """Answer what happened locally on a given date or in a period. Returns
         the events with their source references, any warnings, and a summary."""
         return what_did_i_do_tool(date_or_period, topic=topic, project=project,
@@ -349,7 +341,7 @@ def build_server():
 
     @srv.tool(annotations=_ann(title="Activity timeline", readOnlyHint=True, openWorldHint=False))
     def timeline(period: str, topic: str = "", project: str = "",
-                 max_events: int = 50) -> str:
+                 max_events: int = 50) -> dict[str, Any]:
         """List the INDIVIDUAL activity events in chronological order for a
         period, optionally filtered by topic or project. Prefer weeklog when an
         aggregated summary is wanted instead of every single event."""
@@ -358,7 +350,7 @@ def build_server():
 
     @srv.tool(annotations=_ann(title="Week overview", readOnlyHint=True, openWorldHint=False))
     def weeklog(period: str = "vorige week", topic: str = "", project: str = "",
-                max_events: int = 100) -> str:
+                max_events: int = 100) -> dict[str, Any]:
         """Summarise a week into an AGGREGATED rollup per day, with source
         references. Prefer timeline when the individual events are wanted."""
         return weeklog_tool(period=period, topic=topic, project=project,
@@ -366,7 +358,7 @@ def build_server():
 
     @srv.tool(annotations=_ann(title="Topic through time", readOnlyHint=True, openWorldHint=False))
     def topic_timeline(topic: str, period: str = "afgelopen 90 dagen",
-                       project: str = "", max_events: int = 80) -> str:
+                       project: str = "", max_events: int = 80) -> dict[str, Any]:
         """Follow one topic or entity through time across activity events, to see
         how it developed."""
         return topic_timeline_tool(topic, period=period, project=project,

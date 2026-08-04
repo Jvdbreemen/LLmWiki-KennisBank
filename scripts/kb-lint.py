@@ -88,8 +88,13 @@ def normalize_target(target: str) -> str:
     return target
 
 
-#: Directories die nooit sessielogs bevatten (tooling/index-output).
-SKIP_DIRS = {".claude", ".git", ".obsidian", "graphify-out"}
+#: Directories die nooit sessielogs bevatten: tooling/index-output, plus
+#: 05-bronnen (geïmporteerde bron-documenten, een aparte herkomst-categorie
+#: -- zie resolving_bron_links() -- waar een raw-sessie-*.md-bestand qua
+#: vault-conventie nooit hoort). Gemeten op de echte vault (2026-08-03,
+#: TASK-130): 05-bronnen bevatte 0 sessiestammen op 58k+ bestanden, en die
+#: volle recursieve walk was 12s van kb-lint's 15.6s totale kosten.
+SKIP_DIRS = {".claude", ".git", ".obsidian", "graphify-out", "05-bronnen"}
 
 
 def collect_session_stems(root: Path) -> set[str]:
@@ -98,19 +103,20 @@ def collect_session_stems(root: Path) -> set[str]:
     Vault-breed (zoals Obsidian wikilinks op bestandsnaam resolvet): actieve
     sessies staan in ``01-raw/sessies/``, maar verplaatste of gearchiveerde
     sessies (``01-raw/debug/``, ``08-archive/``, ...) blijven geldige
-    herkomst zolang het bestand ergens in de vault bestaat.
+    herkomst zolang het bestand ergens in de vault bestaat -- behalve onder
+    SKIP_DIRS, waar per conventie nooit een sessielog hoort.
+
+    os.walk met directory-pruning, geen rglob: rglob daalt altijd volledig af
+    en filtert pas op het resultaat, dus zou de uitgesloten mappen nog steeds
+    volledig doorzoeken (TASK-130 -- 05-bronnen alleen al kostte 12s zo).
     """
     stems: set[str] = set()
-    for f in root.rglob(f"{SESSION_PREFIX}*.md"):
-        # Alleen de directories BINNEN de vault tellen; f.parents zou ook
-        # ancestors boven de vault-root meenemen (een vault die zelf onder
-        # een .claude/ of graphify-out/ pad ligt zou anders nul stems krijgen).
-        try:
-            rel_dirs = f.relative_to(root).parts[:-1]
-        except ValueError:
-            rel_dirs = ()
-        if SKIP_DIRS.isdisjoint(rel_dirs):
-            stems.add(f.stem)
+    suffix = ".md"
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+        for name in filenames:
+            if name.startswith(SESSION_PREFIX) and name.endswith(suffix):
+                stems.add(name[:-len(suffix)])
     return stems
 
 

@@ -1,9 +1,10 @@
 ---
 id: TASK-100
 title: 'MCP server: migrate to the 2026-07-28 specification'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-29 21:47'
+updated_date: '2026-08-03 21:10'
 labels: []
 dependencies: []
 ordinal: 103700
@@ -17,8 +18,16 @@ The 2026-07-28 MCP revision makes the protocol stateless: the initialize handsha
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Plan document written with route comparison and a plain recommendation on minimal dependency versus minimal code
-- [ ] #2 Every normative claim in the plan carries a primary-source URL
-- [ ] #3 Tool-surface proposal separates add-now from defer, with reasons
-- [ ] #4 Open questions listed with the cheapest experiment that closes each
+- [x] #1 Plan document written with route comparison and a plain recommendation on minimal dependency versus minimal code
+- [x] #2 Every normative claim in the plan carries a primary-source URL
+- [x] #3 Tool-surface proposal separates add-now from defer, with reasons
+- [x] #4 Open questions listed with the cheapest experiment that closes each
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Verified against the delivered plan document rather than assumed. §4 gives the full route comparison (A/B/C/D) with a plain recommendation (C, Hybrid) and a measured refutation of route B (AC#1). 19 primary-source URLs cited, including the versioning spec for the era-as-date-compare refutation and the tools spec for input validation (AC#2). §6's "Zero new tools" finding plus the D7 decision-log entry name three candidates (read_note, orientation, capture provenance) and defer each with a stated trigger — the add-now/defer split the AC asks for (AC#3). §9 lists five open questions (Q1-Q5) plus a risk (R1), each with its cheapest closing experiment (AC#4).
+
+One finding worth carrying forward: Q1's own measurement (all inspectable clients pre-2026-07-28, checked 2026-07-30) is the primary-source evidence that TASK-110's gate is not met today, and D7's "capture provenance deferred, trigger not fired" directly supersedes TASK-107 as currently scoped. Neither should be executed as written without that context.
+<!-- SECTION:FINAL_SUMMARY:END -->

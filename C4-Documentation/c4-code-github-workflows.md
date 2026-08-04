@@ -146,7 +146,7 @@ Read as the answer to "what does a green check mean here?".
 | --- | --- | --- |
 | `scripts/*.py` (85 files) | `py_compile` (`ci.yml:31`) **and** the suite (`ci.yml:41`) | Syntax always; behaviour where a test in `tests/` drives the script. |
 | `setup.sh`, `scripts/doctor.sh` | `bash -n` (`ci.yml:34`) **and** the suite | Parse always; `tests/test_setup_deploy.py` additionally runs `setup.sh` as a subprocess. |
-| `tests/` (101 test modules) | `ci.yml:41`, 1099 tests | The gate itself; `tests/test_suite_collection.py` guards that it stays collectable. |
+| `tests/` (103 test modules) | `ci.yml:41`, 1131 tests | The gate itself; `tests/test_suite_collection.py` guards that it stays collectable. |
 | `commands/`, `skills/`, `templates/`, README/CHANGELOG/CONFIGURATION, `backlog/` | the suite, via the doc/markdown guards | Guarded by `test_integration_documentation.py`, `test_docs_consistency.py`, `test_command_structure.py`, `test_skill_frontmatter.py`, `test_backlog_integrity.py`. **Precision matters here:** of those five, only `test_integration_documentation.py` was invisible under the old runner — verified, it contains **zero** `unittest.TestCase` references, while the other four are `TestCase`-shaped (2, 10, 1, and 1 occurrences respectively) and `unittest discover` collected them all along. The pytest switch (`ci.yml:36-39`) activated **one** doc guard plus 20 other tests, not the whole doc-guard layer. |
 | `atlas/sidecar/`, `atlas/doctor.py` | `ci.yml:77` | Endpoint behaviour against temp vaults. |
 | `atlas/frontend/src/` | `ci.yml:92` + `ci.yml:96` | Types + 39 unit tests. |
@@ -160,15 +160,17 @@ Read as the answer to "what does a green check mean here?".
 
 **Declared budgets (verified in file):** `test` → `timeout-minutes: 30` (`ci.yml:17`); `atlas` → `timeout-minutes: 15` (`ci.yml:63`). Both are hang nets, explicitly not performance targets (`ci.yml:10`).
 
-**Measured in this checkout (by me, just now):**
+**Measured in this checkout, 2026-08-03 (refreshed from the 2026-07-30 figures below — TASK-123):**
 
 | Measurement | Result |
 | --- | --- |
-| `python -m pytest tests --collect-only -q` | **1099 tests collected in 1.56 s** |
-| `python -m pytest atlas/sidecar/tests --collect-only -q` | **56 tests collected in 1.09 s** |
-| `npx vitest run` in `atlas/frontend` | **5 files, 39 tests, all passing, 1.13 s** (transform 709 ms, import 1.55 s, tests 84 ms) |
+| `python -m pytest tests --collect-only -q` | **1131 tests collected in 2.10 s** (was 1099, +32 in four days) |
+| `python -m pytest atlas/sidecar/tests --collect-only -q` | 56 tests collected in 1.09 s *(2026-07-30 figure, not re-measured — this doc's original finding was scoped to the main suite)* |
+| `npx vitest run` in `atlas/frontend` | 5 files, 39 tests, all passing, 1.13 s *(2026-07-30 figure, not re-measured)* |
 
-**The stale baseline — the main finding here.** The comment justifying the 30-minute net (`ci.yml:10-16`) states its measurement as **781 tests in ~20 min** on a Windows dev machine. The suite now collects **1099** tests: roughly **41% growth against an unchanged 30-minute budget**. The comment's own arithmetic (781 ≈ 20 min) no longer describes the checkout it sits in.
+**The stale baseline — the main finding here, itself now re-stale once already.** The comment justifying the 30-minute net (`ci.yml:10-16`) states its measurement as **781 tests in ~20 min** on a Windows dev machine. The suite now collects **1131** tests: roughly **45% growth against an unchanged 30-minute budget** (was 41% four days ago, at 1099). The comment's own arithmetic (781 ≈ 20 min) no longer describes the checkout it sits in, and the gap is widening, not stabilising — this section will need refreshing again, and probably soon; see the aging note below.
+
+**How this section expects to age.** This growth-percentage finding is a snapshot, not a fixed fact, and it will drift again — the four-day jump from 41% to 45% shows it moves fast enough to matter. A mismatch between the number here and a fresh `python -m pytest tests --collect-only -q` is expected drift, not a defect in this document; treat it as one when the gap looks stable or shrinking, and as confirmation of the finding's direction when it keeps growing. Re-derive with the same command before relying on the percentage for a decision (e.g. whether to widen the 30-minute timeout).
 
 I did **not** re-measure the main suite's wall clock, and deliberately so: `tests/test_setup_deploy.py` executes `setup.sh` as a subprocess (that is what `_bash_path()` at `tests/test_setup_deploy.py:24` and `_find_bash()` at `:38` exist for), which on this machine could write into `$HOME/.claude`, `~/.claude/commands`, and potentially the live vault. Running the full suite is a side-effecting act, not a documentation act. So: the 20-minute figure is **the repository's own claim, not a verified current number**, and I make no claim that CI does or does not now exceed 30 minutes — only that the stated basis for the budget is out of date and worth re-measuring. Note the mitigating factor the comment itself names: Linux runners are typically faster for this subprocess-heavy suite than the Windows machine where 781/20 min was measured.
 
@@ -261,7 +263,7 @@ TOTAL                        76     15    80%
 
 The test module and the suite's `__init__.py` are **rows in the report**: 66 of the 76 measured statements are test code, 10 are production code. So the denominator behind `--fail-under=75` is `scripts/` **plus** `tests/`, not `scripts/` alone.
 
-**[inferred — magnitude]** How much this inflates the full-suite total is *not* measured here; a one-module run says nothing about the 1099-test delta. The direction is not in doubt (test modules run top to bottom and score high), but the size is. Practical consequence: the 75% floor is softer than it reads, and *adding tests* can raise the number without a single production line becoming better covered. The fix is one `[coverage:run]` / `source = scripts` block — after which the 75 must be recalibrated against the real figure, because it will drop.
+**[inferred — magnitude]** How much this inflates the full-suite total is *not* measured here; a one-module run says nothing about the 1131-test delta. The direction is not in doubt (test modules run top to bottom and score high), but the size is. Practical consequence: the 75% floor is softer than it reads, and *adding tests* can raise the number without a single production line becoming better covered. The fix is one `[coverage:run]` / `source = scripts` block — after which the 75 must be recalibrated against the real figure, because it will drop.
 
 **[verified — minor hygiene]** `coverage run` writes a `.coverage` data file into the repo root, and `.gitignore` contains **no** coverage entry (grep for `coverage` in `.gitignore` returns nothing). Harmless in CI, where the runner is discarded; locally it leaves an untracked `?? .coverage` in `git status` after every coverage run. Adding a `[coverage:run]` block would be the natural moment to also add `.coverage` to `.gitignore`.
 
@@ -344,7 +346,7 @@ flowchart TD
 
     T4 -.->|"syntax only · 85 files"| P1["scripts/*.py"]
     T5 -.->|"parse only · the only 2 .sh"| P2["setup.sh<br/>scripts/doctor.sh"]
-    T6 -.->|"1099 tests collected"| P3["tests/<br/>101 modules"]
+    T6 -.->|"1131 tests collected"| P3["tests/<br/>103 modules"]
     P3 -.->|"guards assert on"| P4["commands/ · skills/ · templates/<br/>README · CHANGELOG · backlog/"]
     P3 -.->|"drives as subprocess"| P2
     A4 -.->|"56 tests"| P5["atlas/sidecar/app.py<br/>atlas/sidecar/sources.py<br/>atlas/doctor.py"]
@@ -375,7 +377,7 @@ flowchart TD
 | **Runner / budget** | `ubuntu-latest` / 30 min | `ubuntu-latest` / 15 min |
 | **Steps** | 7 | 8 |
 | **What breaks the job** | broken pin · Python syntax error in `scripts/` · shell syntax error in `setup.sh`/`doctor.sh` · any failing test in `tests/` · total coverage < 75% | broken sidecar pin · any failing sidecar test · `package.json`/lockfile mismatch · any TS type error under `strict` · any failing vitest test |
-| **Scope measured** | 85 scripts, 2 shell scripts, 1099 tests, coverage total | 56 sidecar tests, TS typecheck, 39 frontend tests |
+| **Scope measured** | 85 scripts, 2 shell scripts, 1131 tests, coverage total | 56 sidecar tests, TS typecheck, 39 frontend tests |
 | **Coverage measured** | yes, floor 75% (no config file — see §6.1) | no |
 | **Caching** | none | npm, keyed on `atlas/frontend/package-lock.json` |
 | **Depends on the other job** | no | no (`needs:` absent by design, `ci.yml:60`) |

@@ -740,7 +740,7 @@ De achtergrond-automatieken zijn individueel aan/uit te zetten via
 | `activity_llm_fallback` | uit | laag 3 van de temporele parser: lokale LLM duidt exotische datums/periodes (zie 4b) | alleen de deterministische lagen 1-2 |
 | `checkpoints` | uit | Claude PreCompact schrijft automatisch een werkstand-stub; volgende sessiestart meldt hem (`/checkpoint load`) | alleen handmatige checkpoints via `/checkpoint` |
 | `orientation` | uit | sessiestart toont een compacte vault-orientatie (counts, recente artikelen, veelgebruikte kennis, open backlog-taken) | alleen on-demand via `/sessiestart` |
-| `graph_retrieval` | aan | de `(buur)`-entry in de hook-injectie komt uit de gewogen graafindex `kb-graph.db` (submilliseconde; stale graaf → geen buur, zie doctor) | legacy wikilink-scan over artikelteksten levert de buur (gedrag van vóór TASK-87) |
+| `graph_retrieval` | aan | de `(buur)`-entry in de hook-injectie komt uit de gewogen graafindex `kb-graph.db` (submilliseconde; stale graaf → geen buur, zie doctor) | geen `(buur)`-entry (TASK-93: de legacy wikilink-scan-terugval is verwijderd nadat vier releases met deze default AAN geen regressie meldden) |
 
 - **Wijzigen**: draai `/kennisbank:settings` (toont een tabel en zet toggles aan/uit), of bewerk het JSON-bestand (waarden zijn JSON-booleans).
 - **Self-gating**: één SessionStart-coördinator blijft per client statisch
