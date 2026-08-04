@@ -4,7 +4,7 @@ title: Contribute KennisBank hook robustness fixes
 status: In Progress
 assignee: []
 created_date: '2026-08-04 18:49'
-updated_date: '2026-08-04 18:53'
+updated_date: '2026-08-04 18:54'
 labels: []
 dependencies: []
 references:
@@ -27,10 +27,12 @@ Isolate and contribute the fail-open vault path, embedding warm-worker liveness,
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Five mapped tooling scripts are compared against the installed release baseline and only real upstream changes are included.
-- [ ] #2 The contribution branch is pushed and a PR targets the upstream main branch.
-- [ ] #3 No vault content, local path stamps, backups, or personal configuration are included.
+- [x] #1 Five mapped tooling scripts are compared against the installed release baseline and only real upstream changes are included.
+- [x] #2 The contribution branch is pushed and a PR targets the upstream main branch.
+- [x] #3 No vault content, local path stamps, backups, or personal configuration are included.
 <!-- AC:END -->
+
+
 
 ## Implementation Plan
 
