@@ -151,8 +151,8 @@ def test_emit_uses_one_native_context_payload_per_client(capsys):
 
     module._emit("codex", "action")
     codex = json.loads(capsys.readouterr().out)
-    assert codex["suppressOutput"] is True
-    assert "action" in codex["additionalContext"]
+    assert codex["hookSpecificOutput"]["hookEventName"] == "SessionStart"
+    assert "action" in codex["hookSpecificOutput"]["additionalContext"]
 
 
 def test_timeout_and_nonzero_exit_are_actionable_but_fail_open(tmp_path, monkeypatch):

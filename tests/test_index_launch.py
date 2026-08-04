@@ -31,7 +31,7 @@ class IndexLaunchTest(unittest.TestCase):
 
     def test_second_launch_does_not_spawn_a_second_worker(self):
         spawned = []
-        self.m.spawn_worker = lambda: spawned.append(1)
+        self.m.spawn_worker = lambda token: spawned.append(token)
         self.assertEqual(self.m.main([]), 0)
         self.assertEqual(self.m.main([]), 0)
         self.assertEqual(len(spawned), 1,
@@ -39,7 +39,7 @@ class IndexLaunchTest(unittest.TestCase):
                          "zouden dezelfde index schrijven")
 
     def test_lock_is_released_when_spawning_fails(self):
-        def boom():
+        def boom(_token):
             raise OSError("geen proces")
         self.m.spawn_worker = boom
         self.m.main([])
@@ -62,6 +62,12 @@ class IndexLaunchTest(unittest.TestCase):
         lock = self.m._lock_path()
         future = time.time() + 10_000
         os.utime(lock, (future, future))
+        self.assertTrue(self.m.is_stale(lock))
+
+    def test_recent_lock_with_dead_pid_counts_as_stale(self):
+        """Een gecrashte worker mag geen uur lang onderhoud blokkeren."""
+        lock = self.m._lock_path()
+        lock.write_text("2147483647\nlegacy-token\n", encoding="ascii")
         self.assertTrue(self.m.is_stale(lock))
 
     def test_stale_window_exceeds_the_worst_case_run(self):
@@ -102,9 +108,30 @@ class IndexLaunchTest(unittest.TestCase):
 
     def test_worker_mode_releases_the_lock(self):
         self.assertTrue(self.m.acquire_lock())
+        token = self.m._lock_token(self.m._lock_path())
+        self.assertIsNotNone(token)
         self.m.run_jobs = lambda runner=None: []
-        self.m.main(["--worker"])
+        self.m.main(["--worker", "--lock-token", token])
         self.assertFalse(self.m._lock_path().exists())
+
+    def test_spawn_worker_hides_windows_console(self):
+        calls = []
+        original_popen = self.m.subprocess.Popen
+        self.m.subprocess.Popen = lambda command, **kwargs: calls.append((command, kwargs))
+        try:
+            self.m.spawn_worker("test-token")
+        finally:
+            self.m.subprocess.Popen = original_popen
+
+        self.assertEqual(len(calls), 1)
+        command, kwargs = calls[0]
+        self.assertEqual(command[-3:], ["--worker", "--lock-token", "test-token"])
+        self.assertIs(kwargs["stdout"], self.m.subprocess.DEVNULL)
+        self.assertIs(kwargs["stderr"], self.m.subprocess.DEVNULL)
+        if os.name == "nt":
+            self.assertEqual(kwargs["creationflags"], 0x00000008 | 0x08000000)
+        else:
+            self.assertTrue(kwargs["start_new_session"])
 
 
 if __name__ == "__main__":

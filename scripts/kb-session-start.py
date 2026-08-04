@@ -397,7 +397,15 @@ def _emit(client: str, report: str) -> None:
     elif client == "copilot":
         payload = {"additionalContext": context}
     else:
-        payload = {"suppressOutput": True, "additionalContext": context}
+        # Codex only consumes model-visible context from its hook-specific
+        # envelope. A top-level additionalContext is ignored by Codex, which
+        # made this hook appear successful while injecting nothing.
+        payload = {
+            "hookSpecificOutput": {
+                "hookEventName": "SessionStart",
+                "additionalContext": context,
+            }
+        }
     # ensure_ascii=True (de default) is hier bewust: deze hook geeft de uitvoer
     # van ALLE kindscripts door. Een enkel niet-cp1252 teken -- een accent in een
     # bestandsnaam, een typografisch aanhalingsteken -- gooit op Windows een
