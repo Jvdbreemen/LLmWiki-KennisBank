@@ -73,7 +73,12 @@ NOTIFICATIONS = (
 
 
 def _vault() -> Path:
-    return vault_root()
+    vault = vault_root()
+    # Make the selected vault explicit for every child, including the detached
+    # embedding warm-up. This keeps hook execution deterministic when a client
+    # starts commands without inheriting the user's environment block.
+    os.environ.setdefault("KENNISBANK_VAULT", str(vault))
+    return vault
 
 
 def _prewarm_embed_model(vault: Path) -> None:
