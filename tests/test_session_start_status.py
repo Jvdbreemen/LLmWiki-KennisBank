@@ -137,8 +137,10 @@ class StatusLineTest(unittest.TestCase):
 
     # --- leeft de worker echt? ----------------------------------------------
 
-    def _lock(self, leeftijd_sec: float, pid: int = 31772):
+    def _lock(self, leeftijd_sec: float, pid: int | None = None):
         lock = self.tmp / ".claude" / ".kb-index-worker.lock"
+        if pid is None:
+            pid = os.getpid()
         lock.write_text(str(pid), encoding="utf-8")
         t = time.time() - leeftijd_sec
         os.utime(lock, (t, t))

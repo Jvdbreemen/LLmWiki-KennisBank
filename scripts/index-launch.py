@@ -28,6 +28,7 @@ import os
 import subprocess
 import sys
 import time
+import uuid
 from pathlib import Path
 
 os.environ.setdefault("KENNISBANK_VAULT", str(Path(__file__).resolve().parents[2]))
@@ -71,13 +72,66 @@ def _lock_path() -> Path:
     return vault_root() / ".claude" / LOCK_NAME
 
 
+def _lock_pid(lock: Path) -> int | None:
+    """Read the current owner PID stored in the lock."""
+    try:
+        value = lock.read_text(encoding="ascii").strip().splitlines()[0]
+        pid = int(value)
+        return pid if pid > 0 else None
+    except (OSError, IndexError, TypeError, ValueError):
+        return None
+
+
+def _lock_token(lock: Path) -> str | None:
+    """Read the launch token that prevents an old worker deleting a new lock."""
+    try:
+        value = lock.read_text(encoding="ascii").strip().splitlines()
+        token = value[1].strip()
+        return token or None
+    except (OSError, IndexError, TypeError, ValueError):
+        return None
+
+
+def _pid_alive(pid: int | None) -> bool:
+    """Return whether *pid* currently identifies a process on this host."""
+    if pid is None:
+        return False
+    if os.name == "nt":
+        try:
+            import ctypes
+
+            handle = ctypes.windll.kernel32.OpenProcess(
+                0x1000,  # PROCESS_QUERY_LIMITED_INFORMATION
+                False,
+                pid,
+            )
+            if handle:
+                ctypes.windll.kernel32.CloseHandle(handle)
+                return True
+            return False
+        except Exception:
+            pass
+    try:
+        os.kill(pid, 0)
+    except PermissionError:
+        return True
+    except (ProcessLookupError, OSError):
+        return False
+    return True
+
+
 def is_stale(lock: Path, now: float | None = None) -> bool:
-    """True bij een lock ouder dan STALE_SEC of met een toekomstige mtime.
+    """True bij een dode worker of een lock buiten het geldige tijdvenster.
 
     Die tweede clausule vangt een klokverzetting af: zonder hem zou een lock met
     een mtime in de toekomst nooit verlopen en het onderhoud permanent stilzetten.
     """
     try:
+        # A worker that died before its finally-block ran must not suppress the
+        # next maintenance launch for the full stale window. The old code only
+        # used mtime, which made a dead PID look active for up to an hour.
+        if not _pid_alive(_lock_pid(lock)):
+            return True
         age = (time.time() if now is None else now) - lock.stat().st_mtime
         return age > STALE_SEC or age < 0
     except OSError:
@@ -92,7 +146,10 @@ def acquire_lock(now: float | None = None) -> bool:
     def _create() -> bool:
         try:
             fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            os.write(fd, str(os.getpid()).encode())
+            os.write(
+                fd,
+                f"{os.getpid()}\n{uuid.uuid4().hex}\n".encode("ascii"),
+            )
             os.close(fd)
             return True
         except FileExistsError:
@@ -111,9 +168,13 @@ def acquire_lock(now: float | None = None) -> bool:
     return _create()
 
 
-def release_lock() -> None:
+def release_lock(token: str | None = None) -> None:
+    """Release only our lock; an old worker must not remove a newer one."""
     try:
-        _lock_path().unlink()
+        lock = _lock_path()
+        if token is not None and _lock_token(lock) != token:
+            return
+        lock.unlink()
     except OSError:
         pass
 
@@ -128,9 +189,35 @@ def _enabled(toggle: "str | None") -> bool:
         return True          # fail-open: liever draaien dan stil overslaan
 
 
-def spawn_worker() -> None:
+def _adopt_lock(token: str) -> bool:
+    """Transfer ownership from the launcher PID to this detached worker."""
+    lock = _lock_path()
+    if _lock_token(lock) != token:
+        return False
+    temporary = lock.with_name(f"{lock.name}.{os.getpid()}.tmp")
+    try:
+        temporary.write_text(
+            f"{os.getpid()}\n{token}\n", encoding="ascii"
+        )
+        os.replace(temporary, lock)
+        return True
+    except OSError:
+        try:
+            temporary.unlink()
+        except OSError:
+            pass
+        return False
+
+
+def spawn_worker(token: str) -> None:
     """Start deze module opnieuw in --worker-modus, losgekoppeld van de sessie."""
-    cmd = [sys.executable, os.path.abspath(__file__), "--worker"]
+    cmd = [
+        sys.executable,
+        os.path.abspath(__file__),
+        "--worker",
+        "--lock-token",
+        token,
+    ]
     kwargs: dict = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
     if os.name == "nt":
         kwargs["creationflags"] = 0x00000008 | 0x08000000  # DETACHED_PROCESS|CREATE_NO_WINDOW
@@ -170,16 +257,26 @@ def main(argv: "list[str] | None" = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if "--worker" in argv:
         try:
+            token = argv[argv.index("--lock-token") + 1]
+        except (ValueError, IndexError):
+            return 0
+        if not _adopt_lock(token):
+            return 0
+        try:
             run_jobs()
         finally:
-            release_lock()
+            release_lock(token)
         return 0
     if not acquire_lock():
         return 0                      # er draait al onderhoud
+    token = _lock_token(_lock_path())
+    if not token:
+        release_lock()
+        return 0
     try:
-        spawn_worker()
+        spawn_worker(token)
     except Exception:
-        release_lock()                # niets gespawnd -> lock niet laten staan
+        release_lock(token)            # niets gespawnd -> lock niet laten staan
     return 0
 
 
