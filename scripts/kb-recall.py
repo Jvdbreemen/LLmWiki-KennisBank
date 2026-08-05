@@ -195,9 +195,60 @@ def _neighbor_entry(out) -> "dict | None":
         return None
 
 
+def _merge_scene_members(rows_primary, rows_wide, members, boost: float) -> list:
+    """Add members of the winning scene to the baseline rows. Additive only.
+
+    A row already present keeps its position AND its score untouched: the
+    baseline result stays a strict subset of the treatment, which is what makes
+    the parity claim provable instead of hopeful. Re-scoring a primary hit would
+    let the prior reorder results it was never meant to touch, and would make a
+    recall@1 regression impossible to attribute to admission versus reordering.
+    """
+    seen = {r.get("path") for r in rows_primary}
+    out = list(rows_primary)
+    for r in rows_wide:
+        path = r.get("path")
+        if path in seen or path not in members:
+            continue
+        extra = dict(r)
+        extra["score"] = float(extra.get("score", 0.0)) + float(boost)
+        extra["scene"] = True
+        out.append(extra)
+        seen.add(path)
+    return out
+
+
+def _scene_members_for(query_vector, prior) -> set:
+    """Member paths of the best-matching scene. Fail-open -> empty set.
+
+    Any failure -- no database, a stale one, a corrupt row, a missing module --
+    yields an empty set, and an empty set makes _merge_scene_members a no-op.
+    There is deliberately no error path in which the caller behaves differently
+    from baseline.
+    """
+    try:
+        import _scenes
+        path = _scenes.scene_index_path()
+        if not path.exists():
+            return set()
+        conn = _scenes.connect(path)
+        try:
+            if not _scenes.is_current(conn, _kbindex.index_path()):
+                return set()
+            hit = _scenes.best_scene(conn, query_vector,
+                                     min_cos=float(prior.get("floor", 0.35)))
+            if not hit:
+                return set()
+            return set(_scenes.members_of(conn, hit[0]))
+        finally:
+            conn.close()
+    except Exception:
+        return set()
+
+
 def recall_hits(query_vector, query_text: str = "", k: int = 3,
                 layers=("wiki", "memory"), expand: bool = False,
-                min_cos: float = 0.0) -> list:
+                min_cos: float = 0.0, scene_prior=None) -> list:
     """Recall-hits over de opgegeven lagen (status=current), fail-soft -> [].
     Live-status-hercheck ALLEEN voor de memory-laag (wiki is gecureerd).
 
@@ -222,6 +273,17 @@ def recall_hits(query_vector, query_text: str = "", k: int = 3,
         rows = _kbindex.search(conn, query_vector=query_vector, query_text=query_text,
                                k=k, layers=tuple(layers), statuses=("current",),
                                min_cos=min_cos)
+        # L2 scene prior (TASK-134). scene_prior=None issues no second query and
+        # leaves `rows` exactly as the baseline produced them -- the parity path.
+        if scene_prior:
+            members = _scene_members_for(query_vector, scene_prior)
+            if members:
+                wide = _kbindex.search(
+                    conn, query_vector=query_vector, query_text=query_text,
+                    k=k * 4, layers=tuple(layers), statuses=("current",),
+                    min_cos=float(scene_prior.get("floor", 0.35)))
+                rows = _merge_scene_members(
+                    rows, wide, members, float(scene_prior.get("boost", 0.0)))
         out = []
         for r in rows:
             layer = r.get("layer", "")
@@ -247,6 +309,10 @@ def recall_hits(query_vector, query_text: str = "", k: int = 3,
             _nf = None
         out = _rank.rerank(out, _frontmatter_of, last_used_fn=_lu, noise_fn=_nf,
                            sources_fn=_coupling_sources_fn(conn, rows))
+        # The scene prior may have pushed the candidate list past k. Cut here,
+        # after reranking, so an admitted member can win a slot but can never
+        # inflate the injected block beyond the configured top_n.
+        out = out[:k]
         if expand and out:
             try:
                 entry = _neighbor_entry(out)
@@ -302,10 +368,10 @@ MEMORY_MIN_COS = _memory_min_cos_default()
 
 
 def memory_hits(query_vector, query_text: str = "", k: int = 3,
-                min_cos: float = MEMORY_MIN_COS) -> list:
+                min_cos: float = MEMORY_MIN_COS, scene_prior=None) -> list:
     """Dunne wrapper: alleen de memory-laag (backward-compat)."""
     return recall_hits(query_vector, query_text=query_text, k=k, layers=("memory",),
-                       min_cos=min_cos)
+                       min_cos=min_cos, scene_prior=scene_prior)
 
 
 def index_is_gated() -> bool:
