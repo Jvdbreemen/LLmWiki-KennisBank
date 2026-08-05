@@ -195,6 +195,18 @@ def _neighbor_entry(out) -> "dict | None":
         return None
 
 
+def _scene_path(path) -> str:
+    """Path in the form kb-scene.db stores.
+
+    Scene members are written with forward slashes, while the index hands back
+    native Windows paths with backslashes. Comparing the two raw forms matches
+    nothing and reports nothing -- the same silent mismatch that cost the first
+    scene build all 1428 of its members, in the opposite direction. One helper,
+    used by both the membership test and the lookup.
+    """
+    return str(path or "").replace("\\", "/")
+
+
 def _merge_scene_members(rows_primary, rows_wide, members, boost: float) -> list:
     """Add members of the winning scene to the baseline rows. Additive only.
 
@@ -204,10 +216,10 @@ def _merge_scene_members(rows_primary, rows_wide, members, boost: float) -> list
     let the prior reorder results it was never meant to touch, and would make a
     recall@1 regression impossible to attribute to admission versus reordering.
     """
-    seen = {r.get("path") for r in rows_primary}
+    seen = {_scene_path(r.get("path")) for r in rows_primary}
     out = list(rows_primary)
     for r in rows_wide:
-        path = r.get("path")
+        path = _scene_path(r.get("path"))
         if path in seen or path not in members:
             continue
         extra = dict(r)
@@ -218,14 +230,31 @@ def _merge_scene_members(rows_primary, rows_wide, members, boost: float) -> list
     return out
 
 
-def _scene_members_for(query_vector, prior) -> set:
-    """Member paths of the best-matching scene. Fail-open -> empty set.
+def _scene_members_for(rows_primary, prior) -> set:
+    """Member paths of the scene(s) the strongest baseline hits belong to.
 
-    Any failure -- no database, a stale one, a corrupt row, a missing module --
-    yields an empty set, and an empty set makes _merge_scene_members a no-op.
-    There is deliberately no error path in which the caller behaves differently
-    from baseline.
+    The scene is chosen by MEMBERSHIP of the top hits, not by similarity to a
+    scene centroid. Centroid matching was tried first and is worthless here: a
+    centroid over ~19 atomic memories averages into a generic direction, and
+    measured on 856 questions the winning centroid contained NONE of the twenty
+    nearest memories. It also measured something different from the oracle
+    ceiling, which counts a miss as reachable when its gold memory shares a
+    scene with a RETRIEVED hit -- so the implementation could not realise the
+    bound it was being judged against.
+
+    Routing from the top hit is what the L2 idea actually says: the strongest
+    match tells you which working context you are in, and the scene supplies
+    its neighbours. It is also cheaper -- one indexed lookup instead of a scan
+    over every centroid.
+
+    ``prior["seeds"]`` (default 1) is how many top hits may nominate a scene.
+
+    Fail-open: any failure yields an empty set, which makes
+    _merge_scene_members a no-op. There is deliberately no error path in which
+    the caller behaves differently from baseline.
     """
+    if not rows_primary:
+        return set()
     try:
         import _scenes
         path = _scenes.scene_index_path()
@@ -235,11 +264,15 @@ def _scene_members_for(query_vector, prior) -> set:
         try:
             if not _scenes.is_current(conn, _kbindex.index_path()):
                 return set()
-            hit = _scenes.best_scene(conn, query_vector,
-                                     min_cos=float(prior.get("floor", 0.35)))
-            if not hit:
-                return set()
-            return set(_scenes.members_of(conn, hit[0]))
+            seeds = int(prior.get("seeds", 1) or 1)
+            members = set()
+            for row in rows_primary[:seeds]:
+                found = conn.execute(
+                    "SELECT scene_id FROM scene_members WHERE path=?",
+                    (_scene_path(row.get("path", "")),)).fetchone()
+                if found:
+                    members.update(_scenes.members_of(conn, found[0]))
+            return members
         finally:
             conn.close()
     except Exception:
@@ -276,7 +309,7 @@ def recall_hits(query_vector, query_text: str = "", k: int = 3,
         # L2 scene prior (TASK-134). scene_prior=None issues no second query and
         # leaves `rows` exactly as the baseline produced them -- the parity path.
         if scene_prior:
-            members = _scene_members_for(query_vector, scene_prior)
+            members = _scene_members_for(rows, scene_prior)
             if members:
                 wide = _kbindex.search(
                     conn, query_vector=query_vector, query_text=query_text,

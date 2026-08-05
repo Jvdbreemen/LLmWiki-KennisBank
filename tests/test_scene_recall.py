@@ -81,7 +81,7 @@ class ScenePriorFailOpenTest(unittest.TestCase):
         _scenes.scene_index_path = lambda: Path("does-not-exist-kb-scene.db")
         try:
             self.assertEqual(
-                self.kb._scene_members_for([1.0, 0.0], {"floor": 0.35}), set())
+                self.kb._scene_members_for([{"path": "x.md"}], {"floor": 0.35}), set())
         finally:
             _scenes.scene_index_path = original
 
@@ -95,9 +95,69 @@ class ScenePriorFailOpenTest(unittest.TestCase):
         _scenes.scene_index_path = boom
         try:
             self.assertEqual(
-                self.kb._scene_members_for([1.0, 0.0], {"floor": 0.35}), set())
+                self.kb._scene_members_for([{"path": "x.md"}], {"floor": 0.35}), set())
         finally:
             _scenes.scene_index_path = original
+
+
+class SceneRoutingTest(unittest.TestCase):
+    """The scene is chosen by membership of the top hits, not by centroid.
+
+    Centroid matching was the first implementation and failed on real data: a
+    centroid over ~19 atomic memories averages into a generic direction, and
+    the winning scene contained none of the twenty nearest memories on any of
+    856 questions. Routing from the top hit is both correct and cheaper.
+    """
+
+    def setUp(self):
+        import sqlite3
+        import tempfile
+        import _scenes
+        self.kb = _load("kb-recall.py")
+        self._scenes = _scenes
+        self._tmp = tempfile.TemporaryDirectory()
+        self.db = Path(self._tmp.name) / "kb-scene.db"
+        conn = sqlite3.connect(str(self.db))
+        _scenes.ensure_schema(conn)
+        _scenes.write_scenes(conn, "community", [
+            ("s1", ["/v/09-memory/top.md", "/v/09-memory/sibling.md"], [1.0, 0.0]),
+            ("s2", ["/v/09-memory/other.md"], [0.0, 1.0]),
+        ])
+        index = Path(self._tmp.name) / "kb-index.db"
+        index.write_bytes(b"x")
+        _scenes.set_fingerprint(conn, _scenes.fingerprint(index))
+        conn.close()
+        self._saved_path = _scenes.scene_index_path
+        self._saved_index = self.kb._kbindex.index_path
+        _scenes.scene_index_path = lambda: self.db
+        self.kb._kbindex.index_path = staticmethod(lambda: index)
+
+    def tearDown(self):
+        self._scenes.scene_index_path = self._saved_path
+        self.kb._kbindex.index_path = self._saved_index
+        self._tmp.cleanup()
+
+    def test_routes_from_the_top_hit(self):
+        members = self.kb._scene_members_for(
+            [_row("/v/09-memory/top.md", 0.8)], {"floor": 0.35})
+        self.assertEqual(members,
+                         {"/v/09-memory/top.md", "/v/09-memory/sibling.md"})
+
+    def test_a_top_hit_outside_every_scene_yields_nothing(self):
+        members = self.kb._scene_members_for(
+            [_row("/v/09-memory/unclustered.md", 0.8)], {"floor": 0.35})
+        self.assertEqual(members, set())
+
+    def test_seeds_limits_how_many_hits_may_nominate(self):
+        rows = [_row("/v/09-memory/top.md", 0.8),
+                _row("/v/09-memory/other.md", 0.7)]
+        one = self.kb._scene_members_for(rows, {"seeds": 1})
+        two = self.kb._scene_members_for(rows, {"seeds": 2})
+        self.assertNotIn("/v/09-memory/other.md", one)
+        self.assertIn("/v/09-memory/other.md", two)
+
+    def test_no_primary_hits_means_no_scene(self):
+        self.assertEqual(self.kb._scene_members_for([], {"floor": 0.35}), set())
 
 
 class RecallHitsHarness:
@@ -157,7 +217,7 @@ class RecallHitsHarness:
             def rerank(rows, *a, **kw):
                 return list(rows)
 
-        def members_for(query_vector, prior):
+        def members_for(rows_primary, prior):
             harness.member_lookups += 1
             return set(harness.members)
 

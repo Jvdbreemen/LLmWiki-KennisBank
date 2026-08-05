@@ -3,6 +3,7 @@
 Covers the store (schema, centroids, fingerprint) and the clusterers. The
 parity test that guards the whole experiment lives with the recall changes.
 """
+import json
 import os
 import sqlite3
 import sys
@@ -156,6 +157,118 @@ class CommunityClustererTest(unittest.TestCase):
     def test_empty_input_is_empty(self):
         g = self._graph([("09-memory/a.md", 1)])
         self.assertEqual(_scenes.cluster_community([], g), {})
+
+
+class TagsClustererTest(unittest.TestCase):
+    """Shared tag within a rolling window; every path in exactly one scene."""
+
+    def test_groups_by_shared_tag_within_the_window(self):
+        meta = {
+            "a.md": {"tags": ["otgw"], "created": "2026-01-01"},
+            "b.md": {"tags": ["otgw"], "created": "2026-02-01"},
+            "c.md": {"tags": ["otgw"], "created": "2025-01-01"},
+        }
+        out = _scenes.cluster_tags(meta, window_days=90)
+        groups = sorted(sorted(v) for v in out.values())
+        self.assertIn(["a.md", "b.md"], groups)
+        self.assertIn(["c.md"], groups)
+
+    def test_every_path_is_assigned_exactly_once(self):
+        meta = {"a.md": {"tags": ["x", "y"], "created": "2026-01-01"},
+                "b.md": {"tags": ["y"], "created": "2026-01-02"}}
+        out = _scenes.cluster_tags(meta, window_days=90)
+        assigned = [p for v in out.values() for p in v]
+        self.assertEqual(sorted(assigned), ["a.md", "b.md"])
+        self.assertEqual(len(assigned), len(set(assigned)),
+                         "a path in two scenes would apply the prior twice")
+
+    def test_rarest_tag_wins_the_assignment(self):
+        """The common tag would swallow the vault; the rare one is informative."""
+        meta = {"a.md": {"tags": ["common", "rare"], "created": "2026-01-01"},
+                "b.md": {"tags": ["common"], "created": "2026-01-02"},
+                "c.md": {"tags": ["common"], "created": "2026-01-03"}}
+        out = _scenes.cluster_tags(meta, window_days=90)
+        rare = [label for label in out if label.startswith("rare@")]
+        self.assertEqual(len(rare), 1)
+        self.assertEqual(out[rare[0]], ["a.md"])
+
+    def test_drops_untagged_paths(self):
+        meta = {"a.md": {"tags": [], "created": "2026-01-01"}}
+        self.assertEqual(_scenes.cluster_tags(meta, window_days=90), {})
+
+    def test_undated_memories_get_their_own_bucket(self):
+        meta = {"a.md": {"tags": ["x"], "created": ""},
+                "b.md": {"tags": ["x"], "created": "2026-01-01"}}
+        out = _scenes.cluster_tags(meta, window_days=90)
+        self.assertIn("x@undated", out)
+        self.assertEqual(out["x@undated"], ["a.md"])
+
+
+class LlmClustererTest(unittest.TestCase):
+    """Model-formed scenes under a hard cap. The llm_fn is injected, so no
+    model is needed to test the parsing, the cap, or the failure modes."""
+
+    def test_parses_an_assignment(self):
+        meta = {"a.md": {"title": "OTGW flash"}, "b.md": {"title": "OTGW wifi"}}
+        reply = '{"scenes": [{"label": "otgw", "members": ["a.md", "b.md"]}]}'
+        out = _scenes.cluster_llm(meta, llm_fn=lambda p: reply, max_scenes=15)
+        self.assertEqual(out, {"otgw": ["a.md", "b.md"]})
+
+    def test_tolerates_prose_around_the_json(self):
+        meta = {"a.md": {"title": "x"}}
+        reply = ('Sure! Here you go:\n'
+                 '{"scenes": [{"label": "s", "members": ["a.md"]}]}\nHope that helps.')
+        out = _scenes.cluster_llm(meta, llm_fn=lambda p: reply, max_scenes=15)
+        self.assertEqual(out, {"s": ["a.md"]})
+
+    def test_enforces_the_cap_by_merging_not_dropping(self):
+        meta = {f"{i}.md": {"title": str(i)} for i in range(4)}
+        reply = json.dumps({"scenes": [
+            {"label": f"s{i}", "members": [f"{i}.md"]} for i in range(4)]})
+        out = _scenes.cluster_llm(meta, llm_fn=lambda p: reply, max_scenes=2)
+        self.assertLessEqual(len(out), 2)
+        self.assertEqual(sorted(p for v in out.values() for p in v),
+                         ["0.md", "1.md", "2.md", "3.md"])
+
+    def test_fails_open_on_garbage(self):
+        out = _scenes.cluster_llm({"a.md": {"title": "x"}},
+                                  llm_fn=lambda p: "not json at all", max_scenes=15)
+        self.assertEqual(out, {})
+
+    def test_fails_open_when_the_model_raises(self):
+        def boom(prompt):
+            raise RuntimeError("model unreachable")
+
+        out = _scenes.cluster_llm({"a.md": {"title": "x"}}, llm_fn=boom,
+                                  max_scenes=15)
+        self.assertEqual(out, {})
+
+    def test_ignores_hallucinated_paths(self):
+        out = _scenes.cluster_llm(
+            {"a.md": {"title": "x"}},
+            llm_fn=lambda p: '{"scenes":[{"label":"s","members":["a.md","ghost.md"]}]}',
+            max_scenes=15)
+        self.assertEqual(out, {"s": ["a.md"]})
+
+    def test_a_path_claimed_twice_lands_in_one_scene(self):
+        """Overlapping scenes would apply the prior twice for one query."""
+        out = _scenes.cluster_llm(
+            {"a.md": {"title": "x"}},
+            llm_fn=lambda p: ('{"scenes":[{"label":"s1","members":["a.md"]},'
+                              '{"label":"s2","members":["a.md"]}]}'),
+            max_scenes=15)
+        assigned = [p for v in out.values() for p in v]
+        self.assertEqual(assigned, ["a.md"])
+
+    def test_a_repeated_label_does_not_swallow_the_earlier_group(self):
+        out = _scenes.cluster_llm(
+            {"a.md": {"title": "x"}, "b.md": {"title": "y"}},
+            llm_fn=lambda p: ('{"scenes":[{"label":"s","members":["a.md"]},'
+                              '{"label":"s","members":["b.md"]}]}'),
+            max_scenes=15)
+        self.assertEqual(sorted(p for v in out.values() for p in v),
+                         ["a.md", "b.md"])
+        self.assertEqual(len(out), 2)
 
 
 class SceneKnobsTest(unittest.TestCase):

@@ -193,6 +193,126 @@ def is_current(conn: sqlite3.Connection, index_path) -> bool:
     return bool(fp) and row[0] == fp
 
 
+SCENE_PROMPT = """You group short memory notes into working scenes.
+
+A scene is a project or a recurring working context: the notes someone would
+want back together when they resume that work.
+
+Rules:
+- Use at most {max_scenes} scenes. If you need more, merge the closest ones.
+- Every note must appear in exactly one scene.
+- Use only the note ids given below. Never invent one.
+- Answer with JSON only: {{"scenes": [{{"label": "...", "members": ["id", ...]}}]}}
+
+Notes:
+{notes}
+"""
+
+
+def cluster_llm(path_meta, llm_fn, max_scenes: int = 15) -> dict:
+    """Let a model form scenes under a hard capacity cap.
+
+    The cap is the borrowed idea: TencentDB Agent Memory's scene extractor puts
+    the ceiling in front of the model and blocks new scenes near the limit, so
+    capacity pressure forces merging instead of unbounded growth. When a reply
+    exceeds the cap anyway, the two smallest scenes are merged here rather than
+    dropped -- losing a note would silently shrink the corpus being measured.
+
+    Fail-open: any parse failure yields {}, which the builder turns into "no
+    scenes", which the recall path treats as baseline. A model that answers
+    with prose must not take retrieval down with it.
+    """
+    import json as _json
+
+    notes = "\n".join(f"- {p}: {(meta or {}).get('title', '')}"
+                      for p, meta in sorted(path_meta.items()))
+    prompt = SCENE_PROMPT.format(max_scenes=int(max_scenes), notes=notes)
+    try:
+        raw = llm_fn(prompt) or ""
+        start, end = raw.find("{"), raw.rfind("}")
+        if start < 0 or end <= start:
+            return {}
+        scenes = (_json.loads(raw[start:end + 1]) or {}).get("scenes") or []
+    except Exception:
+        return {}
+
+    known = set(path_meta)
+    assigned: set = set()
+    out: dict = {}
+    for entry in scenes:
+        label = str((entry or {}).get("label", "")).strip()
+        members = [str(m) for m in (entry or {}).get("members", [])
+                   if str(m) in known and str(m) not in assigned]
+        if not label or not members:
+            continue
+        # A label the model repeats must not silently swallow the earlier group.
+        while label in out:
+            label += "'"
+        out[label] = sorted(members)
+        assigned.update(members)
+
+    while len(out) > int(max_scenes) and len(out) > 1:
+        smallest = sorted(out.items(), key=lambda kv: (len(kv[1]), kv[0]))[:2]
+        (l1, m1), (l2, m2) = smallest
+        del out[l1]
+        del out[l2]
+        out[f"{l1}+{l2}"] = sorted(m1 + m2)
+    return out
+
+
+def cluster_tags(path_meta, window_days: int = 90) -> dict:
+    """Group memories by shared tag within a rolling time window.
+
+    A memory can carry several tags, but a scene must be a PARTITION: a path in
+    two scenes would let one query apply the prior twice and would make any
+    recall change impossible to attribute. Each path therefore lands in exactly
+    one scene, chosen by its RAREST tag -- the rarest tag carries the most
+    information, while the most common one would collapse half the vault into a
+    single scene that acts as a global floor change in disguise.
+
+    Untagged memories are dropped, for the same reason cluster_community drops
+    paths absent from the graph.
+
+    ``path_meta``: {path: {"tags": [...], "created": "YYYY-MM-DD"}}.
+    """
+    def _parse(value):
+        try:
+            y, m, d = str(value)[:10].split("-")
+            return date(int(y), int(m), int(d))
+        except Exception:
+            return None
+
+    freq: dict = {}
+    for meta in path_meta.values():
+        for tag in (meta.get("tags") or []):
+            freq[tag] = freq.get(tag, 0) + 1
+
+    buckets: dict = {}
+    for path, meta in sorted(path_meta.items()):
+        tags = [t for t in (meta.get("tags") or []) if t]
+        if not tags:
+            continue
+        tag = sorted(tags, key=lambda t: (freq.get(t, 0), t))[0]
+        buckets.setdefault(tag, []).append((_parse(meta.get("created")), path))
+
+    out: dict = {}
+    for tag, items in buckets.items():
+        dated = sorted((c, p) for c, p in items if c is not None)
+        anchor = None
+        label = None
+        for created, path in dated:
+            if anchor is None or (created - anchor).days > window_days:
+                anchor = created
+                label = f"{tag}@{created.isoformat()}"
+            out.setdefault(label, []).append(path)
+        for created, path in items:
+            if created is None:
+                out.setdefault(f"{tag}@undated", []).append(path)
+    for label in out:
+        out[label].sort()
+    return out
+
+
 def cluster_community(paths, graph_conn) -> dict:
     """Group memory paths by the community partition already in kb-graph.db.
 
