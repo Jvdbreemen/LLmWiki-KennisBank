@@ -121,7 +121,7 @@ def build(clusterer: str, index_conn, graph_conn, scene_conn) -> dict:
         groups = _scenes.cluster_tags(memory_meta(rel_paths))
     elif clusterer == "llm":
         import _llm
-        groups = _scenes.cluster_llm(memory_meta(rel_paths), llm_fn=_llm.complete,
+        groups = _scenes.cluster_llm(memory_meta(rel_paths), llm_fn=_llm.generate,
                                      max_scenes=15)
     else:
         raise SystemExit(f"unknown clusterer: {clusterer}")
