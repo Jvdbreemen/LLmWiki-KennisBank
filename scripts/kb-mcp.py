@@ -103,7 +103,52 @@ except Exception:
     activity = None
 
 
-def recall_tool(query: str, k: int = 5) -> str:
+def _compact_output_enabled() -> bool:
+    """Whether this client should receive short human-readable MCP output."""
+    return os.environ.get("KENNISBANK_MCP_COMPACT_OUTPUT", "").strip().lower() in {
+        "1", "true", "yes",
+    }
+
+
+def _short_text(value: object, limit: int) -> str:
+    text = " ".join(str(value or "").split())
+    return text if len(text) <= limit else f"{text[:limit - 3].rstrip()}..."
+
+
+def _compact_activity_result(result: dict[str, Any]) -> str:
+    """Render activity data for interactive clients that display tool content."""
+    warnings = result.get("warnings") or []
+    if not result.get("ok", False):
+        detail = _short_text("; ".join(map(str, warnings)), 240) or "unknown error"
+        return f"KennisBank activity lookup failed: {detail}"
+
+    period = result.get("period") or {}
+    label = _short_text(period.get("label"), 80) or "requested period"
+    events = result.get("events") or []
+    summary = result.get("summary") or {}
+    event_count = summary.get("event_count", len(events))
+    lines = [f"KennisBank activity for {label}: {event_count} event(s)."]
+    if not events:
+        return "\n".join(lines + ["No matching activity events."])
+
+    for event in events[:3]:
+        title = _short_text(event.get("title") or event.get("activity_kind"), 100)
+        detail = _short_text(event.get("summary"), 260)
+        source = _short_text(event.get("source_ref"), 160)
+        line = f"- {title}"
+        if detail:
+            line += f": {detail}"
+        if source:
+            line += f" ({source})"
+        lines.append(line)
+    if len(events) > 3:
+        lines.append(f"- {len(events) - 3} additional event(s) omitted.")
+    if warnings:
+        lines.append(f"Warning: {_short_text('; '.join(map(str, warnings)), 240)}")
+    return "\n".join(lines)
+
+
+def recall_tool(query: str, k: int = 5, *, compact: bool = False) -> str:
     """Doorzoek de KennisBank (geheugen + wiki) en geef relevante kennis als tekst."""
     q = (query or "").strip()
     if not q:
@@ -124,8 +169,11 @@ def recall_tool(query: str, k: int = 5) -> str:
         tag = "geheugen" if h.get("layer") == "memory" else "wiki"
         stem = Path(h.get("path", "")).stem
         title = h.get("title", "")
+        snippet = h.get("snippet", "")
+        if compact:
+            snippet = _short_text(snippet, 260)
         lines.append(f"- [{tag}] [[{stem}|{title}]] ({h.get('score', 0.0):.2f}): "
-                     f"{h.get('snippet', '')}")
+                     f"{snippet}")
     return "KennisBank-treffers:\n" + "\n".join(lines)
 
 
@@ -209,67 +257,75 @@ def _activity_unavailable() -> dict[str, Any]:
 
 
 def what_did_i_do_tool(date_or_period: str, topic: str = "", project: str = "",
-                       max_events: int = 25) -> dict[str, Any]:
+                       max_events: int = 25) -> "dict[str, Any] | str":
     """Temporal activity recall voor een datum/periode."""
     if activity is None:
-        return _activity_unavailable()
-    try:
-        return activity.what_did_i_do(
-            date_or_period or "today",
-            topic=topic or "",
-            project=project or "",
-            max_events=int(max_events),
-        )
-    except Exception as e:
-        return {"ok": False, "warnings": [f"what_did_i_do failed: {type(e).__name__}"], "events": []}
+        result = _activity_unavailable()
+    else:
+        try:
+            result = activity.what_did_i_do(
+                date_or_period or "today",
+                topic=topic or "",
+                project=project or "",
+                max_events=int(max_events),
+            )
+        except Exception as e:
+            result = {"ok": False, "warnings": [f"what_did_i_do failed: {type(e).__name__}"], "events": []}
+    return _compact_activity_result(result) if _compact_output_enabled() else result
 
 
 def timeline_tool(period: str, topic: str = "", project: str = "",
-                  max_events: int = 50) -> dict[str, Any]:
+                  max_events: int = 50) -> "dict[str, Any] | str":
     """Chronologische temporal activity timeline."""
     if activity is None:
-        return _activity_unavailable()
-    try:
-        return activity.timeline(
-            period or "today",
-            topic=topic or "",
-            project=project or "",
-            max_events=int(max_events),
-        )
-    except Exception as e:
-        return {"ok": False, "warnings": [f"timeline failed: {type(e).__name__}"], "events": []}
+        result = _activity_unavailable()
+    else:
+        try:
+            result = activity.timeline(
+                period or "today",
+                topic=topic or "",
+                project=project or "",
+                max_events=int(max_events),
+            )
+        except Exception as e:
+            result = {"ok": False, "warnings": [f"timeline failed: {type(e).__name__}"], "events": []}
+    return _compact_activity_result(result) if _compact_output_enabled() else result
 
 
 def weeklog_tool(period: str = "vorige week", topic: str = "", project: str = "",
-                 max_events: int = 100) -> dict[str, Any]:
+                 max_events: int = 100) -> "dict[str, Any] | str":
     """Weekoverzicht met rollup en source_refs."""
     if activity is None:
-        return _activity_unavailable()
-    try:
-        return activity.weeklog(
-            period or "vorige week",
-            topic=topic or "",
-            project=project or "",
-            max_events=int(max_events),
-        )
-    except Exception as e:
-        return {"ok": False, "warnings": [f"weeklog failed: {type(e).__name__}"], "events": []}
+        result = _activity_unavailable()
+    else:
+        try:
+            result = activity.weeklog(
+                period or "vorige week",
+                topic=topic or "",
+                project=project or "",
+                max_events=int(max_events),
+            )
+        except Exception as e:
+            result = {"ok": False, "warnings": [f"weeklog failed: {type(e).__name__}"], "events": []}
+    return _compact_activity_result(result) if _compact_output_enabled() else result
 
 
 def topic_timeline_tool(topic: str, period: str = "afgelopen 90 dagen",
-                        project: str = "", max_events: int = 80) -> dict[str, Any]:
+                        project: str = "", max_events: int = 80) -> "dict[str, Any] | str":
     """Volg een onderwerp of entity door de tijd."""
     if activity is None:
-        return _activity_unavailable()
-    try:
-        return activity.topic_timeline(
-            topic or "",
-            period_text=period or "afgelopen 90 dagen",
-            project=project or "",
-            max_events=int(max_events),
-        )
-    except Exception as e:
-        return {"ok": False, "warnings": [f"topic_timeline failed: {type(e).__name__}"], "events": []}
+        result = _activity_unavailable()
+    else:
+        try:
+            result = activity.topic_timeline(
+                topic or "",
+                period_text=period or "afgelopen 90 dagen",
+                project=project or "",
+                max_events=int(max_events),
+            )
+        except Exception as e:
+            result = {"ok": False, "warnings": [f"topic_timeline failed: {type(e).__name__}"], "events": []}
+    return _compact_activity_result(result) if _compact_output_enabled() else result
 
 
 # Pull-nudge voor MCP-clients zonder push-hook (zie module-docstring). Drie
@@ -308,7 +364,8 @@ def build_server():
         """Search your own KennisBank (personal memory + curated wiki) BEFORE
         searching externally or making an assumption. Give a short query; get the
         best-matching entries back."""
-        return recall_tool(query, k=k)
+        compact = _compact_output_enabled()
+        return recall_tool(query, k=min(int(k), 3) if compact else k, compact=compact)
 
     @srv.tool(annotations=_ann(title="Capture a memory", readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False))
     def capture(title: str, body: str, memory_type: str = "feit",
@@ -333,7 +390,7 @@ def build_server():
 
     @srv.tool(annotations=_ann(title="What happened on a date", readOnlyHint=True, openWorldHint=False))
     def what_did_i_do(date_or_period: str, topic: str = "", project: str = "",
-                      max_events: int = 25) -> dict[str, Any]:
+                      max_events: int = 25) -> "dict[str, Any] | str":
         """Answer what happened locally on a given date or in a period. Returns
         the events with their source references, any warnings, and a summary."""
         return what_did_i_do_tool(date_or_period, topic=topic, project=project,
@@ -341,7 +398,7 @@ def build_server():
 
     @srv.tool(annotations=_ann(title="Activity timeline", readOnlyHint=True, openWorldHint=False))
     def timeline(period: str, topic: str = "", project: str = "",
-                 max_events: int = 50) -> dict[str, Any]:
+                 max_events: int = 50) -> "dict[str, Any] | str":
         """List the INDIVIDUAL activity events in chronological order for a
         period, optionally filtered by topic or project. Prefer weeklog when an
         aggregated summary is wanted instead of every single event."""
@@ -350,7 +407,7 @@ def build_server():
 
     @srv.tool(annotations=_ann(title="Week overview", readOnlyHint=True, openWorldHint=False))
     def weeklog(period: str = "vorige week", topic: str = "", project: str = "",
-                max_events: int = 100) -> dict[str, Any]:
+                max_events: int = 100) -> "dict[str, Any] | str":
         """Summarise a week into an AGGREGATED rollup per day, with source
         references. Prefer timeline when the individual events are wanted."""
         return weeklog_tool(period=period, topic=topic, project=project,
@@ -358,7 +415,7 @@ def build_server():
 
     @srv.tool(annotations=_ann(title="Topic through time", readOnlyHint=True, openWorldHint=False))
     def topic_timeline(topic: str, period: str = "afgelopen 90 dagen",
-                       project: str = "", max_events: int = 80) -> dict[str, Any]:
+                       project: str = "", max_events: int = 80) -> "dict[str, Any] | str":
         """Follow one topic or entity through time across activity events, to see
         how it developed."""
         return topic_timeline_tool(topic, period=period, project=project,
