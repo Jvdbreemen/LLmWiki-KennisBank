@@ -3,7 +3,7 @@
 **Date:** 2026-08-11
 **Task:** TASK-134
 **Design:** `docs/superpowers/specs/2026-08-05-l2-scene-retrieval-design.md`
-**Verdict:** no arm met the winner rule. `scene_retrieval` stays off.
+**Verdict:** no shippable arm met the winner rule; `scene_retrieval` stays off. An oracle upper bound shows the tier would pay off (+0.040 recall@5, p < 0.0001) if a clustering five times better than graph communities existed — see "Follow-up".
 
 ## What was tested
 
@@ -113,7 +113,14 @@ but does not change their score, so they rarely reach the top 5.
 without reference to the spread of the underlying scores, so it lifts scene
 members over hits that are substantively better.
 
-**The exchange rate is the real finding.** Tracking what happens to the 47
+> **Superseded by the follow-up in this document.** The paragraph below concluded
+> that the unfavourable exchange rate is a property of the mechanism. The oracle
+> and placebo arms (see "Follow-up") falsify that: with a correct clustering the
+> same mechanism wins 39 and loses 5. The exchange rate is a property of the
+> *clustering*, not of the merge. The numbers here stand; the interpretation does
+> not.
+
+**The exchange rate.** Tracking what happens to the 47
 reachable misses:
 
 | Arm | reachable misses recovered | other questions broken |
@@ -125,9 +132,11 @@ reachable misses:
 A stronger prior does recover more of what the ceiling promised — and destroys
 more than it recovers, in every setting tested. The ceiling assumes an admitted
 gold memory lands in the top 5, but admission costs a slot, and the displaced
-baseline hit is right more often than the admitted scene member. That is a
-property of the mechanism, not of the knob values: no point on this grid, and by
-the monotone trend no point between them, trades favourably.
+baseline hit is right more often than the admitted scene member.
+
+At the time this was written it read as a property of the mechanism. The
+follow-up section shows it is not: it is what displacement looks like when the
+admitted members are the wrong documents.
 
 ### Flip examples
 
@@ -221,6 +230,115 @@ Note also the capacity arithmetic: 15 scenes over 1508 memories is ~100 members
 per scene, against community's median of 3. Even a perfectly obedient model
 would produce scenes that act as a global floor change in disguise.
 
+## Follow-up: is the scene tier worth anything at all?
+
+The arms above answer "does this configuration ship". They do not answer "does
+the idea have value", because every measured clusterer grouped memories badly
+enough to be blamed for the null. Three further arms settle that, all on the
+same index and day, all against the same baseline (recall@1 0.334, recall@5
+0.756, MRR 0.499, reproduced exactly across a reboot).
+
+**Oracle upper bound.** A clustering that cannot be blamed: for 165 of the 209
+baseline misses, the gold memory and a memory the baseline did retrieve are put
+in the same scene, with neighbour filler so sizes match community's shape
+(55 scenes, median 5, p95 24, 30.5% of the memory layer). It consumes dev-set
+gold labels. It is an upper bound, never a candidate configuration, and it is
+built into a scratch database that is swapped out again afterwards.
+
+**Placebo.** The same 55 scenes, the same size histogram, the same coverage,
+membership drawn at random. This separates "the right pairs help" from "a
+smaller, sparser scene index helps".
+
+**Seeds.** The prior routes from the top hit only (`seeds=1`). recall@1 is
+0.334, so two questions in three nominate a scene from a document that is not
+the answer. Raising `seeds` tests whether routing is the binding constraint.
+
+| Arm | recall@1 | recall@5 | Δ@5 | won | lost | net | p (McNemar) | converted |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| baseline | 0.334 | 0.756 | – | – | – | – | – | – |
+| placebo random, seeds 1 | 0.334 | 0.756 | +0.000 | 0 | 0 | 0 | 1.0000 | – |
+| placebo random, seeds 5 | 0.334 | 0.757 | +0.001 | 1 | 0 | +1 | 1.0000 | – |
+| community, seeds 1 | 0.328 | 0.756 | +0.000 | 1 | 1 | 0 | 1.0000 | 1 of 14 (7%) |
+| community, seeds 5 | 0.328 | 0.756 | +0.000 | 7 | 7 | 0 | 1.0000 | 7 of 47 (15%) |
+| oracle, seeds 1 | 0.338 | 0.782 | +0.026 | 26 | 4 | +22 | 0.0001 | 26 of 120 (22%) |
+| oracle, seeds 5 | 0.338 | 0.796 | +0.040 | 39 | 5 | +34 | <0.0001 | 39 of 166 (23%) |
+
+`p` is an exact two-sided McNemar test on the discordant pairs. The oracle
+survives Bonferroni correction over every arm in this document; nothing else
+approaches significance.
+
+### What this changes
+
+**The mechanism works. The clustering is what fails.** With correct scenes the
+merge wins 39 and loses 5 — admission is nearly free. With community scenes
+every win is matched by a loss at every seeds setting. The unfavourable exchange
+rate reported earlier is not inherent to admitting members; it is what admitting
+the *wrong* members looks like.
+
+**The ceiling reported for community was never reachable by the shipped code.**
+`scene-report`'s oracle counts a miss as reachable when the gold shares a scene
+with *any* retrieved hit. `_scene_members_for` routes from the *top* hit only.
+Measured on the same 209 misses:
+
+| Clusterer | reachable from the top hit | reachable from any of the top 5 |
+| --- | --- | --- |
+| community | 14 | 47 |
+| oracle | 120 | 166 |
+
+So community's real ceiling in the shipped configuration is +0.016 — **below the
++0.02 the winner rule demands**, before a single arm runs. The null result was
+predictable from the code. The docstring of `_scene_members_for` already warns
+about exactly this class of mismatch for centroid routing; the same gap survived
+the switch to top-hit routing and nobody re-derived the bound.
+
+**Raising seeds does not rescue a bad clustering.** community goes 1→7 wins and
+1→7 losses; churn doubles (134 → 267 changed hit lists) and the net stays zero.
+The oracle goes 26→39 wins with losses flat. Routing is a real limit for a good
+clustering and irrelevant for a bad one.
+
+**The boost knob is worthless even with perfect scenes.** The oracle arm at the
+production floor with boost only (0.45 / 0.05) scores 29 wins against 28 losses,
+p = 1.0. Pure churn. Everything the oracle gains comes from lowering the floor,
+i.e. from admission, not from re-scoring.
+
+**Even a perfect clustering converts only ~23%.** Admission puts the gold memory
+in the candidate pool; it does not place it in the top 5. The remaining 77% are
+admitted and then outranked. That is the honest size of the prize: not the
++0.19 the reachability count suggests, but +0.04 at best.
+
+**Latency was mis-attributed.** The earlier "+65 ms p50" is a function of scene
+*coverage*, not of the prior. The second retrieval only runs when the top hit
+belongs to a scene: community covers 99% of memories and pays it on nearly every
+query (95 → 160 ms), the oracle covers 30% and often skips it (120 → 102 ms).
+Run-to-run p50 varies by roughly 25% here, so treat all latency figures in this
+document as indicative.
+
+### The bar a real clusterer has to clear
+
+Working backwards from the measurements: +0.02 recall@5 on this set needs about
+17 net conversions. The oracle converts 22-23% of what it makes reachable. So a
+candidate clusterer needs roughly **75 top-hit-reachable misses** to qualify.
+community delivers 14. That is the gap, and it is a factor of five — not a
+tuning problem.
+
+### Chunked LLM extraction
+
+Reported above as "a single-shot prompt is not feasible". The chunked variant
+was then built and measured, which strengthens the claim:
+
+| Configuration | Result |
+| --- | --- |
+| gemma4:12b, 13 batches of 120 notes | 13 of 13 batches returned nothing, 2849 s, 0 scenes |
+| qwen3.5:4b, batches of 120 | answered, assigned 58 of 120 notes (48%) |
+| qwen3.5:4b, batches of 60 | one batch assigned 21 of 60 (35%), the next returned nothing after a retry |
+
+Only two batches of the 60-note run completed before it was interrupted, so the
+per-batch failure rate is not established. What is established: gemma4:12b fails
+completely at this task, and qwen3.5:4b assigns a third to a half of the notes it
+is given and drops the rest silently. Neither produces the clustering the oracle
+shows would be needed, and the oracle's bar (75 top-hit-reachable misses) is far
+above what a clusterer that discards half its input can deliver.
+
 ## Winner rule
 
 All four conditions were required on dev. The best arm (0.35 / 0.00):
@@ -243,12 +361,24 @@ behind its toggle: the store, the three clusterers, the diagnostics and the
 experiment driver are all reusable, and the oracle-ceiling tooling is the cheap
 gate that should precede any future retrieval idea.
 
-If this is revisited, the evidence points at one thing: the problem is not
-*finding* related memories — the ceiling says 47 recoverable misses are sitting
-right there — but *admitting* them without evicting something better. That is a
-question about the ranking function, not about clustering. A prior that reorders
-within an unchanged candidate set, or that expands k rather than substituting
-members, is the shape worth testing next.
+The follow-up sharpens what a revisit would need. The merge is not the problem —
+given correct scenes it wins 39 against 5. Two things must change together:
+
+1. **A clustering with roughly 75 top-hit-reachable misses**, five times what
+   graph communities deliver here. Not a tuning target; a different signal.
+2. **A routing rule that matches the bound it is judged against.** Today
+   `scene-report` measures reachability from any retrieved hit while the code
+   routes from the top hit, so the reported ceiling was 3.4x what the
+   implementation could realise.
+
+The boost knob can be deleted: it is noise with bad scenes and noise with
+perfect ones.
+
+Whether such a clustering exists on this corpus is open. It is not produced by
+graph communities, it cannot be produced by tags (no tags exist), and the local
+models available here cannot produce it either — but the oracle shows the tier
+itself would pay off if it could: +0.040 recall@5, p < 0.0001, gains in all four
+memory types, losses in the noise.
 
 ## Reproduction
 
