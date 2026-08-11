@@ -9,6 +9,7 @@ it is on, embed_id() moves with it.
 """
 import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -22,9 +23,15 @@ class TestEmbedPrefix(unittest.TestCase):
     def setUp(self):
         self.saved = {k: os.environ.get(k) for k in
                       ("KB_EMBED_QUERY_PREFIX", "KB_EMBED_DOC_PREFIX",
-                       "KB_EMBED_MODEL", "KB_EMBED_PROVIDER")}
+                       "KB_EMBED_MODEL", "KB_EMBED_PROVIDER", "KENNISBANK_VAULT")}
         for k in self.saved:
             os.environ.pop(k, None)
+        # An empty vault, so "the default" means the code's default and not
+        # "whatever this machine happens to have configured". Without this the
+        # suite passes or fails on the contents of kennisbank-embed.json: adding
+        # a query_prefix there broke these two tests while the code was correct.
+        self._tmp = tempfile.TemporaryDirectory()
+        os.environ["KENNISBANK_VAULT"] = self._tmp.name
         os.environ["KB_EMBED_PROVIDER"] = "ollama"
         os.environ["KB_EMBED_MODEL"] = "testmodel"
         self.sent = []
@@ -34,6 +41,7 @@ class TestEmbedPrefix(unittest.TestCase):
 
     def tearDown(self):
         emb._http_json = self._orig
+        self._tmp.cleanup()
         for k, v in self.saved.items():
             if v is None:
                 os.environ.pop(k, None)
