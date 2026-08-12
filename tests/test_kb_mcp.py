@@ -247,7 +247,7 @@ class KbMcpTemporalToolTest(unittest.TestCase):
     def tearDown(self):
         self.m.activity = self.orig
 
-    def test_temporal_tool_wrappers_return_dicts(self):
+    def test_temporal_tool_wrappers_preserve_structured_results_by_default(self):
         """MCP migration step 3: the four tools return dict[str, Any] directly
         (activity.*()'s own return value, unwrapped) so structuredContent comes
         free from the SDK's return-annotation auto-detection."""
@@ -268,6 +268,49 @@ class KbMcpTemporalToolTest(unittest.TestCase):
         self.assertEqual(self.m.timeline_tool("vorige week")["mode"], "timeline")
         self.assertEqual(self.m.weeklog_tool()["mode"], "weeklog")
         self.assertEqual(self.m.topic_timeline_tool("Codex MCP")["mode"], "topic_timeline")
+
+    def test_temporal_tool_wrappers_compact_results_for_interactive_clients(self):
+        self.m.activity.what_did_i_do = lambda *_a, **_k: {
+            "ok": True,
+            "period": {"label": "2026-07-03"},
+            "summary": {"event_count": 4},
+            "events": [
+                {
+                    "title": "First event",
+                    "summary": "A useful result.",
+                    "source_ref": "09-memory/first.md#file",
+                },
+                {
+                    "title": "Second event",
+                    "summary": "Another useful result.",
+                    "source_ref": "09-memory/second.md#file",
+                },
+                {
+                    "title": "Third event",
+                    "summary": "A third useful result.",
+                    "source_ref": "09-memory/third.md#file",
+                },
+                {
+                    "title": "Fourth event",
+                    "summary": "This one is omitted.",
+                    "source_ref": "09-memory/fourth.md#file",
+                },
+            ],
+        }
+        previous = os.environ.get("KENNISBANK_MCP_COMPACT_OUTPUT")
+        os.environ["KENNISBANK_MCP_COMPACT_OUTPUT"] = "1"
+        try:
+            out = self.m.what_did_i_do_tool("2026-07-03")
+        finally:
+            if previous is None:
+                os.environ.pop("KENNISBANK_MCP_COMPACT_OUTPUT", None)
+            else:
+                os.environ["KENNISBANK_MCP_COMPACT_OUTPUT"] = previous
+        self.assertIsInstance(out, str)
+        self.assertIn("First event", out)
+        self.assertIn("Third event", out)
+        self.assertIn("1 additional event(s) omitted.", out)
+        self.assertNotIn("Fourth event", out)
 
 
 if __name__ == "__main__":

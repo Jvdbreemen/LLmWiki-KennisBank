@@ -44,6 +44,7 @@ MIN_VERSION = (1, 0, 70)
 def _kb_env(vault: "Path") -> dict:
     return {
         "KENNISBANK_VAULT": _posix(vault),
+        "KENNISBANK_MCP_COMPACT_OUTPUT": "1",
         "KB_LLM_PROVIDERS": "ollama",
         "KB_LLM_MODEL": "gemma4:12b",
         "KB_LLM_ENDPOINT": "http://localhost:11434",
@@ -521,6 +522,7 @@ Operational rules for GitHub Copilot CLI:
 - Always set or preserve `KENNISBANK_VAULT={vault_s}` for KennisBank scripts, skills and the MCP server.
 - Do not use `~/KennisBank` as the active vault on this machine unless the user explicitly changes it.
 - Prefer the local KennisBank MCP server (`recall`, `capture`) before external search when a task may depend on prior local knowledge. For temporal questions use `what_did_i_do`, `timeline`, `weeklog` or `topic_timeline` first.
+- KennisBank MCP tools already return compact summaries. Use a short query and request only the details needed; summarize the result instead of reproducing tool output.
 - KennisBank uses one fail-open start and one exit coordinator. Copilot may render one row per lifecycle event; routine details stay silent and actionable startup results are consolidated.
 - Use `/sessiestart` for explicit startup maintenance and `/sessielog` for session capture.
 
@@ -550,6 +552,8 @@ Use the local KennisBank MCP server before external search:
 - `recall(query, k)` for wiki/memory retrieval.
 - `capture(title, body, memory_type, importance)` for unverified memory.
 - `what_did_i_do`, `timeline`, `weeklog`, `topic_timeline` for temporal recall.
+- KennisBank MCP responses are compact by design. Use a narrow query and report
+  the relevant result, not raw tool content.
 
 Your Copilot prompt, tool, and session events are captured locally (rawlog to
 activity index) so you can recall "what did I do" later; capture is fail-open.

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Copilot MCP output is compact by default.** The managed Copilot server
+  registration now sets `KENNISBANK_MCP_COMPACT_OUTPUT=1`, so temporal tools
+  return a short summary with at most three events and recall trims results and
+  snippets. Codex, Claude, and OpenCode retain their structured temporal MCP
+  responses.
+
 ## [0.28.0] - 2026-08-03
 
 Nine embedding models were measured on one real vault against its owner's own

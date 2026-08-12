@@ -96,6 +96,8 @@ class CopilotConfigTest(unittest.TestCase):
         self.assertEqual(mcp["mcpServers"]["kennisbank"]["type"], "local")
         self.assertEqual(mcp["mcpServers"]["kennisbank"]["env"]["KENNISBANK_VAULT"],
                          str(self.vault).replace("\\", "/"))
+        self.assertEqual(mcp["mcpServers"]["kennisbank"]["env"]["KENNISBANK_MCP_COMPACT_OUTPUT"],
+                         "1")
 
         hooks = json.loads(hooks_path.read_text(encoding="utf-8"))
         session = json.dumps(hooks["hooks"]["sessionStart"])
@@ -401,7 +403,7 @@ class CopilotConfigTest(unittest.TestCase):
         text = self.m._agent_profile_text(self.vault)
         for needle in (self.m._posix(self.vault), "recall", "capture",
                        "what_did_i_do", "timeline", "/sessiestart", "/sessielog",
-                       "rawlog"):
+                       "rawlog", "compact"):
             self.assertIn(needle, text, f"agent profile missing: {needle}")
 
     def test_agent_profile_uses_marker(self):

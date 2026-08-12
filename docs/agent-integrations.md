@@ -180,6 +180,11 @@ real initialize/list-tools handshake used for Codex/OpenCode. `copilot mcp list`
 work **without** a GitHub login; only a live model turn
 needs `copilot` `/login`.
 
+The Copilot MCP registration sets `KENNISBANK_MCP_COMPACT_OUTPUT=1`. It returns
+short, human-readable temporal summaries (up to three events) and trims recall
+results, avoiding duplicated full JSON in interactive tool output. This setting
+is Copilot-specific; other clients retain the structured temporal contract.
+
 Copilot exposes the generated personal skills as slash commands. Use
 `/sessiestart` for explicit maintenance and `/sessielog` to capture the session.
 KennisBank registers one start and one exit coordinator. At startup, Copilot
@@ -201,6 +206,7 @@ no `${VAR}` interpolation):
       "args": ["-3", "/absolute/path/to/vault/.claude/scripts/kb-mcp.py"],
       "env": {
         "KENNISBANK_VAULT": "/absolute/path/to/vault",
+        "KENNISBANK_MCP_COMPACT_OUTPUT": "1",
         "KB_LLM_PROVIDERS": "ollama",
         "KB_LLM_MODEL": "gemma4:12b",
         "KB_LLM_ENDPOINT": "http://localhost:11434"
