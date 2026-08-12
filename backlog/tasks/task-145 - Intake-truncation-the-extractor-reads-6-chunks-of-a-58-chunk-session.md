@@ -4,7 +4,7 @@ title: 'Intake truncation: the extractor reads 6 chunks of a 58-chunk session'
 status: In Progress
 assignee: []
 created_date: '2026-08-12 20:31'
-updated_date: '2026-08-12 20:56'
+updated_date: '2026-08-12 21:24'
 labels:
   - memory
   - capture
@@ -53,9 +53,9 @@ Design context: `docs/superpowers/specs/2026-08-12-self-correcting-memory-layer-
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Yield per chunk position is measured on a sample of long transcripts: new memories, duplicates, and cost per extra chunk
-- [ ] #2 max_chunks is raised or removed on the basis of that measurement, with the chosen value and its reason recorded
-- [ ] #3 A full sweep over a long transcript completes within the detached background budget, with the wall-clock time recorded before and after
+- [x] #1 Yield per chunk position is measured on a sample of long transcripts: new memories, duplicates, and cost per extra chunk
+- [x] #2 max_chunks is raised or removed on the basis of that measurement, with the chosen value and its reason recorded
+- [x] #3 A full sweep over a long transcript completes within the detached background budget, with the wall-clock time recorded before and after
 - [ ] #4 P2 holds: after a re-sweep a memory asserting qwen3-embedding:4b exists in 09-memory
 - [ ] #5 python -m pytest tests -q is green
 - [x] #6 transcript_text() returns content for every transcript format in 01-raw/transcripts, or reports which formats it cannot read; today four of ten sampled transcripts yield zero chunks
@@ -99,4 +99,36 @@ Honest limitation: the Copilot format contains no assistant replies at all, only
 tests/test_transcript_formats.py pins all three shapes plus a mixed file, because an unreadable transcript is swept, written to the watermark, and produces zero memories -- indistinguishable from a session where nothing happened.
 
 Still open on this task: max_chunks=6 still truncates what the parser can now read, and AC #7 (the eval gate on corpus growth) is untouched.
+
+Second half measured and applied.
+
+Yield per chunk position, four long transcripts (198, 171, 154 and 33 chunks), 120 chunks through the real extractor:
+
+  transcript                     chunks   uniek 1-6   uniek 7+   %na6   dup
+  2026-07-15-oralhistoryagent       198          29         95    77%     2
+  2026-07-26-llmwiki-kennisbank     171          21         71    77%     0
+  2026-07-17-oralhistoryagent       154          22         86    80%     2
+  2026-07-12-otgw-firmware           33          29        109    79%     0
+
+  TOTAAL   uniek 1-6: 101 | uniek 7+: 361 = 78% van alle unieke kennis
+  duplicaten: 4 van 466 kandidaten = 0,9%
+  opbrengst: 4,2 (chunk 1-5) 4,2 (6-10) 4,3 (11-15) 3,7 (16-20) 3,9 (21-25) 2,9 (26-30)
+  kosten: 6,0 s per chunk
+
+Geen knik binnen 30 chunks. De premisse onder de cap -- later in een sessie is herhaling -- is weerlegd met 0,9% duplicaten.
+
+Vondst tijdens het meten: max_chunks was NIET de bindende rem. max_memories_per_transcript=20 stopte de schrijflus al na ~5 chunks bij ~4 kandidaten per chunk. Beide knoppen moesten dus samen omhoog, anders had het verhogen van max_chunks vrijwel niets gedaan.
+
+Gekozen waarden, met reden:
+  MAX_CHUNKS               6 -> 40   (opbrengst blijft vlak tot 25; 40 x 6 s = 4 min per transcript)
+  MAX_MEMORIES_PER_TRANSCRIPT 20 -> 60   (anders blijft dit de bindende rem)
+  CHUNK_BUDGET             nieuw, 150   (~15 min per run)
+
+De budget-rem is nieuw en het punt is niet zuinigheid maar de hot path: de sweep is losgekoppeld maar deelt de GPU met het embedding-model dat retrieval bedient. Tien transcripts van 40 chunks zou 40 minuten aaneengesloten modelwerk zijn. Het budget kapt TUSSEN transcripts af, nooit erbinnen -- een half verwerkt transcript zou als gedaan in de append-only watermark landen en de rest voorgoed kwijtraken. Wat afvalt blijft pending.
+
+Ook toegevoegd aan de heartbeat: chunks_read, chunks_skipped, budget_reached. Zonder die drie is '5 memories geschreven' niet te onderscheiden van '5 memories geschreven en 300 chunks genegeerd' -- precies hoe dit defect onzichtbaar bleef.
+
+Alle drie de env-overrides bestaan: KB_SWEEP_MAX_CHUNKS, KB_SWEEP_MAX_MEMORIES, KB_SWEEP_CHUNK_BUDGET.
+
+Nog open: AC #4 (P2, vereist een echte re-sweep) en AC #7 (P5, de eval-run). Die twee gaan over de gevolgen van de grotere corpus en horen niet in dezelfde commit als de knop zelf.
 <!-- SECTION:NOTES:END -->

@@ -217,9 +217,41 @@ def _write_heartbeat(summary: dict) -> None:
         pass
 
 
-def run_sweep(max_transcripts: int = 10, max_chunks: int = 6,
-              max_memories_per_transcript: int = 20,
-              ignore_watermark: bool = False) -> dict:
+#: Hoeveel chunks van één transcript de extractor leest, en hoeveel memories dat
+#: transcript maximaal mag opleveren. Beide stonden op 6 en 20, gekozen toen een
+#: chunk 30-56 s kostte omdat het judge-model eerst nadacht (TASK-143). Na die fix
+#: kost een chunk 5-6 s en is de oude rem alleen nog verlies.
+#:
+#: Gemeten over vier lange transcripts (198, 171, 154 en 33 chunks), 120 chunks
+#: door de echte extractor:
+#:
+#:   uniek uit chunk 1-6 : 101 kandidaten
+#:   uniek uit chunk 7+  : 361 kandidaten  = 78% van alle unieke kennis
+#:   duplicaten          : 4 van 466 = 0,9%
+#:   opbrengst per chunk : 4,2 (1-5) 4,2 (6-10) 4,3 (11-15) 3,7 (16-20) 2,9 (26-30)
+#:
+#: De aanname onder de oude cap -- later in een sessie is herhaling -- is daarmee
+#: weerlegd: er is geen knik, en bijna niets wordt dubbel gezegd.
+#:
+#: max_memories_per_transcript was in de praktijk de BINDENDE rem, niet max_chunks:
+#: bij ~4 kandidaten per chunk was 20 memories al na vijf chunks op.
+MAX_CHUNKS = int(os.environ.get("KB_SWEEP_MAX_CHUNKS", "").strip() or 40)
+MAX_MEMORIES_PER_TRANSCRIPT = int(
+    os.environ.get("KB_SWEEP_MAX_MEMORIES", "").strip() or 60)
+
+#: Bovengrens op één sweep-run, in chunks. De sweep is losgekoppeld maar deelt de
+#: GPU met het embedding-model dat de retrieval-hot-path bedient; tien transcripts
+#: van 40 chunks zou 40 minuten aaneengesloten modelwerk zijn. Bij 5-6 s per chunk
+#: is 150 chunks ongeveer een kwartier. Wat niet past blijft pending en komt de
+#: volgende run aan de beurt -- de watermark wordt alleen gezet voor transcripts
+#: die HELEMAAL verwerkt zijn.
+CHUNK_BUDGET = int(os.environ.get("KB_SWEEP_CHUNK_BUDGET", "").strip() or 150)
+
+
+def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
+              max_memories_per_transcript: int = MAX_MEMORIES_PER_TRANSCRIPT,
+              ignore_watermark: bool = False,
+              chunk_budget: int = CHUNK_BUDGET) -> dict:
     """Verwerk pending (of alle) transcripts naar memory-files.
 
     Bij ignore_watermark=True worden ALLE *.jsonl in 01-raw/transcripts/ verwerkt,
@@ -241,6 +273,12 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = 6,
         "errors": 0,
         "embed_failed": 0,
         "model_unreachable": False,
+        # Zichtbaar maken hoeveel van het aangeboden materiaal daadwerkelijk is
+        # gelezen. Zonder deze twee is "5 memories geschreven" niet te
+        # onderscheiden van "5 memories geschreven en 300 chunks genegeerd".
+        "chunks_read": 0,
+        "chunks_skipped": 0,
+        "budget_reached": False,
         "superseded": 0,
         "rechecked_retracted": 0,
         "promote_marked": 0,
@@ -293,12 +331,20 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = 6,
         pool = []
 
     for tp in todo:
+        # Budget-stop TUSSEN transcripts, nooit erbinnen: een half verwerkt
+        # transcript zou gemarkeerd worden als gedaan en de rest voorgoed
+        # kwijtraken. Wat hier afvalt blijft pending voor de volgende run.
+        if not ignore_watermark and chunk_budget and s["chunks_read"] >= chunk_budget:
+            s["budget_reached"] = True
+            break
         try:
             transcript = ss.transcript_text(tp)
             valid_from = _session_date(tp.name, today)
             chunks = su.chunk(transcript)
             # Bij --all geen chunk-cap: de rebuild-belofte geldt voor het hele transcript.
             chunk_iter = chunks if ignore_watermark else chunks[:max_chunks]
+            s["chunks_read"] += len(chunk_iter)
+            s["chunks_skipped"] += max(0, len(chunks) - len(chunk_iter))
             written_for_tp = 0
             for ch in chunk_iter:
                 if max_memories_per_transcript and written_for_tp >= max_memories_per_transcript:
