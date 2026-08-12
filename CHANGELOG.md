@@ -7,13 +7,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Upgrading
+
+**Pull the new judge model.** The local judge/extraction default moves from
+`gemma4:latest` to `qwen3.5:4b`:
+
+```bash
+ollama pull qwen3.5:4b
+```
+
+A vault that pins `model` in `kennisbank-llm.json` keeps its own choice — config
+beats the default. Re-running `install-agent-envs.py` now writes the new model
+into the generated agent configs; a pinned `KB_LLM_MODEL` in your environment
+still wins over both.
+
 ### Changed
 
+- **The local judge model now has to fit beside the embedding model.** The
+  default is `qwen3.5:4b` (was `gemma4:latest`), and no generated agent config
+  hardcodes `gemma4:12b` any more — that was four surfaces in
+  `install-agent-envs.py`, a fifth in `_copilot.py`, two `gemma4:latest`
+  fallbacks, and the opt-in temporal date fallback in `_activity.py`. They share
+  one constant, guarded by
+  `tests/test_llm_model_default.py`, because the old spread is what let a
+  corrected environment be silently undone by re-running the installer. The
+  reason is VRAM, not preference: measured on an RTX 3080 Laptop (16 GB) with
+  both models resident, `qwen3-embedding:4b` at ctx 2048 costs 4.06 GB and
+  `qwen3.5:4b` at ctx 4096 costs 3.13 GB, together 7.19 GB. `gemma4:12b` costs
+  8.06 GB, so Ollama evicted the embedding model and the next recall met a
+  30-60 s cold load against the retrieval hook's 2 s budget — retrieval stopped
+  answering for whole sessions without reporting anything.
+- **The embedding model is sized by context and never unloaded on a timer.**
+  Ollama allocates an embedding model from `num_ctx`, not from document length,
+  so `qwen3-embedding:4b` claimed 6.24 GB against 2.5 GB of weights. The vault's
+  longest embedded document is about 1000 tokens, so the window is pinned at
+  2048 (`KB_EMBED_NUM_CTX`) and costs 4.06 GB; the vectors are identical, proven
+  by cosine 1.000000 between a 16384-ctx and a 2048-ctx embedding of the same
+  text and by a fresh embedding matching the one already in `kb-index.db`. No
+  re-index, no threshold recalibration. `keep_alive` is now `-1`
+  (`KB_EMBED_KEEP_ALIVE`): the old 30-minute TTL meant any longer gap turned
+  retrieval off for the next prompt.
+- **Session start says when the embedding model is cold.** The status line adds
+  `embedding-model koud` (and `(wordt geladen)` while a warm-up child is alive)
+  by reading Ollama's process table. It stays a readout: `/api/ps` answers in
+  about 3 ms and never loads a model, the call is capped at 100 ms, and an
+  unknown state (another provider, Ollama down) says nothing rather than guess.
+  Until now a cold model only surfaced through the retrieval hook, which reports
+  the miss after the answer was already given without the vault. One caveat: the
+  line asks about the model `_embeddings` resolves, and with no
+  `kennisbank-embed.json` and no `KB_EMBED_MODEL` that still falls back to the
+  legacy `OLLAMA_EMBED_MODEL` variable. If that names a model you do not run,
+  the answer is an honest "cold" about a model you never chose — pin `model` in
+  `kennisbank-embed.json`.
 - **Copilot MCP output is compact by default.** The managed Copilot server
   registration now sets `KENNISBANK_MCP_COMPACT_OUTPUT=1`, so temporal tools
   return a short summary with at most three events and recall trims results and
   snippets. Codex, Claude, and OpenCode retain their structured temporal MCP
   responses.
+
+### Fixed
+
+- **A single-flight lock could hand itself the lock on Windows.** `is_stale()`
+  treated any mtime in the future as a clock change and reclaimed the lock. On
+  Windows `time.time()` reads a clock with a 15.625 ms resolution while the
+  filesystem stamps `st_mtime` from a finer one, so a lock the process created
+  microseconds ago measures as slightly in the future: 586 of 5000 samples on
+  the target machine. `sweep-launch.py`, `index-launch.py` and the SessionStart
+  coordinator therefore gave away their own fresh lock about one time in eight,
+  which is how two index builders could end up writing `kb-index.db` at once.
+  The window is symmetric now (`abs(age) > STALE_SEC`), so a genuine clock
+  change still expires a lock. Same fix in `_embeddings.warm_in_progress()`,
+  where the noise spawned a second warm-up child.
 
 ## [0.28.0] - 2026-08-03
 
