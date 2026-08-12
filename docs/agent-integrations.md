@@ -94,7 +94,7 @@ args = ["-3", "/absolute/path/to/vault/.claude/scripts/kb-mcp.py"]
 [mcp_servers.kennisbank.env]
 KENNISBANK_VAULT = "/absolute/path/to/vault"
 KB_LLM_PROVIDERS = "ollama"
-KB_LLM_MODEL = "gemma4:12b"
+KB_LLM_MODEL = "qwen3.5:4b"
 KB_LLM_ENDPOINT = "http://localhost:11434"
 ```
 
@@ -133,7 +133,7 @@ py -3 -m pip install mcp==1.28.1
       "environment": {
         "KENNISBANK_VAULT": "/absolute/path/to/vault",
         "KB_LLM_PROVIDERS": "ollama",
-        "KB_LLM_MODEL": "gemma4:12b",
+        "KB_LLM_MODEL": "qwen3.5:4b",
         "KB_LLM_ENDPOINT": "http://localhost:11434"
       }
     }
@@ -208,7 +208,7 @@ no `${VAR}` interpolation):
         "KENNISBANK_VAULT": "/absolute/path/to/vault",
         "KENNISBANK_MCP_COMPACT_OUTPUT": "1",
         "KB_LLM_PROVIDERS": "ollama",
-        "KB_LLM_MODEL": "gemma4:12b",
+        "KB_LLM_MODEL": "qwen3.5:4b",
         "KB_LLM_ENDPOINT": "http://localhost:11434"
       },
       "tools": ["*"]

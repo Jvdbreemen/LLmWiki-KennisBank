@@ -216,7 +216,7 @@ configure_llm_backend() {
   backend="$(printf "%s" "${backend:-ollama}" | tr '[:upper:]' '[:lower:]' | tr -d ' ')"
   case "$backend" in
     ""|ollama)
-      printf "Ollama model tag? [gemma4:latest] "
+      printf "Ollama model tag? [qwen3.5:4b] "
       read model
       if [ -n "$model" ]; then
         python3 "$SCRIPT_DIR/scripts/install-agent-envs.py" \

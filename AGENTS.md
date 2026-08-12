@@ -78,8 +78,10 @@ ollama list
 ```
 
 The default embedding model is `qwen3-embedding:4b`. The local judge/extraction
-model should match `<vault>/.claude/kennisbank-llm.json`; on Robert's machine it
-is normally pinned to `gemma4:12b`.
+model should match `<vault>/.claude/kennisbank-llm.json`; the default is
+`qwen3.5:4b`, chosen because it fits beside the embedding model on a 16 GB GPU
+(4.06 + 3.13 GB). A larger judge such as `gemma4:12b` (8.06 GB) evicts the
+embedder and turns retrieval off without saying so.
 
 If the user chooses OpenRouter for judge/extraction, keep it explicit:
 

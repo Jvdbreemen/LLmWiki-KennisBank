@@ -1175,7 +1175,14 @@ def _dateparser_fallback(
 # resolution is cached per (phrase, reference-date) so repeat queries are
 # deterministic and free, and appended to an audit log. Uses a local Ollama
 # model via stdlib urllib (no third-party client), matching the vault pattern.
-_LLM_MODEL = "gemma4:12b"
+# Same model the rest of KennisBank pins (_llm.OLLAMA_DEFAULT_MODEL), and for the
+# same reason: anything larger evicts the embedding model from a 16 GB GPU and
+# turns retrieval off. Kept as a literal rather than an import because this path
+# deliberately does NOT go through the provider chain -- routing it through _llm
+# would let a configured cloud provider see the user's phrasing, and this feature
+# is off by default precisely to keep that decision explicit.
+# tests/test_llm_model_default.py checks the two strings stay equal.
+_LLM_MODEL = "qwen3.5:4b"
 _LLM_URL = "http://localhost:11434/api/generate"
 _LLM_TIMEOUT = 20
 _SETTINGS_MOD = None  # None=unchecked, False=unavailable, else the _settings module

@@ -88,7 +88,7 @@ for stdio; no `${VAR}` interpolation — literal env values):
       "env": {
         "KENNISBANK_VAULT": "<vault>",
         "KB_LLM_PROVIDERS": "ollama",
-        "KB_LLM_MODEL": "gemma4:12b",
+        "KB_LLM_MODEL": "qwen3.5:4b",
         "KB_LLM_ENDPOINT": "http://localhost:11434"
       },
       "tools": ["*"]

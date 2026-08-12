@@ -427,7 +427,7 @@ The design bias throughout: **deterministic where possible, LLM only where it ad
 - Python 3.10+
 - [Ollama](https://ollama.com) with:
   - `qwen3-embedding:4b` (embeddings; multilingual default. English-only vaults can use the lighter `nomic-embed-text`)
-  - a chat model for the memory judge/extraction (default `gemma4:latest`; pin another via `<vault>/.claude/kennisbank-llm.json`)
+  - a chat model for the memory judge/extraction (default `qwen3.5:4b`; pin another via `<vault>/.claude/kennisbank-llm.json`, but keep it small enough to sit beside the embedding model)
 
 Ollama is optional in the sense that everything fails open without it, but the memory sweep, semantic retrieval, and deduplication are the heart of the system: install it. For the **LLM judge/extraction only**, setup can also configure OpenRouter as an explicit cloud opt-in. Embeddings remain local by default.
 
@@ -654,7 +654,7 @@ args = ["-3", "/absolute/path/to/vault/.claude/scripts/kb-mcp.py"]
 [mcp_servers.kennisbank.env]
 KENNISBANK_VAULT = "/absolute/path/to/vault"
 KB_LLM_PROVIDERS = "ollama"
-KB_LLM_MODEL = "gemma4:12b"
+KB_LLM_MODEL = "qwen3.5:4b"
 KB_LLM_ENDPOINT = "http://localhost:11434"
 ```
 
@@ -777,7 +777,7 @@ The importer walks ChatGPT's message *tree* (`mapping`), orders turns by timesta
 1. Edit `<vault>/CLAUDE.md` after setup. Replace `[YOUR NAME]` and `[YOUR PROJECTS]` with your own. For a non-default install, `<vault>` is the exact `KENNISBANK_VAULT` path you used.
 2. **Vault path.** All Python scripts, `doctor.sh`, and generated agent integrations honor the `KENNISBANK_VAULT` environment variable (default `~/KennisBank`). See [CONFIGURATION.md](CONFIGURATION.md) section 9 for the non-default vault contract.
 3. **Embedding backend.** Swappable via `<vault>/.claude/kennisbank-embed.json` or `KB_EMBED_*` env vars: local Ollama by default, OpenAI-compatible endpoints when configured. Switching models invalidates the cache by design; run `kb-calibrate.py` afterwards to check the thresholds against the new model (it proposes values, you set them).
-4. **LLM backend** (judge/extraction): `<vault>/.claude/kennisbank-llm.json` or `KB_LLM_*` env vars. Default Ollama `gemma4:latest`; optional OpenRouter uses `https://openrouter.ai/api/v1/chat/completions` through the OpenAI-compatible chat schema.
+4. **LLM backend** (judge/extraction): `<vault>/.claude/kennisbank-llm.json` or `KB_LLM_*` env vars. Default Ollama `qwen3.5:4b` (sized to coexist with the embedding model on one GPU); optional OpenRouter uses `https://openrouter.ai/api/v1/chat/completions` through the OpenAI-compatible chat schema.
 5. **Wiki categories.** `build-karpathy-index.py` groups articles using a built-in taxonomy; override with a `categories.json` (copy [`categories.example.json`](categories.example.json)).
 6. The commands are in Dutch by default (they follow prompt language). Change section headings if you prefer English.
 7. Stale threshold (default 60 days): pass `--days N` or edit `stale-check.py`.

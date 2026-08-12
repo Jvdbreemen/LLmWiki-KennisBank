@@ -449,7 +449,7 @@ De ontwerpvoorkeur is overal dezelfde: **deterministisch waar mogelijk, LLM alle
 - Python 3.10+
 - [Ollama](https://ollama.com) met:
   - `qwen3-embedding:4b` (embeddings; meertalige standaard. Kluizen met alleen Engels kunnen het lichtere `nomic-embed-text` gebruiken)
-  - een chatmodel voor de geheugenbeoordeling/-extractie (standaard `gemma4:latest`; pin een ander via `<vault>/.claude/kennisbank-llm.json`)
+  - een chatmodel voor de geheugenbeoordeling/-extractie (standaard `qwen3.5:4b`; pin een ander via `<vault>/.claude/kennisbank-llm.json`, maar houd het klein genoeg om naast het embeddingmodel te passen)
 
 Ollama is optioneel in de zin dat alles fail-open werkt zonder, maar de geheugen-sweep, semantische retrieval, en deduplicatie zijn het hart van het systeem: installeer het. Alleen voor de **LLM-beoordeling/-extractie** kan setup ook OpenRouter configureren als expliciete cloud-opt-in. Embeddings blijven standaard lokaal.
 
@@ -674,7 +674,7 @@ args = ["-3", "/absolute/path/to/vault/.claude/scripts/kb-mcp.py"]
 [mcp_servers.kennisbank.env]
 KENNISBANK_VAULT = "/absolute/path/to/vault"
 KB_LLM_PROVIDERS = "ollama"
-KB_LLM_MODEL = "gemma4:12b"
+KB_LLM_MODEL = "qwen3.5:4b"
 KB_LLM_ENDPOINT = "http://localhost:11434"
 ```
 
@@ -794,7 +794,7 @@ De importer loopt door ChatGPT's bericht-*boom* (`mapping`), ordent beurten op t
 1. Bewerk `<vault>/CLAUDE.md` na setup. Vervang `[YOUR NAME]` en `[YOUR PROJECTS]` door je eigen. Voor een niet-standaard installatie is `<vault>` het exacte `KENNISBANK_VAULT`-pad dat je gebruikte.
 2. **Kluispad.** Alle Python-scripts, `doctor.sh`, en gegenereerde agent-integraties respecteren de omgevingsvariabele `KENNISBANK_VAULT` (standaard `~/KennisBank`). Zie [CONFIGURATION.md](CONFIGURATION.md) sectie 9 voor het niet-standaard-kluiscontract.
 3. **Embedding-backend.** Verwisselbaar via `<vault>/.claude/kennisbank-embed.json` of `KB_EMBED_*`-env-vars: standaard lokale Ollama, OpenAI-compatibele endpoints wanneer geconfigureerd. Van model wisselen invalideert de cache by design; draai daarna `kb-calibrate.py` om de drempels tegen het nieuwe model te controleren (het stelt waarden voor, jij stelt ze in).
-4. **LLM-backend** (beoordeling/extractie): `<vault>/.claude/kennisbank-llm.json` of `KB_LLM_*`-env-vars. Standaard Ollama `gemma4:latest`; optioneel OpenRouter gebruikt `https://openrouter.ai/api/v1/chat/completions` via het OpenAI-compatibele chat-schema.
+4. **LLM-backend** (beoordeling/extractie): `<vault>/.claude/kennisbank-llm.json` of `KB_LLM_*`-env-vars. Standaard Ollama `qwen3.5:4b` (past naast het embeddingmodel op één GPU); optioneel OpenRouter gebruikt `https://openrouter.ai/api/v1/chat/completions` via het OpenAI-compatibele chat-schema.
 5. **Wiki-categorieën.** `build-karpathy-index.py` groepeert artikelen met een ingebouwde taxonomie; overschrijf met een `categories.json` (kopieer [`categories.example.json`](categories.example.json)).
 6. De commando's zijn standaard in het Nederlands (ze volgen de prompt-taal). Wijzig de sectiekoppen als je Engels prefereert.
 7. Stale-drempel (standaard 60 dagen): geef `--days N` mee of bewerk `stale-check.py`.
