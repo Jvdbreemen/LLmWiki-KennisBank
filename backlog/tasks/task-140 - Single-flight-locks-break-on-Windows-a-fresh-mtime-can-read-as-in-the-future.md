@@ -6,7 +6,7 @@ title: >-
 status: Done
 assignee: []
 created_date: '2026-08-12 15:58'
-updated_date: '2026-08-12 16:31'
+updated_date: '2026-08-12 17:27'
 labels:
   - bug
   - windows
@@ -65,4 +65,8 @@ Worth recording, because it cost a full debug cycle: the FIRST version of that t
 Gate: `python -m pytest tests -q` -> 1217 passed, 2 skipped in 5:01, exit 0.
 
 Separate finding, NOT fixed here: tests/__init__.py pins the embed/LLM endpoints to 127.0.0.1:1 on the premise that 'the OS returns RST immediately, so there is no timeout wait'. On this machine every closed loopback port times out instead -- measured 2012 ms to :1, :9 and a freshly released ephemeral port. The local suite pays that wait wherever a code path still attempts a connection, and any timeout-sensitive assertion is a latent flake. Changing the port does not help.
+
+Review follow-up (commit b418e13): the same single-flight hole turned out to exist one level below the mtime. index-launch's _create() opens the lock with O_EXCL and writes the PID as a SECOND step, so a process that loses that race reads an empty file, _lock_pid returns None, _pid_alive(None) is False, and it declares the winner dead and takes the lock. Window is microseconds -- the same order as the clock noise this task measured. Fixed with PID_GRACE_SEC (5 s): an unreadable lock counts as freshly created until it is also old, and only then as orphaned. Two tests cover both halves.
+
+Also from the review, same class: warm_async's own sentinel still used the one-sided comparison, so a marker stamped hours ahead suppressed every prewarm until wall-clock time caught up. Paired with the new session-start notice that reads as 'embedding-model koud' forever about a warm-up that never fires.
 <!-- SECTION:NOTES:END -->
