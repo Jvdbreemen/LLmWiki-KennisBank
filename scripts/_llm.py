@@ -35,6 +35,17 @@ _DEFAULTS = {
     "claude-cli": {"endpoint": "", "model": ""},
 }
 
+#: Ollama sizes a model from its context window, and without an explicit value it
+#: uses the model's own default -- 16384 for qwen3.5:4b, measured at 3.6 GB of
+#: VRAM against 3.13 GB at 4096. The judge never needs that: memory-sweep chunks
+#: transcripts at 6000 characters (~1500 tokens) before calling extract, so the
+#: worst case is roughly 1500 in + system prompt + a JSON answer, about 2700
+#: tokens. 4096 covers it with room to spare.
+#: Too low would be worse than wasteful: the prompt is truncated silently and the
+#: judge answers about a transcript it only half saw. Raise this before raising
+#: the chunk size in _sweeputil.chunk().
+OLLAMA_NUM_CTX = int(os.environ.get("KB_LLM_NUM_CTX", "").strip() or 4096)
+
 
 def _config() -> dict:
     f = vault_root() / ".claude" / "kennisbank-llm.json"
@@ -134,7 +145,8 @@ def _call(provider, model, endpoint, api_key_env, prompt, system, timeout):
             full = (system + "\n\n" + prompt) if system else prompt
             r = _http_json(f"{endpoint}/api/generate",
                            {"model": model, "prompt": full, "stream": False,
-                            "options": {"temperature": 0}},
+                            "options": {"temperature": 0,
+                                        "num_ctx": OLLAMA_NUM_CTX}},
                            {"Content-Type": "application/json"}, timeout)
             return (r.get("response") or "").strip() or None
         if provider == "openrouter":

@@ -195,9 +195,93 @@ def _neighbor_entry(out) -> "dict | None":
         return None
 
 
+def _scene_path(path) -> str:
+    """Path in the form kb-scene.db stores.
+
+    Scene members are written with forward slashes, while the index hands back
+    native Windows paths with backslashes. Comparing the two raw forms matches
+    nothing and reports nothing -- the same silent mismatch that cost the first
+    scene build all 1428 of its members, in the opposite direction. One helper,
+    used by both the membership test and the lookup.
+    """
+    return str(path or "").replace("\\", "/")
+
+
+def _merge_scene_members(rows_primary, rows_wide, members, boost: float) -> list:
+    """Add members of the winning scene to the baseline rows. Additive only.
+
+    A row already present keeps its position AND its score untouched: the
+    baseline result stays a strict subset of the treatment, which is what makes
+    the parity claim provable instead of hopeful. Re-scoring a primary hit would
+    let the prior reorder results it was never meant to touch, and would make a
+    recall@1 regression impossible to attribute to admission versus reordering.
+    """
+    seen = {_scene_path(r.get("path")) for r in rows_primary}
+    out = list(rows_primary)
+    for r in rows_wide:
+        path = _scene_path(r.get("path"))
+        if path in seen or path not in members:
+            continue
+        extra = dict(r)
+        extra["score"] = float(extra.get("score", 0.0)) + float(boost)
+        extra["scene"] = True
+        out.append(extra)
+        seen.add(path)
+    return out
+
+
+def _scene_members_for(rows_primary, prior) -> set:
+    """Member paths of the scene(s) the strongest baseline hits belong to.
+
+    The scene is chosen by MEMBERSHIP of the top hits, not by similarity to a
+    scene centroid. Centroid matching was tried first and is worthless here: a
+    centroid over ~19 atomic memories averages into a generic direction, and
+    measured on 856 questions the winning centroid contained NONE of the twenty
+    nearest memories. It also measured something different from the oracle
+    ceiling, which counts a miss as reachable when its gold memory shares a
+    scene with a RETRIEVED hit -- so the implementation could not realise the
+    bound it was being judged against.
+
+    Routing from the top hit is what the L2 idea actually says: the strongest
+    match tells you which working context you are in, and the scene supplies
+    its neighbours. It is also cheaper -- one indexed lookup instead of a scan
+    over every centroid.
+
+    ``prior["seeds"]`` (default 1) is how many top hits may nominate a scene.
+
+    Fail-open: any failure yields an empty set, which makes
+    _merge_scene_members a no-op. There is deliberately no error path in which
+    the caller behaves differently from baseline.
+    """
+    if not rows_primary:
+        return set()
+    try:
+        import _scenes
+        path = _scenes.scene_index_path()
+        if not path.exists():
+            return set()
+        conn = _scenes.connect(path)
+        try:
+            if not _scenes.is_current(conn, _kbindex.index_path()):
+                return set()
+            seeds = int(prior.get("seeds", 1) or 1)
+            members = set()
+            for row in rows_primary[:seeds]:
+                found = conn.execute(
+                    "SELECT scene_id FROM scene_members WHERE path=?",
+                    (_scene_path(row.get("path", "")),)).fetchone()
+                if found:
+                    members.update(_scenes.members_of(conn, found[0]))
+            return members
+        finally:
+            conn.close()
+    except Exception:
+        return set()
+
+
 def recall_hits(query_vector, query_text: str = "", k: int = 3,
                 layers=("wiki", "memory"), expand: bool = False,
-                min_cos: float = 0.0) -> list:
+                min_cos: float = 0.0, scene_prior=None) -> list:
     """Recall-hits over de opgegeven lagen (status=current), fail-soft -> [].
     Live-status-hercheck ALLEEN voor de memory-laag (wiki is gecureerd).
 
@@ -222,6 +306,17 @@ def recall_hits(query_vector, query_text: str = "", k: int = 3,
         rows = _kbindex.search(conn, query_vector=query_vector, query_text=query_text,
                                k=k, layers=tuple(layers), statuses=("current",),
                                min_cos=min_cos)
+        # L2 scene prior (TASK-134). scene_prior=None issues no second query and
+        # leaves `rows` exactly as the baseline produced them -- the parity path.
+        if scene_prior:
+            members = _scene_members_for(rows, scene_prior)
+            if members:
+                wide = _kbindex.search(
+                    conn, query_vector=query_vector, query_text=query_text,
+                    k=k * 4, layers=tuple(layers), statuses=("current",),
+                    min_cos=float(scene_prior.get("floor", 0.35)))
+                rows = _merge_scene_members(
+                    rows, wide, members, float(scene_prior.get("boost", 0.0)))
         out = []
         for r in rows:
             layer = r.get("layer", "")
@@ -247,6 +342,10 @@ def recall_hits(query_vector, query_text: str = "", k: int = 3,
             _nf = None
         out = _rank.rerank(out, _frontmatter_of, last_used_fn=_lu, noise_fn=_nf,
                            sources_fn=_coupling_sources_fn(conn, rows))
+        # The scene prior may have pushed the candidate list past k. Cut here,
+        # after reranking, so an admitted member can win a slot but can never
+        # inflate the injected block beyond the configured top_n.
+        out = out[:k]
         if expand and out:
             try:
                 entry = _neighbor_entry(out)
@@ -302,10 +401,10 @@ MEMORY_MIN_COS = _memory_min_cos_default()
 
 
 def memory_hits(query_vector, query_text: str = "", k: int = 3,
-                min_cos: float = MEMORY_MIN_COS) -> list:
+                min_cos: float = MEMORY_MIN_COS, scene_prior=None) -> list:
     """Dunne wrapper: alleen de memory-laag (backward-compat)."""
     return recall_hits(query_vector, query_text=query_text, k=k, layers=("memory",),
-                       min_cos=min_cos)
+                       min_cos=min_cos, scene_prior=scene_prior)
 
 
 def index_is_gated() -> bool:

@@ -64,6 +64,11 @@ DEFAULTS = {
     # (A/B op 329 wiki-vragen: @1 0.745->0.790, @5 0.954->1.000, MRR
     # 0.836->0.882, single-hop@1 0.777->0.831, p95 lager) -> default AAN.
     "graph_retrieval": True,
+    # L2 scene prior (TASK-134): members of the best-matching scene are admitted
+    # at a lower similarity floor. Experimental and unproven -> opt-in, default
+    # off. It only ships if the pre-registered winner rule in
+    # docs/superpowers/specs/2026-08-05-l2-scene-retrieval-design.md is met.
+    "scene_retrieval": False,
 }
 
 _TRUTHY = ("1", "true", "yes", "y", "on")

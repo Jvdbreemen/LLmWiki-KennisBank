@@ -62,6 +62,25 @@ _DEFAULTS = {
 
 CACHE_FILE = vault_root() / ".claude" / "embeddings-cache.json"
 
+#: Ollama allocates its KV cache from the context size, not from the document
+#: length, so an embedding model loads far larger than its weights. Measured on
+#: qwen3-embedding:4b (RTX 3080, 16 GB): 16384 ctx costs 6.24 GB of VRAM, 2048
+#: costs 4.06 GB. The vault's longest embedded document is ~1000 tokens
+#: (doc_text caps it), so 2048 leaves room to spare and the vectors are
+#: unchanged -- cosine between a 16384-ctx and a 2048-ctx embedding of the same
+#: text measures 1.000000 for both a short query and a full-length document.
+#: The 2.18 GB that frees is what lets a judge model stay resident beside the
+#: embedding model instead of evicting it.
+#: Raise this if documents ever grow past it: truncation WOULD change vectors
+#: and silently invalidate the index.
+OLLAMA_NUM_CTX = int(os.environ.get("KB_EMBED_NUM_CTX", "").strip() or 2048)
+
+#: Never unload on a timer. A cold load takes 30-60 s while the retrieval hook
+#: has a 2 s budget, so an idle gap turns retrieval off without saying so.
+#: This does not protect against eviction by another model -- only fitting in
+#: VRAM does that (see docs/research on the model combination).
+OLLAMA_KEEP_ALIVE = os.environ.get("KB_EMBED_KEEP_ALIVE", "").strip() or -1
+
 
 def _config() -> dict:
     cfg_file = vault_root() / ".claude" / "kennisbank-embed.json"
@@ -251,7 +270,9 @@ def embed(text: str, timeout: float = 30.0, kind: str = ""):
         if prov == "ollama":
             r = _http_json(
                 f"{endpoint}/api/embeddings",
-                {"model": model, "prompt": text, "keep_alive": "30m"},
+                {"model": model, "prompt": text,
+                 "keep_alive": OLLAMA_KEEP_ALIVE,
+                 "options": {"num_ctx": OLLAMA_NUM_CTX}},
                 {"Content-Type": "application/json"},
                 timeout,
             )

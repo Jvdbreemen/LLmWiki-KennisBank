@@ -872,6 +872,7 @@ the interpreter convention: `py -3` on Windows, `python3` on POSIX.
       "args": ["-3", "<vault>/.claude/scripts/kb-mcp.py"],
       "env": {
         "KENNISBANK_VAULT": "<vault>",
+        "KENNISBANK_MCP_COMPACT_OUTPUT": "1",
         "KB_LLM_PROVIDERS": "ollama",
         "KB_LLM_MODEL": "gemma4:12b",
         "KB_LLM_ENDPOINT": "http://localhost:11434"
@@ -884,7 +885,10 @@ the interpreter convention: `py -3` on Windows, `python3` on POSIX.
 
 Registration is a login-free key-scoped JSON merge (not `copilot mcp add`),
 validated with the same real initialize/list-tools handshake used for
-Codex/OpenCode. `copilot mcp list` then shows the server.
+Codex/OpenCode. `copilot mcp list` then shows the server. The Copilot-only
+`KENNISBANK_MCP_COMPACT_OUTPUT=1` setting keeps MCP responses brief: temporal
+tools return up to three summarized events, and recall limits its result count
+and snippets. Other MCP clients retain structured temporal responses.
 
 ### Coordinated hooks and native command workflows
 

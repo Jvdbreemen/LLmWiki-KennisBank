@@ -191,6 +191,14 @@ def retrieve_params(cfg: dict) -> dict:
         "top_n": int(_num("KB_RETRIEVE_TOP_N", cfg, "retrieve_top_n", 3)),
         "min_cos": _num("KB_RETRIEVE_THRESHOLD", cfg, "retrieve_threshold", 0.50),
         "expand": bool(int(_num("KB_RETRIEVE_EXPAND", cfg, "retrieve_expand", 1))),
+        # L2 scene prior (TASK-134). Members of the best-matching scene are
+        # admitted at scene_floor instead of the memory floor, and may receive
+        # scene_boost on their score. Both are inert until the scene_retrieval
+        # toggle is on; these defaults are the neutral arm of the experiment.
+        "scene_clusterer": (os.environ.get("KB_SCENE_CLUSTERER")
+                            or str(cfg.get("scene_clusterer", "community"))),
+        "scene_floor": _num("KB_SCENE_FLOOR", cfg, "scene_floor", 0.35),
+        "scene_boost": _num("KB_SCENE_BOOST", cfg, "scene_boost", 0.0),
     }
 
 
