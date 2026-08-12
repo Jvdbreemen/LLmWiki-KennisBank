@@ -9,17 +9,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Upgrading
 
-**Pull the new judge model.** The local judge/extraction default moves from
-`gemma4:latest` to `qwen3.5:4b`:
+**Pull the new judge model, then edit your vault's pin.** The local
+judge/extraction default moves from `gemma4:latest` to `qwen3.5:4b`:
 
 ```bash
 ollama pull qwen3.5:4b
 ```
 
-A vault that pins `model` in `kennisbank-llm.json` keeps its own choice — config
-beats the default. Re-running `install-agent-envs.py` now writes the new model
-into the generated agent configs; a pinned `KB_LLM_MODEL` in your environment
-still wins over both.
+Changing the code default is not enough for an existing vault, and this is the
+step to not skip: `setup.sh` copies `kennisbank-llm.example.json` to
+`<vault>/.claude/kennisbank-llm.json` at install time and never overwrites it
+afterwards without `--force`, so **every** installed vault carries an explicit
+`"model"` — and `_llm.model_for()` returns that before it ever reaches the code
+default. Set it to `qwen3.5:4b` (or whatever you actually run):
+
+```json
+{ "providers": ["ollama"], "model": "qwen3.5:4b", "endpoint": "http://localhost:11434" }
+```
+
+Leave it and the split is invisible but real: the generated Codex, opencode and
+Copilot configs now put `KB_LLM_MODEL=qwen3.5:4b` in the environment, while the
+Claude Code hooks and memory-sweep run without that variable and keep loading
+the old model — two tags in one vault, with the hot path holding the one that
+evicts the embedder. A `KB_LLM_MODEL` exported in your user environment beats
+both, so check that too (`install-agent-envs.py` writes one on Windows).
+
+Cached temporal date resolutions are keyed by model from now on, so the opt-in
+`activity_llm_fallback` recomputes phrases it had already answered rather than
+serving the previous model's reading of them.
 
 ### Changed
 

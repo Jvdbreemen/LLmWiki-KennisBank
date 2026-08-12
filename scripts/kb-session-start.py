@@ -113,14 +113,13 @@ def _prewarm_embed_model(vault: Path) -> None:
 
 
 def _embed_state(vault: Path) -> str:
-    """Statuswoord voor het embedding-model, of "" als er niets te melden valt.
+    """Status word for the embedding model, or "" when there is nothing to say.
 
-    Een koud model is de stilste manier waarop KennisBank kan uitvallen: de
-    retrieval-hook heeft 2s en een koude load kost er 30-60, dus de hook meldt
-    de misser pas NADAT het antwoord zonder vault gegeven is. Hier is het nog
-    vooraf. Dit blijft een aflezing: /api/ps vertelt wat Ollama in geheugen
-    heeft, het laadt niets. Warm = zwijgen; onbekend (andere provider, Ollama
-    plat) = ook zwijgen, want een gok is hier erger dan geen melding.
+    A cold model is the quietest way KennisBank can fail: the retrieval hook has
+    2 s and a cold load costs 30-60, so the hook reports the miss only AFTER the
+    answer was given without the vault. Here it is still up front. Warm says
+    nothing; unknown (another provider, Ollama down) also says nothing, because
+    a guess is worse here than no notice at all.
     """
     emb = _embeddings_module(vault)
     if emb is None:
@@ -128,16 +127,19 @@ def _embed_state(vault: Path) -> str:
     try:
         # 100 ms, not the function default: a live local Ollama answers /api/ps
         # in ~3 ms (measured), and an endpoint that needs longer is one this line
-        # should stay silent about rather than wait for. A closed port does not
-        # always refuse instantly -- on this machine a dropped loopback connect
-        # runs to the full timeout -- so the number here IS the worst case.
+        # should stay silent about rather than wait for. is_resident refuses
+        # non-local endpoints outright, so this budget is per connect attempt to
+        # a loopback address -- "localhost" can resolve to ::1 AND 127.0.0.1, so
+        # the ceiling is two attempts, not one. A closed port does not always
+        # refuse instantly (a dropped loopback connect runs to the timeout),
+        # which is exactly why the number is this small.
         if emb.is_resident(timeout=0.1) is not False:
             return ""
         warming = bool(emb.warm_in_progress())
     except Exception:
         return ""
-    # "wordt geladen" alleen als er ECHT een warm-child leeft: de prewarm is
-    # sentinel-gegate en slaat een tweede start binnen 60s over.
+    # "wordt geladen" only when a warm child is genuinely alive: the prewarm is
+    # sentinel-gated and skips a second start within 60 s.
     return "embedding-model koud (wordt geladen)" if warming else "embedding-model koud"
 
 
@@ -342,9 +344,16 @@ def status_line(vault: Path, *, worker_running: bool) -> str:
     """Eenregelig statusbericht, afgelezen uit bestaande state.
 
     Bewust een AFLEZING en geen berekening: alles hier komt uit bestanden die
-    de vorige achtergrondrun al heeft achtergelaten, of uit een enkele
-    SQLite-telling. Geen embed-calls, geen vault-scan, geen LLM. Een sessiestart
-    hoort te melden waar je aan toe bent, niet het te gaan uitzoeken.
+    de vorige achtergrondrun al heeft achtergelaten, uit een enkele
+    SQLite-telling, of uit een begrensde lokale lookup. Geen embed-calls, geen
+    vault-scan, geen LLM. Een sessiestart hoort te melden waar je aan toe bent,
+    niet het te gaan uitzoeken.
+
+    Eén onderdeel doet wél een netwerkstap: _embed_state vraagt Ollama's
+    procestabel op (GET /api/ps, ~3 ms lokaal, alleen loopback, 100 ms per
+    connect-poging). Dat is nog steeds een aflezing -- het laadt niets -- maar
+    het is geen pure bestandsleesactie meer, en dat verschil hoort hier te
+    staan voor wie deze functie ergens anders wil aanroepen.
 
     Fail-open per onderdeel: elk stuk dat niet leesbaar is wordt overgeslagen,
     zodat een ontbrekende index nooit de melding (of de sessie) breekt.

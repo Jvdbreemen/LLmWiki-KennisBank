@@ -51,7 +51,16 @@ TASK_RE = re.compile(r"\bTASK-\d+(?:\.\d+)?\b", re.I)
 ADR_RE = re.compile(r"\bADR-\d+\b", re.I)
 TAG_RE = re.compile(r"\bv\d+\.\d+(?:\.\d+)?\b", re.I)
 COMMAND_RE = re.compile(r"(?<!\w)/(?:[a-z][\w-]*)(?::[a-z][\w-]*)?", re.I)
-MODEL_RE = re.compile(r"\b(?:gemma\d+(?::[\w.-]+)?|qwen3-embedding:8b|nomic-embed-text)\b", re.I)
+# Model names in transcripts. Deliberately shaped by FAMILY rather than by a
+# list of exact tags: the previous version enumerated qwen3-embedding:8b only,
+# so the moment the vault moved to qwen3-embedding:4b and qwen3.5:4b it stopped
+# recognising the models actually in use, while retired ones kept indexing fine.
+MODEL_RE = re.compile(
+    r"\b(?:gemma[\d.]+(?::[\w.-]+)?"
+    r"|qwen[\d.]+(?:-embedding)?(?::[\w.-]+)?"
+    r"|nomic-embed-text)\b",
+    re.I,
+)
 PATH_RE = re.compile(r"(?:(?:[A-Za-z]:)?[/\\])?[A-Za-z0-9_. -]+[/\\][A-Za-z0-9_. /\\-]+\.[A-Za-z0-9]+")
 WIKILINK_RE = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]")
 
@@ -1306,7 +1315,12 @@ def _llm_fallback(query: str, current: datetime, tz: ZoneInfo, original: str, to
     vault = vault_root()
     ref = current.date()
     ref_s = ref.isoformat()
-    key = hashlib.sha256(f"{text.casefold()}\x1f{ref_s}".encode("utf-8")).hexdigest()[:24]
+    # The model is part of the key, the same discipline _embeddings.embed_id()
+    # applies to vectors: two models can read one ambiguous phrase differently,
+    # and serving a cached answer from a model that is no longer configured
+    # would hand back a resolution the current setup would never produce.
+    key = hashlib.sha256(
+        f"{text.casefold()}\x1f{ref_s}\x1f{_LLM_MODEL}".encode("utf-8")).hexdigest()[:24]
     cached = _llm_cache_get(vault, key)
     if cached:
         return _range_from_iso(cached[0], cached[1], cached[2], original, topic, tz, ref)

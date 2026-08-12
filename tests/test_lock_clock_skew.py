@@ -78,6 +78,30 @@ class IndexLaunchSkewTest(_VaultCase):
         self.assertFalse(self.m.is_stale(lock))
         self.assertFalse(self.m.acquire_lock(), "two index builders could run at once")
 
+    def test_a_lock_without_its_pid_yet_is_not_an_orphan(self):
+        """The same race one level down from the mtime.
+
+        _create() opens the lock with O_EXCL and writes the PID as a SECOND
+        step. A process that loses the O_EXCL race in that window reads an empty
+        file, and calling that a dead owner would hand it the lock the winner
+        just took -- the double-writer this lock exists to prevent.
+        """
+        lock = self.m._lock_path()
+        lock.parent.mkdir(parents=True, exist_ok=True)
+        lock.write_text("", encoding="ascii")  # created, PID not written yet
+        self.assertFalse(self.m.is_stale(lock))
+        self.assertFalse(self.m.acquire_lock())
+
+    def test_a_lock_that_never_gets_its_pid_does_expire(self):
+        """A truly truncated lock must not block maintenance for the full hour."""
+        lock = self.m._lock_path()
+        lock.parent.mkdir(parents=True, exist_ok=True)
+        lock.write_text("", encoding="ascii")
+        old = time.time() - self.m.PID_GRACE_SEC - 1
+        os.utime(str(lock), (old, old))
+        self.assertTrue(self.m.is_stale(lock))
+        self.assertTrue(self.m.acquire_lock())
+
 
 class SessionStartSkewTest(_VaultCase):
     def setUp(self):
@@ -85,14 +109,14 @@ class SessionStartSkewTest(_VaultCase):
         self.m = load_script("kb-session-start.py")
 
     def test_barely_future_lock_is_held_not_reclaimed(self):
-        lock = self.vault / ".claude" / ".kb-session-start.lock"
+        lock = self.vault / ".claude" / self.m.LOCK_NAME
         self.assertTrue(self.m.acquire_lock(lock))
         _stamp_future(lock)
         self.assertFalse(self.m.acquire_lock(lock), "coordinator lock reclaimed itself")
 
     def test_far_future_lock_still_expires(self):
         """A real clock change must not park SessionStart maintenance forever."""
-        lock = self.vault / ".claude" / ".kb-session-start.lock"
+        lock = self.vault / ".claude" / self.m.LOCK_NAME
         self.assertTrue(self.m.acquire_lock(lock))
         _stamp_future(lock, self.m.LOCK_STALE_SECONDS + 60)
         self.assertTrue(self.m.acquire_lock(lock))

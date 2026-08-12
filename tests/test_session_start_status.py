@@ -106,8 +106,11 @@ class StatusLineTest(unittest.TestCase):
 
     def _embed(self, resident, warming=False):
         """Vervang de embeddings-module door een dubbel met een bekende staat."""
+        gezien = {}
+
         class Dubbel:
             def is_resident(_self, timeout=0.1):
+                gezien["timeout"] = timeout
                 if isinstance(resident, Exception):
                     raise resident
                 return resident
@@ -116,6 +119,17 @@ class StatusLineTest(unittest.TestCase):
                 return warming
 
         self.mod._embeddings_module = lambda _vault: Dubbel()
+        return gezien
+
+    def test_modelprobe_krijgt_een_hot_path_plafond(self):
+        """De probe is een netwerkstap in een functie met een 250ms-budget.
+
+        Zonder expliciet plafond erft hij de default van is_resident (500ms), en
+        dat is op een machine waar een dichte poort uittimet in plaats van
+        weigert al meer dan twee keer het hele budget."""
+        gezien = self._embed(resident=True)
+        self.mod.status_line(self.tmp, worker_running=False)
+        self.assertLessEqual(gezien["timeout"], 0.1)
 
     def test_warm_model_wordt_niet_genoemd(self):
         """Alleen de misser hoort op te vallen; een werkend model is geen nieuws."""
@@ -269,7 +283,15 @@ class StatusLineTest(unittest.TestCase):
 
     def test_blijft_binnen_het_budget(self):
         """Een aflezing, geen berekening. Loopt dit uit de hand, dan hoort het
-        werk naar de achtergrondworker en niet naar de sessiestart."""
+        werk naar de achtergrondworker en niet naar de sessiestart.
+
+        De modelprobe wordt hier bewust gestubd. Zonder stub doet deze test vijf
+        echte /api/ps-calls, en dan meet hij of Ollama toevallig draait in plaats
+        van wat status_line zelf kost -- op een machine waar een dichte poort
+        uittimet in plaats van weigert kost dat seconden. Het plafond van de
+        probe zelf is een aparte afspraak, bewaakt door
+        test_modelprobe_krijgt_een_hot-path-plafond."""
+        self._embed(resident=True)
         self._index(docs=500)
         self._graph()
         t = time.perf_counter()

@@ -6,11 +6,16 @@ embedder: the next recall pays a 30-60 s cold load against a 2 s budget, so
 retrieval silently stops answering (TASK-139). The model therefore is not a free
 choice per config writer -- it is one measured value.
 
-Five places write it: _llm.py's own default, _copilot.py's pinned env, and the
-Codex TOML, opencode plugin and opencode JSON that install-agent-envs.py
-generates. Re-running the installer must not undo the fix, which is exactly what
-happened before: the environment was corrected by hand while the installer still
-carried the old model.
+Everything that writes a model name is checked here: _llm.py's own default,
+_copilot.py's pinned env, the Codex TOML / opencode plugin / opencode JSON that
+install-agent-envs.py generates, _activity.py's opt-in date fallback, and the two
+surfaces that decide what a FRESH install ends up with -- kennisbank-llm.example.json
+(setup.sh copies it to <vault>/.claude/kennisbank-llm.json, where its "model" beats
+the code default) and setup.sh's own interactive prompt.
+
+Re-running the installer must not undo the fix, which is exactly what happened
+before: the environment was corrected by hand while the installer still carried
+the old model.
 """
 from __future__ import annotations
 
@@ -96,6 +101,23 @@ class ModelDefaultTest(unittest.TestCase):
         finally:
             if saved is not None:
                 os.environ["KB_LLM_MODEL"] = saved
+
+    def test_the_example_config_ships_the_same_model(self):
+        """This file outranks the code default on every installed vault.
+
+        setup.sh copies it to <vault>/.claude/kennisbank-llm.json and _llm's
+        model_for() returns cfg["model"] before it ever reaches
+        OLLAMA_DEFAULT_MODEL. Change the constant and forget this file, and every
+        new vault is pinned to a model the code no longer intends -- with a green
+        suite, because nothing else reads it.
+        """
+        cfg = json.loads((REPO_ROOT / "kennisbank-llm.example.json").read_text(encoding="utf-8"))
+        self.assertEqual(cfg["model"], self.model)
+
+    def test_setup_prompts_with_the_same_model(self):
+        """The interactive default is what a user gets by pressing Enter."""
+        text = (REPO_ROOT / "setup.sh").read_text(encoding="utf-8")
+        self.assertIn(f"Ollama model tag? [{self.model}]", text)
 
     def test_no_stale_model_literal_survives_in_the_writers(self):
         """A literal here is how the enumeration gets fixed and the rest stays.

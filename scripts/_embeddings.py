@@ -375,10 +375,18 @@ def is_resident(timeout: float = 0.5):
     remote endpoint, Ollama down, a malformed answer); a caller that reports
     this to a user must stay silent on None instead of claiming a cold model.
 
-    The timeout is deliberately below a second: this is only ever worth asking
-    on a path that must not block, so an unresponsive Ollama reads as unknown."""
+    LOCAL ENDPOINTS ONLY. A remote host answers None without a request being
+    made -- not because the question is meaningless there, but because the
+    timeout below cannot bound it: socket.create_connection resolves the name
+    first (getaddrinfo ignores the timeout entirely) and then applies the
+    timeout to EACH address it got back. A caller that needs a hard ceiling on a
+    hot path can only get one when the address is a literal loopback.
+
+    Even then the ceiling is per connect attempt, not per call: "localhost" on
+    Windows yields ::1 and 127.0.0.1, so budget for two. Callers that care
+    should pass a timeout with that headroom, or configure 127.0.0.1."""
     prov, model, endpoint, _key = _resolve()
-    if prov != "ollama" or not model or not endpoint_allowed(prov, endpoint):
+    if prov != "ollama" or not model or not is_local_endpoint(endpoint):
         return None
     try:
         import urllib.request
@@ -390,18 +398,15 @@ def is_resident(timeout: float = 0.5):
     entries = data.get("models") if isinstance(data, dict) else None
     if not isinstance(entries, list):
         return None
-    loaded = set()
-    for e in entries:
-        if not isinstance(e, dict):
-            continue
-        for key in ("name", "model"):
-            v = e.get(key)
-            if isinstance(v, str) and v:
-                loaded.add(v)
-                # Ollama reports "qwen3.5:4b" for a pull of "qwen3.5"; accept
-                # both spellings so a config without a tag still matches.
-                if v.endswith(":latest"):
-                    loaded.add(v[: -len(":latest")])
+    loaded = {v for e in entries if isinstance(e, dict)
+              for v in (e.get("name"), e.get("model"))
+              if isinstance(v, str) and v}
+    # An untagged pull is reported as "<name>:latest" (verified against a live
+    # /api/tags: bge-m3:latest, embeddinggemma:latest), so a config that names a
+    # model without a tag matches that spelling. It does NOT match a differently
+    # tagged variant on purpose: asking Ollama to embed with "qwen3-embedding"
+    # would load :latest, so "qwen3-embedding:4b" being resident is genuinely a
+    # different model from the one this config would use.
     return model in loaded or f"{model}:latest" in loaded
 
 
@@ -424,7 +429,12 @@ def warm_async(min_interval: float = 60.0) -> None:
         import time as _time
         marker = _warm_marker()
         try:
-            if marker.exists() and (_time.time() - marker.stat().st_mtime) < min_interval:
+            # abs(), for the reason warm_in_progress states: a marker whose
+            # mtime reads as slightly in the future is measurement noise, but a
+            # one-sided `age < min_interval` also swallows a marker stamped
+            # HOURS ahead (a clock set back, a restored file) and would then
+            # suppress every prewarm until wall-clock time caught up.
+            if marker.exists() and abs(_time.time() - marker.stat().st_mtime) < min_interval:
                 return
         except Exception:
             pass
