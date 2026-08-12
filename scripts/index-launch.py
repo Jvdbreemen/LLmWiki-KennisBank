@@ -66,6 +66,10 @@ JOBS = (
 # een los getal in een comment drift zodra JOBS groeit.
 # test_stale_window_exceeds_the_worst_case_run bewaakt de ongelijkheid.
 STALE_SEC = PER_JOB_TIMEOUT * len(JOBS) * 2
+#: How long a lock without a readable PID counts as freshly created rather than
+#: orphaned. Covers the microseconds between O_EXCL and the PID write; anything
+#: longer than this and the file really is truncated.
+PID_GRACE_SEC = 5.0
 
 
 def _lock_path() -> Path:
@@ -121,21 +125,38 @@ def _pid_alive(pid: int | None) -> bool:
 
 
 def is_stale(lock: Path, now: float | None = None) -> bool:
-    """True bij een dode worker of een lock buiten het geldige tijdvenster.
+    """True when the owner is dead, or the lock lies outside its time window.
 
-    Die tweede clausule vangt een klokverzetting af: zonder hem zou een lock met
-    een mtime in de toekomst nooit verlopen en het onderhoud permanent stilzetten.
+    The window is SYMMETRIC (`abs(age) > STALE_SEC`), not `age < 0`. It has to
+    expire a lock stamped far in the future, or a clock change parks maintenance
+    forever -- but on Windows `time.time()` reads GetSystemTimeAsFileTime at a
+    15.625 ms resolution while the filesystem stamps mtime from a finer clock,
+    so a lock created microseconds ago can carry a future mtime: 586 of 5000
+    measured. With `age < 0` acquire_lock reclaimed its OWN fresh lock and two
+    index builders could write kb-index.db at once -- exactly what TASK-63 put
+    behind this lock (TASK-140).
+
+    The PID has the same race one level down, which is what PID_GRACE_SEC is
+    for: _create() opens the lock with O_EXCL and writes the PID as a second
+    step, so for a few microseconds the file is empty and _lock_pid() reads
+    nothing. Calling that a dead owner would hand the lock to the process that
+    LOST the race. An unreadable lock is therefore only orphaned once it is also
+    old -- which is still far quicker than the full stale window, so a genuinely
+    truncated lock does not block maintenance for an hour.
     """
     try:
-        # A worker that died before its finally-block ran must not suppress the
-        # next maintenance launch for the full stale window. The old code only
-        # used mtime, which made a dead PID look active for up to an hour.
-        if not _pid_alive(_lock_pid(lock)):
-            return True
         age = (time.time() if now is None else now) - lock.stat().st_mtime
-        return age > STALE_SEC or age < 0
     except OSError:
         return True
+    pid = _lock_pid(lock)
+    if pid is None:
+        return abs(age) > PID_GRACE_SEC
+    # A worker that died before its finally-block ran must not suppress the
+    # next maintenance launch for the full stale window. The old code only
+    # used mtime, which made a dead PID look active for up to an hour.
+    if not _pid_alive(pid):
+        return True
+    return abs(age) > STALE_SEC
 
 
 def acquire_lock(now: float | None = None) -> bool:

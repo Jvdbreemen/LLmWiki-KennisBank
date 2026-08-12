@@ -39,6 +39,15 @@ KB_END = "<!-- END LLmWiki-KennisBank -->"
 # Copilot hook behavior is validated against v1.0.70+.
 MIN_VERSION = (1, 0, 70)
 
+# The local judge/extraction model this config pins. Must coexist on one GPU with
+# the embedding model that serves the retrieval hot path -- see the measurements at
+# _llm.OLLAMA_DEFAULT_MODEL. Not imported from there on purpose: importing _llm
+# would run its KENNISBANK_VAULT setdefault, and this module is used by the
+# installer before the vault is resolved. tests/test_llm_model_default.py keeps the
+# two strings equal.
+KB_LLM_MODEL_DEFAULT = "qwen3.5:4b"
+
+
 # Env every KennisBank-generated Copilot config pins so the right vault + local
 # LLM backend is used regardless of Copilot's cwd.
 def _kb_env(vault: "Path") -> dict:
@@ -46,7 +55,7 @@ def _kb_env(vault: "Path") -> dict:
         "KENNISBANK_VAULT": _posix(vault),
         "KENNISBANK_MCP_COMPACT_OUTPUT": "1",
         "KB_LLM_PROVIDERS": "ollama",
-        "KB_LLM_MODEL": "gemma4:12b",
+        "KB_LLM_MODEL": KB_LLM_MODEL_DEFAULT,
         "KB_LLM_ENDPOINT": "http://localhost:11434",
     }
 

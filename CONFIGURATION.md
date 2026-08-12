@@ -384,11 +384,12 @@ pluggable, fail-soft.
 
 ### Provider chain / model / endpoint (`KB_LLM_*`)
 
-- **Default**: providers `["ollama"]`, model `gemma4:latest`, endpoint `http://localhost:11434`. `setup.sh` bootstraps this into `<vault>/.claude/kennisbank-llm.json` when absent.
+- **Default**: providers `["ollama"]`, model `qwen3.5:4b`, endpoint `http://localhost:11434`. `setup.sh` bootstraps this into `<vault>/.claude/kennisbank-llm.json` when absent.
 - **Where set** (first match wins): env `KB_LLM_PROVIDERS` (comma list), `KB_LLM_MODEL`, `KB_LLM_ENDPOINT`, `KB_LLM_API_KEY_ENV`; then `<vault>/.claude/kennisbank-llm.json` (`{"providers":[...], "model":"...", "models":{prov:model}, "endpoint":"..."}`), bootstrapped from `kennisbank-llm.example.json`; then the code default above.
 - **Provider chain**: `providers` is ORDERED; `generate()` tries each until one returns a non-empty string. `ollama` is local (default). `openrouter` and `claude-cli` are **opt-in** cloud providers: putting them in the chain is explicit consent, and each cloud step logs LOUDLY to stderr, never silently. `claude-cli` shells the existing `claude` binary (uses your Claude Code auth, no key).
 - **OpenRouter**: uses OpenRouter's OpenAI-compatible `POST /api/v1/chat/completions` endpoint with `Authorization: Bearer <key>`. Set `"providers": ["openrouter"]`, `"endpoint": "https://openrouter.ai/api/v1"`, `"model": "<provider/model>"`, and `"api_key_env": "OPENROUTER_API_KEY"`. The key is read from that environment variable first, then from user-local `~/.config/kennisbank/secrets.json`. The key is never written to the vault.
-- **PIN YOUR MODEL (common gotcha)**: the code default is the tag `gemma4:latest`. If your local Ollama has a differently-tagged model (e.g. `gemma4:12b`), the sweep probe fails and the heartbeat (`<vault>/.claude/memory-sweep-status.json`) reports `model_unreachable: true` even though Ollama is running — capture then silently produces nothing. Check `ollama list` and pin the tag you actually have in `kennisbank-llm.json`.
+- **PIN YOUR MODEL (common gotcha)**: the code default is the tag `qwen3.5:4b`. If your local Ollama does not have that exact tag, the sweep probe fails and the heartbeat (`<vault>/.claude/memory-sweep-status.json`) reports `model_unreachable: true` even though Ollama is running — capture then silently produces nothing. Check `ollama list` and pin the tag you actually have in `kennisbank-llm.json`.
+- **SIZE IT TO COEXIST**: the judge shares the GPU with the embedding model that serves retrieval. Measured on an RTX 3080 Laptop (16 GB), both resident: `qwen3-embedding:4b` at ctx 2048 = 4.06 GB and `qwen3.5:4b` at ctx 4096 = 3.13 GB, together 7.19 GB. A `gemma4:12b` judge costs 8.06 GB and makes Ollama evict the embedding model; the next recall then hits a 30-60 s cold load against the hook's 2 s budget and retrieval quietly stops answering. Pin a bigger judge only if it still fits beside the embedder.
 - **To change**: set the env vars, or edit `<vault>/.claude/kennisbank-llm.json`. `setup.sh` creates the file when missing and preserves existing values unless `--force` is used.
 - **Interactive setup**: asks for `ollama` (default) or `openrouter`. For OpenRouter, setup asks for model slug, API-key env-var name, and optionally stores the entered key in `~/.config/kennisbank/secrets.json`.
 
@@ -874,7 +875,7 @@ the interpreter convention: `py -3` on Windows, `python3` on POSIX.
         "KENNISBANK_VAULT": "<vault>",
         "KENNISBANK_MCP_COMPACT_OUTPUT": "1",
         "KB_LLM_PROVIDERS": "ollama",
-        "KB_LLM_MODEL": "gemma4:12b",
+        "KB_LLM_MODEL": "qwen3.5:4b",
         "KB_LLM_ENDPOINT": "http://localhost:11434"
       },
       "tools": ["*"]

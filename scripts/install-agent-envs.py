@@ -37,6 +37,11 @@ import _hooks_manifest  # noqa: E402
 
 
 AGENTS = ("claude", "codex", "opencode", "copilot")
+# The judge/extraction model every generated agent config pins. Defined once in
+# _copilot.py (the only surface that must stay importable on its own) and aliased
+# here so the four writers below cannot drift apart. See _llm.OLLAMA_DEFAULT_MODEL
+# for why the size matters: it shares a GPU with the embedding model.
+KB_LLM_MODEL_DEFAULT = _copilot.KB_LLM_MODEL_DEFAULT
 KB_START = "<!-- BEGIN LLmWiki-KennisBank -->"
 KB_END = "<!-- END LLmWiki-KennisBank -->"
 
@@ -172,7 +177,7 @@ Operational rules:
 - Always set or preserve `KENNISBANK_VAULT={vault_s}` for KennisBank scripts, hooks, MCP servers, skills, and commands.
 - Do not use `C:\\Users\\rvdbr\\KennisBank` or `~/KennisBank` as the active vault on this machine unless the user explicitly changes the vault.
 - Prefer the local KennisBank MCP server before external search when the task may depend on prior local knowledge.
-- The local LLM backend is Ollama with `gemma4:12b`; embeddings use `qwen3-embedding:4b` unless the vault config says otherwise.
+- The local LLM backend is Ollama with `{KB_LLM_MODEL_DEFAULT}`; embeddings use `qwen3-embedding:4b` unless the vault config says otherwise.
 - KennisBank hooks must fail open: missing Ollama, missing embeddings, or a script error may skip context injection, but must not block the agent.
 
 Client: {client}
@@ -460,7 +465,7 @@ args = [{args}]
 
 [mcp_servers.kennisbank.env]
 KB_LLM_ENDPOINT = "http://localhost:11434"
-KB_LLM_MODEL = "gemma4:12b"
+KB_LLM_MODEL = "{KB_LLM_MODEL_DEFAULT}"
 KB_LLM_PROVIDERS = "ollama"
 KENNISBANK_VAULT = "{_posix(vault)}"
 """.strip()
@@ -515,7 +520,7 @@ async function run(script) {{
       ...process.env,
       KENNISBANK_VAULT: vault,
       KB_LLM_PROVIDERS: process.env.KB_LLM_PROVIDERS || "ollama",
-      KB_LLM_MODEL: process.env.KB_LLM_MODEL || "gemma4:12b",
+      KB_LLM_MODEL: process.env.KB_LLM_MODEL || "{KB_LLM_MODEL_DEFAULT}",
       KB_LLM_ENDPOINT: process.env.KB_LLM_ENDPOINT || "http://localhost:11434",
     }}).quiet();
   }} catch (_) {{
@@ -563,7 +568,7 @@ def _ensure_opencode_config(path: Path, vault: Path, plugin: Path) -> Path:
         "environment": {
             "KENNISBANK_VAULT": _posix(vault),
             "KB_LLM_PROVIDERS": "ollama",
-            "KB_LLM_MODEL": "gemma4:12b",
+            "KB_LLM_MODEL": KB_LLM_MODEL_DEFAULT,
             "KB_LLM_ENDPOINT": "http://localhost:11434",
         },
     }
@@ -815,7 +820,7 @@ def validate_mcp_runtime(vault: Path, timeout: int = 15) -> list[str]:
         "env": {
             "KENNISBANK_VAULT": _posix(vault),
             "KB_LLM_PROVIDERS": "ollama",
-            "KB_LLM_MODEL": "gemma4:12b",
+            "KB_LLM_MODEL": KB_LLM_MODEL_DEFAULT,
             "KB_LLM_ENDPOINT": "http://localhost:11434",
         },
     }
@@ -923,7 +928,7 @@ def configure_llm(
     if provider == "ollama":
         cfg.update({
             "providers": ["ollama"],
-            "model": model or cfg.get("model") or "gemma4:latest",
+            "model": model or cfg.get("model") or KB_LLM_MODEL_DEFAULT,
             "endpoint": "http://localhost:11434",
         })
         cfg.pop("api_key_env", None)
@@ -949,7 +954,7 @@ def _resolve_llm_config(vault: Path) -> dict:
         providers = [p.strip() for p in providers.split(",") if p.strip()]
     return {
         "providers": providers,
-        "model": os.environ.get("KB_LLM_MODEL") or cfg.get("model") or "gemma4:latest",
+        "model": os.environ.get("KB_LLM_MODEL") or cfg.get("model") or KB_LLM_MODEL_DEFAULT,
         "endpoint": os.environ.get("KB_LLM_ENDPOINT") or cfg.get("endpoint") or "http://localhost:11434",
         "api_key_env": os.environ.get("KB_LLM_API_KEY_ENV") or cfg.get("api_key_env") or "OPENROUTER_API_KEY",
         "models": cfg.get("models") if isinstance(cfg.get("models"), dict) else {},

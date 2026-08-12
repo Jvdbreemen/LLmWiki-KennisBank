@@ -344,12 +344,18 @@ def warm_in_progress(max_age: float = 60.0) -> bool:
     attempt rather than as proof that a process is alive. The marker is only a
     rate-limit record; it must not make a user-facing hook claim that work is
     running when the child already exited.
+
+    The window is symmetric on purpose. On Windows time.time() reads a clock with
+    a 15.625 ms resolution while the filesystem stamps mtime from a finer one, so
+    a marker written moments ago can measure as slightly in the future (586 of
+    5000 samples); rejecting that as "not running" spawned a second warm child
+    for no reason (TASK-140).
     """
     try:
         import time as _time
         marker = _warm_marker()
         age = _time.time() - marker.stat().st_mtime
-        if age < 0 or age >= max_age:
+        if abs(age) >= max_age:
             return False
         data = json.loads(marker.read_text(encoding="utf-8"))
         pid = data.get("pid") if isinstance(data, dict) else None
@@ -358,6 +364,50 @@ def warm_in_progress(max_age: float = 60.0) -> bool:
         return _pid_alive(pid)
     except Exception:
         return False
+
+
+def is_resident(timeout: float = 0.5):
+    """Whether the configured model is loaded RIGHT NOW: True, False, or None.
+
+    Reads Ollama's process table (GET /api/ps). That is a lookup, not a load --
+    unlike a probe embed, which would pay the very 30-60 s cold load a caller
+    asks this question to avoid. None means "cannot tell" (another provider, a
+    remote endpoint, Ollama down, a malformed answer); a caller that reports
+    this to a user must stay silent on None instead of claiming a cold model.
+
+    LOCAL ENDPOINTS ONLY. A remote host answers None without a request being
+    made -- not because the question is meaningless there, but because the
+    timeout below cannot bound it: socket.create_connection resolves the name
+    first (getaddrinfo ignores the timeout entirely) and then applies the
+    timeout to EACH address it got back. A caller that needs a hard ceiling on a
+    hot path can only get one when the address is a literal loopback.
+
+    Even then the ceiling is per connect attempt, not per call: "localhost" on
+    Windows yields ::1 and 127.0.0.1, so budget for two. Callers that care
+    should pass a timeout with that headroom, or configure 127.0.0.1."""
+    prov, model, endpoint, _key = _resolve()
+    if prov != "ollama" or not model or not is_local_endpoint(endpoint):
+        return None
+    try:
+        import urllib.request
+        req = urllib.request.Request(f"{endpoint}/api/ps", method="GET")
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            data = json.loads(r.read().decode("utf-8"))
+    except Exception:
+        return None
+    entries = data.get("models") if isinstance(data, dict) else None
+    if not isinstance(entries, list):
+        return None
+    loaded = {v for e in entries if isinstance(e, dict)
+              for v in (e.get("name"), e.get("model"))
+              if isinstance(v, str) and v}
+    # An untagged pull is reported as "<name>:latest" (verified against a live
+    # /api/tags: bge-m3:latest, embeddinggemma:latest), so a config that names a
+    # model without a tag matches that spelling. It does NOT match a differently
+    # tagged variant on purpose: asking Ollama to embed with "qwen3-embedding"
+    # would load :latest, so "qwen3-embedding:4b" being resident is genuinely a
+    # different model from the one this config would use.
+    return model in loaded or f"{model}:latest" in loaded
 
 
 def warm(timeout: float = 120.0) -> bool:
@@ -379,7 +429,12 @@ def warm_async(min_interval: float = 60.0) -> None:
         import time as _time
         marker = _warm_marker()
         try:
-            if marker.exists() and (_time.time() - marker.stat().st_mtime) < min_interval:
+            # abs(), for the reason warm_in_progress states: a marker whose
+            # mtime reads as slightly in the future is measurement noise, but a
+            # one-sided `age < min_interval` also swallows a marker stamped
+            # HOURS ahead (a clock set back, a restored file) and would then
+            # suppress every prewarm until wall-clock time caught up.
+            if marker.exists() and abs(_time.time() - marker.stat().st_mtime) < min_interval:
                 return
         except Exception:
             pass

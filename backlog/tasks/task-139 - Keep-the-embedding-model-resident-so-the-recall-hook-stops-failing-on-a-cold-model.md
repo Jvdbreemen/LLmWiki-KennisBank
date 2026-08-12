@@ -3,10 +3,10 @@ id: TASK-139
 title: >-
   Keep the embedding model resident so the recall hook stops failing on a cold
   model
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-11 17:19'
-updated_date: '2026-08-11 17:40'
+updated_date: '2026-08-12 16:31'
 labels:
   - performance
   - retrieval
@@ -47,10 +47,10 @@ Unrelated trap noticed while measuring: the environment sets `OLLAMA_EMBED_MODEL
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The embedding model stays resident across an idle period longer than the current 30 minute TTL, verified through /api/ps
+- [x] #1 The embedding model stays resident across an idle period longer than the current 30 minute TTL, verified through /api/ps
 - [x] #2 The judge/extraction model is pinned to a size that coexists with the embedding model on a 16 GB GPU, with the VRAM figures recorded
-- [ ] #3 A cold or evicted embedding model is visible to the user (session start or hook notice) instead of silently yielding no knowledge
-- [ ] #4 python -m pytest tests -q is green
+- [x] #3 A cold or evicted embedding model is visible to the user (session start or hook notice) instead of silently yielding no knowledge
+- [x] #4 python -m pytest tests -q is green
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -75,4 +75,23 @@ Done (commit 8d11970): num_ctx 2048 and keep_alive -1 in _embeddings.py with KB_
 Still open: AC #1 (verify residency across an idle gap longer than 30 minutes) and AC #3 (surface a cold model at session start instead of reporting no knowledge). Also note scripts/install-agent-envs.py:463 and scripts/_copilot.py:49 still write KB_LLM_MODEL = gemma4:12b as the repo default, so re-running the installer would undo the environment change.
 
 Full measurements and web sources: ~/Claude/research/2026-08-11-ollama-modelcombinatie-16gb-kennisbank.md
+
+Finished 2026-08-12.
+
+AC #1 (residency across an idle gap) — verified through /api/ps rather than waited out, because keep_alive -1 removes the TTL entirely. Forced a fresh embed through the current _embeddings path first (0.9 s warm, dim 2560), then read the process table:
+
+  qwen3-embedding:4b  4.06 GB VRAM  ctx 2048  expires 2318-11-22
+  qwen3.5:4b          3.13 GB VRAM  ctx 4096  expires +30 min
+
+An expiry three centuries out is what 'no TTL' looks like in Ollama's answer, so no idle gap can unload it. Total 7.19 GB of 16 GB, exactly the measured budget.
+
+AC #3 (a cold model is visible) — the retrieval hook already reported the miss, but only AFTER the answer had been given without the vault. The session-start status line now reads /api/ps and appends `embedding-model koud`, or `embedding-model koud (wordt geladen)` when a warm-up child is actually alive. Warm says nothing; unknown (another provider, Ollama down) also says nothing, because guessing 'cold' would send the user hunting for a VRAM problem that is not there. Capped at 100 ms: a live local Ollama answers in ~3 ms, and a dropped connection must not eat the 250 ms budget the status line is held to.
+
+The regression the notes warned about is closed. install-agent-envs.py wrote gemma4:12b in FOUR generated surfaces plus two gemma4:latest fallbacks, and _copilot.py in a fifth; re-running the installer would have undone the environment fix. They now share one constant with _llm.OLLAMA_DEFAULT_MODEL = qwen3.5:4b, guarded by tests/test_llm_model_default.py, which also fails if a literal reappears. _activity.py's opt-in Layer-3 date fallback carried its own gemma4:12b and is pinned to the same value -- deliberately still off the provider chain, since routing it through _llm could hand a user's phrasing to a configured cloud provider.
+
+Docs swept in the same pass: README, README.nl, CONFIGURATION (with the VRAM table), AGENTS, docs/agent-integrations, ADR-0003's config snippet, kennisbank-llm.example.json and setup.sh's interactive default.
+
+Still true and NOT fixed here: the environment sets OLLAMA_EMBED_MODEL=qwen3-embedding:8b. _embeddings._resolve() DOES honour that variable as a legacy fallback when neither KB_EMBED_MODEL nor kennisbank-embed.json names a model -- measured: a vault without that config resolves to the 8b model. The real vault pins 4b in its config, so nothing is broken today, but the trap is one deleted config file away.
+
+Gate: `python -m pytest tests -q` -> 1217 passed, 2 skipped in 5:01, exit 0.
 <!-- SECTION:NOTES:END -->

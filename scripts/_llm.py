@@ -10,7 +10,7 @@ toestemming (#4). Een cloud-stap logt LUID naar stderr — nooit stil.
 Config (eerste match wint):
   1. env: KB_LLM_PROVIDERS (comma-lijst), KB_LLM_MODEL, KB_LLM_ENDPOINT, KB_LLM_API_KEY_ENV
   2. <vault>/.claude/kennisbank-llm.json: {"providers":[...], "model":"...", "models":{prov:model}, "endpoint":"..."}
-  3. default: providers ["ollama"], model gemma4:latest, endpoint http://localhost:11434
+  3. default: providers ["ollama"], model qwen3.5:4b, endpoint http://localhost:11434
 
 Stdlib only. claude-cli shelt het bestaande `claude`-binary (gebruikt je CC-auth).
 """
@@ -29,8 +29,19 @@ from _vaultpath import vault_root  # noqa: E402
 LOCAL_PROVIDERS = {"ollama"}
 CLOUD_PROVIDERS = {"openrouter", "claude-cli"}
 
+#: The local judge/extraction model. It shares one GPU with the embedding model,
+#: which is the hot path: retrieval has a 2 s budget and a cold load costs 30-60 s.
+#: Ollama evicts the smaller model when the next one does not fit, so the judge is
+#: pinned to a size that COEXISTS. Measured on an RTX 3080 Laptop (16 GB), both
+#: models resident: qwen3-embedding:4b @ ctx 2048 = 4.06 GB, qwen3.5:4b @ ctx 4096
+#: = 3.13 GB, together 7.19 GB. gemma4:12b costs 8.06 GB and evicted the embedder,
+#: which is what turned retrieval off for whole sessions (TASK-139).
+#: Every surface that writes KB_LLM_MODEL repeats this string; keep them in step.
+#: tests/test_llm_model_default.py is the guard that they are.
+OLLAMA_DEFAULT_MODEL = "qwen3.5:4b"
+
 _DEFAULTS = {
-    "ollama": {"endpoint": "http://localhost:11434", "model": "gemma4:latest"},
+    "ollama": {"endpoint": "http://localhost:11434", "model": OLLAMA_DEFAULT_MODEL},
     "openrouter": {"endpoint": "https://openrouter.ai/api/v1", "model": ""},
     "claude-cli": {"endpoint": "", "model": ""},
 }

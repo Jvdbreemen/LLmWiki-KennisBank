@@ -102,6 +102,61 @@ class StatusLineTest(unittest.TestCase):
         (self.tmp / "graphify-out" / ".needs-rebuild").write_text("", encoding="utf-8")
         self.assertNotIn("rebuild", self.mod.status_line(self.tmp, worker_running=False))
 
+    # --- koud embedding-model ------------------------------------------------
+
+    def _embed(self, resident, warming=False):
+        """Vervang de embeddings-module door een dubbel met een bekende staat."""
+        gezien = {}
+
+        class Dubbel:
+            def is_resident(_self, timeout=0.1):
+                gezien["timeout"] = timeout
+                if isinstance(resident, Exception):
+                    raise resident
+                return resident
+
+            def warm_in_progress(_self):
+                return warming
+
+        self.mod._embeddings_module = lambda _vault: Dubbel()
+        return gezien
+
+    def test_modelprobe_krijgt_een_hot_path_plafond(self):
+        """De probe is een netwerkstap in een functie met een 250ms-budget.
+
+        Zonder expliciet plafond erft hij de default van is_resident (500ms), en
+        dat is op een machine waar een dichte poort uittimet in plaats van
+        weigert al meer dan twee keer het hele budget."""
+        gezien = self._embed(resident=True)
+        self.mod.status_line(self.tmp, worker_running=False)
+        self.assertLessEqual(gezien["timeout"], 0.1)
+
+    def test_warm_model_wordt_niet_genoemd(self):
+        """Alleen de misser hoort op te vallen; een werkend model is geen nieuws."""
+        self._embed(resident=True)
+        self.assertNotIn("embedding-model", self.mod.status_line(self.tmp, worker_running=False))
+
+    def test_koud_model_wordt_gemeld(self):
+        self._embed(resident=False)
+        self.assertIn("embedding-model koud", self.mod.status_line(self.tmp, worker_running=False))
+
+    def test_koud_model_meldt_de_lopende_opwarming(self):
+        self._embed(resident=False, warming=True)
+        self.assertIn("wordt geladen", self.mod.status_line(self.tmp, worker_running=False))
+
+    def test_onbekende_staat_zwijgt(self):
+        """Een andere provider of een onbereikbare Ollama levert None. Daarop
+        'koud' melden zou een gok zijn die de gebruiker naar VRAM stuurt die
+        niets mankeert."""
+        self._embed(resident=None)
+        self.assertNotIn("embedding-model", self.mod.status_line(self.tmp, worker_running=False))
+
+    def test_kapotte_probe_breekt_de_regel_niet(self):
+        self._embed(resident=RuntimeError("stuk"))
+        regel = self.mod.status_line(self.tmp, worker_running=False)
+        self.assertTrue(regel.startswith("KennisBank:"))
+        self.assertNotIn("embedding-model", regel)
+
     def test_telling_krijgt_voorbehoud_tijdens_onderhoud(self):
         """Een tabel die gevuld wordt levert een momentopname. Het getal zonder
         voorbehoud tonen is stelliger dan de werkelijkheid toestaat."""
@@ -228,7 +283,15 @@ class StatusLineTest(unittest.TestCase):
 
     def test_blijft_binnen_het_budget(self):
         """Een aflezing, geen berekening. Loopt dit uit de hand, dan hoort het
-        werk naar de achtergrondworker en niet naar de sessiestart."""
+        werk naar de achtergrondworker en niet naar de sessiestart.
+
+        De modelprobe wordt hier bewust gestubd. Zonder stub doet deze test vijf
+        echte /api/ps-calls, en dan meet hij of Ollama toevallig draait in plaats
+        van wat status_line zelf kost -- op een machine waar een dichte poort
+        uittimet in plaats van weigert kost dat seconden. Het plafond van de
+        probe zelf is een aparte afspraak, bewaakt door
+        test_modelprobe_krijgt_een_hot-path-plafond."""
+        self._embed(resident=True)
         self._index(docs=500)
         self._graph()
         t = time.perf_counter()

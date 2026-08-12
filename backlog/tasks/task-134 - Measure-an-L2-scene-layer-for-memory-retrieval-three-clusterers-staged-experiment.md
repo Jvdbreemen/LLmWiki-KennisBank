@@ -3,10 +3,10 @@ id: TASK-134
 title: >-
   Measure an L2 scene layer for memory retrieval (three clusterers, staged
   experiment)
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-05 21:20'
-updated_date: '2026-08-10 22:30'
+updated_date: '2026-08-12 16:13'
 labels:
   - retrieval
   - research
@@ -47,10 +47,8 @@ Out of scope (separate projects): in-session tool-payload compression, periodic 
 - [x] #9 Holdout (30% split) and kb-memory-eval-set-v2.json each run exactly once, on the chosen configuration only
 - [x] #10 Report written to docs/research/l2-scene-retrieval-2026-08.md with per-arm tables, twenty flip examples in each direction, raw JSON alongside, and an explicit conclusion including what did not work
 - [x] #11 scene_retrieval toggle defaults to off and is only enabled if the winner rule is met
-- [ ] #12 python -m pytest tests -q is green
+- [x] #12 python -m pytest tests -q is green
 <!-- AC:END -->
-
-
 
 ## Implementation Notes
 
@@ -66,4 +64,8 @@ AC verdicts that are not a plain tick:
 Bug fixed on this branch: build-scene-index.py called _llm.complete, which does not exist (_llm exposes generate). That was an AttributeError, not a fail-open path.
 
 Side finding, filed as TASK-136: turning off embed_index/memory_capture makes build-kb-index prune the entire derived index (1707 documents deleted). Three arms ran against an empty index and produced plausible-looking negatives before the cause was found.
+
+Closed 2026-08-12. Landed in PR #105; the suite it left red on main was fixed within the hour by PR #106 (conftest pins the tests to a temporary vault) and `python -m pytest tests -q` is green again, so AC #12 is ticked. AC #7 stays unticked on purpose: only the `community` clusterer produced scenes, and the evidence for the other two is in the notes above rather than a tick it did not earn.
+
+The measurement's real yield is TASK-138 (the bottleneck is ranking, not retrieval: the gold memory sits in the top 20 for 130 of 209 misses) and TASK-136 (the toggle that pruned the index and silently poisoned three arms).
 <!-- SECTION:NOTES:END -->

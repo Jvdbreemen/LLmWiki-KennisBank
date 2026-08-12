@@ -81,6 +81,18 @@ def _vault() -> Path:
     return vault
 
 
+def _embeddings_module(vault: Path):
+    """Import the vault's _embeddings, or None. Fail-open by contract."""
+    try:
+        scripts = vault / ".claude" / "scripts"
+        if str(scripts) not in sys.path:
+            sys.path.insert(0, str(scripts))
+        import _embeddings as emb
+        return emb
+    except Exception:
+        return None
+
+
 def _prewarm_embed_model(vault: Path) -> None:
     """Fire a detached warm of the embedding model at session start so the first
     prompt's retrieval hook (kb-retrieve) is hot.
@@ -91,14 +103,44 @@ def _prewarm_embed_model(vault: Path) -> None:
     out. Non-blocking, fail-open, sentinel-guarded (see _embeddings.warm_async).
     Fires from main(), not coordinate(), so it is independent of the freshness
     gate and never runs inside the unit tests that drive coordinate() directly."""
+    emb = _embeddings_module(vault)
+    if emb is None:
+        return
     try:
-        scripts = vault / ".claude" / "scripts"
-        if str(scripts) not in sys.path:
-            sys.path.insert(0, str(scripts))
-        import _embeddings as emb
         emb.warm_async()
     except Exception:
         pass
+
+
+def _embed_state(vault: Path) -> str:
+    """Status word for the embedding model, or "" when there is nothing to say.
+
+    A cold model is the quietest way KennisBank can fail: the retrieval hook has
+    2 s and a cold load costs 30-60, so the hook reports the miss only AFTER the
+    answer was given without the vault. Here it is still up front. Warm says
+    nothing; unknown (another provider, Ollama down) also says nothing, because
+    a guess is worse here than no notice at all.
+    """
+    emb = _embeddings_module(vault)
+    if emb is None:
+        return ""
+    try:
+        # 100 ms, not the function default: a live local Ollama answers /api/ps
+        # in ~3 ms (measured), and an endpoint that needs longer is one this line
+        # should stay silent about rather than wait for. is_resident refuses
+        # non-local endpoints outright, so this budget is per connect attempt to
+        # a loopback address -- "localhost" can resolve to ::1 AND 127.0.0.1, so
+        # the ceiling is two attempts, not one. A closed port does not always
+        # refuse instantly (a dropped loopback connect runs to the timeout),
+        # which is exactly why the number is this small.
+        if emb.is_resident(timeout=0.1) is not False:
+            return ""
+        warming = bool(emb.warm_in_progress())
+    except Exception:
+        return ""
+    # "wordt geladen" only when a warm child is genuinely alive: the prewarm is
+    # sentinel-gated and skips a second start within 60 s.
+    return "embedding-model koud (wordt geladen)" if warming else "embedding-model koud"
 
 
 def _changed_count(text: str, pattern: str) -> int:
@@ -227,10 +269,15 @@ def acquire_lock(path: Path, now: float | None = None) -> bool:
     except FileExistsError:
         try:
             age = current - path.stat().st_mtime
-            # age < 0 = mtime in de toekomst (klokverzetting, of een bestand van
-            # een machine met scheve klok). Zonder die clausule verloopt zo'n
-            # lock nooit en ligt het onderhoud permanent stil.
-            if 0 <= age <= LOCK_STALE_SECONDS:
+            # Symmetrisch venster: een mtime die VER in de toekomst ligt is een
+            # klokverzetting en moet verlopen, anders ligt het onderhoud
+            # permanent stil. Maar niet elke negatieve age is skew -- op Windows
+            # leest time.time() een klok met 15,625 ms resolutie terwijl het
+            # bestandssysteem fijner stempelt, dus een lock van een fractie
+            # geleden meet gerust -0,001 s (gemeten: 586 van 5000). De oude
+            # `0 <= age` liet die door naar unlink + hercreatie en gaf
+            # single-flight weg op de plek die hem moest garanderen (TASK-140).
+            if abs(age) <= LOCK_STALE_SECONDS:
                 return False
             path.unlink()
             fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
@@ -297,9 +344,16 @@ def status_line(vault: Path, *, worker_running: bool) -> str:
     """Eenregelig statusbericht, afgelezen uit bestaande state.
 
     Bewust een AFLEZING en geen berekening: alles hier komt uit bestanden die
-    de vorige achtergrondrun al heeft achtergelaten, of uit een enkele
-    SQLite-telling. Geen embed-calls, geen vault-scan, geen LLM. Een sessiestart
-    hoort te melden waar je aan toe bent, niet het te gaan uitzoeken.
+    de vorige achtergrondrun al heeft achtergelaten, uit een enkele
+    SQLite-telling, of uit een begrensde lokale lookup. Geen embed-calls, geen
+    vault-scan, geen LLM. Een sessiestart hoort te melden waar je aan toe bent,
+    niet het te gaan uitzoeken.
+
+    Eén onderdeel doet wél een netwerkstap: _embed_state vraagt Ollama's
+    procestabel op (GET /api/ps, ~3 ms lokaal, alleen loopback, 100 ms per
+    connect-poging). Dat is nog steeds een aflezing -- het laadt niets -- maar
+    het is geen pure bestandsleesactie meer, en dat verschil hoort hier te
+    staan voor wie deze functie ergens anders wil aanroepen.
 
     Fail-open per onderdeel: elk stuk dat niet leesbaar is wordt overgeslagen,
     zodat een ontbrekende index nooit de melding (of de sessie) breekt.
@@ -325,6 +379,15 @@ def status_line(vault: Path, *, worker_running: bool) -> str:
                 delen.append(deel)
             finally:
                 conn.close()
+    except Exception:
+        pass
+
+    # Embedding-model: een index van 1700 documenten is niets waard als het
+    # model dat de vraag moet vectoriseren niet in geheugen staat.
+    try:
+        deel = _embed_state(vault)
+        if deel:
+            delen.append(deel)
     except Exception:
         pass
 

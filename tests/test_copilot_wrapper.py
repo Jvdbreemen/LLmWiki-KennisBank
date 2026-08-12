@@ -22,6 +22,10 @@ from unittest import mock
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MODULE = REPO_ROOT / "scripts" / "kennisbank-copilot.py"
 
+import sys  # noqa: E402
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+import _copilot  # noqa: E402  (owns the pinned KB_LLM_MODEL default)
+
 # Env keys the tests mutate; saved and restored so runs are isolated.
 _ENV_KEYS = (
     "HOME", "USERPROFILE", "COPILOT_HOME", "KENNISBANK_COPILOT_BIN",
@@ -103,7 +107,9 @@ class CopilotWrapperTest(unittest.TestCase):
         env = calls["env"]
         self.assertEqual(env["KENNISBANK_VAULT"], self._posix(self.vault))
         self.assertEqual(env["KB_LLM_PROVIDERS"], "ollama")
-        self.assertEqual(env["KB_LLM_MODEL"], "gemma4:12b")
+        # The pinned judge model itself is guarded in test_llm_model_default.py;
+        # what matters here is that the wrapper passes it through unchanged.
+        self.assertEqual(env["KB_LLM_MODEL"], _copilot.KB_LLM_MODEL_DEFAULT)
         self.assertEqual(env["KB_LLM_ENDPOINT"], "http://localhost:11434")
 
     def test_kb_llm_not_clobbered_when_user_set(self):
@@ -243,7 +249,7 @@ class CopilotWrapperTest(unittest.TestCase):
         self.assertEqual(rc, 0)
         text = out.getvalue()
         self.assertIn(f"KENNISBANK_VAULT={self._posix(self.vault)}", text)
-        self.assertIn("KB_LLM_MODEL=gemma4:12b", text)
+        self.assertIn(f"KB_LLM_MODEL={_copilot.KB_LLM_MODEL_DEFAULT}", text)
         # DoD#3: the launcher prints only the vars it injects, never the
         # inherited environment, so an ambient secret can never surface.
         self.assertNotIn("supersecret-should-never-print", text)
