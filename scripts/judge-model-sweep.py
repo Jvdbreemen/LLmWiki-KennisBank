@@ -55,6 +55,7 @@ import _extract  # noqa: E402
 import _judge  # noqa: E402
 import _llm  # noqa: E402
 import _reconcile  # noqa: E402
+import _sweepstate as ss  # noqa: E402
 import _sweeputil as su  # noqa: E402
 
 WIKILINK = re.compile(r"\[\[([^\]|]+)")
@@ -150,6 +151,13 @@ def unrelated_pairs(mems: dict, limit: int, rng: random.Random,
 def transcript_chunks(vault: Path, limit: int, min_chars: int = 1500) -> list:
     """Real transcript chunks, spread across the archive rather than clustered.
 
+    Parsing goes through _sweepstate.transcript_text, the same function capture
+    uses. An earlier version of this harness carried its own copy that understood
+    Claude Code's shape only, so it silently skipped every Codex and Copilot
+    transcript -- biasing its own sample toward one client while claiming to
+    measure the archive. A measurement harness that reads less than the thing it
+    measures is worse than no harness.
+
     Short chunks are skipped: a 200-character fragment has almost nothing to
     extract, so both arms return [] and the comparison learns nothing from it.
     """
@@ -163,25 +171,7 @@ def transcript_chunks(vault: Path, limit: int, min_chars: int = 1500) -> list:
     for path in picked:
         if len(out) >= limit:
             break
-        try:
-            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
-        except OSError:
-            continue
-        texts = []
-        for line in lines:
-            try:
-                obj = json.loads(line)
-            except Exception:
-                continue
-            msg = obj.get("message") if isinstance(obj, dict) else None
-            content = msg.get("content") if isinstance(msg, dict) else None
-            if isinstance(content, str) and content.strip():
-                texts.append(content.strip())
-            elif isinstance(content, list):
-                for part in content:
-                    if isinstance(part, dict) and isinstance(part.get("text"), str):
-                        texts.append(part["text"].strip())
-        chunks = su.chunk("\n\n".join(texts))
+        chunks = su.chunk(ss.transcript_text(path))
         if chunks and len(chunks[0]) >= min_chars:
             out.append({"source": path.name, "text": chunks[0]})
     return out

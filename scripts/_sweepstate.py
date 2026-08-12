@@ -63,9 +63,10 @@ def mark(stems, vault=None) -> int:
 #: Codex writes "input_text" on the way in and "output_text" on the way out.
 _TEXT_BLOCKS = ("text", "input_text", "output_text")
 
-#: Rollen die als gesprek tellen. "developer" hoort er NIET bij: dat is het
-#: ingespoten instructieblok (AGENTS.md, en daarin het KennisBank-blok zelf),
-#: dus meenemen zou de extractor zijn eigen instructies laten samenvatten.
+#: Roles that count as conversation. "developer" is deliberately NOT one: that is
+#: the injected instruction block (AGENTS.md, and inside it KennisBank's own
+#: block), so capturing it would have the extractor summarise its own
+#: instructions.
 _ROLES = ("user", "assistant")
 
 
@@ -84,27 +85,26 @@ def _block_text(content) -> str:
 
 
 def transcript_text(jsonl_path) -> str:
-    """Reduceer een transcript-jsonl tot platte user/assistant-tekst. Fail-soft.
+    """Reduce a transcript jsonl to flat user/assistant text. Fail-soft.
 
-    Twee formaten, omdat de vault transcripts van meerdere clients archiveert:
+    Three shapes, because the vault archives transcripts from several clients:
 
-    - Claude Code: elk record heeft ``message`` met ``role`` en ``content``.
-    - Codex: elk record is ``{timestamp, type, payload}``. Het gesprek zit in
-      ``type == "response_item"`` met ``payload.type == "message"``; de rest
-      (``reasoning``, ``custom_tool_call``, ``function_call``, ``token_count``)
-      is gereedschapsruis, net zoals de Claude-tak alleen user/assistant pakt.
-      ``event_msg``/``agent_message`` herhaalt de assistent-tekst en wordt
-      overgeslagen om dubbeltelling te voorkomen.
-    - Copilot: een hook-eventlog met platte records waarin ``message`` een
-      STRING is en ``role`` naast ``message`` staat. Alleen ``role == "user"``
-      draagt gesprek; ``tool_use`` en ``session`` zijn gereedschap en
-      levenscyclus. Assistent-antwoorden staan er niet in -- dit formaat levert
-      dus de helft van een gesprek, en dat is beter dan niets maar het is geen
-      volwaardig transcript.
+    - Claude Code: every record has ``message`` with ``role`` and ``content``.
+    - Codex: every record is ``{timestamp, type, payload}``. The conversation
+      lives under ``type == "response_item"`` with ``payload.type == "message"``;
+      the rest (``reasoning``, ``custom_tool_call``, ``function_call``,
+      ``token_count``) is tool noise, exactly as the Claude branch already takes
+      user/assistant only. ``event_msg``/``agent_message`` repeats the assistant
+      text and is skipped so it cannot double-count.
+    - Copilot: a hook event log of flat records where ``message`` is a STRING and
+      ``role`` sits beside it. Only ``role == "user"`` carries conversation;
+      ``tool_use`` and ``session`` are tooling and lifecycle. Assistant replies
+      are absent from this format altogether, so it yields half a conversation --
+      better than nothing, but not a full transcript.
 
-    Zonder de Codex- en Copilot-takken leverde deze functie NIETS terug voor 39
-    van de 299 gearchiveerde transcripts, samen 94 MB sessie-inhoud: een compleet
-    onzichtbare capture-laag in plaats van een gedeeltelijke (TASK-145).
+    Without the Codex and Copilot branches this function returned NOTHING for 39
+    of the 299 archived transcripts, together 94 MB of session content: a capture
+    layer that was entirely blind rather than partly (TASK-145).
     """
     out = []
     try:
@@ -130,8 +130,8 @@ def transcript_text(jsonl_path) -> str:
                 if isinstance(msg, str) and rec.get("role") in _ROLES:
                     role = rec.get("role")
                     t = msg.strip()
-                    # De hook schrijft "userPromptSubmitted: <prompt>"; de
-                    # eventnaam is metadata en hoort niet in de kennis.
+                    # The hook writes "userPromptSubmitted: <prompt>"; the event
+                    # name is metadata and does not belong in the knowledge.
                     event = str(rec.get("event") or "")
                     if event and t.startswith(event + ":"):
                         t = t[len(event) + 1:].strip()
