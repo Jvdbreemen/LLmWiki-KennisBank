@@ -1238,6 +1238,12 @@ def _llm_call(prompt: str, *, model: str = _LLM_MODEL, timeout: int = _LLM_TIMEO
         "prompt": prompt,
         "stream": False,
         "format": "json",
+        # Reasoning off. This path is stricter than _llm's: num_predict caps the
+        # answer at 128 tokens, and a thinking model spends thousands before it
+        # starts answering, so with thinking on it returns an empty response
+        # every time and the caller degrades to a parse error. See
+        # _llm.OLLAMA_THINK for the measurements.
+        "think": False,
         "options": {"temperature": 0, "seed": 0, "num_predict": 128},
     }).encode("utf-8")
     req = urllib.request.Request(_LLM_URL, data=body, headers={"Content-Type": "application/json"})

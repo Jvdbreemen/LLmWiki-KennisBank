@@ -59,6 +59,17 @@ def mark(stems, vault=None) -> int:
     return len(new)
 
 
+#: Content-block kinds that carry conversation text. Claude Code writes "text";
+#: Codex writes "input_text" on the way in and "output_text" on the way out.
+_TEXT_BLOCKS = ("text", "input_text", "output_text")
+
+#: Roles that count as conversation. "developer" is deliberately NOT one: that is
+#: the injected instruction block (AGENTS.md, and inside it KennisBank's own
+#: block), so capturing it would have the extractor summarise its own
+#: instructions.
+_ROLES = ("user", "assistant")
+
+
 def _block_text(content) -> str:
     if content is None:
         return ""
@@ -67,14 +78,34 @@ def _block_text(content) -> str:
     if isinstance(content, list):
         parts = []
         for block in content:
-            if isinstance(block, dict) and block.get("type") == "text":
+            if isinstance(block, dict) and block.get("type") in _TEXT_BLOCKS:
                 parts.append(str(block.get("text", "")))
         return "\n".join(parts)
     return ""
 
 
 def transcript_text(jsonl_path) -> str:
-    """Reduceer een CC-transcript-jsonl tot platte user/assistant-tekst. Fail-soft."""
+    """Reduce a transcript jsonl to flat user/assistant text. Fail-soft.
+
+    Three shapes, because the vault archives transcripts from several clients:
+
+    - Claude Code: every record has ``message`` with ``role`` and ``content``.
+    - Codex: every record is ``{timestamp, type, payload}``. The conversation
+      lives under ``type == "response_item"`` with ``payload.type == "message"``;
+      the rest (``reasoning``, ``custom_tool_call``, ``function_call``,
+      ``token_count``) is tool noise, exactly as the Claude branch already takes
+      user/assistant only. ``event_msg``/``agent_message`` repeats the assistant
+      text and is skipped so it cannot double-count.
+    - Copilot: a hook event log of flat records where ``message`` is a STRING and
+      ``role`` sits beside it. Only ``role == "user"`` carries conversation;
+      ``tool_use`` and ``session`` are tooling and lifecycle. Assistant replies
+      are absent from this format altogether, so it yields half a conversation --
+      better than nothing, but not a full transcript.
+
+    Without the Codex and Copilot branches this function returned NOTHING for 39
+    of the 299 archived transcripts, together 94 MB of session content: a capture
+    layer that was entirely blind rather than partly (TASK-145).
+    """
     out = []
     try:
         with Path(jsonl_path).open("r", encoding="utf-8", errors="replace") as f:
@@ -86,14 +117,35 @@ def transcript_text(jsonl_path) -> str:
                     rec = json.loads(line)
                 except Exception:
                     continue
-                msg = rec.get("message") if isinstance(rec, dict) else None
-                if not isinstance(msg, dict):
+                if not isinstance(rec, dict):
                     continue
-                role = msg.get("role")
-                if role in ("user", "assistant"):
-                    t = _block_text(msg.get("content")).strip()
+                msg = rec.get("message")
+                if isinstance(msg, dict):
+                    role = msg.get("role")
+                    if role in _ROLES:
+                        t = _block_text(msg.get("content")).strip()
+                        if t:
+                            out.append(f"{role}: {t}")
+                    continue
+                if isinstance(msg, str) and rec.get("role") in _ROLES:
+                    role = rec.get("role")
+                    t = msg.strip()
+                    # The hook writes "userPromptSubmitted: <prompt>"; the event
+                    # name is metadata and does not belong in the knowledge.
+                    event = str(rec.get("event") or "")
+                    if event and t.startswith(event + ":"):
+                        t = t[len(event) + 1:].strip()
                     if t:
                         out.append(f"{role}: {t}")
+                    continue
+                payload = rec.get("payload")
+                if rec.get("type") == "response_item" and isinstance(payload, dict) \
+                        and payload.get("type") == "message":
+                    role = payload.get("role")
+                    if role in _ROLES:
+                        t = _block_text(payload.get("content")).strip()
+                        if t:
+                            out.append(f"{role}: {t}")
     except Exception:
         return ""
     return "\n\n".join(out)

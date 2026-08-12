@@ -57,6 +57,22 @@ _DEFAULTS = {
 #: the chunk size in _sweeputil.chunk().
 OLLAMA_NUM_CTX = int(os.environ.get("KB_LLM_NUM_CTX", "").strip() or 4096)
 
+#: Reasoning models answer AFTER thinking, and the thinking spends the same
+#: num_ctx budget as the answer. Measured on qwen3.5:4b with the reconcile
+#: prompt at num_ctx 4096: 2106-3885 tokens of thinking, 30-56 s per call, and
+#: one call in three returned done_reason="length" with an EMPTY response --
+#: Ollama had put the reasoning in a separate `thinking` field and never reached
+#: the answer. Every seam here is fail-safe (extract -> [], judge ->
+#: unverified, reconcile -> ADD), so that silence looks exactly like a model
+#: that considered the input and shrugged. With think=false the same three
+#: prompts took 1.6-1.7 s, spent 39-48 tokens, and all three returned valid
+#: JSON.
+#: Sent unconditionally: a non-thinking model accepts the flag without
+#: complaint (verified against gemma4:12b -- valid JSON, no HTTP error).
+#: Set KB_LLM_THINK=1 to hand the budget back to the model's reasoning; only
+#: worth it with a num_ctx that leaves room for an answer afterwards.
+OLLAMA_THINK = os.environ.get("KB_LLM_THINK", "").strip() in ("1", "true", "yes")
+
 
 def _config() -> dict:
     f = vault_root() / ".claude" / "kennisbank-llm.json"
@@ -156,6 +172,7 @@ def _call(provider, model, endpoint, api_key_env, prompt, system, timeout):
             full = (system + "\n\n" + prompt) if system else prompt
             r = _http_json(f"{endpoint}/api/generate",
                            {"model": model, "prompt": full, "stream": False,
+                            "think": OLLAMA_THINK,
                             "options": {"temperature": 0,
                                         "num_ctx": OLLAMA_NUM_CTX}},
                            {"Content-Type": "application/json"}, timeout)
