@@ -125,6 +125,14 @@ def is_stale(lock: Path, now: float | None = None) -> bool:
 
     Die tweede clausule vangt een klokverzetting af: zonder hem zou een lock met
     een mtime in de toekomst nooit verlopen en het onderhoud permanent stilzetten.
+
+    Het tijdvenster is symmetrisch (`abs(age) > STALE_SEC`), niet `age < 0`. Op
+    Windows leest `time.time()` GetSystemTimeAsFileTime met een resolutie van
+    15,625 ms terwijl het bestandssysteem een fijnere klok stempelt, dus een
+    zojuist aangemaakte lock kan een mtime in de toekomst hebben: gemeten 586
+    van 5000 gevallen. Met `age < 0` heroverde acquire_lock daardoor zijn eigen
+    verse lock en konden twee indexbouwers tegelijk in kb-index.db schrijven --
+    precies wat TASK-63 achter dit slot zette (TASK-140).
     """
     try:
         # A worker that died before its finally-block ran must not suppress the
@@ -133,7 +141,7 @@ def is_stale(lock: Path, now: float | None = None) -> bool:
         if not _pid_alive(_lock_pid(lock)):
             return True
         age = (time.time() if now is None else now) - lock.stat().st_mtime
-        return age > STALE_SEC or age < 0
+        return abs(age) > STALE_SEC
     except OSError:
         return True
 

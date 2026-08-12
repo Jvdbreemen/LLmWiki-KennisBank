@@ -102,6 +102,47 @@ class StatusLineTest(unittest.TestCase):
         (self.tmp / "graphify-out" / ".needs-rebuild").write_text("", encoding="utf-8")
         self.assertNotIn("rebuild", self.mod.status_line(self.tmp, worker_running=False))
 
+    # --- koud embedding-model ------------------------------------------------
+
+    def _embed(self, resident, warming=False):
+        """Vervang de embeddings-module door een dubbel met een bekende staat."""
+        class Dubbel:
+            def is_resident(_self, timeout=0.1):
+                if isinstance(resident, Exception):
+                    raise resident
+                return resident
+
+            def warm_in_progress(_self):
+                return warming
+
+        self.mod._embeddings_module = lambda _vault: Dubbel()
+
+    def test_warm_model_wordt_niet_genoemd(self):
+        """Alleen de misser hoort op te vallen; een werkend model is geen nieuws."""
+        self._embed(resident=True)
+        self.assertNotIn("embedding-model", self.mod.status_line(self.tmp, worker_running=False))
+
+    def test_koud_model_wordt_gemeld(self):
+        self._embed(resident=False)
+        self.assertIn("embedding-model koud", self.mod.status_line(self.tmp, worker_running=False))
+
+    def test_koud_model_meldt_de_lopende_opwarming(self):
+        self._embed(resident=False, warming=True)
+        self.assertIn("wordt geladen", self.mod.status_line(self.tmp, worker_running=False))
+
+    def test_onbekende_staat_zwijgt(self):
+        """Een andere provider of een onbereikbare Ollama levert None. Daarop
+        'koud' melden zou een gok zijn die de gebruiker naar VRAM stuurt die
+        niets mankeert."""
+        self._embed(resident=None)
+        self.assertNotIn("embedding-model", self.mod.status_line(self.tmp, worker_running=False))
+
+    def test_kapotte_probe_breekt_de_regel_niet(self):
+        self._embed(resident=RuntimeError("stuk"))
+        regel = self.mod.status_line(self.tmp, worker_running=False)
+        self.assertTrue(regel.startswith("KennisBank:"))
+        self.assertNotIn("embedding-model", regel)
+
     def test_telling_krijgt_voorbehoud_tijdens_onderhoud(self):
         """Een tabel die gevuld wordt levert een momentopname. Het getal zonder
         voorbehoud tonen is stelliger dan de werkelijkheid toestaat."""

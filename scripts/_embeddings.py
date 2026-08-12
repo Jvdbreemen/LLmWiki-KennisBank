@@ -344,12 +344,18 @@ def warm_in_progress(max_age: float = 60.0) -> bool:
     attempt rather than as proof that a process is alive. The marker is only a
     rate-limit record; it must not make a user-facing hook claim that work is
     running when the child already exited.
+
+    The window is symmetric on purpose. On Windows time.time() reads a clock with
+    a 15.625 ms resolution while the filesystem stamps mtime from a finer one, so
+    a marker written moments ago can measure as slightly in the future (586 of
+    5000 samples); rejecting that as "not running" spawned a second warm child
+    for no reason (TASK-140).
     """
     try:
         import time as _time
         marker = _warm_marker()
         age = _time.time() - marker.stat().st_mtime
-        if age < 0 or age >= max_age:
+        if abs(age) >= max_age:
             return False
         data = json.loads(marker.read_text(encoding="utf-8"))
         pid = data.get("pid") if isinstance(data, dict) else None
@@ -358,6 +364,45 @@ def warm_in_progress(max_age: float = 60.0) -> bool:
         return _pid_alive(pid)
     except Exception:
         return False
+
+
+def is_resident(timeout: float = 0.5):
+    """Whether the configured model is loaded RIGHT NOW: True, False, or None.
+
+    Reads Ollama's process table (GET /api/ps). That is a lookup, not a load --
+    unlike a probe embed, which would pay the very 30-60 s cold load a caller
+    asks this question to avoid. None means "cannot tell" (another provider, a
+    remote endpoint, Ollama down, a malformed answer); a caller that reports
+    this to a user must stay silent on None instead of claiming a cold model.
+
+    The timeout is deliberately below a second: this is only ever worth asking
+    on a path that must not block, so an unresponsive Ollama reads as unknown."""
+    prov, model, endpoint, _key = _resolve()
+    if prov != "ollama" or not model or not endpoint_allowed(prov, endpoint):
+        return None
+    try:
+        import urllib.request
+        req = urllib.request.Request(f"{endpoint}/api/ps", method="GET")
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            data = json.loads(r.read().decode("utf-8"))
+    except Exception:
+        return None
+    entries = data.get("models") if isinstance(data, dict) else None
+    if not isinstance(entries, list):
+        return None
+    loaded = set()
+    for e in entries:
+        if not isinstance(e, dict):
+            continue
+        for key in ("name", "model"):
+            v = e.get(key)
+            if isinstance(v, str) and v:
+                loaded.add(v)
+                # Ollama reports "qwen3.5:4b" for a pull of "qwen3.5"; accept
+                # both spellings so a config without a tag still matches.
+                if v.endswith(":latest"):
+                    loaded.add(v[: -len(":latest")])
+    return model in loaded or f"{model}:latest" in loaded
 
 
 def warm(timeout: float = 120.0) -> bool:

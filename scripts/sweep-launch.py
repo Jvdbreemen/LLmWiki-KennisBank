@@ -34,10 +34,20 @@ def _lock_path() -> Path:
 
 
 def is_stale(lock: Path) -> bool:
-    """True als de lock ouder is dan STALE_SEC of een toekomstige mtime heeft (clock skew)."""
+    """True als de lock verder dan STALE_SEC van nu af ligt -- in het verleden
+    (verweesd) of in de toekomst (klokverzetting; zonder die kant verloopt zo'n
+    lock nooit en ligt het onderhoud permanent stil).
+
+    Het venster is SYMMETRISCH en niet `age < 0`, want een verse mtime kan op
+    Windows in de toekomst liggen: `time.time()` leest daar
+    GetSystemTimeAsFileTime met een resolutie van 15,625 ms, terwijl het
+    bestandssysteem de mtime van een fijnere klok stempelt. Gemeten: 586 van
+    5000 net aangemaakte bestanden gaven age < 0 (max +0,016 s). Met `age < 0`
+    verklaarde acquire_lock dus 12% van zijn EIGEN verse locks stale, ruimde ze
+    op en gaf single-flight weg (TASK-140)."""
     try:
         age = time.time() - lock.stat().st_mtime
-        return age > STALE_SEC or age < 0
+        return abs(age) > STALE_SEC
     except OSError:
         return True
 
