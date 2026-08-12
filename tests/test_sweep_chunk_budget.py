@@ -119,3 +119,68 @@ class ChunkBudgetTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SweepCliTest(unittest.TestCase):
+    """The CLI is how the sweep actually starts: sweep-launch.py spawns it."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="kb-cli-"))
+        (self.tmp / "01-raw" / "transcripts").mkdir(parents=True)
+        (self.tmp / "09-memory").mkdir(parents=True)
+        (self.tmp / ".claude").mkdir(parents=True)
+        self._saved = os.environ.get("KENNISBANK_VAULT")
+        os.environ["KENNISBANK_VAULT"] = str(self.tmp)
+        self.m = _load()
+
+    def tearDown(self):
+        if self._saved is None:
+            os.environ.pop("KENNISBANK_VAULT", None)
+        else:
+            os.environ["KENNISBANK_VAULT"] = self._saved
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_help_does_not_start_a_sweep(self):
+        """argv is hand-parsed, so --help fell through and swept the vault.
+
+        Asking a script what it does must never be a write operation.
+        """
+        called = []
+        self.m.run_sweep = lambda *a, **k: called.append(k) or {"enabled": True}
+        import io
+        import contextlib
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = self.m.main(["--help"])
+        self.assertEqual(rc, 0)
+        self.assertEqual(called, [], "--help mag geen sweep starten")
+        self.assertIn("Usage:", buf.getvalue())
+
+    def test_the_cli_passes_the_measured_memory_cap(self):
+        """main() hardcoded 20 and so silently overrode the module default.
+
+        The constant was raised to 60 on measured evidence; a CLI that keeps
+        passing 20 means the change never reaches production, because
+        sweep-launch.py starts the sweep through exactly this path.
+        """
+        # De echte samenvatting draagt alle tellers; de stub ook, anders
+        # meet de test de printregel in plaats van de argumenten.
+        summary = {"enabled": True, "processed": 0, "written": 0, "current": 0,
+                   "unverified": 0, "duplicates": 0, "reconcile_noop": 0,
+                   "reconciled_superseded": 0, "expired": 0, "errors": 0}
+        seen = {}
+        self.m.run_sweep = lambda *a, **k: seen.update(k) or summary
+        self.m.main([])
+        self.assertEqual(seen["max_memories_per_transcript"],
+                         self.m.MAX_MEMORIES_PER_TRANSCRIPT)
+
+    def test_an_explicit_flag_still_wins(self):
+        # De echte samenvatting draagt alle tellers; de stub ook, anders
+        # meet de test de printregel in plaats van de argumenten.
+        summary = {"enabled": True, "processed": 0, "written": 0, "current": 0,
+                   "unverified": 0, "duplicates": 0, "reconcile_noop": 0,
+                   "reconciled_superseded": 0, "expired": 0, "errors": 0}
+        seen = {}
+        self.m.run_sweep = lambda *a, **k: seen.update(k) or summary
+        self.m.main(["--max-per-transcript", "5"])
+        self.assertEqual(seen["max_memories_per_transcript"], 5)
