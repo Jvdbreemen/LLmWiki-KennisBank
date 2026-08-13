@@ -22,6 +22,46 @@ from _frontmatter import parse_frontmatter, split_frontmatter  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402
 
 
+def _index_vectors() -> dict:
+    """path -> vector for the memory layer, straight out of kb-index.db.
+
+    Fail-soft and best-effort: a missing index, a missing sqlite-vec extension or
+    a schema that does not match simply yields {}, and every caller falls back to
+    the embedding cache. This is a shortcut, never a dependency.
+
+    Only vectors in the index's own embed_id space are returned, because the
+    index stores exactly one space and records it in meta. Mixing spaces would be
+    silently wrong: cosine across two models means nothing.
+    """
+    try:
+        import sqlite3
+        import sqlite_vec
+        db = vault_root() / ".claude" / "kb-index.db"
+        if not db.exists():
+            return {}
+        conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=1.0)
+        try:
+            conn.enable_load_extension(True)
+            sqlite_vec.load(conn)
+            conn.enable_load_extension(False)
+            row = conn.execute("SELECT value FROM meta WHERE key='embed_id'").fetchone()
+            if not row or row[0] != emb.embed_id():
+                return {}
+            import array
+            out = {}
+            for path, blob in conn.execute(
+                    "SELECT d.path, v.embedding FROM docs d "
+                    "JOIN vec_docs v ON v.doc_id = d.doc_id WHERE d.layer='memory'"):
+                a = array.array("f")
+                a.frombytes(blob)
+                out[str(path)] = list(a)
+            return out
+        finally:
+            conn.close()
+    except Exception:
+        return {}
+
+
 def current_items(get_cached_fn=None, statuses=("current",)) -> list:
     """Laad memories uit 09-memory/ met hun embeddings, gefilterd op status.
 
@@ -36,6 +76,16 @@ def current_items(get_cached_fn=None, statuses=("current",)) -> list:
     """
     gc = get_cached_fn or (lambda p, cache, recompute=True: emb.get_cached(p, cache))
     cache = emb.load_cache()
+    # De index is de goedkope bron voor precies deze vectoren. Zonder deze stap
+    # valt elke memory terug op get_cached(), en die embedt opnieuw zodra het
+    # embed_id van de cache-entry niet matcht. Gemeten op de live vault: 1506 van
+    # 1531 cache-entries stonden onder een ouder embed_id, dus elke pass die
+    # current_items() aanroept -- supersede_pass, cluster_promote_pass en de
+    # reconcile-pool -- wilde de hele corpus opnieuw embedden. Een handmatige
+    # aanroep draaide na tien minuten nog. De index bevat wel de juiste vectoren
+    # (embed_id ollama:qwen3-embedding:4b, 1531 memory-docs), want die wordt
+    # incrementeel bijgewerkt door build-kb-index (TASK-148).
+    from_index = _index_vectors()
     mdir = vault_root() / "09-memory"
     out = []
     if not mdir.exists():
@@ -47,7 +97,7 @@ def current_items(get_cached_fn=None, statuses=("current",)) -> list:
             continue
         if fm.get("status") not in statuses:
             continue
-        vec = gc(f, cache)
+        vec = from_index.get(str(f)) or gc(f, cache)
         if not vec:
             continue
         out.append({

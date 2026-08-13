@@ -475,8 +475,22 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
 
 def main(argv=None) -> int:
     argv = argv if argv is not None else sys.argv[1:]
+    if "--help" in argv or "-h" in argv:
+        # Zonder deze tak viel --help door de hand-geparste argv heen en STARTTE
+        # het script een echte sweep op de vault. "Wat doet dit ook alweer?" hoort
+        # geen schrijfactie te zijn.
+        print("Usage: memory-sweep.py [--max N] [--max-per-transcript N] [--all]\n"
+              f"  --max                 transcripts per run (default {10})\n"
+              f"  --max-per-transcript  memories per transcript "
+              f"(default {MAX_MEMORIES_PER_TRANSCRIPT})\n"
+              "  --all                 negeer de watermark en de caps; verwerk alles\n"
+              f"\nChunks per transcript: {MAX_CHUNKS} (KB_SWEEP_MAX_CHUNKS)\n"
+              f"Budget per run: {CHUNK_BUDGET} chunks (KB_SWEEP_CHUNK_BUDGET)")
+        return 0
     mx = 10
-    mm = 20
+    # De module-default, niet 20: anders overschrijft de CLI-tak stilzwijgend de
+    # gemeten waarde, en sweep-launch.py start de sweep juist via de CLI.
+    mm = MAX_MEMORIES_PER_TRANSCRIPT
     if "--max" in argv:
         try:
             mx = int(argv[argv.index("--max") + 1])
@@ -486,7 +500,7 @@ def main(argv=None) -> int:
         try:
             mm = int(argv[argv.index("--max-per-transcript") + 1])
         except Exception:
-            mm = 20
+            mm = MAX_MEMORIES_PER_TRANSCRIPT
     ignore = "--all" in argv
     s = run_sweep(max_transcripts=mx, max_memories_per_transcript=mm,
                   ignore_watermark=ignore)

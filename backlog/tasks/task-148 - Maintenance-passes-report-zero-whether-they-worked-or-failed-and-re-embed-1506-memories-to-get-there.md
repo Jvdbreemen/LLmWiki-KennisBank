@@ -3,9 +3,10 @@ id: TASK-148
 title: >-
   Maintenance passes report zero whether they worked or failed, and re-embed
   1506 memories to get there
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-08-12 20:33'
+updated_date: '2026-08-12 22:06'
 labels:
   - bug
   - memory
@@ -50,8 +51,28 @@ Design context: `docs/superpowers/specs/2026-08-12-self-correcting-memory-layer-
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [ ] #1 A pass that fails is distinguishable from a pass that had nothing to do, in the heartbeat and in the log
-- [ ] #2 current_items() no longer re-embeds memories that already have a current-space vector, with the wall-clock time recorded before and after
+- [x] #2 current_items() no longer re-embeds memories that already have a current-space vector, with the wall-clock time recorded before and after
 - [ ] #3 The decision on the stale embeddings cache is made and recorded: prune, or read vectors from the index
 - [ ] #4 A sweep run shows non-zero maintenance counters on a corpus where work demonstrably exists, or explains in the heartbeat why not
 - [ ] #5 python -m pytest tests -q is green
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Half done (commit 28ea0bb): the re-embed storm is gone.
+
+Proven live rather than reasoned about. Running `memory-sweep.py --help` accidentally started a real sweep (argv is hand-parsed, so --help fell through to run_sweep). It ran ten minutes without writing a single memory, because current_items() was still re-embedding the corpus before the first transcript was touched. That is exactly the symptom this task describes, observed end to end.
+
+current_items() now reads vectors from kb-index.db first, which already holds them in the current space (embed_id ollama:qwen3-embedding:4b, 1531 memory docs, maintained incrementally by build-kb-index):
+
+  current_items()   1531 items in 16.8 s   (was >600 s and never finished)
+
+Fail-soft: a missing index, a missing sqlite-vec extension, or an index under a different embed_id yields {} and every caller falls back to the cache. A shortcut, never a dependency. Vectors from another embedding space are refused outright, because cosine across two models is meaningless -- the same reason _embeddings gates cache reuse on embed_id.
+
+That also answers AC #3 for now WITHOUT touching the 51 MB cache: pruning it is no longer on the critical path, since the passes no longer read it for memories that the index already covers. The cache stays as the fallback and for layers the index does not carry (superseded and unverified memories are not indexed).
+
+Still open: AC #1 and #4, the silent zeros. `except Exception: 0` in memory-sweep.py still makes a crashed pass indistinguishable from an idle one.
+
+Two unrelated defects found in the same file and fixed alongside, because they were in the way: --help started a sweep, and main() hardcoded max_memories_per_transcript=20, silently overriding the value TASK-145 had just set on measured evidence. sweep-launch.py starts the sweep through that exact path, so the raised cap would never have reached production.
+<!-- SECTION:NOTES:END -->
