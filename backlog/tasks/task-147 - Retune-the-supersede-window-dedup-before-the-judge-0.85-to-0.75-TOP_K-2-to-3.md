@@ -1,10 +1,10 @@
 ---
 id: TASK-147
 title: 'Retune the supersede window: 0.85 to 0.75, TOP_K 2 to 3'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-08-12 20:32'
-updated_date: '2026-08-12 20:41'
+updated_date: '2026-08-13 18:47'
 labels:
   - memory
   - retrieval
@@ -63,10 +63,10 @@ Design context: `docs/superpowers/specs/2026-08-12-self-correcting-memory-layer-
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 supersede_pass runs at 0.75 with the extra call volume measured against the previous run
-- [ ] #2 TOP_K is raised and the change in pair visibility is reported against P1's 95% baseline
-- [ ] #3 A wrongly superseded memory has somewhere to surface before the threshold is lowered (see the review-queue task); otherwise the lower threshold stays off
-- [ ] #4 A re-run of judge-model-sweep.py scores only the 0.70-0.90 band and states why
+- [x] #1 supersede_pass runs at 0.75 with the extra call volume measured against the previous run
+- [x] #2 TOP_K is raised and the change in pair visibility is reported against P1's 95% baseline
+- [x] #3 A wrongly superseded memory has somewhere to surface before the threshold is lowered (see the review-queue task); otherwise the lower threshold stays off
+- [x] #4 A re-run of judge-model-sweep.py scores only the 0.70-0.90 band and states why
 - [ ] #5 python -m pytest tests -q is green
 <!-- AC:END -->
 
@@ -91,4 +91,41 @@ SUPERSEDE_PASS IS NOT THE SELF-CORRECTING MECHANISM. Eleven pairs in the whole v
 The threshold change survives and is cheaper than feared: 11 -> 163 candidate pairs, roughly three minutes of judge time for the entire corpus.
 
 New gate: lowering the threshold increases automatic supersessions, and nothing today shows a closed memory to a human -- /kennisbank:review walks the unverified queue only, and recall filters on current. The earlier claim that superseding is safe because the review queue catches it was wrong.
+
+## Done, 2026-08-13. Full report: docs/research/supersede-window-2026-08-13.md
+
+**AC#3's gate is satisfied.** TASK-150 landed first: every closure is recorded in `memory-closed-log.jsonl` with what replaced it and why, and `memory-doctor.py reopen <stem>` puts it back. A wrong supersession now costs a log line and one command.
+
+**AC#1 — threshold 0.85 -> 0.75.** Re-measured on 149 real pairs (P1 had 101):
+
+    above 0.95   43/149 = 29%
+    above 0.85   87/149 = 58%
+    above 0.75  141/149 = 95%
+
+So 0.85 saw 58% of real supersessions and 0.75 sees 95% — a stronger case than P1's 70%/93%. Call volume: 10 candidate pairs become 163, about three minutes of judge time for the whole vault.
+
+**AC#2 — TOP_K 2 -> 3, and 3 is complete rather than a compromise.** Successor rank among all 1595 current memories: top-1 83.2%, top-2 96.6%, top-3 98.0%, top-5 100%. Raising it beyond 3 buys nothing, measured rather than argued: across all 1,271,215 pairs, no memory has more than three neighbours above 0.75 (median 0, p99 2, max 3; only 6 memories exceed 2). With TOP_K=3 the judge sees every neighbour that exists.
+
+Worth keeping straight: the top-5 figure is rank among ALL memories, while `similar_existing` filters by threshold first and takes top-k second. A successor at rank 4 below 0.75 is invisible at any k. The threshold binds, not k.
+
+**AC#4 — scored only on 0.70-0.90, and here is why.** Agreement with the vault's own recorded supersessions, qwen3.5:4b:
+
+    0.70-0.90   29/97 = 30%    the band that matters
+    0.90-0.95    2/7  = 29%
+    above 0.95   0/43 =  0%    near-identical, defensibly answered "no change"
+
+The 0% confirms the contamination this task predicted; that band must never be scored.
+
+## The finding that reframes the task
+
+**Two measurements say the window is not where the problem is.**
+
+First, the judge recognises 30% of real supersessions in the band that matters. At a median rank of 1, the mechanism looks straight at the successor and says no. Lowering the threshold triples what it is shown and cannot hurt — you cannot judge what you never see — but it does not by itself produce more supersessions. That is not obviously a defect either: `SUPERSEDE_SYSTEM` says "Bij twijfel: false" on purpose. The measurement prices that choice, and the price was set when a wrong closure was unrecoverable, which TASK-150 changed. Re-pricing is TASK-156.
+
+Second, and more concretely: on today's corpus the threshold change is **entirely** inert, not merely small. Measured with volatility applied:
+
+    above 0.75   163 pairs,   0 reach the judge
+    above 0.85    10 pairs,   0 reach the judge
+
+1572 of 1595 memories carry no volatility label and therefore default to event, and the guard skips any pair with an event on either side. `supersede_pass` will report zero on this corpus at any threshold until new captures arrive carrying labels. That is the designed trade, recorded here so a zero in the heartbeat is not later mistaken for a broken guard.
 <!-- SECTION:NOTES:END -->

@@ -323,8 +323,20 @@ def exact_duplicate_pass(dry_run: bool = False) -> int:
 #: van een opgelost probleem, en viel onder beide drempels. Het venster stond
 #: dus op de verkeerde band gericht.
 #:
-#: Kosten: 11 kandidaatparen worden er 163 (gemeten over de hele corpus),
+#: Kosten: 10 kandidaatparen worden er 163 (gemeten over de hele corpus),
 #: ongeveer drie minuten judge-tijd voor de hele vault. Dat is te doen.
+#:
+#: Wat die 163 vandaag OPLEVEREN is nul, en dat hoort hier te staan zodat een
+#: nul in de heartbeat later niet als kapotte guard gelezen wordt: de
+#: volatility-guard (TASK-146) slaat elk paar over waarvan een kant een
+#: gebeurtenis is, en 1572 van de 1595 memories dragen geen label en gelden dus
+#: als gebeurtenis. Gemeten: 163 paren boven 0.75, 0 bereiken de judge. Deze
+#: verlaging werkt pas mee naarmate nieuwe captures een label meebrengen.
+#:
+#: En zelfs met labels is het venster niet het zelfcorrigerende mechanisme: op
+#: de paren die de judge WEL ziet herkent hij 30% van de echte supersessies
+#: (band 0.70-0.90, qwen3.5:4b). Zoeken was nooit het knelpunt; oordelen wel.
+#: Zie docs/research/supersede-window-2026-08-13.md.
 #:
 #: Deze verlaging mocht pas nadat een onterecht gesloten memory ergens
 #: zichtbaar werd. Dat was de blokkade: /kennisbank:review loopt alleen de

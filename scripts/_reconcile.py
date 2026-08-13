@@ -47,11 +47,19 @@ import _embeddings as emb  # noqa: E402
 import _llmjson  # noqa: E402
 
 RECONCILE_THRESHOLD = 0.75
-#: Hoeveel buren de judge te zien krijgt. Was 2. Gemeten over 101 echte
-#: supersede-paren (P1b): de opvolger staat op rang 1 bij 58%, binnen top-2 bij
-#: 95%, binnen top-5 bij 100%. De sprong van 2 naar 3 pakt het grootste deel
-#: van de resterende 5% mee en kost hooguit een derde judge-aanroep per
-#: kandidaat -- en alleen wanneer die derde buur uberhaupt boven de drempel zit.
+#: Hoeveel buren de judge te zien krijgt. Was 2.
+#:
+#: Gemeten over 149 echte supersede-paren: de opvolger staat binnen top-2 bij
+#: 96,6% en binnen top-3 bij 98,0%. Hoger dan 3 heeft geen zin, en dat is
+#: gemeten in plaats van geschat: over alle 1.271.215 paren in de vault heeft
+#: GEEN ENKELE memory meer dan drie buren boven de drempel (mediaan 0, p99 2,
+#: max 3). Met TOP_K=3 ziet de judge dus alles wat er is; 5 zou identiek zijn.
+#:
+#: Let op welke vraag die top-5 beantwoordt: dat is de rang onder ALLE
+#: memories. similar_existing filtert eerst op de drempel en pakt daarna pas
+#: top-k, dus een opvolger op rang 4 die onder 0.75 zit is bij elke k
+#: onzichtbaar. De drempel is de bindende beperking, niet k.
+#: Zie docs/research/supersede-window-2026-08-13.md.
 TOP_K = 3
 
 ACTIONS = ("ADD", "SUPERSEDE", "NOOP")
