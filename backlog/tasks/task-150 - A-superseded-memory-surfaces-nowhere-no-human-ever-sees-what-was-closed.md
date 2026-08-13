@@ -44,8 +44,8 @@ The first is enough to unblock TASK-147. The second is the real ingress, and mat
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Supersessions since the previous run are visible to a human without reading the filesystem, including both stems and the judge's stated reason
-- [ ] #2 Reopening a wrongly superseded memory is possible through a documented path, and restores it to the recall set
-- [ ] #3 The claim that superseding is reversible is either true end to end, or the docs stop making it
-- [ ] #4 python -m pytest tests -q is green
+- [x] #1 Supersessions since the previous run are visible to a human without reading the filesystem, including both stems and the judge's stated reason
+- [x] #2 Reopening a wrongly superseded memory is possible through a documented path, and restores it to the recall set
+- [x] #3 The claim that superseding is reversible is either true end to end, or the docs stop making it
+- [x] #4 python -m pytest tests -q is green
 <!-- AC:END -->

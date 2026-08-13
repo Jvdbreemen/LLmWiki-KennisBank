@@ -152,7 +152,7 @@ The vault was left untouched by both interrupted attempts -- 1661 memories, wate
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
 The intake fix works and is measured. The two remaining criteria are answered — one negatively, one not at all — and both for reasons the fix itself exposed rather than for reasons in the fix.
 
-**What the fix delivers.** First sweep under the raised caps, on the live vault: 617 memories from 7 transcripts. Before it, ten swept transcripts produced 99 memories between them. The truncation was real and it is gone.
+**What the fix delivers.** First sweep under the raised caps, on the live vault: 482 memories from 7 transcripts. Before it, ten swept transcripts produced 99 memories between them. The truncation was real and it is gone.
 
 **AC#7 does NOT hold. Report: docs/research/recall-after-growth-2026-08-14.md.**
 
