@@ -32,13 +32,20 @@ that could be called noise.
 
 ## What grew
 
-    current memories   1531  ->  1740   (+14%)
-    written this run    617          (400 unverified, 217 current, 111 later superseded)
+    current memories   1531  ->  1740   (+209, +14%)
+    memory files       1907  ->  2389   (+482, measured before and after the run)
     transcripts read      7 of 89 pending
 
-Note the split. Of 617 new memories only 217 entered the recall set; the rest sit
-in `unverified` quarantine and are not indexed. So a 14% larger haystack came
-from a run that read seven transcripts out of eighty-nine.
+Only 209 of those 482 entered the recall set. The rest sit in `unverified`
+quarantine and are not indexed, which is why the index holds 1946 documents
+(206 wiki + 1740 current) while the folder holds 2389 files. So a 14% larger
+haystack came from a run that read seven transcripts out of eighty-nine.
+
+A note on how this was counted, because a first draft of this report said 617.
+That figure came from counting memories with `created: 2026-08-13`, which spans
+the whole day — including earlier sweeps — rather than this run. The run's own
+output is the difference in file count measured immediately before and after it:
+482. Counting by date answers a different question than the one asked.
 
 ## Why it dropped, and what the number does not say
 
@@ -62,7 +69,7 @@ imperfect would be choosing the interpretation after seeing the result.
 ## What follows
 
 **Do not raise the caps further until ranking is addressed.** The intake fix
-works — 617 memories from seven transcripts, against 99 from ten transcripts
+works — 482 memories from seven transcripts, against 99 from ten transcripts
 before it — and that is the problem: the thing it fixed now presses on the next
 constraint. Eighty-two transcripts remain pending, and each one makes the
 haystack bigger at the current ranking quality.
