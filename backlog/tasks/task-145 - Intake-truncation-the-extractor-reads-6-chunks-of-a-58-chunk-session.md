@@ -4,7 +4,7 @@ title: 'Intake truncation: the extractor reads 6 chunks of a 58-chunk session'
 status: In Progress
 assignee: []
 created_date: '2026-08-12 20:31'
-updated_date: '2026-08-12 21:24'
+updated_date: '2026-08-13 04:40'
 labels:
   - memory
   - capture
@@ -131,4 +131,18 @@ Ook toegevoegd aan de heartbeat: chunks_read, chunks_skipped, budget_reached. Zo
 Alle drie de env-overrides bestaan: KB_SWEEP_MAX_CHUNKS, KB_SWEEP_MAX_MEMORIES, KB_SWEEP_CHUNK_BUDGET.
 
 Nog open: AC #4 (P2, vereist een echte re-sweep) en AC #7 (P5, de eval-run). Die twee gaan over de gevolgen van de grotere corpus en horen niet in dezelfde commit als de knop zelf.
+
+P5 baseline recorded 2026-08-13 in docs/research/recall-baseline-2026-08-13.md, before any sweep with the new caps:
+
+  memory  recall@1 0.322  @3 0.662  @5 0.778  MRR 0.498  (1224 questions)
+  wiki    recall@1 0.842  @3 0.997  @5 1.000  MRR 0.917  (329 questions)
+  corpus  1661 memories, 1737 index docs, 97 transcripts pending
+
+Rule fixed before the numbers move: memory recall@5 must not fall below 0.778 and wiki recall@5 must stay at 1.000. recall@1 may give a little if @5 holds, because the hook injects three memories rather than one.
+
+AC #4 (P2) and AC #7 (P5) are deliberately deferred rather than forced. Measuring them needs a grown corpus, and growing it means sweeping a 97-transcript backlog -- 30-50 minutes in one run, because every candidate costs an extract, a judge and a reconcile call. Two attempts at that were interrupted, and forcing a third would measure a run nobody wants to sit through.
+
+Instead the background sweep drains the backlog across sessions, which is exactly what the per-run chunk budget was added for, and the after-measurement runs on what grew organically. That also makes it a better measurement: it reflects production behaviour rather than a forced batch.
+
+The vault was left untouched by both interrupted attempts -- 1661 memories, watermark at 202, heartbeat still from the previous day. Verified, not assumed.
 <!-- SECTION:NOTES:END -->
