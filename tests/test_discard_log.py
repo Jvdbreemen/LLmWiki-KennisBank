@@ -61,6 +61,19 @@ class DiscardLogTest(unittest.TestCase):
         self.assertEqual([r["title"] for r in _memory.recent_discards()],
                          ["K2", "K1", "K0"])
 
+    def test_an_empty_covering_path_is_recorded_as_empty(self):
+        """Raised in review as `Path("").stem` yielding ".". Measured: it does not.
+
+        `Path("").stem` and `Path(".").stem` are both `""`, so the empty case
+        already lands correctly. Pinning it here rather than adding a guard,
+        because the concern was reasonable even though the premise was wrong,
+        and "correct by accident" is one refactor away from "wrong".
+        """
+        self.assertEqual(Path("").stem, "")
+        self.assertEqual(Path(".").stem, "")
+        _memory.log_discard("K", "body", covered_by=Path("").stem)
+        self.assertEqual(_memory.recent_discards()[0]["covered_by"], "")
+
     def test_a_broken_log_never_blocks_the_sweep(self):
         """A record, never a gate: capture must not depend on bookkeeping."""
         (self.tmp / ".claude" / _memory.DISCARD_LOG).mkdir()

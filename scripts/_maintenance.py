@@ -71,6 +71,7 @@ def _index_conn():
     Comparing vectors across two embedding spaces is silently meaningless, so
     the embed_id check is a gate and not a hint.
     """
+    conn = None
     try:
         import sqlite3
         import sqlite_vec
@@ -93,6 +94,15 @@ def _index_conn():
             return None
         return conn
     except Exception:
+        # Every early return above closes deliberately; this one catches the
+        # rest -- a missing meta table, a failed extension load, a schema that
+        # does not match. Without it the handle stays open on every fallback,
+        # and the sweep takes this path on every run when the index is stale.
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
         return None
 
 
@@ -360,10 +370,38 @@ def neighbor_counts(items: list, threshold: float) -> dict:
     return counts
 
 
+#: Promptversie: ophogen bij ELKE wijziging aan SUPERSEDE_SYSTEM, zodat een
+#: sluiting herleidbaar blijft tot de prompt die haar veroorzaakte. Wordt in de
+#: reden in de closed-log gestempeld (TASK-150).
+SUPERSEDE_PROMPT_VERSION = 2
+
+#: Dezelfde behandeling als RECONCILE_SYSTEM kreeg in TASK-144: de volgorde van
+#: de vragen expliciet, en de vraag "gaat dit uberhaupt over hetzelfde?"
+#: vooraan.
+#:
+#: Aanleiding is een meting, geen gevoel. Op de 149 echte supersede-paren van
+#: deze vault herkende de oude prompt er 30% in de band 0.70-0.90 (en 0% boven
+#: 0.95, waar de teksten bijna identiek zijn en "er verandert niets" een
+#: verdedigbaar antwoord is). Zeven van de tien echte vervangingen bleven dus
+#: liggen.
+#:
+#: "Bij twijfel: false" blijft staan en hoort te blijven staan. Wat verandert
+#: is wat er VOOR die regel gebeurt: het model kreeg een definitie en geen
+#: procedure, en moest zelf bedenken of "vervangt" ook slaat op een waarde die
+#: is bijgesteld of een probleem dat is opgelost. Nu staat dat er.
 SUPERSEDE_SYSTEM = (
-    "Je beoordeelt of een NIEUWERE memory een OUDERE TEGENSPREEKT of vervangt "
-    "(bv. 'Jim zoekt baan' -> 'Jim heeft baan'). Antwoord UITSLUITEND met JSON: "
-    "{\"supersede\": true|false, \"reason\": \"<kort>\"}. Bij twijfel: false."
+    "Je beoordeelt of een NIEUWERE memory een OUDERE vervangt. Loop deze vragen "
+    "in volgorde af en stop bij de eerste die past:\n"
+    "1. Gaan ze over HETZELFDE onderwerp? Nee -> supersede: false. Klaar.\n"
+    "2. Geeft de nieuwere een ANDERE waarde, status of uitkomst voor dat "
+    "onderwerp dan de oudere? Denk aan: een gewijzigde instelling, een "
+    "teruggedraaid besluit, een opgelost probleem ('knop mist terugkoppeling' "
+    "-> 'knop toont nu een status'), of een veranderde situatie ('Jim zoekt "
+    "baan' -> 'Jim heeft baan'). Ja -> supersede: true.\n"
+    "3. Vullen ze elkaar aan zonder elkaar tegen te spreken, of zeggen ze "
+    "hetzelfde? -> supersede: false.\n"
+    "Antwoord UITSLUITEND met JSON: {\"supersede\": true|false, "
+    "\"reason\": \"<kort>\"}. Bij twijfel: false."
 )
 
 
