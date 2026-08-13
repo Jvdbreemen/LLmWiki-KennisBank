@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-08-13
+
+The memory layer had quietly stopped capturing, and nothing said so. Three
+independent causes, each invisible for the same reason: every seam is fail-safe,
+so a component that never answers looks exactly like one that had nothing to
+report.
+
 ### Upgrading
 
 **Pull the new judge model, then edit your vault's pin.** The local
@@ -40,6 +47,24 @@ serving the previous model's reading of them.
 
 ### Changed
 
+- **Capture reads 40 chunks of a session instead of 6.** The old caps (6 chunks,
+  20 memories per transcript) were a cost decision from when a chunk took
+  30-56 s. Measured after that cost fell, over four long transcripts and 120
+  real extractor calls: 78% of all unique knowledge sits beyond chunk 6, and
+  only 0.9% of candidates are duplicates. The premise behind the cap — later
+  chunks repeat the early ones — is simply false, so what the sweep discarded
+  was knowledge. `max_chunks` is now 40 and `max_memories_per_transcript` 60;
+  the second number mattered as much as the first, because at ~4 candidates per
+  chunk the old 20 stopped the write loop after five chunks regardless.
+  A new per-run budget of 150 chunks keeps one sweep to roughly a quarter of an
+  hour: the sweep is detached but shares one GPU with the embedding model that
+  serves retrieval. It stops between transcripts, never inside one, so nothing
+  lands half-read in the append-only watermark. `--all` ignores both, because
+  that command promises the whole archive. Overrides: `KB_SWEEP_MAX_CHUNKS`,
+  `KB_SWEEP_MAX_MEMORIES`, `KB_SWEEP_CHUNK_BUDGET`. The heartbeat now reports
+  `chunks_read`, `chunks_skipped` and `budget_reached`, because "5 memories
+  written" should not be indistinguishable from "5 written and 300 chunks
+  ignored".
 - **The local judge model now has to fit beside the embedding model.** The
   default is `qwen3.5:4b` (was `gemma4:latest`), and no generated agent config
   hardcodes `gemma4:12b` any more — that was four surfaces in
@@ -84,6 +109,43 @@ serving the previous model's reading of them.
 
 ### Fixed
 
+- **The judge thought away its own answer.** `qwen3.5` is a reasoning model, and
+  its chain-of-thought spent the same `num_ctx` budget as the answer. When the
+  thinking filled the window, Ollama returned `done_reason: "length"` with an
+  **empty** response and the reasoning in a `thinking` field nothing reads.
+  Measured on three real reconcile pairs at num_ctx 4096: 30.2 / 40.3 / 55.7 s
+  per call, 2106-3885 tokens of thinking, and **one call in three came back
+  empty**. With `think: false`: 1.6-1.7 s, 39-48 tokens, none empty. So the seam
+  was roughly 25x slower and failed outright about a third of the time — and it
+  failed invisibly, because the fail-safes turn a silent model into `extract ->
+  []`, `judge -> unverified`, `reconcile -> ADD`. Set `KB_LLM_THINK=1` to hand
+  the budget back to the model's reasoning.
+- **Capture could read only one client's transcripts.** `transcript_text()`
+  looked for `message.role`, which is Claude Code's shape alone. Codex writes
+  `{timestamp, type, payload}` and Copilot a flat hook-event log, so both
+  produced nothing: **39 of 299 archived transcripts, 94 MB of session content**,
+  including single Codex sessions of 21 and 26 MB. An unreadable transcript is
+  still swept and still written to the watermark, so it looks exactly like a
+  session in which nothing happened. Now 7 of 299 read as empty, together
+  0.07 MB. Tool records, repeated `agent_message`s and the injected `developer`
+  instruction block stay out. Note that the Copilot format holds no assistant
+  replies at all, so it yields half a conversation.
+- **`memory-sweep.py --help` started a real sweep.** `argv` is hand-parsed and
+  `--help` fell through every branch into `run_sweep()`. Asking a script what it
+  does is not supposed to be a write operation.
+- **The sweep CLI discarded the raised memory cap.** `main()` hardcoded
+  `max_memories_per_transcript=20` and passed it on, so the measured default
+  never reached production — and `sweep-launch.py` starts the sweep through
+  exactly that path.
+- **Maintenance re-embedded the whole corpus before doing anything.**
+  `_maintenance.current_items()` fell back to `get_cached()`, which re-embeds
+  whenever the cached entry carries a different `embed_id`; on a vault where
+  1506 of 1531 entries sit under an older id, every pass that builds a pool
+  wanted to embed 1506 memories first. It now reads the vectors from
+  `kb-index.db`, which already holds them in the current space: **16.8 s instead
+  of over ten minutes without finishing.** Fail-soft — a missing index or a
+  different `embed_id` falls back to the old path, and vectors from another
+  embedding space are refused outright.
 - **A single-flight lock could hand itself the lock on Windows.** `is_stale()`
   treated any mtime in the future as a clock change and reclaimed the lock. On
   Windows `time.time()` reads a clock with a 15.625 ms resolution while the
@@ -95,6 +157,24 @@ serving the previous model's reading of them.
   The window is symmetric now (`abs(age) > STALE_SEC`), so a genuine clock
   change still expires a lock. Same fix in `_embeddings.warm_in_progress()`,
   where the noise spawned a second warm-up child.
+
+### Added
+
+- **`scripts/judge-model-sweep.py`** — compares judge models on the three seams
+  they actually drive, scoring the RAW response so a fail-safe fallback is never
+  counted as a success. Read-only on the vault, and it refuses to run with a
+  cloud provider in the chain. Verdict for this release, in
+  `docs/research/judge-model-4b-vs-9b-2026-08.md`: keep `qwen3.5:4b`. The 9b
+  extracted nothing from five of six transcript chunks.
+- **`docs/research/recall-baseline-2026-08-13.md`** — recall before the capture
+  caps take effect (memory @5 0.778, wiki @5 1.000), so the effect of a larger
+  corpus can be measured rather than assumed. `retrieve_top_n` is 3, and a fact
+  that is captured but ranks fourth is as invisible as one never captured.
+- **`docs/superpowers/specs/2026-08-12-self-correcting-memory-layer-design.md`**
+  — a design for state-replaces / events-accumulate, written after the recall
+  hook injected a superseded model default into the very prompt asking which
+  model to use. Includes the adversarial review that cost the first draft four
+  of its claims.
 
 ## [0.28.0] - 2026-08-03
 
@@ -1508,7 +1588,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.28.0...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.29.0...HEAD
+[0.29.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.28.0...v0.29.0
 [0.28.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.27.0...v0.28.0
 [0.27.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.26.1...v0.27.0
 [0.26.1]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.26.0...v0.26.1
