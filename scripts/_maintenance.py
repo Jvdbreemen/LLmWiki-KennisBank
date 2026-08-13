@@ -10,7 +10,6 @@ Stdlib + _embeddings.
 """
 from __future__ import annotations
 
-import json as _json
 import os
 import sys
 from pathlib import Path
@@ -18,7 +17,9 @@ from pathlib import Path
 os.environ.setdefault("KENNISBANK_VAULT", str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _embeddings as emb  # noqa: E402
+import _llmjson  # noqa: E402
 from _frontmatter import parse_frontmatter, split_frontmatter  # noqa: E402
+from _progress import Progress  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402
 
 
@@ -74,6 +75,7 @@ def current_items(get_cached_fn=None, statuses=("current",)) -> list:
         statuses: welke status-waarden meedoen (default alleen "current";
                   de write-time reconcile gebruikt ("current", "unverified")).
     """
+    import _memory
     gc = get_cached_fn or (lambda p, cache, recompute=True: emb.get_cached(p, cache))
     cache = emb.load_cache()
     # De index is de goedkope bron voor precies deze vectoren. Zonder deze stap
@@ -90,25 +92,44 @@ def current_items(get_cached_fn=None, statuses=("current",)) -> list:
     out = []
     if not mdir.exists():
         return out
-    for f in sorted(mdir.glob("**/*.md")):
-        try:
-            fm, body = parse_frontmatter(f.read_text(encoding="utf-8"))
-        except Exception:
-            continue
-        if fm.get("status") not in statuses:
-            continue
-        vec = from_index.get(str(f)) or gc(f, cache)
-        if not vec:
-            continue
-        out.append({
-            "path": str(f),
-            "title": fm.get("title", ""),
-            "status": fm.get("status", ""),
-            "created": fm.get("created", ""),
-            "valid_from": fm.get("valid_from", fm.get("created", "")),
-            "body": body.strip(),
-            "vec": vec,
-        })
+    files = sorted(mdir.glob("**/*.md"))
+    # Zichtbaar maken hoeveel er UIT DE INDEX komt en hoeveel er alsnog
+    # geembed moet worden: het verschil tussen zestien seconden en tien
+    # minuten zit precies daar (TASK-148), en zonder deze melding ziet een
+    # trage run er hetzelfde uit als een snelle die vastloopt.
+    embedded = 0
+    with Progress(len(files), "memories inlezen") as p:
+        for f in files:
+            p.step()
+            try:
+                fm, body = parse_frontmatter(f.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if fm.get("status") not in statuses:
+                continue
+            vec = from_index.get(str(f))
+            if not vec:
+                vec = gc(f, cache)
+                embedded += 1
+            if not vec:
+                continue
+            out.append({
+                "path": str(f),
+                "title": fm.get("title", ""),
+                "status": fm.get("status", ""),
+                "created": fm.get("created", ""),
+                "valid_from": fm.get("valid_from", fm.get("created", "")),
+                # De update-as MOET hier mee (TASK-146). Laat je hem weg, dan
+                # leest elke consument 'event' via de default, slaat de
+                # supersede-pas alles over en rapporteert 0 -- een nul die
+                # "de guard is stuk" betekent in plaats van "niets te doen".
+                "volatility": _memory.coerce_volatility(fm.get("volatility"), body),
+                "body": body.strip(),
+                "vec": vec,
+            })
+        if embedded:
+            p.note(f"let op: {embedded} van de {len(out)} vectoren kwamen niet uit "
+                   f"de index en zijn opnieuw geembed (traag)")
     return out
 
 
@@ -116,13 +137,27 @@ def similar_pairs(items: list, threshold: float) -> list:
     """Vind alle paren current-items met cosine(a, b) > threshold.
 
     Returns list[tuple(a, b, sim)] gesorteerd van hoog naar laag sim.
+
+    Kwadratisch in het aantal memories: op de levende vault (1595 current
+    memories) zijn dat 1,27 miljoen cosinussen en ruim een kwartier rekenen,
+    dat tot TASK-153 zwijgend afliep.
+
+    De voortgang telt PAREN, niet rijen. Dat lijkt een detail en is het niet:
+    rij i doet n-i vergelijkingen, dus elke volgende rij is korter. Een
+    schatting die uit "rijen gedaan" extrapoleert rekent met het gemiddelde
+    van de brede rijen aan het begin en zit er ruim twee keer naast (gemeten:
+    24 minuten voorspeld waar 11 resteerde). Tellen in de eenheid waarin het
+    werk zit, maakt het percentage en de schatting allebei waar.
     """
     pairs = []
-    for i in range(len(items)):
-        for j in range(i + 1, len(items)):
-            s = emb.cosine(items[i]["vec"], items[j]["vec"])
-            if s > threshold:
-                pairs.append((items[i], items[j], s))
+    n = len(items)
+    with Progress(n * (n - 1) // 2, f"paren zoeken boven {threshold}") as p:
+        for i in range(n):
+            for j in range(i + 1, n):
+                s = emb.cosine(items[i]["vec"], items[j]["vec"])
+                if s > threshold:
+                    pairs.append((items[i], items[j], s))
+            p.step(n - i - 1)
     pairs.sort(key=lambda t: t[2], reverse=True)
     return pairs
 
@@ -134,11 +169,16 @@ def neighbor_counts(items: list, threshold: float) -> dict:
     telt het voor beide.
     """
     counts = {it["path"]: 0 for it in items}
-    for i in range(len(items)):
-        for j in range(i + 1, len(items)):
-            if emb.cosine(items[i]["vec"], items[j]["vec"]) > threshold:
-                counts[items[i]["path"]] += 1
-                counts[items[j]["path"]] += 1
+    n = len(items)
+    # Telt paren, om dezelfde reden als similar_pairs: een driehoekslus die
+    # rijen telt geeft een schatting die er structureel naast zit.
+    with Progress(n * (n - 1) // 2, "buren tellen") as p:
+        for i in range(n):
+            for j in range(i + 1, n):
+                if emb.cosine(items[i]["vec"], items[j]["vec"]) > threshold:
+                    counts[items[i]["path"]] += 1
+                    counts[items[j]["path"]] += 1
+            p.step(n - i - 1)
     return counts
 
 
@@ -155,11 +195,7 @@ def judge_supersede(new_text: str, old_text: str) -> bool:
                         system=SUPERSEDE_SYSTEM)
     if not raw:
         return False
-    try:
-        s, e = raw.find("{"), raw.rfind("}")
-        obj = _json.loads(raw[s:e + 1]) if s >= 0 and e > s else {}
-    except Exception:
-        return False
+    obj = _llmjson.first_object(raw) or {}
     return obj.get("supersede") is True
 
 
@@ -181,11 +217,7 @@ def judge_recheck(text: str) -> bool:
     raw = _llm.generate(f"Geheugen:\n{text}\n\nOordeel (JSON):", system=RECHECK_SYSTEM)
     if not raw:
         return False
-    try:
-        s, e = raw.find("{"), raw.rfind("}")
-        obj = _json.loads(raw[s:e + 1]) if s >= 0 and e > s else {}
-    except Exception:
-        return False
+    obj = _llmjson.first_object(raw) or {}
     return obj.get("retract") is True
 
 
@@ -276,12 +308,46 @@ def exact_duplicate_pass(dry_run: bool = False) -> int:
                 gesloten += 1
                 continue
             if _memory.set_status(dubbel["path"], "superseded",
-                                  superseded_by=[stem]):
+                                  superseded_by=[stem],
+                                  reason="exact_duplicate_pass: byte-identieke body"):
                 gesloten += 1
     return gesloten
 
 
-def supersede_pass(threshold: float = 0.85, judge_fn=None, get_cached_fn=None) -> int:
+#: Vanaf welke cosinus twee memories aan de judge worden voorgelegd.
+#:
+#: Was 0.85. Gemeten op 101 echte supersede-paren uit deze vault (P1a): 70%
+#: van de paren haalt 0.85, 93% haalt 0.75. De drie LAAGSTE cosinussen zijn
+#: juist de inhoudelijke gevallen -- "de Rescan-knop mist visuele terugkoppeling"
+#: -> "de Rescan-knop toont nu 'Scanning...'" staat op 0.704, het schoolvoorbeeld
+#: van een opgelost probleem, en viel onder beide drempels. Het venster stond
+#: dus op de verkeerde band gericht.
+#:
+#: Kosten: 10 kandidaatparen worden er 163 (gemeten over de hele corpus),
+#: ongeveer drie minuten judge-tijd voor de hele vault. Dat is te doen.
+#:
+#: Wat die 163 vandaag OPLEVEREN is nul, en dat hoort hier te staan zodat een
+#: nul in de heartbeat later niet als kapotte guard gelezen wordt: de
+#: volatility-guard (TASK-146) slaat elk paar over waarvan een kant een
+#: gebeurtenis is, en 1572 van de 1595 memories dragen geen label en gelden dus
+#: als gebeurtenis. Gemeten: 163 paren boven 0.75, 0 bereiken de judge. Deze
+#: verlaging werkt pas mee naarmate nieuwe captures een label meebrengen.
+#:
+#: En zelfs met labels is het venster niet het zelfcorrigerende mechanisme: op
+#: de paren die de judge WEL ziet herkent hij 30% van de echte supersessies
+#: (band 0.70-0.90, qwen3.5:4b). Zoeken was nooit het knelpunt; oordelen wel.
+#: Zie docs/research/supersede-window-2026-08-13.md.
+#:
+#: Deze verlaging mocht pas nadat een onterecht gesloten memory ergens
+#: zichtbaar werd. Dat was de blokkade: /kennisbank:review loopt alleen de
+#: unverified-wachtrij en recall filtert op current, dus een sluiting
+#: verscheen NERGENS. Sinds TASK-150 staat elke sluiting in de closed-log en
+#: is ze met `memory-doctor.py reopen` terug te draaien.
+SUPERSEDE_THRESHOLD = 0.75
+
+
+def supersede_pass(threshold: float = SUPERSEDE_THRESHOLD, judge_fn=None,
+                   get_cached_fn=None) -> int:
     import _memory
     judge_fn = judge_fn or judge_supersede
     items = current_items(get_cached_fn=get_cached_fn)
@@ -298,12 +364,21 @@ def supersede_pass(threshold: float = 0.85, judge_fn=None, get_cached_fn=None) -
         newer, older = (a, b) if _when(a) >= _when(b) else (b, a)
         if older["path"] in superseded_paths or newer["path"] in superseded_paths:
             continue
+        # Een gebeurtenis wordt nooit gesloten en sluit nooit (TASK-146). Twee
+        # log-regels over verschillende sessies lezen makkelijk als
+        # bijna-duplicaten; op 0.85 kon dit paar elkaar opeten. Nu is dat
+        # structureel onmogelijk in plaats van een oordeel dat het model elke
+        # keer goed moet hebben.
+        if "event" in (newer.get("volatility"), older.get("volatility")):
+            continue
         if judge_fn(newer["body"], older["body"]):
             # Bi-temporele sluiting: het oude feit gold tot het nieuwe inging.
             until = newer.get("valid_from") or newer.get("created") or ""
             if _memory.set_status(older["path"], "superseded",
                                   superseded_by=[Path(newer["path"]).stem],
-                                  valid_until=until or None):
+                                  valid_until=until or None,
+                                  reason=("supersede_pass: cosine boven de drempel "
+                                          "en de judge zei dat het nieuwe het oude vervangt")):
                 superseded_paths.add(older["path"])
                 done += 1
     return done

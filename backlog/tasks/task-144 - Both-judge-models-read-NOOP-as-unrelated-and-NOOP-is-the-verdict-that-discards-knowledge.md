@@ -3,9 +3,10 @@ id: TASK-144
 title: >-
   Both judge models read NOOP as "unrelated", and NOOP is the verdict that
   discards knowledge
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-08-12 19:14'
+updated_date: '2026-08-13 18:55'
 labels:
   - memory
   - llm
@@ -52,9 +53,75 @@ Second, independent finding from the same rows: all three seams parse with `find
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The reconcile prompt is reworded so "no overlap" cannot reach NOOP, with the ordering of the decision made explicit
-- [ ] #2 The wire values ADD/SUPERSEDE/NOOP stay unchanged, so no stored data or caller needs migrating
-- [ ] #3 judge-model-sweep.py is re-run on the same seed and the unrelated-pair NOOP rate is reported before and after
-- [ ] #4 The JSON slice in _reconcile, _judge and _extract tolerates prose after the object, proven by a test with a trailing-text response
-- [ ] #5 python -m pytest tests -q is green
+- [x] #1 The reconcile prompt is reworded so "no overlap" cannot reach NOOP, with the ordering of the decision made explicit
+- [x] #2 The wire values ADD/SUPERSEDE/NOOP stay unchanged, so no stored data or caller needs migrating
+- [x] #3 judge-model-sweep.py is re-run on the same seed and the unrelated-pair NOOP rate is reported before and after
+- [x] #4 The JSON slice in _reconcile, _judge and _extract tolerates prose after the object, proven by a test with a trailing-text response
+- [x] #5 python -m pytest tests -q is green
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+## Measured A/B, 2026-08-13, qwen3.5:4b, 20 unrelated pairs, seed 42
+
+Both prompts were run against the SAME pairs in one go. Re-running the old
+sweep would have compared two different samples rather than two prompts: the
+documented "before" comes from a corpus that has since grown from 1531 to 1595
+memories, so the seeded selection no longer draws the same pairs.
+
+    OLD prompt:   ADD=14  NOOP=5  SUPERSEDE=1     NOOP on unrelated pairs 25%
+    NEW prompt:   ADD=20                          NOOP on unrelated pairs  0%
+
+The old prompt reproduced the documented failure verbatim, in the model's own
+words:
+
+> {"action": "NOOP", "reason": "De twee onderwerpen zijn ongerelateerd:
+> Git-commit validatie versus MQTT-reset na flash."}
+
+Unrelated is the definition of ADD, and NOOP is the one action that throws the
+new memory away. The new prompt asks "is this even about the same thing?"
+first, with ADD as the answer, and puts the destructive action last with what
+it costs spelled out. Wire values are untouched, so nothing needs migrating.
+
+Side effect worth recording: the new prompt is also faster (39s against 49s for
+the same 20 pairs), presumably because the answers are shorter once the model
+stops explaining why two unrelated texts do not overlap.
+
+## The JSON slice
+
+`_llmjson.py` replaces `raw[find("{"):rfind("}")+1]` in five seams (_extract,
+_judge, _reconcile, and both judges in _maintenance). It takes the FIRST
+complete object or array, counting depth with string and escape awareness, and
+falls back to the old wide slice only if that yields nothing.
+
+Two failure shapes, not one. The task described trailing prose; a review of the
+first implementation found the mirror case, which is just as silent:
+
+    Ik denk {even} na. {"action": "ADD"}
+
+Taking only the first opening brace picks `{even}`, fails, falls back to the
+wide slice which also fails, and the seam returns its fail-safe as if the model
+had said nothing at all. `_parse` now walks successive opening delimiters until
+one parses. Both directions have tests.
+
+## What still has no trace
+
+`RECONCILE_PROMPT_VERSION` is stamped in the closed-log reason (TASK-150), so
+every supersession is traceable to the prompt that caused it. A NOOP leaves
+nothing behind: the candidate is discarded and the heartbeat only counts how
+often. That is precisely the action models get wrong, so the gap is filed
+separately rather than left as an unstated assumption.
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Two independent silent failures in the judge seams, both fixed and both measured.
+
+The reconcile prompt now asks "is this even about the same thing?" first, with ADD as the answer, and puts the destructive action last with its cost spelled out. Measured A/B on the same 20 unrelated pairs: NOOP fell from 25% to 0%, and the new prompt is faster (39s against 49s) because the model stops explaining why two unrelated texts do not overlap.
+
+`_llmjson` replaces the widest-possible JSON slice in five seams with a first-complete-object scan that is aware of strings and escapes. A review of the first implementation found the mirror case the task had not described: a brace in the LEADING prose makes a first-brace-only scan pick the wrong span, fail, fall back to the wide slice, and fail again. Both directions have tests.
+
+`RECONCILE_PROMPT_VERSION` is stamped in the closure reason so a supersession is traceable to the prompt that caused it. A NOOP still leaves nothing behind; that gap is TASK-155 rather than an unstated assumption.
+<!-- SECTION:FINAL_SUMMARY:END -->

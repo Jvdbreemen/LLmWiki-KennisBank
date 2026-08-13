@@ -17,9 +17,13 @@ import _reconcile  # noqa: E402
 
 
 def _item(path: str, vec, body: str = "b", valid_from: str = "2026-01-01",
-          status: str = "current"):
+          status: str = "current", volatility: str = "state"):
+    # volatility="state" omdat deze suite de VERVANG-weg test. Een event-buur
+    # wordt met opzet nooit gesloten; dat gedrag hoort in test_volatility.py
+    # (TASK-146), niet verstopt in de default van deze fixture.
     return {"path": path, "title": path, "status": status, "created": valid_from,
-            "valid_from": valid_from, "body": body, "vec": vec}
+            "valid_from": valid_from, "body": body, "vec": vec,
+            "volatility": volatility}
 
 
 class TestSimilarExisting(unittest.TestCase):
@@ -91,26 +95,30 @@ class TestReconcileFlow(unittest.TestCase):
 
     def test_noop_wins_immediately(self):
         r = _reconcile.reconcile("nieuw", "2026-06-25", self.target, [self.buur],
-                                 judge_fn=lambda n, o: "NOOP")
+                                 judge_fn=lambda n, o: "NOOP",
+                                 new_volatility="state")
         self.assertEqual(r, {"action": "NOOP", "supersedes": []})
 
     def test_supersede_collects_neighbor(self):
         r = _reconcile.reconcile("nieuw", "2026-06-25", self.target, [self.buur],
-                                 judge_fn=lambda n, o: "SUPERSEDE")
+                                 judge_fn=lambda n, o: "SUPERSEDE",
+                                 new_volatility="state")
         self.assertEqual(r["action"], "ADD")
         self.assertEqual([it["path"] for it in r["supersedes"]], ["buur.md"])
 
     def test_supersede_blocked_by_temporal_guard(self):
         # Kandidaat uit een OUDER transcript mag een nieuwer feit niet sluiten.
         r = _reconcile.reconcile("nieuw", "2025-01-01", self.target, [self.buur],
-                                 judge_fn=lambda n, o: "SUPERSEDE")
+                                 judge_fn=lambda n, o: "SUPERSEDE",
+                                 new_volatility="state")
         self.assertEqual(r["action"], "ADD")
         self.assertEqual(r["supersedes"], [])
 
     def test_add_when_no_neighbors(self):
         called = []
         r = _reconcile.reconcile("nieuw", "2026-06-25", self.target, [],
-                                 judge_fn=lambda n, o: called.append(1) or "NOOP")
+                                 judge_fn=lambda n, o: called.append(1) or "NOOP",
+                                 new_volatility="state")
         self.assertEqual(r["action"], "ADD")
         self.assertEqual(called, [])  # judge niet aangeroepen zonder buren
 
@@ -119,9 +127,22 @@ class TestReconcileFlow(unittest.TestCase):
         # unverified buur telt niet, de kandidaat wordt gewoon ge-ADD.
         onbevestigd = _item("q.md", [0.9, 0.4358899, 0.0], status="unverified")
         r = _reconcile.reconcile("nieuw", "2026-06-25", self.target, [onbevestigd],
-                                 judge_fn=lambda n, o: "NOOP")
+                                 judge_fn=lambda n, o: "NOOP",
+                                 new_volatility="state")
         self.assertEqual(r["action"], "ADD")
         self.assertEqual(r["supersedes"], [])
+
+    def test_the_default_is_event_so_a_caller_that_forgets_writes_history(self):
+        """Pin the default, because forgetting it disables the seam silently.
+
+        A caller that omits `new_volatility` gets ADD for everything: no
+        NOOP, no supersede. That is the safe direction — nothing is closed —
+        but it is also indistinguishable from "reconcile found nothing", so
+        it belongs in a test rather than in a reader's memory.
+        """
+        r = _reconcile.reconcile("nieuw", "2026-06-25", self.target, [self.buur],
+                                 judge_fn=lambda n, o: "SUPERSEDE")
+        self.assertEqual(r, {"action": "ADD", "supersedes": []})
 
 
 if __name__ == "__main__":

@@ -18,6 +18,7 @@ from pathlib import Path
 os.environ.setdefault("KENNISBANK_VAULT", str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _llm  # noqa: E402
+import _llmjson  # noqa: E402
 
 EXTRACT_SYSTEM = (
     "Je extraheert herbruikbare kennis uit een werk-transcript voor een persoonlijke "
@@ -28,16 +29,22 @@ EXTRACT_SYSTEM = (
     "\"voorkeur\" (hoe de gebruiker het wil), "
     "\"procedure\" (hoe je iets doet: stappen, werkwijze), "
     "\"beslissing\" (gemaakte keuze met reden). "
+    "Geef daarnaast per memory de UPDATE-as: "
+    "\"state\" = een huidige waarde die verandert en dus vervangen moet worden "
+    "(een model, een drempel, een versie, een pad, een status, een eigenaar); "
+    "\"event\" = iets dat gebeurd is en blijft staan "
+    "(een bug-fix, een besluit, een les, een meting). Twijfel? Kies \"event\". "
     "Antwoord UITSLUITEND met een JSON-lijst: "
     "[{\"title\": \"<kort>\", \"body\": \"<2-4 zinnen>\", "
-    "\"type\": \"feit|voorkeur|procedure|beslissing\"}]. Leeg = []."
+    "\"type\": \"feit|voorkeur|procedure|beslissing\", "
+    "\"volatility\": \"state|event\"}]. Leeg = []."
 )
 
 
 #: Promptversie (TASK-90 E5): opgehoogd bij ELKE wijziging aan EXTRACT_SYSTEM.
 #: Wordt met het model-id in de memory-frontmatter gestempeld, zodat na een
 #: slechte promptversie alle getroffen claims selecteerbaar zijn.
-EXTRACT_PROMPT_VERSION = 1
+EXTRACT_PROMPT_VERSION = 2
 
 #: Weigering-/meta-patronen (TASK-90 E4, arkon#25): een model dat niet kan
 #: antwoorden mag dat NOOIT als kennis het archief in schrijven. "Ik kan deze
@@ -66,12 +73,7 @@ def extract_candidates(transcript_text: str, max_n: int = 8) -> list:
                         system=EXTRACT_SYSTEM)
     if not raw:
         return []
-    try:
-        start = raw.find("[")
-        end = raw.rfind("]")
-        arr = json.loads(raw[start:end + 1]) if start >= 0 and end > start else []
-    except Exception:
-        return []
+    arr = _llmjson.first_array(raw) or []
     out = []
     for item in arr if isinstance(arr, list) else []:
         if not isinstance(item, dict):
@@ -84,7 +86,11 @@ def extract_candidates(transcript_text: str, max_n: int = 8) -> list:
             continue
         if title and body:
             out.append({"title": title, "body": body,
-                        "type": str(item.get("type", "")).strip().lower()})
+                        "type": str(item.get("type", "")).strip().lower(),
+                        # Ongefilterd doorgeven; _memory.coerce_volatility
+                        # bepaalt de regel (label > config-vorm > event) op
+                        # EEN plek, niet hier en daar allebei een beetje.
+                        "volatility": str(item.get("volatility", "")).strip().lower()})
         if len(out) >= max_n:
             break
     return out

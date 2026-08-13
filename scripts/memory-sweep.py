@@ -37,6 +37,7 @@ import _settings  # noqa: E402
 import _sweepstate as ss  # noqa: E402
 import _sweeputil as su  # noqa: E402
 from _frontmatter import parse_frontmatter  # noqa: E402
+from _progress import Progress  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402
 
 HEARTBEAT = "memory-sweep-status.json"
@@ -57,6 +58,19 @@ def _producer_id() -> str:
     except Exception:
         pass
     return ""
+
+
+def _reconcile_prompt_version() -> str:
+    """Promptversie van de reconcile-seam, of "?" als die laag ontbreekt.
+
+    Fail-soft: bij een partiele deploy valt reconcile terug op ADD en is er
+    geen versie; dan hoort de reden dat te zeggen in plaats van te crashen.
+    """
+    try:
+        import _reconcile
+        return str(_reconcile.RECONCILE_PROMPT_VERSION)
+    except Exception:
+        return "?"
 
 
 def _session_date(name: str, fallback: str) -> str:
@@ -195,6 +209,34 @@ def _rot_count() -> "int | None":
         return None
 
 
+def _note_pass_failure(s: dict, key: str, exc: BaseException) -> None:
+    """Record WHY a maintenance pass produced nothing.
+
+    Elke pass stond in `try: ... except Exception: 0`. Een time-out, een
+    ImportError en een rustige run leverden daardoor exact dezelfde regel in de
+    heartbeat op: nul. Dat is dezelfde faalvorm als TASK-143 een laag lager --
+    daar slikte de seam een model dat nooit antwoordde, hier slikt de
+    orkestrator een pass die nooit draaide.
+
+    De teller blijft een int (0), want lezers rekenen daarop. De reden komt
+    ernaast te staan, en telt mee in `errors` zodat memory-notify het bij de
+    volgende sessiestart meldt via een kanaal dat al bestaat.
+    """
+    s.setdefault("pass_errors", {})[key] = f"{type(exc).__name__}: {exc}"[:200]
+    s["errors"] = s.get("errors", 0) + 1
+    print(f"memory-sweep: pass '{key}' faalde: {type(exc).__name__}: {exc}",
+          file=sys.stderr)
+
+
+def _run_pass(s: dict, key: str, fn) -> None:
+    """Draai één onderhoudspass en houd vast of hij het gehaald heeft."""
+    try:
+        s[key] = fn()
+    except Exception as e:
+        s[key] = 0
+        _note_pass_failure(s, key, e)
+
+
 def _write_heartbeat(summary: dict) -> None:
     """Schrijf de heartbeat-status naar <vault>/.claude/memory-sweep-status.json."""
     hb = vault_root() / ".claude" / HEARTBEAT
@@ -279,6 +321,9 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
         "chunks_read": 0,
         "chunks_skipped": 0,
         "budget_reached": False,
+        # Leeg = elke pass heeft gedraaid. Een nul in een teller hierboven
+        # betekent dan echt "niets te doen" en niet "gecrasht" (TASK-148).
+        "pass_errors": {},
         "superseded": 0,
         "rechecked_retracted": 0,
         "promote_marked": 0,
@@ -330,12 +375,18 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
         _reconcile_fn = lambda body, vf, vec, items: {"action": "ADD", "supersedes": []}  # noqa: E731
         pool = []
 
+    # Eén balk over de transcripts -- de eenheid die de gebruiker kent ("54
+    # wachtende transcripts") -- met daarbinnen step(0) per chunk. Die telt de
+    # noemer niet op maar laat de regel wel bewegen, zodat een transcript van
+    # veertig chunks met een LLM-aanroep per chunk niet minutenlang zwijgt.
+    voortgang = Progress(len(todo), "transcripts verwerken")
     for tp in todo:
         # Budget-stop TUSSEN transcripts, nooit erbinnen: een half verwerkt
         # transcript zou gemarkeerd worden als gedaan en de rest voorgoed
         # kwijtraken. Wat hier afvalt blijft pending voor de volgende run.
         if not ignore_watermark and chunk_budget and s["chunks_read"] >= chunk_budget:
             s["budget_reached"] = True
+            voortgang.note(f"chunk-budget ({chunk_budget}) op; de rest blijft pending")
             break
         try:
             transcript = ss.transcript_text(tp)
@@ -346,7 +397,8 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
             s["chunks_read"] += len(chunk_iter)
             s["chunks_skipped"] += max(0, len(chunks) - len(chunk_iter))
             written_for_tp = 0
-            for ch in chunk_iter:
+            for chunk_nr, ch in enumerate(chunk_iter, 1):
+                voortgang.step(0, note=f"{tp.stem[:38]} chunk {chunk_nr}/{len(chunk_iter)}")
                 if max_memories_per_transcript and written_for_tp >= max_memories_per_transcript:
                     break
                 for cand in _extract.extract_candidates(ch):
@@ -369,7 +421,10 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
                         continue
                     # Write-time invalidatie (Mem0-patroon): NOOP -> niets
                     # schrijven; SUPERSEDE -> oude memory sluiten na schrijven.
-                    rec = _reconcile_fn(body, valid_from, vec, pool)
+                    volatility = _memory.coerce_volatility(
+                        cand.get("volatility"), body)
+                    rec = _reconcile_fn(body, valid_from, vec, pool,
+                                        new_volatility=volatility)
                     if rec["action"] == "NOOP":
                         s["reconcile_noop"] += 1
                         continue
@@ -393,6 +448,7 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
                         created=today,
                         valid_from=valid_from,
                         memory_type=_memory.coerce_memory_type(cand.get("type")),
+                        volatility=volatility,
                         importance=_memory.coerce_importance(verdict.get("importance")),
                         model_id=_producer_id(),
                         prompt_version=_extract.EXTRACT_PROMPT_VERSION,
@@ -406,9 +462,13 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
                     # current-only) het paar op.
                     if status == "current":
                         for old in rec["supersedes"]:
-                            if _memory.set_status(old["path"], "superseded",
-                                                  superseded_by=[path.stem],
-                                                  valid_until=valid_from):
+                            if _memory.set_status(
+                                    old["path"], "superseded",
+                                    superseded_by=[path.stem],
+                                    valid_until=valid_from,
+                                    reason=("reconcile op schrijfmoment (promptversie "
+                                            f"{_reconcile_prompt_version()}): "
+                                            "nieuw feit vervangt dit")):
                                 s["reconciled_superseded"] += 1
                                 pool = [it for it in pool if it["path"] != old["path"]]
                     existing.append({"vec": vec, "status": status, "valid_until": ""})
@@ -416,6 +476,7 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
                     pool.append({
                         "path": str(path), "title": title, "status": status,
                         "created": today, "valid_from": valid_from,
+                        "volatility": volatility,
                         "body": body, "vec": vec,
                     })
                     s["written"] += 1
@@ -425,6 +486,10 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
             s["processed"] += 1
         except Exception:
             s["errors"] += 1
+        finally:
+            voortgang.step()
+    voortgang.close(f"({s['written']} memories geschreven, "
+                    f"{s['duplicates']} duplicaten)")
 
     # Fail-soft: een malformed memory-file mag de sweep-afronding (heartbeat,
     # onderhoudspas) niet blokkeren.
@@ -448,26 +513,13 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
         # Exacte duplicaten EERST, en zonder LLM. Scheelt supersede_pass een
         # judge-aanroep per duplicaatpaar, en belangrijker: een identieke body
         # hoort niet aan een oordeel onderworpen te worden dat fout kan gaan.
-        try:
-            s["exact_duplicates_closed"] = _mnt.exact_duplicate_pass()
-        except Exception:
-            s["exact_duplicates_closed"] = 0
-        try:
-            s["superseded"] = _mnt.supersede_pass()
-        except Exception:
-            s["superseded"] = 0
-        try:
-            s["rechecked_retracted"] = _mnt.recheck_pass()
-        except Exception:
-            s["rechecked_retracted"] = 0
-        try:
-            s["promote_marked"] = _mnt.cluster_promote_pass()
-        except Exception:
-            s["promote_marked"] = 0
-    except Exception:
-        s["superseded"] = s.get("superseded", 0)
-        s["rechecked_retracted"] = s.get("rechecked_retracted", 0)
-        s["promote_marked"] = s.get("promote_marked", 0)
+        _run_pass(s, "exact_duplicates_closed", _mnt.exact_duplicate_pass)
+        _run_pass(s, "superseded", _mnt.supersede_pass)
+        _run_pass(s, "rechecked_retracted", _mnt.recheck_pass)
+        _run_pass(s, "promote_marked", _mnt.cluster_promote_pass)
+    except Exception as e:
+        # De import zelf faalde: geen enkele pass heeft gedraaid.
+        _note_pass_failure(s, "maintenance", e)
 
     _write_heartbeat(s)
     return s

@@ -22,10 +22,16 @@ class SupersedeTest(unittest.TestCase):
         (self.vault / "09-memory").mkdir(parents=True)
         self._saved = os.environ.get("KENNISBANK_VAULT")
         os.environ["KENNISBANK_VAULT"] = str(self.vault)
+        # volatility="state" staat er expliciet: "Jim zoekt een baan" ->
+        # "Jim heeft een baan" is het schoolvoorbeeld van een waarde die
+        # vervangen hoort te worden. Zonder label leest coerce_volatility de
+        # body als een gebeurtenis en slaat de pas het paar over (TASK-146).
         self.old = _memory.write("Jim zoekt baan", "Jim is op zoek naar een nieuwe baan.",
-                                 status="current", created="2026-01-01")
+                                 status="current", created="2026-01-01",
+                                 volatility="state")
         self.new = _memory.write("Jim heeft baan", "Jim heeft de nieuwe baan gekregen.",
-                                 status="current", created="2026-06-01")
+                                 status="current", created="2026-06-01",
+                                 volatility="state")
         # injecteer vectoren: oud en nieuw liggen dicht bij elkaar (zelfde onderwerp)
         self._gc = lambda p, cache, recompute=True: [1.0, 0.0] if True else None
         self._orig_gen = _llm.generate
@@ -72,10 +78,10 @@ class SupersedeTest(unittest.TestCase):
             f.unlink()
         newer_fact = _memory.write("Jim heeft baan", "Jim heeft een baan.",
                                    status="current", created="2026-01-01",
-                                   valid_from="2026-01-01")
+                                   valid_from="2026-01-01", volatility="state")
         stale_capture = _memory.write("Jim zoekt baan", "Jim zoekt een baan.",
                                       status="current", created="2026-07-01",
-                                      valid_from="2025-01-01")
+                                      valid_from="2025-01-01", volatility="state")
         _llm.generate = lambda *a, **k: '{"supersede": true, "reason": "x"}'
         n = mnt.supersede_pass(threshold=0.5, get_cached_fn=self._gc)
         self.assertEqual(n, 1)

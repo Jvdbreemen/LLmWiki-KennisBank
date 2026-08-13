@@ -19,6 +19,7 @@ import _kbindex  # noqa: E402
 import _settings  # noqa: E402
 from _frontmatter import parse_frontmatter  # noqa: E402
 from _memory import read_status  # noqa: E402
+from _progress import Progress  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402
 
 VAULT = vault_root()
@@ -166,22 +167,28 @@ def main(rebuild: bool = False) -> None:
     cache = emb.load_cache()
     seen = set()
     indexed = skipped = failed = 0
-    for f, layer, status in _collect():
-        sp = str(f)
-        seen.add(sp)
-        fh = emb.file_hash(f)
-        if not rebuild and _kbindex.indexed_hash(conn, sp) == fh:
-            skipped += 1
-            continue
-        vec = emb.get_cached(f, cache)
-        if not vec:
-            failed += 1
-            continue
-        title, created, sources = _doc_meta(f, layer)
-        _kbindex.upsert(conn, path=sp, layer=layer, status=status,
-                        body=emb.doc_text(f), vector=vec, file_hash=fh,
-                        title=title, created=created, sources=sources)
-        indexed += 1
+    # _collect() is een generator; hier eerst uitputten zodat het totaal
+    # bekend is. Een percentage zonder noemer is geen percentage, en de lijst
+    # met paden weegt niets naast de embeddings die erachteraan komen.
+    docs = list(_collect())
+    with Progress(len(docs), "index bijwerken") as p:
+        for f, layer, status in docs:
+            p.step()
+            sp = str(f)
+            seen.add(sp)
+            fh = emb.file_hash(f)
+            if not rebuild and _kbindex.indexed_hash(conn, sp) == fh:
+                skipped += 1
+                continue
+            vec = emb.get_cached(f, cache)
+            if not vec:
+                failed += 1
+                continue
+            title, created, sources = _doc_meta(f, layer)
+            _kbindex.upsert(conn, path=sp, layer=layer, status=status,
+                            body=emb.doc_text(f), vector=vec, file_hash=fh,
+                            title=title, created=created, sources=sources)
+            indexed += 1
     total_before = conn.execute("SELECT count(*) FROM docs").fetchone()[0]
     removed = _kbindex.prune(conn, keep_paths=seen, layers=_active_layers())
     notice = prune_notice(removed, total_before, _active_layers())

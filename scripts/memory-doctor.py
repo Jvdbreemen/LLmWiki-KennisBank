@@ -184,6 +184,50 @@ def main(argv=None) -> int:
                 hours = 48
         print(rot_count(hours))
         return 0
+    if argv and argv[0] == "closed":
+        # Wat is er dichtgezet, en waardoor. De reviewwachtrij loopt alleen
+        # `unverified`, en recall filtert op `current`, dus een gesloten memory
+        # verscheen tot nu toe NERGENS meer -- functioneel hetzelfde als
+        # verwijderd, terwijl het ontwerp leunt op "het is omkeerbaar"
+        # (TASK-150).
+        import json as _json
+        import _memory
+        limit = 20
+        if "--limit" in argv:
+            try:
+                limit = int(argv[argv.index("--limit") + 1])
+            except Exception:
+                limit = 20
+        rows = _memory.recent_closures(limit=limit)
+        if "--json" in argv:
+            print(_json.dumps(rows, ensure_ascii=False))
+        elif not rows:
+            print("geen sluitingen geregistreerd")
+        else:
+            for r in rows:
+                door = ", ".join(r.get("superseded_by") or []) or "-"
+                print(f"{r.get('ts','')[:19]}  {r.get('status',''):<12} {r.get('stem','')}")
+                print(f"    vervangen door: {door}")
+                if r.get("reason"):
+                    print(f"    reden: {r['reason']}")
+            print(f"\nHeropenen: python3 memory-doctor.py reopen <stem>")
+        return 0
+    if argv and argv[0] == "reopen":
+        import _memory
+        if len(argv) < 2:
+            print("gebruik: memory-doctor.py reopen <stem>", file=sys.stderr)
+            return 2
+        stem = argv[1]
+        path = _memory.memory_dir() / f"{stem}.md"
+        if not path.exists():
+            print(f"niet gevonden: {path}", file=sys.stderr)
+            return 1
+        if _memory.reopen(path):
+            print(f"{stem} -> current (superseded_by en valid_until verwijderd)")
+            print("Draai build-kb-index zodat de memory weer recallbaar is.")
+            return 0
+        print(f"{stem}: niets gewijzigd (al open?)", file=sys.stderr)
+        return 1
     if argv and argv[0] == "pending":
         import json as _json
         import _memory
