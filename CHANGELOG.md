@@ -7,6 +7,130 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-08-14
+
+v0.29.0 fixed a memory layer that had quietly stopped capturing. This release is
+about the decisions it makes once it is capturing again — and about the fact
+that, until now, you could not see any of them. Two of the measurements here
+contradict the assumption that asked for them, and both are reported as they
+came out.
+
+### Upgrading
+
+Nothing is required. `volatility` is a new frontmatter field and an absent value
+reads as `event`, so existing memories need no migration.
+
+Two things worth knowing before you read a heartbeat and draw a conclusion:
+
+- **`supersede_pass` will report zero on an existing vault, at any threshold.**
+  A memory without a `volatility` label counts as an event, and events are never
+  closed. On a vault of 1595 memories, all 163 candidate pairs above the new
+  threshold are skipped for that reason. That is the designed trade, not a
+  broken guard: new captures arrive with labels, old ones do not, and the pass
+  starts working again as the corpus turns over.
+- **Scripts now write progress to stderr.** `KB_NO_PROGRESS=1` silences it
+  everywhere; hooks and the heartbeat were already silent and stay that way.
+
+### Added
+
+- **A closed memory is visible again, and reversible in practice.** The design
+  rested on superseding being safe because nothing is deleted. True on disk and
+  false everywhere else: recall filters on `current` and `/kennisbank:review`
+  walks the `unverified` queue only, so a closed memory appeared in no path a
+  human uses — functionally the same as deletion. Every closure now lands in
+  `.claude/memory-closed-log.jsonl` with what replaced it and why, and
+  `memory-doctor.py closed` / `reopen <stem>` is the way back.
+- **A discarded candidate leaves a record.** `NOOP` is the one reconcile action
+  where the new memory is never written. The heartbeat counted how often;
+  nothing said what. Now `.claude/memory-noop-log.jsonl`, read with
+  `memory-doctor.py discarded`. Bounded at 2000 lines, because unlike closures
+  these are common.
+- **`volatility: state | event`, the update rule in the structure.**
+  `memory_type` says what a memory is about; none of its values says "replace me
+  when the value changes", so every decision re-derived that from prose — scored
+  7/20, 5/20 and 4/20 across three models. `event` is the safe default because
+  destroying history is the irreversible error. Measured on the live vault: of
+  nine pairs above 0.85 that the old pass could have closed, three were
+  genuinely different facts that merely read alike, including the locations of
+  two *different* skills at cosine 0.867.
+- **`kb-state-audit.py`** compares memories against an authority rather than
+  against each other — the config files and the constants in these scripts are
+  right by definition about what runs now. Deterministic, read-only, no model
+  call. On this vault: 4 contradictions (every one a stale
+  `qwen3-embedding:8b`), 11 unsupported claims, a coverage line saying how many
+  memories carried nothing checkable, and a pile for memories that hold a
+  checkable value but count as an event and can therefore never be corrected.
+- **Progress and an estimate on every long-running script.** A sweep once ran
+  ten minutes writing nothing, which from the outside is indistinguishable from
+  a hang. Percentage, bar, counts, elapsed and an estimate from measured
+  throughput; one rewritten line on a terminal, throttled whole lines in a log.
+
+### Changed
+
+- **The supersede window is aimed at the band where the real cases are.**
+  Threshold 0.85 → 0.75 and `TOP_K` 2 → 3. On 149 real supersede pairs, 0.85
+  saw 58% of them and 0.75 sees 95%. `TOP_K = 3` is complete rather than a
+  compromise: no memory in this vault has more than three neighbours above the
+  threshold.
+- **Finding pairs is 11x faster, with an identical result.** The maintenance
+  pass compared every memory with every other one — 1,271,215 pairs, measured at
+  1171.86 s — and `cluster_promote_pass` walked the same triangle again. Routed
+  through `kb-index.db` it takes 106.94 s and returns the same 163 pairs, with
+  the largest cosine disagreement at 4.01e-07. It is exact, not approximate, and
+  falls back to the old path whenever the index cannot answer.
+- **Two prompts reordered, both measured.** `RECONCILE_SYSTEM` and
+  `SUPERSEDE_SYSTEM` now ask "is this even about the same thing?" first and put
+  the destructive action last. Reconcile: NOOP on unrelated pairs 25% → **0%**.
+  Supersede: recognition of real replacements 30% → **55%**. Both are faster
+  too.
+
+### Fixed
+
+- **A zero meant "nothing to do" and "this crashed" alike.** Every maintenance
+  pass ran inside `except Exception: 0`, so a timeout, an ImportError and an
+  idle vault wrote the same heartbeat line. The counters stay integers, because
+  readers depend on that, and the reason is recorded beside them.
+- **JSON parsing took the widest possible slice.** `raw[find("{"):rfind("}")+1]`
+  runs to the last brace anywhere in the answer, so a model that keeps talking
+  after its object broke the parse — silently, since every seam is fail-safe.
+  Five seams now take the first complete object, and handle a brace in the
+  *leading* prose too.
+- **The upgrade stamped a tag object as if it were a commit.** Every tag here is
+  annotated, so `git rev-parse v0.29.0` returned the tag's SHA, not the commit's.
+  Two consecutive upgrades recorded a SHA that appears in no branch.
+- **The test suite's hermeticity pin was slow here and switched off entirely.**
+  It pinned `127.0.0.1:1` on the premise that a closed port refuses instantly;
+  measured, every closed loopback port on this machine times out at ~2012 ms. It
+  now binds a listening socket that closes at once. The larger half: an ambient
+  `KB_LLM_ENDPOINT` in the user's settings beat the `setdefault`, so the pin
+  never fired for the LLM seam on the machine where Ollama runs, while CI stayed
+  pinned. Assigned now, with `KB_INTEGRATION=1` as the only override.
+
+### Measured, and not what was expected
+
+Two results in this release contradict the task that asked for them. Both are
+recorded rather than absorbed, because a rule set in advance is only worth
+something if it is allowed to fail.
+
+- **The supersede judge is not too conservative.** It looked that way at 30%
+  agreement. Hand-labelling 22 of the 44 pairs where it contradicts the vault's
+  own history shows it is right on **19 of 22**: nearly every "miss" is the same
+  memory captured twice, weeks apart, in slightly different words. Two ADR
+  memories in that set supersede *each other*, in both directions. So the
+  fail-safe bias stays: it costs about 3% of real replacements while the
+  refusals it produces are 86% correct.
+- **Growing the memory corpus cost recall.** After the first sweep under the
+  raised intake caps, memory `recall@5` fell from 0.778 to **0.768** — below a
+  floor recorded a day earlier — and `recall@1` from 0.322 to 0.266. Wiki holds
+  at 1.000. `retrieve_top_n` is 3, and 209 more current memories compete for
+  those three slots. The eval is one-sided by construction, since it asks only
+  about memories that existed before the sweep, and that does not rescue the
+  number. Reranking the top-20 candidates moves from worth-doing to blocking.
+
+Reports: `docs/research/supersede-window-2026-08-13.md`,
+`docs/research/supersede-judge-labelled-2026-08-13.md`,
+`docs/research/recall-after-growth-2026-08-14.md`.
+
 ## [0.29.0] - 2026-08-13
 
 The memory layer had quietly stopped capturing, and nothing said so. Three
@@ -1588,7 +1712,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.29.0...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.30.0...HEAD
+[0.30.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.29.0...v0.30.0
 [0.29.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.28.0...v0.29.0
 [0.28.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.27.0...v0.28.0
 [0.27.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.26.1...v0.27.0

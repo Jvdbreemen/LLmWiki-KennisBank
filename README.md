@@ -73,7 +73,44 @@ Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: 
 
 The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
 
-## Feature highlights (v0.29.0)
+## Feature highlights (v0.30.0)
+
+### New in v0.30.0
+
+v0.29.0 fixed a memory layer that had quietly stopped capturing. This release is
+about the decisions it makes now that it is capturing again — and about the fact
+that you could not see any of them.
+
+- **A closed memory is visible again, and reversible in practice.** The design
+  rested on superseding being safe because nothing is deleted. True on disk and
+  false everywhere else: recall filters on `current` and `/kennisbank:review`
+  walks the `unverified` queue only, so a closed memory appeared in no path a
+  human uses. Every closure is now logged with what replaced it and why, and
+  `memory-doctor.py closed` / `reopen <stem>` is the way back.
+- **`volatility: state | event` puts the update rule in the structure.** A state
+  is replaced when its value changes; an event is never closed. Deriving that
+  from prose scored 7/20, 5/20 and 4/20 across three models, so it is now
+  decided once, at write time. On the live vault the guard protects three pairs
+  that merely read alike — including the locations of two *different* skills at
+  cosine 0.867.
+- **`kb-state-audit.py` compares memories against an authority**, not against
+  each other: 4 contradictions found on this vault, every one a stale
+  `qwen3-embedding:8b`, with no model call — plus a coverage line saying where
+  it was blind.
+- **Finding supersede pairs is 11x faster with an identical result.** 1,271,215
+  pairwise comparisons (1171.86 s) become an index query (106.94 s) returning
+  the same 163 pairs. Exact, not approximate, with the old path as fallback.
+- **Two prompts reordered and re-measured.** Reconcile: NOOP on unrelated pairs
+  25% → **0%**. Supersede: recognition of real replacements 30% → **55%**.
+- **Progress and an estimate on every long-running script**, because a sweep
+  that runs ten minutes writing nothing is indistinguishable from a hang.
+  `KB_NO_PROGRESS=1` silences it.
+
+Two measurements contradicted the task that asked for them, and both are in the
+changelog rather than quietly dropped: the supersede judge turns out **not** to
+be too conservative (86% of its refusals are correct; the recorded history is
+full of duplicate cleanups), and growing the corpus cost memory `recall@5`
+0.778 → 0.768, below a floor set a day in advance.
 
 ### New in v0.29.0
 
