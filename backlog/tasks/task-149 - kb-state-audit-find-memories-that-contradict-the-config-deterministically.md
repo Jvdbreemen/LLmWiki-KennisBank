@@ -4,7 +4,7 @@ title: 'kb-state-audit: find memories that contradict the config, deterministica
 status: In Progress
 assignee: []
 created_date: '2026-08-12 20:33'
-updated_date: '2026-08-13 18:12'
+updated_date: '2026-08-13 18:56'
 labels:
   - memory
   - audit
@@ -57,7 +57,7 @@ Design context: `docs/superpowers/specs/2026-08-12-self-correcting-memory-layer-
 - [x] #3 Output is available as JSON so the sweep heartbeat can carry the counts
 - [x] #4 The script never writes to the vault, proven by a test
 - [x] #5 A memory that agrees with the authority is reported as confirmed, not silently omitted
-- [ ] #6 python -m pytest tests -q is green
+- [x] #6 python -m pytest tests -q is green
 - [x] #7 Memories that look state-shaped but carry volatility=event (or no volatility at all) are listed as a separate pile, so the safe default does not silently disable self-correction
 <!-- AC:END -->
 
@@ -93,3 +93,15 @@ The first run reported 12 contradictions and 32 unsupported. Only 4 and 11 of th
 
 `_switching` blocks in both config files name other models on purpose (gemma4:12b, text-embedding-3-small). They are documentation, not authority. Counting them would turn every stale claim into a confirmed one — the exact failure this audit exists to prevent — so every key starting with `_` is dropped before anything is compared. There is a test for it.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+`kb-state-audit.py` compares memories against an authority rather than against each other: the config files and the constants in these scripts are right by definition about what runs now. Deterministic, read-only, no LLM.
+
+On the live vault: 4 contradictions (every one a stale `qwen3-embedding:8b`), 11 unsupported (including `claude-opus-4-8`), a coverage line saying how many memories carried nothing checkable, and a fifth pile carrying TASK-146's mitigation — memories that hold a checkable value but count as an event and can therefore never be corrected.
+
+The first version reported 12 and 32. Three over-broad rules, all found by running it on real bodies rather than invented ones: `endpoint` is an ordinary English word in a vault full of firmware REST endpoints; `family:tag` also matches `/kennisbank:settings` and `_kbindex.py:41`; and a `claude-` prefix matches `Claude-sessiehistorie`, which is a Dutch word with a hyphen in front of it.
+
+The refusal that matters most: `_switching` blocks name other models on purpose, so counting them would turn every stale claim into a confirmed one. Dropped before anything is compared, with a test.
+<!-- SECTION:FINAL_SUMMARY:END -->

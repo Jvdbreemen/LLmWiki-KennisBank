@@ -4,7 +4,7 @@ title: 'Retune the supersede window: 0.85 to 0.75, TOP_K 2 to 3'
 status: In Progress
 assignee: []
 created_date: '2026-08-12 20:32'
-updated_date: '2026-08-13 18:47'
+updated_date: '2026-08-13 18:56'
 labels:
   - memory
   - retrieval
@@ -67,7 +67,7 @@ Design context: `docs/superpowers/specs/2026-08-12-self-correcting-memory-layer-
 - [x] #2 TOP_K is raised and the change in pair visibility is reported against P1's 95% baseline
 - [x] #3 A wrongly superseded memory has somewhere to surface before the threshold is lowered (see the review-queue task); otherwise the lower threshold stays off
 - [x] #4 A re-run of judge-model-sweep.py scores only the 0.70-0.90 band and states why
-- [ ] #5 python -m pytest tests -q is green
+- [x] #5 python -m pytest tests -q is green
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -129,3 +129,17 @@ Second, and more concretely: on today's corpus the threshold change is **entirel
 
 1572 of 1595 memories carry no volatility label and therefore default to event, and the guard skips any pair with an event on either side. `supersede_pass` will report zero on this corpus at any threshold until new captures arrive carrying labels. That is the designed trade, recorded here so a zero in the heartbeat is not later mistaken for a broken guard.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Threshold 0.85 → 0.75 and TOP_K 2 → 3, both justified by measurement on 149 real supersede pairs rather than by intuition. 0.85 saw 58% of real supersessions; 0.75 sees 95%. TOP_K=3 is complete rather than a compromise: no memory in this vault has more than three neighbours above the threshold, so the judge now sees every neighbour that exists.
+
+The gate on AC#3 was real and is satisfied: TASK-150 landed first, so a wrong closure costs a log line and one `memory-doctor.py reopen`.
+
+Two findings reframe what this change can achieve, and both are written into the code so a later zero is not misread. The judge recognises only 30% of real supersessions in the 0.70-0.90 band — at a median rank of 1 it looks straight at the successor and says no, so search was never the bottleneck. And on today's corpus the change is entirely inert: 163 candidate pairs above 0.75, of which 0 reach the judge, because 1572 of 1595 memories default to event.
+
+Scoring above 0.95 is excluded permanently: 0/43 there, because those pairs are near-identical and "nothing is being replaced" is a defensible answer that scores as wrong.
+
+Report: docs/research/supersede-window-2026-08-13.md. Follow-up: TASK-156.
+<!-- SECTION:FINAL_SUMMARY:END -->

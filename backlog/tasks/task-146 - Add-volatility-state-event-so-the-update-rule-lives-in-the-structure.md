@@ -4,7 +4,7 @@ title: Add volatility (state | event) so the update rule lives in the structure
 status: In Progress
 assignee: []
 created_date: '2026-08-12 20:32'
-updated_date: '2026-08-13 17:54'
+updated_date: '2026-08-13 18:55'
 labels:
   - memory
   - schema
@@ -52,12 +52,10 @@ Design context: `docs/superpowers/specs/2026-08-12-self-correcting-memory-layer-
 - [x] #2 reconcile never returns SUPERSEDE or NOOP when either side is an event
 - [x] #3 supersede_pass skips any pair where either side is an event, proven by a test
 - [x] #4 P3 holds on a dry run over the full corpus: zero events would change status
-- [ ] #5 python -m pytest tests -q is green
-- [ ] #6 A memory that looks state-shaped but is labelled or defaulted to event is reported by kb-state-audit, so uncertainty is visible rather than permanent
+- [x] #5 python -m pytest tests -q is green
+- [x] #6 A memory that looks state-shaped but is labelled or defaulted to event is reported by kb-state-audit, so uncertainty is visible rather than permanent
 - [x] #7 Config-shaped claims (model tag, threshold, version, path) are classified as state deterministically, without a model call
 <!-- AC:END -->
-
-
 
 ## Implementation Notes
 
@@ -109,3 +107,19 @@ Both found by running the predicate over real bodies rather than invented ones:
 1. `re.IGNORECASE` turned the ALL-CAPS key branch `[A-Z][A-Z0-9_]{2,}` into "any word of three letters or more", so `grid-column: 1 / -1` in a CSS explanation read as a setting. It was the only reason a layout memory classified as state. Fixed with a scoped `(?-i:...)`; the corpus-wide state count fell from 54 to 23, i.e. 31 of 54 were false positives.
 2. The copula form was missed: `de standaardwaarde voor 'policy.network_allowed' is 'false'` is unmistakably a setting. Added `is` as a separator, plus tolerance for a closing quote after the key — in prose the key is nearly always quoted, and without that the separator never got its turn.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+`volatility: state | event` is now a frontmatter field, set at write time and applied on read, so the update rule lives in the structure rather than in a model's judgement three times a day.
+
+The ordering is what makes the safe default safe: an explicit label always wins, and the deterministic config-shape check only rescues candidates the extractor left unlabelled. `render()` coerces instead of raising, because a garbled label must cost the label, never the capture.
+
+Measured on the live vault: nine pairs above 0.85, all nine skipped. Three of them are genuinely different facts that read alike — including the locations of two DIFFERENT skills at cosine 0.867 — and closing either would have destroyed a true fact. That pair is the argument for the whole field.
+
+Two classifier bugs surfaced only by running the predicate over real bodies: `re.IGNORECASE` turned the ALL-CAPS branch into "any three-letter word", and Dutch hides booleans inside ordinary words ('off' in "officieel"). 54 state classifications fell to 17 real ones.
+
+AC#6 is carried by kb-state-audit (TASK-149), which reports every memory holding a checkable value that counts as an event — a broader and more useful set than "looks state-shaped", because those are exactly the claims that can never be corrected.
+
+Recorded plainly, because it will otherwise be misread later: with 1572 of 1595 memories defaulting to event, supersede_pass is inert on the legacy corpus until new captures bring labels. That is the designed trade, not a regression.
+<!-- SECTION:FINAL_SUMMARY:END -->

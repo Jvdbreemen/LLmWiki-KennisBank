@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-08-12 17:48'
-updated_date: '2026-08-13 18:35'
+updated_date: '2026-08-13 18:56'
 labels:
   - tests
   - windows
@@ -56,7 +56,7 @@ Directions to evaluate, cheapest first:
 - [x] #1 The dead-endpoint premise is either made true (a target that refuses or answers instantly, verified by measurement on Windows and Linux) or removed in favour of stubbing the seam
 - [x] #2 tests/__init__.py's comment states the measured behaviour, not the assumed one
 - [x] #3 A test with a wall-clock budget that touches a network seam behaves the same on CI and on Windows
-- [ ] #4 python -m pytest tests -q is green, and the local wall-clock runtime is recorded before and after
+- [x] #4 python -m pytest tests -q is green, and the local wall-clock runtime is recorded before and after
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -85,3 +85,15 @@ Now assigned rather than defaulted. The override is still there and is unambiguo
 
 Unchanged within noise, and the task's premise that "the local suite runs ~5 minutes; part of that is waiting on nothing" does not hold at suite level. The 2012 ms cost per connection is real, but few tests open a socket at all, so there is no measurable saving to claim. What the change actually buys is the two things that matter more than seconds: a wall-clock assertion now behaves the same on Windows and on Linux, and the hermeticity guarantee is no longer silently off.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+The pin now points at a bound-and-listening loopback socket that closes each connection at once, so the handshake completes against the backlog and the client sees a reset instead of a firewall drop. Same on Windows and Linux; 2012 ms becomes sub-250 ms, and `test_hermetic_pin.py` measures that rather than asserting it in a comment.
+
+The larger finding came from that test failing on something else: `KB_LLM_ENDPOINT` was the real Ollama. `~/.claude/settings.json` exports it for every session, and the pin used `setdefault`, so it never fired for the LLM seam on the machine where Ollama runs — while CI stayed pinned. The asymmetry the pin exists to remove, running backwards, invisibly. Assigned now; the override is `KB_INTEGRATION=1`, which cannot be confused with a variable that has a production meaning.
+
+Nothing failed once hardened (1355 passed), so the risk was latent, not realised.
+
+Runtime is unchanged within noise (318.49s → 327.64s with 27 more tests), and the task's premise that the suite spends meaningful time waiting on the pin does not hold at suite level — few tests open a socket at all. Reported as measured rather than as hoped.
+<!-- SECTION:FINAL_SUMMARY:END -->

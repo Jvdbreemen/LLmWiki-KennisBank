@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-08-12 19:14'
-updated_date: '2026-08-13 18:34'
+updated_date: '2026-08-13 18:55'
 labels:
   - memory
   - llm
@@ -57,7 +57,7 @@ Second, independent finding from the same rows: all three seams parse with `find
 - [x] #2 The wire values ADD/SUPERSEDE/NOOP stay unchanged, so no stored data or caller needs migrating
 - [x] #3 judge-model-sweep.py is re-run on the same seed and the unrelated-pair NOOP rate is reported before and after
 - [x] #4 The JSON slice in _reconcile, _judge and _extract tolerates prose after the object, proven by a test with a trailing-text response
-- [ ] #5 python -m pytest tests -q is green
+- [x] #5 python -m pytest tests -q is green
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -113,3 +113,15 @@ nothing behind: the candidate is discarded and the heartbeat only counts how
 often. That is precisely the action models get wrong, so the gap is filed
 separately rather than left as an unstated assumption.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Two independent silent failures in the judge seams, both fixed and both measured.
+
+The reconcile prompt now asks "is this even about the same thing?" first, with ADD as the answer, and puts the destructive action last with its cost spelled out. Measured A/B on the same 20 unrelated pairs: NOOP fell from 25% to 0%, and the new prompt is faster (39s against 49s) because the model stops explaining why two unrelated texts do not overlap.
+
+`_llmjson` replaces the widest-possible JSON slice in five seams with a first-complete-object scan that is aware of strings and escapes. A review of the first implementation found the mirror case the task had not described: a brace in the LEADING prose makes a first-brace-only scan pick the wrong span, fail, fall back to the wide slice, and fail again. Both directions have tests.
+
+`RECONCILE_PROMPT_VERSION` is stamped in the closure reason so a supersession is traceable to the prompt that caused it. A NOOP still leaves nothing behind; that gap is TASK-155 rather than an unstated assumption.
+<!-- SECTION:FINAL_SUMMARY:END -->
