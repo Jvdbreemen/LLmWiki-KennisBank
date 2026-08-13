@@ -1,7 +1,7 @@
 ---
 id: TASK-159
 title: Release v0.30.0
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-13 22:43'
 updated_date: '2026-08-13 22:44'
@@ -39,11 +39,29 @@ Two findings in this release contradict the tasks that asked for them, and both 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Version and its reason stated from the commit delta
-- [ ] #2 CHANGELOG has a dated 0.30.0 section and both compare links updated
-- [ ] #3 Both READMEs name v0.30.0 in their highlight and new-in headings
-- [ ] #4 Full gate green before the docs edit, docs subset green after
-- [ ] #5 Copilot review processed before the merge
-- [ ] #6 The tag points at a SHA verified to be on origin/main
-- [ ] #7 The published release body is not empty
+- [x] #1 Version and its reason stated from the commit delta
+- [x] #2 CHANGELOG has a dated 0.30.0 section and both compare links updated
+- [x] #3 Both READMEs name v0.30.0 in their highlight and new-in headings
+- [x] #4 Full gate green before the docs edit, docs subset green after
+- [x] #5 Copilot review processed before the merge
+- [x] #6 The tag points at a SHA verified to be on origin/main
+- [x] #7 The published release body is not empty
 <!-- AC:END -->
+
+Final Summary:
+--------------------------------------------------
+v0.30.0 published: https://github.com/Jvdbreemen/LLmWiki-KennisBank/releases/tag/v0.30.0
+
+Tag `v0.30.0` points at `9c035e5`, verified equal to `origin/main` after the
+merge rather than assumed. Release body 7552 characters, checked non-empty --
+both halves of that verification exist because both failed once before.
+
+Gate: full suite 1382 passed / 2 skipped on the released code, documentation
+subset 56 passed after the docs edit. Copilot reviewed the release PR and
+generated no comments.
+
+Carried twelve tasks. Two of them produced measurements that contradicted the
+task that asked for them, and both went into the release notes as they came out:
+the supersede judge is not too conservative (86% of its refusals are correct),
+and growing the memory corpus cost recall@5 0.778 -> 0.768, below a floor
+recorded a day in advance.
