@@ -3,9 +3,10 @@ id: TASK-143
 title: >-
   The judge is a reasoning model and its thinking eats the answer: send
   think=false
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-12 19:04'
+updated_date: '2026-08-13 05:05'
 labels:
   - bug
   - llm
@@ -53,9 +54,15 @@ Not a model-choice problem: 9b thinks too (2124 tokens on the same prompt, 42.9 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 _llm._call sends think=false to Ollama, with an env override to turn thinking back on for anyone who wants it
-- [ ] #2 _activity._llm_call sends the same flag
-- [ ] #3 A test pins the payload for both call sites, so a refactor cannot drop the flag silently
-- [ ] #4 The three seams are re-measured after the fix and the empty-response rate and latency are recorded
-- [ ] #5 python -m pytest tests -q is green
+- [x] #1 _llm._call sends think=false to Ollama, with an env override to turn thinking back on for anyone who wants it
+- [x] #2 _activity._llm_call sends the same flag
+- [x] #3 A test pins the payload for both call sites, so a refactor cannot drop the flag silently
+- [x] #4 The three seams are re-measured after the fix and the empty-response rate and latency are recorded
+- [x] #5 python -m pytest tests -q is green
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Shipped in v0.29.0. AC #4 (re-measure after the fix) is covered by the judge-model sweep that ran with think=false throughout: 40 reconcile + 6 extract + 8 judge calls per arm at 100% JSON conformance for qwen3.5:4b, against the 1-in-3 empty responses measured before. Full numbers in docs/research/judge-model-4b-vs-9b-2026-08.md.
+<!-- SECTION:NOTES:END -->
