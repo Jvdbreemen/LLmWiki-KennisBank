@@ -37,6 +37,7 @@ import _settings  # noqa: E402
 import _sweepstate as ss  # noqa: E402
 import _sweeputil as su  # noqa: E402
 from _frontmatter import parse_frontmatter  # noqa: E402
+from _progress import Progress  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402
 
 HEARTBEAT = "memory-sweep-status.json"
@@ -361,12 +362,18 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
         _reconcile_fn = lambda body, vf, vec, items: {"action": "ADD", "supersedes": []}  # noqa: E731
         pool = []
 
+    # Eén balk over de transcripts -- de eenheid die de gebruiker kent ("54
+    # wachtende transcripts") -- met daarbinnen step(0) per chunk. Die telt de
+    # noemer niet op maar laat de regel wel bewegen, zodat een transcript van
+    # veertig chunks met een LLM-aanroep per chunk niet minutenlang zwijgt.
+    voortgang = Progress(len(todo), "transcripts verwerken")
     for tp in todo:
         # Budget-stop TUSSEN transcripts, nooit erbinnen: een half verwerkt
         # transcript zou gemarkeerd worden als gedaan en de rest voorgoed
         # kwijtraken. Wat hier afvalt blijft pending voor de volgende run.
         if not ignore_watermark and chunk_budget and s["chunks_read"] >= chunk_budget:
             s["budget_reached"] = True
+            voortgang.note(f"chunk-budget ({chunk_budget}) op; de rest blijft pending")
             break
         try:
             transcript = ss.transcript_text(tp)
@@ -377,7 +384,8 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
             s["chunks_read"] += len(chunk_iter)
             s["chunks_skipped"] += max(0, len(chunks) - len(chunk_iter))
             written_for_tp = 0
-            for ch in chunk_iter:
+            for chunk_nr, ch in enumerate(chunk_iter, 1):
+                voortgang.step(0, note=f"{tp.stem[:38]} chunk {chunk_nr}/{len(chunk_iter)}")
                 if max_memories_per_transcript and written_for_tp >= max_memories_per_transcript:
                     break
                 for cand in _extract.extract_candidates(ch):
@@ -400,7 +408,10 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
                         continue
                     # Write-time invalidatie (Mem0-patroon): NOOP -> niets
                     # schrijven; SUPERSEDE -> oude memory sluiten na schrijven.
-                    rec = _reconcile_fn(body, valid_from, vec, pool)
+                    volatility = _memory.coerce_volatility(
+                        cand.get("volatility"), body)
+                    rec = _reconcile_fn(body, valid_from, vec, pool,
+                                        new_volatility=volatility)
                     if rec["action"] == "NOOP":
                         s["reconcile_noop"] += 1
                         continue
@@ -424,6 +435,7 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
                         created=today,
                         valid_from=valid_from,
                         memory_type=_memory.coerce_memory_type(cand.get("type")),
+                        volatility=volatility,
                         importance=_memory.coerce_importance(verdict.get("importance")),
                         model_id=_producer_id(),
                         prompt_version=_extract.EXTRACT_PROMPT_VERSION,
@@ -449,6 +461,7 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
                     pool.append({
                         "path": str(path), "title": title, "status": status,
                         "created": today, "valid_from": valid_from,
+                        "volatility": volatility,
                         "body": body, "vec": vec,
                     })
                     s["written"] += 1
@@ -458,6 +471,10 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
             s["processed"] += 1
         except Exception:
             s["errors"] += 1
+        finally:
+            voortgang.step()
+    voortgang.close(f"({s['written']} memories geschreven, "
+                    f"{s['duplicates']} duplicaten)")
 
     # Fail-soft: een malformed memory-file mag de sweep-afronding (heartbeat,
     # onderhoudspas) niet blokkeren.

@@ -28,16 +28,22 @@ EXTRACT_SYSTEM = (
     "\"voorkeur\" (hoe de gebruiker het wil), "
     "\"procedure\" (hoe je iets doet: stappen, werkwijze), "
     "\"beslissing\" (gemaakte keuze met reden). "
+    "Geef daarnaast per memory de UPDATE-as: "
+    "\"state\" = een huidige waarde die verandert en dus vervangen moet worden "
+    "(een model, een drempel, een versie, een pad, een status, een eigenaar); "
+    "\"event\" = iets dat gebeurd is en blijft staan "
+    "(een bug-fix, een besluit, een les, een meting). Twijfel? Kies \"event\". "
     "Antwoord UITSLUITEND met een JSON-lijst: "
     "[{\"title\": \"<kort>\", \"body\": \"<2-4 zinnen>\", "
-    "\"type\": \"feit|voorkeur|procedure|beslissing\"}]. Leeg = []."
+    "\"type\": \"feit|voorkeur|procedure|beslissing\", "
+    "\"volatility\": \"state|event\"}]. Leeg = []."
 )
 
 
 #: Promptversie (TASK-90 E5): opgehoogd bij ELKE wijziging aan EXTRACT_SYSTEM.
 #: Wordt met het model-id in de memory-frontmatter gestempeld, zodat na een
 #: slechte promptversie alle getroffen claims selecteerbaar zijn.
-EXTRACT_PROMPT_VERSION = 1
+EXTRACT_PROMPT_VERSION = 2
 
 #: Weigering-/meta-patronen (TASK-90 E4, arkon#25): een model dat niet kan
 #: antwoorden mag dat NOOIT als kennis het archief in schrijven. "Ik kan deze
@@ -84,7 +90,11 @@ def extract_candidates(transcript_text: str, max_n: int = 8) -> list:
             continue
         if title and body:
             out.append({"title": title, "body": body,
-                        "type": str(item.get("type", "")).strip().lower()})
+                        "type": str(item.get("type", "")).strip().lower(),
+                        # Ongefilterd doorgeven; _memory.coerce_volatility
+                        # bepaalt de regel (label > config-vorm > event) op
+                        # EEN plek, niet hier en daar allebei een beetje.
+                        "volatility": str(item.get("volatility", "")).strip().lower()})
         if len(out) >= max_n:
             break
     return out

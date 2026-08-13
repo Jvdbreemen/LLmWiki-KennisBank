@@ -49,6 +49,14 @@ class ChunkBudgetTest(unittest.TestCase):
         self._saved = os.environ.get("KENNISBANK_VAULT")
         os.environ["KENNISBANK_VAULT"] = str(self.vault)
         self.m = _load()
+        # `self.m` is een VERSE kopie van memory-sweep, maar `self.m._extract`
+        # is de GEDEELDE module uit sys.modules. De tests hieronder hangen daar
+        # een stub in die altijd [] teruggeeft, en zonder deze restore erft de
+        # rest van de suite een extractor die niets meer vindt -- wat er precies
+        # uitziet als een lege extract in plaats van als een lekkende test.
+        self._orig_extract = self.m._extract.extract_candidates
+        self.addCleanup(lambda: setattr(self.m._extract, "extract_candidates",
+                                        self._orig_extract))
 
     def tearDown(self):
         if self._saved is None:

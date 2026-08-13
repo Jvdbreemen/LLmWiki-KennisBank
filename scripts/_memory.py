@@ -9,6 +9,11 @@ Frontmatter-contract (spec fase 1, bi-temporeel uitgebreid):
     title: vrije tekst (verplicht)
     type: memory
     memory_type: feit | voorkeur | procedure | beslissing
+    volatility: state | event. De UPDATE-as, los van memory_type (de
+        ONDERWERP-as). state = een waarde die verandert en dus vervangen
+        wordt; event = iets dat gebeurd is en dus blijft staan. Afwezig of
+        onherkenbaar -> event, tenzij de body config-vormig is (zie
+        coerce_volatility).
     importance: 1-5 (judge-oordeel bij capture; 3 = neutraal)
     status: unverified | current | superseded | retracted | expired
     evidence_basis: getypt | cc-sessie | audio | import | autoresearch | agent
@@ -48,6 +53,117 @@ def coerce_memory_type(value) -> str:
     """Sanitize een (LLM-geleverd) memory-type; onbekend -> 'feit'."""
     v = str(value or "").strip().lower()
     return v if v in MEMORY_TYPES else DEFAULT_MEMORY_TYPE
+
+
+# ---------------------------------------------------------------------------
+# volatility: de UPDATE-as (TASK-146)
+#
+# memory_type zegt WAAROVER een memory gaat; geen van zijn vier waarden zegt
+# "vervang mij als de waarde verandert". Die regel werd daarom bij elke
+# reconcile- en supersede-beslissing opnieuw uit proza afgeleid. Gemeten
+# kwaliteit van dat afleiden tegen de eigen supersede-besluiten van de vault:
+# 7/20 (qwen3.5:4b), 5/20 (qwen3.5:9b), 4/20 (claude haiku). Een model dat
+# drie op de vier keer misgokt hoort die vraag niet te krijgen; de structuur
+# hoort het antwoord te dragen.
+#
+#   state -> mag vervangen en vervangen worden
+#   event -> wordt NOOIT superseded en supersedet NOOIT
+#
+# event is de veilige default omdat geschiedenis vernietigen de onomkeerbare
+# fout is, en omdat een afwezig veld dan veilig degradeert: de 1661 bestaande
+# memories hebben geen migratie nodig.
+# ---------------------------------------------------------------------------
+VOLATILITIES = ("state", "event")
+DEFAULT_VOLATILITY = "event"
+
+#: Een sleutel die naar een instelling ruikt: bevat een underscore of punt
+#: (num_ctx, retrieve_top_n, policy.network_allowed) of is ALL_CAPS
+#: (RECONCILE_THRESHOLD). Gewone woorden vallen hier bewust buiten, anders
+#: wordt "Robert is een ontwikkelaar" een setting.
+#:
+#: De ALL-CAPS-tak staat expliciet op hoofdlettergevoelig via (?-i:...). Zonder
+#: dat werd hij onder re.IGNORECASE "elk woord van drie letters of meer", en
+#: dan las `grid-column: 1 / -1` -- een CSS-regel in proza -- als een
+#: instelling. Gemeten op de levende vault: dat was de enige reden dat een
+#: layout-memory als state werd geclassificeerd.
+_CFG_KEY = (r"[A-Za-z][A-Za-z0-9]*(?:[_.][A-Za-z0-9]+)+"
+            r"|(?-i:[A-Z][A-Z0-9_]{2,})")
+#: Een waarde die naar een instelling ruikt: getal, decimaal, bool, versie,
+#: model-tag (qwen3.5:4b), pad, of een aangehaalde token.
+#:
+#: De \b achter de bool-woorden is niet cosmetisch. Zonder die grens zit
+#: 'aan' in "aangepast", 'uit' in "uitgebreid", 'on' in "ontworpen" en 'off'
+#: in "officieel" -- alle vier doodgewone Nederlandse woorden. Gemeten op de
+#: levende vault leverde dat vijf valse instellingen op, waaronder "FreeRTOS
+#: is officieel afgerond" als 'RTOS is off'.
+_CFG_VAL = (r"(?:-?\d+(?:\.\d+)?"
+            r"|(?i:true|false|waar|onwaar|aan|uit|on|off|null|none)\b"
+            r"|v?\d+(?:\.\d+){1,}|[A-Za-z][\w.-]*:[\w.-]+"
+            r"|[~/.]?[\w.-]*[/\\][\w./\\-]+|\"[^\"]{1,40}\"|'[^']{1,40}')")
+#: Scheidingstekens tussen sleutel en waarde. De copula ("is", eventueel met
+#: 'gelijk aan'/'gezet op') hoort erbij: op de levende vault stond de
+#: netwerk-policy als "de standaardwaarde voor 'policy.network_allowed' is
+#: 'false'" -- onmiskenbaar een instelling, en zonder deze vorm gemist.
+_CFG_SEP = (r"(?:=|:=|:|->|→"
+            r"|\s+(?i:is|zijn)(?:\s+(?i:gelijk aan|gezet op|gepind op|ingesteld op))?)")
+#: Patroon 1 -- toekenning: `num_ctx = 8192`, `TOP_K: 3`, `policy.x is 'false'`.
+#: De optionele quote/backtick achter de sleutel is niet cosmetisch: in proza
+#: staat een sleutel bijna altijd aangehaald ("de waarde voor
+#: 'policy.network_allowed' is 'false'"), en zonder die tolerantie kwam de
+#: scheiding nooit aan de beurt.
+_CFG_ASSIGN = re.compile(rf"(?:{_CFG_KEY})[\"'`]?\s*{_CFG_SEP}\s*{_CFG_VAL}")
+#: Patroon 2 -- toekenning in proza zonder setting-vormige sleutel, maar dan
+#: wel met een toekennend werkwoord EN een config-vormige waarde. "de judge
+#: draait op qwen3.5:4b" telt; "Robert draait op koffie" niet, want koffie is
+#: geen instelling.
+_CFG_PHRASE = re.compile(
+    r"\b(?:staat op|draait op|is gepind op|is ingesteld op|is gezet op|"
+    r"defaultwaarde is|default is|standaard op|"
+    r"is set to|runs on|pinned to|defaults to)\s+" + _CFG_VAL,
+    re.IGNORECASE)
+
+
+def looks_like_config(text: str) -> bool:
+    """True als de tekst een huidige INSTELLING beweert (model, drempel,
+    versie, pad, vlag).
+
+    Deterministisch en zonder model-aanroep, want de vorm is herkenbaar. Deze
+    predicaat is met opzet smal: hij draait alleen op de fallback-weg (het
+    extract-label ontbreekt) en wordt gedeeld met kb-state-audit, zodat er
+    niet twee definities van "config-vormig" ontstaan die uit elkaar lopen.
+
+    Een versienummer of pad ALLEEN is niet genoeg -- "bug X opgelost in
+    v0.29.0" is een gebeurtenis die toevallig een versie noemt. Er moet een
+    toekenning zijn: een setting-achtige sleutel of een toekennend werkwoord.
+    """
+    t = " ".join(str(text or "").split())
+    if not t:
+        return False
+    return bool(_CFG_ASSIGN.search(t) or _CFG_PHRASE.search(t))
+
+
+def coerce_volatility(value, body: str = "") -> str:
+    """Bepaal de update-as van een memory. Volgorde is de hele truc:
+
+      1. extract zegt 'state'  -> state
+      2. extract zegt 'event'  -> event, NOOIT overruled
+      3. afwezig/onleesbaar    -> config-vormige body? state, anders event
+
+    De deterministische check is dus een VANGNET voor de gevallen waarin het
+    model twijfelde, geen tweede mening over een label dat het wel gaf. Dat
+    houdt het valse-positief-oppervlak klein: alleen kandidaten zonder label
+    met een config-vormige body kunnen verkeerd op state landen, en dat is
+    omkeerbaar (de sluiting staat in de closed-log, TASK-150).
+
+    Ook gebruikt bij LEZEN van bestaande memories: de 1661 files zonder veld
+    krijgen zo dezelfde regel, zodat de supersede-pas blijft werken op precies
+    de memories waar vervangen hoort (instellingen) zonder ooit een
+    gebeurtenis te sluiten.
+    """
+    v = str(value or "").strip().lower()
+    if v in VOLATILITIES:
+        return v
+    return "state" if looks_like_config(body) else DEFAULT_VOLATILITY
 
 
 def coerce_importance(value) -> int:
@@ -188,7 +304,7 @@ def render(title: str, body: str, *, status: str = DEFAULT_STATUS,
            valid_from: str | None = None, valid_until: str | None = None,
            expires: str | None = None, superseded_by=None, tags=None,
            memory_type: str = DEFAULT_MEMORY_TYPE, importance: int = 3,
-           model_id: str = "", prompt_version=None) -> str:
+           volatility: str = "", model_id: str = "", prompt_version=None) -> str:
     if status not in STATUSES:
         raise ValueError(f"ongeldige status: {status!r} (verwacht een van {STATUSES})")
     if evidence_basis not in EVIDENCE_BASES:
@@ -196,6 +312,10 @@ def render(title: str, body: str, *, status: str = DEFAULT_STATUS,
     if memory_type not in MEMORY_TYPES:
         raise ValueError(f"ongeldig memory_type: {memory_type!r} (verwacht een van {MEMORY_TYPES})")
     importance = coerce_importance(importance)
+    # GEEN ValueError zoals hierboven: een verhaspeld LLM-label mag de write
+    # niet laten crashen en de capture verliezen. Coercen, zoals memory_type
+    # en importance dat al doen.
+    volatility = coerce_volatility(volatility, body)
     created = created or _today_iso()
     updated = updated or created
     valid_from = valid_from or created
@@ -203,6 +323,7 @@ def render(title: str, body: str, *, status: str = DEFAULT_STATUS,
              f"title: {_yaml_scalar(title)}",
              "type: memory",
              f"memory_type: {memory_type}",
+             f"volatility: {volatility}",
              f"importance: {importance}",
              f"status: {status}",
              f"evidence_basis: {evidence_basis}",

@@ -113,7 +113,7 @@ def may_supersede(new_valid_from: str, old_valid_from: str) -> bool:
 
 
 def reconcile(new_body: str, new_valid_from: str, vec, items: list,
-              judge_fn=None) -> dict:
+              judge_fn=None, new_volatility: str = "event") -> dict:
     """Reconcileer een kandidaat tegen de bestaande pool.
 
     Returns {"action": "ADD"|"NOOP", "supersedes": [item, ...]}:
@@ -125,10 +125,25 @@ def reconcile(new_body: str, new_valid_from: str, vec, items: list,
       - ADD zonder supersedes: gewoon schrijven.
     Judge-volgorde: buren van meest naar minst gelijkend; een geldig
     NOOP-verdict wint direct (niets schrijven verslaat schrijven-en-sluiten).
+
+    new_volatility: de update-as van de KANDIDAAT ('state' | 'event'). Default
+    'event' = altijd ADD, want geschiedenis vernietigen is de onomkeerbare
+    fout. Let op wat die default betekent voor een aanroeper die hem vergeet:
+    reconcile doet dan niets meer. De sweep geeft hem expliciet mee en een
+    test pint dat vast; een volgende aanroeper moet dat ook doen.
     """
     judge_fn = judge_fn or judge_reconcile
+    # Een gebeurtenis accumuleert (TASK-146): ze wordt nooit gesloten en drukt
+    # nooit iets weg. Geen judge-aanroep, geen oordeel -- gewoon schrijven.
+    # NOOP zou hier net zo schadelijk zijn als SUPERSEDE: de dedup op 0.92
+    # vangt her-captures al af, dus wat in de 0.75-0.92-band binnenkomt zijn
+    # ECHT verschillende gebeurtenissen en die horen allebei te bestaan.
+    if new_volatility == "event":
+        return {"action": "ADD", "supersedes": []}
     supersedes = []
     for it in similar_existing(vec, items):
+        if it.get("volatility") == "event":
+            continue
         action = judge_fn(new_body, it.get("body", ""))
         if action == "NOOP":
             if it.get("status") == "current":

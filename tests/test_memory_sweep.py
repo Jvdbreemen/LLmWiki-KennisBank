@@ -213,7 +213,14 @@ class MemorySweepTest(unittest.TestCase):
     def _dated_transcript_in_reconcile_band(self):
         """Vervang s1.jsonl door een gedateerd transcript en zet de embeddings
         zo dat de kandidaat in de reconcile-band valt (cosine 0.9 met bestaand:
-        boven RECONCILE_THRESHOLD 0.75, onder dup-drempel 0.92)."""
+        boven RECONCILE_THRESHOLD 0.75, onder dup-drempel 0.92).
+
+        De kandidaat draagt volatility="state": reconcile beoordeelt alleen
+        waardes die vervangen mogen worden, en een gebeurtenis gaat sinds
+        TASK-146 rechtstreeks naar ADD zonder de judge te raadplegen."""
+        self._extract.extract_candidates = lambda text, max_n=8: [
+            {"title": "Jim baan", "body": "Jim heeft een baan",
+             "volatility": "state"}]
         tdir = self.vault / "01-raw" / "transcripts"
         (tdir / "s1.jsonl").unlink()
         (tdir / "2026-06-25-jim.jsonl").write_text(
@@ -226,7 +233,8 @@ class MemorySweepTest(unittest.TestCase):
         import _memory
         import _reconcile
         old = _memory.write("Jim zoekt baan", "Jim zoekt een baan",
-                            status="current", created="2026-01-01")
+                            status="current", created="2026-01-01",
+                            volatility="state")
         self._dated_transcript_in_reconcile_band()
         orig = _reconcile.judge_reconcile
         _reconcile.judge_reconcile = lambda new, o: "SUPERSEDE"
@@ -246,7 +254,8 @@ class MemorySweepTest(unittest.TestCase):
         import _memory
         import _reconcile
         _memory.write("Jim zoekt baan", "Jim zoekt een baan",
-                      status="current", created="2026-01-01")
+                      status="current", created="2026-01-01",
+                      volatility="state")
         self._dated_transcript_in_reconcile_band()
         orig = _reconcile.judge_reconcile
         _reconcile.judge_reconcile = lambda new, o: "NOOP"
@@ -262,7 +271,8 @@ class MemorySweepTest(unittest.TestCase):
         import _memory
         import _reconcile
         old = _memory.write("Jim zoekt baan", "Jim zoekt een baan",
-                            status="current", created="2026-01-01")
+                            status="current", created="2026-01-01",
+                            volatility="state")
         self._dated_transcript_in_reconcile_band()
         self._judge.judge = lambda cand, context="": {"verdict": "unverified", "reason": "vaag"}
         orig = _reconcile.judge_reconcile
