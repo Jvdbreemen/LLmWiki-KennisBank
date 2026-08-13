@@ -76,7 +76,42 @@ Geheugensystemen van leveranciers (Mem0, Zep, Letta, Cognee) zijn krachtig maar 
 
 De ontwerpvoorkeur is overal dezelfde: **deterministisch waar mogelijk, LLM alleen waar het oordeelsvermogen toevoegt, fail-open overal**. Een dood model blokkeert nooit een sessie, verliest nooit een transcript, en verwijdert nooit geverifieerde kennis.
 
-## Functie-highlights (v0.28.0)
+## Functie-highlights (v0.29.0)
+
+### Nieuw in v0.29.0
+
+> **Upgraden:** draai `ollama pull qwen3.5:4b` en zet daarna `"model"` in
+> `<vault>/.claude/kennisbank-llm.json` op dezelfde waarde. `setup.sh` kopieert
+> dat bestand bij de installatie en overschrijft het nooit, dus elke bestaande
+> vault draagt een pin die het wint van de code-default — laat je hem staan, dan
+> blijven je hooks het oude model laden.
+
+De geheugenlaag was stilgevallen zonder dat iets dat meldde. Drie onafhankelijke
+oorzaken, alle drie onzichtbaar om dezelfde reden: elke seam is fail-safe, dus
+een onderdeel dat nooit antwoordt ziet eruit als een onderdeel dat niets te
+melden had.
+
+- **De judge dacht zijn eigen antwoord weg.** `qwen3.5` is een reasoning-model
+  en zijn gedachtegang verbruikte hetzelfde contextbudget als het antwoord.
+  Gemeten op drie echte paren: 30-56 s per call, en **één op de drie kwam leeg
+  terug** — waarna `extract` `[]` geeft, `judge` `unverified` en `reconcile`
+  `ADD`, alle drie geruisloos. Met `think: false`: 1,6 s, geen enkele leeg.
+- **Capture kon maar één client lezen.** De parser kende alleen de vorm van
+  Claude Code, dus Codex- en Copilot-sessies leverden niets op: **39 van de 299
+  gearchiveerde transcripts, 94 MB**, waaronder sessies van 21 en 26 MB. Een
+  onleesbaar transcript wordt wél gesweept en wél afgevinkt, en dat ziet eruit
+  als een sessie waarin niets gebeurde. Nu 7 van de 299, samen 0,07 MB.
+- **Capture las zes chunks van een sessie.** Gemeten over vier lange transcripts
+  en 120 extractie-calls: **78% van alle unieke kennis zit voorbij chunk 6**, met
+  0,9% duplicaten. De cap ging ervan uit dat het vervolg herhaling is; dat is
+  niet zo. Nu 40 chunks en 60 memories per transcript, met een budget van 150
+  chunks per run zodat een sweep de GPU niet bezet houdt die retrieval nodig
+  heeft.
+- **Eén judge-model, passend naast de embedder.** Acht plekken schreven een
+  modelnaam en spreken elkaar niet meer tegen. `qwen3.5:4b` kost 3,13 GB en past
+  naast `qwen3-embedding:4b` (4,06 GB) op een kaart van 16 GB; het oude
+  `gemma4:12b` vroeg 8,06 GB, verdrong de embedder, en daarna liep elke recall
+  tegen een koude load van 30-60 s aan met een budget van 2 s.
 
 ### Nieuw in v0.28.0
 

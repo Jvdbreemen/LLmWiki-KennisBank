@@ -73,7 +73,40 @@ Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: 
 
 The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
 
-## Feature highlights (v0.28.0)
+## Feature highlights (v0.29.0)
+
+### New in v0.29.0
+
+> **Upgrading:** run `ollama pull qwen3.5:4b`, then set `"model"` in
+> `<vault>/.claude/kennisbank-llm.json` to match. `setup.sh` copies that file on
+> install and never overwrites it, so every existing vault carries a pin that
+> beats the code default — leave it and your hooks keep loading the old model.
+
+The memory layer had quietly stopped capturing, and nothing said so. Three
+independent causes, each invisible for the same reason: every seam is fail-safe,
+so a component that never answers looks exactly like one with nothing to report.
+
+- **The judge was thinking away its own answer.** `qwen3.5` is a reasoning
+  model, and its chain-of-thought spent the same context budget as the answer.
+  Measured on three real pairs: 30-56 s per call, and **one in three came back
+  empty** — after which `extract` returns `[]`, `judge` returns `unverified` and
+  `reconcile` returns `ADD`, all silently. With `think: false`: 1.6 s, none
+  empty.
+- **Capture could read only one client's transcripts.** The parser knew Claude
+  Code's shape alone, so Codex and Copilot sessions produced nothing: **39 of
+  299 archived transcripts, 94 MB**, including single sessions of 21 and 26 MB.
+  An unreadable transcript is still swept and still marked done, which looks
+  exactly like a session where nothing happened. Now 7 of 299, together 0.07 MB.
+- **Capture read six chunks of a session.** Measured over four long transcripts
+  and 120 extractor calls: **78% of all unique knowledge sits beyond chunk 6**,
+  with 0.9% duplicates. The cap assumed later chunks repeat; they do not. Now 40
+  chunks and 60 memories per transcript, with a 150-chunk budget per run so a
+  sweep cannot hold the GPU that retrieval needs.
+- **One judge model, sized to coexist.** Eight surfaces wrote a model name and
+  they no longer disagree. `qwen3.5:4b` at 3.13 GB fits beside
+  `qwen3-embedding:4b` at 4.06 GB on a 16 GB card; the old `gemma4:12b` needed
+  8.06 GB and evicted the embedder, after which every recall met a 30-60 s cold
+  load against a 2 s budget.
 
 ### New in v0.28.0
 
