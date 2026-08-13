@@ -181,7 +181,8 @@ class ReconcileTest(unittest.TestCase):
         r = _reconcile.reconcile("nieuw", "2026-08-13", [1.0], items,
                                  judge_fn=self._judge("SUPERSEDE"),
                                  new_volatility="event")
-        self.assertEqual(r, {"action": "ADD", "supersedes": []})
+        self.assertEqual(r["action"], "ADD")
+        self.assertEqual(r["supersedes"], [])
 
     def test_an_event_candidate_is_not_swallowed_by_noop_either(self):
         """NOOP would discard a second, genuinely different event.

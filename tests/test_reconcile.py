@@ -97,7 +97,8 @@ class TestReconcileFlow(unittest.TestCase):
         r = _reconcile.reconcile("nieuw", "2026-06-25", self.target, [self.buur],
                                  judge_fn=lambda n, o: "NOOP",
                                  new_volatility="state")
-        self.assertEqual(r, {"action": "NOOP", "supersedes": []})
+        self.assertEqual(r["action"], "NOOP")
+        self.assertEqual(r["supersedes"], [])
 
     def test_supersede_collects_neighbor(self):
         r = _reconcile.reconcile("nieuw", "2026-06-25", self.target, [self.buur],
@@ -132,6 +133,19 @@ class TestReconcileFlow(unittest.TestCase):
         self.assertEqual(r["action"], "ADD")
         self.assertEqual(r["supersedes"], [])
 
+    def test_the_return_shape_is_pinned_in_exactly_one_place(self):
+        """The contract, asserted once rather than in every flow test.
+
+        An exact-dict comparison in each test breaks on every field that gets
+        added -- `covered_by` did exactly that -- while proving nothing the
+        individual assertions do not already prove. Pin the key set here, and
+        let the other tests assert only what they are about.
+        """
+        r = _reconcile.reconcile("nieuw", "2026-06-25", self.target, [self.buur],
+                                 judge_fn=lambda n, o: "ADD",
+                                 new_volatility="state")
+        self.assertEqual(set(r), {"action", "supersedes", "covered_by"})
+
     def test_the_default_is_event_so_a_caller_that_forgets_writes_history(self):
         """Pin the default, because forgetting it disables the seam silently.
 
@@ -142,7 +156,8 @@ class TestReconcileFlow(unittest.TestCase):
         """
         r = _reconcile.reconcile("nieuw", "2026-06-25", self.target, [self.buur],
                                  judge_fn=lambda n, o: "SUPERSEDE")
-        self.assertEqual(r, {"action": "ADD", "supersedes": []})
+        self.assertEqual(r["action"], "ADD")
+        self.assertEqual(r["supersedes"], [])
 
 
 if __name__ == "__main__":

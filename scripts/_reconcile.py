@@ -180,7 +180,7 @@ def reconcile(new_body: str, new_valid_from: str, vec, items: list,
     # vangt her-captures al af, dus wat in de 0.75-0.92-band binnenkomt zijn
     # ECHT verschillende gebeurtenissen en die horen allebei te bestaan.
     if new_volatility == "event":
-        return {"action": "ADD", "supersedes": []}
+        return {"action": "ADD", "supersedes": [], "covered_by": ""}
     supersedes = []
     for it in similar_existing(vec, items):
         if it.get("volatility") == "event":
@@ -188,8 +188,12 @@ def reconcile(new_body: str, new_valid_from: str, vec, items: list,
         action = judge_fn(new_body, it.get("body", ""))
         if action == "NOOP":
             if it.get("status") == "current":
-                return {"action": "NOOP", "supersedes": []}
+                # Meld WELKE buur dekte. Zonder dat is de weggegooide kandidaat
+                # niet te beoordelen, en NOOP is juist de actie waarbij hij
+                # verdwijnt (TASK-155).
+                return {"action": "NOOP", "supersedes": [],
+                        "covered_by": it.get("path", "")}
             continue
         if action == "SUPERSEDE" and may_supersede(new_valid_from, it.get("valid_from", it.get("created", ""))):
             supersedes.append(it)
-    return {"action": "ADD", "supersedes": supersedes}
+    return {"action": "ADD", "supersedes": supersedes, "covered_by": ""}

@@ -547,6 +547,89 @@ def recent_closures(limit: int = 20) -> list:
         return rows[-limit:][::-1]
     except Exception:
         return []
+
+
+DISCARD_LOG = "memory-noop-log.jsonl"
+#: Hoeveel regels het discard-logboek hoogstens houdt. Een --all-rebuild over
+#: honderden transcripts kan duizenden NOOPs opleveren; de closed-log heeft dat
+#: probleem niet, want sluitingen zijn zeldzaam. Ouder dan dit wordt gesnoeid.
+DISCARD_LOG_MAX_LINES = 2000
+
+
+def log_discard(title: str, body: str, covered_by: str = "",
+                reason: str = "", prompt_version=None) -> None:
+    """Record a candidate memory that reconcile threw away (NOOP).
+
+    Of the three reconcile actions, NOOP is the only one where the candidate is
+    never written. The heartbeat counts how OFTEN that happened; until this log
+    nothing said WHAT was discarded, so "is the seam throwing away good
+    knowledge?" could only be answered by re-running a measurement.
+
+    It matters because NOOP is the action models get wrong. Measured on 20
+    unrelated pairs, the old prompt answered NOOP 25% of the time with reasons
+    that amounted to "these are unrelated" -- the definition of ADD (TASK-144).
+    The prompt fix took that to 0%, but nothing stops a future prompt, model or
+    threshold from bringing it back, and nothing would say so.
+
+    Same rules as the closure log: append-only, fail-soft, never a gate. If the
+    log cannot be written the sweep carries on, because capture must not depend
+    on bookkeeping.
+    """
+    try:
+        import json
+        from datetime import datetime, timezone
+        rec = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "title": str(title or "")[:200],
+            "body": str(body or "")[:1000],
+            "covered_by": str(covered_by or ""),
+            "reason": str(reason or "")[:300],
+            "prompt_version": prompt_version,
+        }
+        log = vault_root() / ".claude" / DISCARD_LOG
+        log.parent.mkdir(parents=True, exist_ok=True)
+        with log.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        _trim_discard_log(log)
+    except Exception:
+        pass  # a record must never block the sweep
+
+
+def _trim_discard_log(log: Path) -> None:
+    """Keep the discard log bounded, oldest first.
+
+    Trimming only when the file is meaningfully over the limit, so a long
+    rebuild does not rewrite the whole file on every single line.
+    """
+    try:
+        lines = log.read_text(encoding="utf-8", errors="replace").splitlines()
+        if len(lines) <= DISCARD_LOG_MAX_LINES * 1.25:
+            return
+        keep = lines[-DISCARD_LOG_MAX_LINES:]
+        log.write_text("\n".join(keep) + "\n", encoding="utf-8")
+    except Exception:
+        pass
+
+
+def recent_discards(limit: int = 20) -> list:
+    """The most recently discarded candidates, newest first."""
+    try:
+        import json
+        log = vault_root() / ".claude" / DISCARD_LOG
+        if not log.exists():
+            return []
+        rows = []
+        for line in log.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rows.append(json.loads(line))
+            except Exception:
+                continue
+        return rows[-limit:][::-1]
+    except Exception:
+        return []
 # --- Menselijke review van unverified memories (TASK-89) ---------------------
 #
 # Eén gesloten actieset, gedeeld door de Atlas-sidecar (POST /memory/decide),
