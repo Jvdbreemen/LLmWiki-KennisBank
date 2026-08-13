@@ -271,7 +271,8 @@ def read_status(path) -> str:
         return DEFAULT_STATUS
 
 
-def set_status(path, status: str, superseded_by=None, valid_until: str | None = None) -> bool:
+def set_status(path, status: str, superseded_by=None, valid_until: str | None = None,
+               reason: str = "") -> bool:
     """Herschrijf de status-regel binnen het frontmatter-blok; optioneel een
     superseded_by-link en/of valid_until (bi-temporele sluiting) zetten.
     Return True als het bestand gewijzigd is.
@@ -333,7 +334,98 @@ def set_status(path, status: str, superseded_by=None, valid_until: str | None = 
         p.write_text(new_raw, encoding="utf-8")
     except OSError:
         return False
+    if status in CLOSED_STATUSES:
+        _log_closure(p, status, superseded_by, valid_until, reason)
     return True
+
+
+#: Statussen waarmee een memory uit de recall-set verdwijnt. Recall filtert op
+#: `current`, dus dit is de grens waarachter kennis onzichtbaar wordt.
+CLOSED_STATUSES = ("superseded", "retracted", "expired")
+
+CLOSED_LOG = "memory-closed-log.jsonl"
+
+
+def _log_closure(path: Path, status: str, superseded_by, valid_until, reason: str) -> None:
+    """Leg vast dat een memory is gesloten. Append-only, fail-soft.
+
+    Het ontwerp leunt erop dat superseden omkeerbaar is: het bestand blijft
+    staan, met `superseded_by` en `valid_until` erbij. Dat is waar op schijf en
+    onwaar in de praktijk -- recall filtert op `current`, en de reviewwachtrij
+    loopt alleen `unverified`. Een verkeerd gesloten memory verscheen dus
+    NERGENS meer, en dat is functioneel hetzelfde als verwijderen (TASK-150).
+
+    Dit logboek is de ingang: wat is er gesloten, waardoor, en waarom. Zonder
+    zo'n spoor is "het is terug te draaien" een belofte die niemand kan innen.
+    """
+    try:
+        import json
+        from datetime import datetime, timezone
+        rec = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "stem": path.stem,
+            "status": status,
+            "superseded_by": list(superseded_by) if superseded_by else [],
+            "valid_until": valid_until or "",
+            "reason": (reason or "")[:300],
+        }
+        log = vault_root() / ".claude" / CLOSED_LOG
+        log.parent.mkdir(parents=True, exist_ok=True)
+        with log.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    except Exception:
+        pass  # een logboek mag de sluiting zelf nooit blokkeren
+
+
+def reopen(path, status: str = "current") -> bool:
+    """Draai een sluiting terug: status naar current, sluitingsvelden eruit.
+
+    De tegenhanger van set_status voor de gesloten kant. Zonder deze functie is
+    terugdraaien handwerk in een frontmatter-blok, en dan is "omkeerbaar" iets
+    wat je alleen op papier bent.
+    """
+    import re
+    p = Path(path)
+    try:
+        raw = p.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    fm, body = split_frontmatter(raw)
+    if not fm:
+        return False
+    new_fm = re.sub(r"^status:.*$", lambda _m: f"status: {status}",
+                    fm, count=1, flags=re.MULTILINE)
+    new_fm = re.sub(r"^superseded_by:.*$\n?", "", new_fm, flags=re.MULTILINE)
+    new_fm = re.sub(r"^valid_until:.*$\n?", "", new_fm, flags=re.MULTILINE)
+    if new_fm == fm:
+        return False
+    try:
+        p.write_text("---\n" + new_fm.strip("\n") + "\n---\n" + body, encoding="utf-8")
+    except OSError:
+        return False
+    _log_closure(p, f"reopened->{status}", None, None, "handmatig heropend")
+    return True
+
+
+def recent_closures(limit: int = 20) -> list:
+    """De laatste sluitingen, nieuwste eerst. Leeg als er geen logboek is."""
+    try:
+        import json
+        log = vault_root() / ".claude" / CLOSED_LOG
+        if not log.exists():
+            return []
+        rows = []
+        for line in log.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rows.append(json.loads(line))
+            except Exception:
+                continue
+        return rows[-limit:][::-1]
+    except Exception:
+        return []
 # --- Menselijke review van unverified memories (TASK-89) ---------------------
 #
 # Eén gesloten actieset, gedeeld door de Atlas-sidecar (POST /memory/decide),
