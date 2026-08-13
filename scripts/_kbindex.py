@@ -213,9 +213,29 @@ def sources_for(conn: sqlite3.Connection, doc_ids) -> dict:
     return out
 
 
-def prune(conn: sqlite3.Connection, keep_paths: set) -> int:
-    rows = conn.execute("SELECT doc_id, path FROM docs").fetchall()
-    gone = [(d, p) for (d, p) in rows if p not in keep_paths]
+def prune(conn: sqlite3.Connection, keep_paths: set, layers=None) -> int:
+    """Remove indexed documents that are no longer on disk.
+
+    ``layers`` limits the judgement to the layers the caller actually looked at.
+    Without it, a layer that was not collected has an empty keep-set, and every
+    one of its documents reads as deleted.
+
+    That is not hypothetical. The settings toggles gate collection per layer, so
+    turning one off used to empty that layer out of the index on the next run:
+    `embed_index=false` removed 199 wiki documents, `memory_capture=false` the
+    remaining 1508, leaving a 23 MB file with zero rows. Retrieval then returned
+    nothing relevant, with no notice and no log line, and three eval arms scored
+    0.016 / 0.000 / 0.000 before anyone suspected the index rather than the
+    experiment (TASK-136).
+
+    "Do not index new or changed files" and "consider these files deleted" are
+    different instructions and must not share a code path.
+    """
+    rows = conn.execute("SELECT doc_id, path, layer FROM docs").fetchall()
+    if layers is not None:
+        layers = set(layers)
+        rows = [(d, p, l) for (d, p, l) in rows if l in layers]
+    gone = [(d, p) for (d, p, _l) in rows if p not in keep_paths]
     for doc_id, _ in gone:
         conn.execute("DELETE FROM docs WHERE doc_id=?", (doc_id,))
         conn.execute("DELETE FROM fts_docs WHERE rowid=?", (doc_id,))

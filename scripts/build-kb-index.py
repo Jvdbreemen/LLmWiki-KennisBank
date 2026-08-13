@@ -46,15 +46,55 @@ def _doc_meta(path, layer):
     return fm.get("title", ""), fm.get("created", ""), sources
 
 
+def _active_layers() -> set:
+    """Lagen die deze run daadwerkelijk inleest.
+
+    Los van _collect() omdat de prune-stap dit óók moet weten: een laag die niet
+    is ingelezen heeft een lege keep-set, en zonder deze verzameling leest prune
+    dat als "alles verwijderd". Zie _kbindex.prune (TASK-136).
+
+    Een uitgezette toggle betekent "indexeer niets nieuws uit deze laag", niet
+    "beschouw deze laag als verdwenen".
+    """
+    layers = set()
+    if _settings.get("embed_index", True) and WIKI.exists():
+        layers.add("wiki")
+    if _settings.get("memory_capture", True) and MEMORY.exists():
+        layers.add("memory")
+    return layers
+
+
+#: Boven welk aandeel van de index een verwijdering een expliciete melding krijgt.
+PRUNE_NOTICE_FRACTION = 0.10
+
+
+def prune_notice(removed: int, total_before: int, layers) -> str:
+    """Melding voor een bouw die een flink deel van de index weggooit, of "".
+
+    Een verwijdering stond alleen als getal in de slotregel, tussen vier andere
+    getallen. Zo verdwenen eerst 199 wiki- en daarna 1508 memory-documenten
+    zonder dat iemand het zag: de regel meldde het, maar meldde het als routine.
+    Boven een tiende van de index is het geen routine (TASK-136).
+    """
+    if not removed or not total_before:
+        return ""
+    if removed <= total_before * PRUNE_NOTICE_FRACTION:
+        return ""
+    namen = ", ".join(sorted(layers)) or "geen"
+    return (f"kb-index: LET OP -- {removed} van {total_before} documenten verwijderd "
+            f"({100 * removed / total_before:.0f}%). Lagen in deze run: {namen}.")
+
+
 def _collect():
     """(path, layer, status) voor elke te indexeren file, gated op toggles."""
     items = []
-    if _settings.get("embed_index", True) and WIKI.exists():
+    active = _active_layers()
+    if "wiki" in active:
         for f in sorted(WIKI.glob("**/*.md")):
             if f.name in WIKI_SKIP:
                 continue
             items.append((f, "wiki", "current"))
-    if _settings.get("memory_capture", True) and MEMORY.exists():
+    if "memory" in active:
         for f in sorted(MEMORY.glob("**/*.md")):
             if read_status(f) == "current":
                 items.append((f, "memory", "current"))
@@ -80,8 +120,16 @@ def main(rebuild: bool = False) -> None:
                 seen = {str(f) for f, _, _ in items}
                 work = any(_kbindex.indexed_hash(probe_conn, str(f)) != emb.file_hash(f)
                            for f, _, _ in items)
-                stale = probe_conn.execute(
-                    "SELECT count(*) FROM docs").fetchone()[0] != len(seen)
+                # Tel alleen de lagen die deze run inleest. Met een uitgezette
+                # toggle staat de bevroren laag wél in docs maar niet in seen,
+                # en dan is deze check altijd "stale" -- dus draait elke
+                # sessiestart een volledige pas voor niets (TASK-136).
+                active = _active_layers()
+                qmarks = ",".join("?" for _ in active) or "''"
+                counted = probe_conn.execute(
+                    f"SELECT count(*) FROM docs WHERE layer IN ({qmarks})",
+                    tuple(sorted(active))).fetchone()[0]
+                stale = counted != len(seen)
                 if not work and not stale:
                     print(f"kb-index: {len(seen)} files, 0 (re)indexed, "
                           f"{len(seen)} ongewijzigd, 0 verwijderd, 0 failed, backend={eid}")
@@ -134,7 +182,11 @@ def main(rebuild: bool = False) -> None:
                         body=emb.doc_text(f), vector=vec, file_hash=fh,
                         title=title, created=created, sources=sources)
         indexed += 1
-    removed = _kbindex.prune(conn, keep_paths=seen)
+    total_before = conn.execute("SELECT count(*) FROM docs").fetchone()[0]
+    removed = _kbindex.prune(conn, keep_paths=seen, layers=_active_layers())
+    notice = prune_notice(removed, total_before, _active_layers())
+    if notice:
+        print(notice, file=sys.stderr)
     # De cache muteert alleen op het niet-overgeslagen pad; zonder nieuw
     # ingedexte bestanden is wegschrijven pure I/O.
     if indexed:

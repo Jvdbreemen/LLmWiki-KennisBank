@@ -1,9 +1,10 @@
 ---
 id: TASK-136
 title: Turning off an index toggle prunes the derived index instead of freezing it
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-10 22:09'
+updated_date: '2026-08-13 05:37'
 labels:
   - bug
   - index
@@ -42,8 +43,26 @@ Suggested direction: prune only within the layers that were actually collected (
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A regression test proves that running build-kb-index with embed_index=false leaves existing wiki rows in the index
-- [ ] #2 A regression test proves that running build-kb-index with memory_capture=false leaves existing memory rows in the index
-- [ ] #3 A run that prunes more than 10% of the index reports the removal count on stderr instead of removing silently
-- [ ] #4 python -m pytest tests -q is green
+- [x] #1 A regression test proves that running build-kb-index with embed_index=false leaves existing wiki rows in the index
+- [x] #2 A regression test proves that running build-kb-index with memory_capture=false leaves existing memory rows in the index
+- [x] #3 A run that prunes more than 10% of the index reports the removal count on stderr instead of removing silently
+- [x] #4 python -m pytest tests -q is green
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Fixed in three parts, plus a fourth defect found on the way.
+
+1. `_kbindex.prune()` takes a `layers` argument and only judges the layers the run actually read. Without it, a layer that was not collected has an empty keep-set and every one of its documents reads as deleted. Omitting the argument keeps the old behaviour, so other callers are untouched.
+
+2. `_active_layers()` is split out of `_collect()`. Two places need to know which layers are in scope -- the collector and the prune -- and keeping that knowledge inside the collector is exactly how 'index nothing new from this layer' and 'treat this layer as gone' ended up sharing a code path.
+
+3. Not in the task: the early-exit staleness probe compared `count(*) FROM docs` against the keep-set. With a toggle off, the frozen layer is in `docs` but not in `seen`, so that check reported stale forever and every session start ran a full pass for nothing. Now counted per active layer.
+
+4. The notice. The removal count was already printed -- as one number among five on the closing line. That is how 199 wiki documents and then 1508 memory documents disappeared unnoticed: the line reported it, and reported it as routine. `prune_notice()` now writes an explicit warning to stderr above a tenth of the index, naming the layers the run read. Below that it stays quiet, because a warning that fires on ordinary housekeeping teaches you to ignore it.
+
+Ten tests, including the inverse: a genuinely deleted file is still removed, with its rows in fts_docs, vec_docs and doc_sources. The scope narrows the judgement; it does not switch pruning off.
+
+Gate: python -m pytest tests -q -> 1261 passed, 2 skipped.
+<!-- SECTION:NOTES:END -->
