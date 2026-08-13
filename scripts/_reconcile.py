@@ -37,7 +37,6 @@ Stdlib + _embeddings; LLM alleen via de judge_reconcile-seam (mockbaar).
 """
 from __future__ import annotations
 
-import json as _json
 import os
 import sys
 from pathlib import Path
@@ -45,19 +44,57 @@ from pathlib import Path
 os.environ.setdefault("KENNISBANK_VAULT", str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _embeddings as emb  # noqa: E402
+import _llmjson  # noqa: E402
 
 RECONCILE_THRESHOLD = 0.75
-TOP_K = 2
+#: Hoeveel buren de judge te zien krijgt. Was 2. Gemeten over 101 echte
+#: supersede-paren (P1b): de opvolger staat op rang 1 bij 58%, binnen top-2 bij
+#: 95%, binnen top-5 bij 100%. De sprong van 2 naar 3 pakt het grootste deel
+#: van de resterende 5% mee en kost hooguit een derde judge-aanroep per
+#: kandidaat -- en alleen wanneer die derde buur uberhaupt boven de drempel zit.
+TOP_K = 3
 
 ACTIONS = ("ADD", "SUPERSEDE", "NOOP")
 
+#: Promptversie: ophogen bij ELKE wijziging aan RECONCILE_SYSTEM.
+#:
+#: Waar hij landt, en waar niet -- want een versienummer dat nergens wordt
+#: gestempeld belooft traceerbaarheid die er niet is. Een SUPERSEDE zet hem in
+#: de reden in de closed-log (TASK-150), dus elke sluiting is herleidbaar tot
+#: de prompt die haar veroorzaakte. Een NOOP laat NIETS achter: de kandidaat
+#: wordt weggegooid, de heartbeat telt alleen hoevaak. Dat is precies de
+#: actie waar modellen de mist in gaan (TASK-144), dus het gat is bekend en
+#: staat als aparte taak genoteerd, niet als stilzwijgende aanname.
+RECONCILE_PROMPT_VERSION = 2
+
+#: De volgorde van de vragen IS de fix (TASK-144).
+#:
+#: De oude prompt gaf drie definities zonder volgorde, en beide lokale modellen
+#: gebruikten NOOP voor "gaat nergens over elkaar" -- het omgekeerde van de
+#: definitie, en precies waar ADD voor is. Gemeten op 20 bewust ongerelateerde
+#: paren: qwen3.5:4b zei 6 keer NOOP, de 9b 18 keer, met redenen als "de nieuwe
+#: tekst gaat over lwIP, de bestaande over exit codes; geen overlap".
+#:
+#: NOOP is de enige actie waarbij het nieuwe geheugen NIET geschreven wordt. Een
+#: model dat de definities door elkaar haalt, verliest dus kennis. Daarom staat
+#: de vraag "gaat dit uberhaupt over hetzelfde?" nu VOORAAN met ADD als
+#: uitkomst, en komt de destructieve actie als laatste aan bod.
+#:
+#: De draadwaarden ADD/SUPERSEDE/NOOP blijven ongewijzigd; alleen de uitleg
+#: verandert, dus er hoeft niets gemigreerd te worden.
 RECONCILE_SYSTEM = (
     "Je vergelijkt een NIEUW kandidaat-geheugen met een BESTAAND geheugen uit een "
-    "persoonlijke kennisbank. Kies precies een actie:\n"
-    "- SUPERSEDE: het nieuwe feit VERVANGT of WEERLEGT het bestaande "
-    "(bv. 'Jim zoekt baan' -> 'Jim heeft baan', of een besluit dat is teruggedraaid).\n"
-    "- NOOP: het nieuwe voegt niets toe; het bestaande dekt het al.\n"
-    "- ADD: het nieuwe is echt aanvullend; beide kunnen naast elkaar bestaan.\n"
+    "persoonlijke kennisbank. Loop de vragen in DEZE volgorde af en stop bij de "
+    "eerste die past:\n"
+    "1. Gaan ze over HETZELFDE onderwerp? Nee, of maar zijdelings verwant -> ADD. "
+    "Geen overlap is ALTIJD ADD, nooit NOOP.\n"
+    "2. Zegt het nieuwe iets ANDERS over dat onderwerp dan het bestaande -- een "
+    "andere waarde, een teruggedraaid besluit, een weerlegging "
+    "(bv. 'Jim zoekt baan' -> 'Jim heeft baan')? Ja -> SUPERSEDE.\n"
+    "3. Staat alles wat het nieuwe zegt AL in het bestaande, zodat opslaan "
+    "letterlijk niets toevoegt? Ja -> NOOP. Let op: bij NOOP wordt het nieuwe "
+    "geheugen WEGGEGOOID, dus kies dit alleen als je zeker bent.\n"
+    "4. Anders -> ADD.\n"
     "Antwoord UITSLUITEND met JSON: {\"action\": \"ADD\"|\"SUPERSEDE\"|\"NOOP\", "
     "\"reason\": \"<kort>\"}. Bij twijfel: ADD."
 )
@@ -94,11 +131,7 @@ def judge_reconcile(new_text: str, old_text: str) -> str:
     )
     if not raw:
         return "ADD"
-    try:
-        s, e = raw.find("{"), raw.rfind("}")
-        obj = _json.loads(raw[s:e + 1]) if s >= 0 and e > s else {}
-    except Exception:
-        return "ADD"
+    obj = _llmjson.first_object(raw) or {}
     action = obj.get("action")
     return action if action in ACTIONS else "ADD"
 

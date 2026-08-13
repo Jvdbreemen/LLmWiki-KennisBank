@@ -18,6 +18,7 @@ from pathlib import Path
 os.environ.setdefault("KENNISBANK_VAULT", str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _llm  # noqa: E402
+import _llmjson  # noqa: E402
 
 EXTRACT_SYSTEM = (
     "Je extraheert herbruikbare kennis uit een werk-transcript voor een persoonlijke "
@@ -72,12 +73,7 @@ def extract_candidates(transcript_text: str, max_n: int = 8) -> list:
                         system=EXTRACT_SYSTEM)
     if not raw:
         return []
-    try:
-        start = raw.find("[")
-        end = raw.rfind("]")
-        arr = json.loads(raw[start:end + 1]) if start >= 0 and end > start else []
-    except Exception:
-        return []
+    arr = _llmjson.first_array(raw) or []
     out = []
     for item in arr if isinstance(arr, list) else []:
         if not isinstance(item, dict):

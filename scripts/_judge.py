@@ -21,6 +21,7 @@ from pathlib import Path
 os.environ.setdefault("KENNISBANK_VAULT", str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _llm  # noqa: E402
+import _llmjson  # noqa: E402
 
 JUDGE_SYSTEM = (
     "Je bent een sceptische, onafhankelijke keurder van kandidaat-geheugens voor een "
@@ -50,11 +51,8 @@ def judge(candidate: str, context: str = "") -> dict:
     if not raw:
         return {"verdict": "unverified", "importance": 3,
                 "reason": "geen model-respons (fail-safe)"}
-    try:
-        start = raw.find("{")
-        end = raw.rfind("}")
-        obj = json.loads(raw[start:end + 1]) if start >= 0 and end > start else {}
-    except Exception:
+    obj = _llmjson.first_object(raw)
+    if obj is None:
         return {"verdict": "unverified", "importance": 3,
                 "reason": "onparseerbaar (fail-safe)"}
     verdict = obj.get("verdict")

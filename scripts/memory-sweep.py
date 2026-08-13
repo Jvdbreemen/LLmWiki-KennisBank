@@ -60,6 +60,19 @@ def _producer_id() -> str:
     return ""
 
 
+def _reconcile_prompt_version() -> str:
+    """Promptversie van de reconcile-seam, of "?" als die laag ontbreekt.
+
+    Fail-soft: bij een partiele deploy valt reconcile terug op ADD en is er
+    geen versie; dan hoort de reden dat te zeggen in plaats van te crashen.
+    """
+    try:
+        import _reconcile
+        return str(_reconcile.RECONCILE_PROMPT_VERSION)
+    except Exception:
+        return "?"
+
+
 def _session_date(name: str, fallback: str) -> str:
     """Event-tijd van een transcript: leidende ISO-datum uit de bestandsnaam,
     anders de fallback (capture-datum). Voedt valid_from."""
@@ -453,7 +466,9 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
                                     old["path"], "superseded",
                                     superseded_by=[path.stem],
                                     valid_until=valid_from,
-                                    reason="reconcile op schrijfmoment: nieuw feit vervangt dit"):
+                                    reason=("reconcile op schrijfmoment (promptversie "
+                                            f"{_reconcile_prompt_version()}): "
+                                            "nieuw feit vervangt dit")):
                                 s["reconciled_superseded"] += 1
                                 pool = [it for it in pool if it["path"] != old["path"]]
                     existing.append({"vec": vec, "status": status, "valid_until": ""})

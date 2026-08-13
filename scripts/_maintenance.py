@@ -10,7 +10,6 @@ Stdlib + _embeddings.
 """
 from __future__ import annotations
 
-import json as _json
 import os
 import sys
 from pathlib import Path
@@ -18,6 +17,7 @@ from pathlib import Path
 os.environ.setdefault("KENNISBANK_VAULT", str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _embeddings as emb  # noqa: E402
+import _llmjson  # noqa: E402
 from _frontmatter import parse_frontmatter, split_frontmatter  # noqa: E402
 from _progress import Progress  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402
@@ -195,11 +195,7 @@ def judge_supersede(new_text: str, old_text: str) -> bool:
                         system=SUPERSEDE_SYSTEM)
     if not raw:
         return False
-    try:
-        s, e = raw.find("{"), raw.rfind("}")
-        obj = _json.loads(raw[s:e + 1]) if s >= 0 and e > s else {}
-    except Exception:
-        return False
+    obj = _llmjson.first_object(raw) or {}
     return obj.get("supersede") is True
 
 
@@ -221,11 +217,7 @@ def judge_recheck(text: str) -> bool:
     raw = _llm.generate(f"Geheugen:\n{text}\n\nOordeel (JSON):", system=RECHECK_SYSTEM)
     if not raw:
         return False
-    try:
-        s, e = raw.find("{"), raw.rfind("}")
-        obj = _json.loads(raw[s:e + 1]) if s >= 0 and e > s else {}
-    except Exception:
-        return False
+    obj = _llmjson.first_object(raw) or {}
     return obj.get("retract") is True
 
 
@@ -322,7 +314,28 @@ def exact_duplicate_pass(dry_run: bool = False) -> int:
     return gesloten
 
 
-def supersede_pass(threshold: float = 0.85, judge_fn=None, get_cached_fn=None) -> int:
+#: Vanaf welke cosinus twee memories aan de judge worden voorgelegd.
+#:
+#: Was 0.85. Gemeten op 101 echte supersede-paren uit deze vault (P1a): 70%
+#: van de paren haalt 0.85, 93% haalt 0.75. De drie LAAGSTE cosinussen zijn
+#: juist de inhoudelijke gevallen -- "de Rescan-knop mist visuele terugkoppeling"
+#: -> "de Rescan-knop toont nu 'Scanning...'" staat op 0.704, het schoolvoorbeeld
+#: van een opgelost probleem, en viel onder beide drempels. Het venster stond
+#: dus op de verkeerde band gericht.
+#:
+#: Kosten: 11 kandidaatparen worden er 163 (gemeten over de hele corpus),
+#: ongeveer drie minuten judge-tijd voor de hele vault. Dat is te doen.
+#:
+#: Deze verlaging mocht pas nadat een onterecht gesloten memory ergens
+#: zichtbaar werd. Dat was de blokkade: /kennisbank:review loopt alleen de
+#: unverified-wachtrij en recall filtert op current, dus een sluiting
+#: verscheen NERGENS. Sinds TASK-150 staat elke sluiting in de closed-log en
+#: is ze met `memory-doctor.py reopen` terug te draaien.
+SUPERSEDE_THRESHOLD = 0.75
+
+
+def supersede_pass(threshold: float = SUPERSEDE_THRESHOLD, judge_fn=None,
+                   get_cached_fn=None) -> int:
     import _memory
     judge_fn = judge_fn or judge_supersede
     items = current_items(get_cached_fn=get_cached_fn)
