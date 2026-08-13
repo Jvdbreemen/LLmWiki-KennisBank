@@ -132,7 +132,7 @@ Alle drie de env-overrides bestaan: KB_SWEEP_MAX_CHUNKS, KB_SWEEP_MAX_MEMORIES, 
 
 Nog open: AC #4 (P2, vereist een echte re-sweep) en AC #7 (P5, de eval-run). Die twee gaan over de gevolgen van de grotere corpus en horen niet in dezelfde commit als de knop zelf.
 
-P5 baseline recorded 2026-08-13 in docs/research/recall-baseline-2026-08-13.md, before any sweep with the new caps:
+P5 baseline recorded 2026-08-13 in [docs/research/recall-baseline-2026-08-13.md](../../docs/research/recall-baseline-2026-08-13.md), before any sweep with the new caps:
 
   memory  recall@1 0.322  @3 0.662  @5 0.778  MRR 0.498  (1224 questions)
   wiki    recall@1 0.842  @3 0.997  @5 1.000  MRR 0.917  (329 questions)

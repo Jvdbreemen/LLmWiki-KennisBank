@@ -20,8 +20,14 @@ python3 scripts/kb-eval.py --json --latency
 ```
 
 Run on 2026-08-13 against the live vault, before any sweep with the new caps.
-No arguments beyond the defaults, so both stock question sets are used. The
-eval reads `kb-index.db` and issues one query embedding per question.
+No `--set` or `--layer` override, so both stock question sets are used as-is;
+`--json --latency` only change what is reported. The eval reads `kb-index.db`
+and issues one query embedding per question.
+
+**Evaluator at commit `1138d06`** (the merge of PR #109). Record this with any
+repeat run: if `kb-eval.py`, the retrieval path or the eval sets change, a later
+number differs for reasons that have nothing to do with the corpus, and the
+comparison this file exists for becomes ambiguous.
 
 Corpus at the time of measurement:
 
@@ -61,12 +67,15 @@ losing it.
 
 By memory type:
 
-| type | n | @1 | @3 | @5 |
-| --- | --- | --- | --- | --- |
-| beslissing | 289 | 0.460 | 0.723 | 0.775 |
-| feit | 493 | 0.288 | 0.665 | 0.819 |
-| procedure | 411 | 0.277 | 0.637 | 0.737 |
-| voorkeur | 31 | 0.161 | 0.355 | 0.677 |
+The labels are the canonical `memory_type` values written into the frontmatter,
+so they stay in Dutch; the gloss is for readers, not a rename.
+
+| type | gloss | n | @1 | @3 | @5 |
+| --- | --- | --- | --- | --- | --- |
+| beslissing | decision | 289 | 0.460 | 0.723 | 0.775 |
+| feit | fact | 493 | 0.288 | 0.665 | 0.819 |
+| procedure | procedure | 411 | 0.277 | 0.637 | 0.737 |
+| voorkeur | preference | 31 | 0.161 | 0.355 | 0.677 |
 
 ## The rule, fixed before the numbers move
 
