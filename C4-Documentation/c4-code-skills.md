@@ -165,7 +165,7 @@ user and confirm with `git -C "$REPO" rev-parse` (`:17-18`).
 | 7b | Migrate legacy backups: report any `~/.claude/skills/*.pre-*.bak` and, on confirmation, move them to `$VAULT/.claude/skills.pre-legacy.bak/` | (`mv`) | `:79-84` |
 | 8 | Check out the tag detached | `git -C "$REPO" -c advice.detachedHead=false checkout "$LATEST"` | `:85` |
 | 9 | **Delegate the deploy to the installer** — the single idempotent-safe mechanism since v0.9.0. It refreshes all tooling, registers the full hookset in `~/.claude/settings.json` (interpreter-aware: `py -3` on Windows, `python3` elsewhere; PreToolUse matcher), installs runtime deps (`sqlite-vec`), and runs the version-gated migrations that stamp `.kennisbank-schema-version`. Without this, an upgrade would deploy new scripts but register no hooks and install no deps — "de feature shipt dan dood" | `( cd "$REPO" && KENNISBANK_VAULT="$VAULT" bash setup.sh --yes )` | `:86-100` (command at `:95`) |
-| 10 | Write the release-tag stamp (distinct from the schema stamp set in step 9): `{"tag":"$LATEST","commit":"<git rev-parse --short $LATEST>","installed_at":"<UTC ISO 8601>"}` → `$VAULT/.claude/.kennisbank-version` | — | `:101-103` |
+| 10 | Write the release-tag stamp (distinct from the schema stamp set in step 9): `{"tag":"$LATEST","commit":"<git rev-parse --short $LATEST^{}>","installed_at":"<UTC ISO 8601>"}` (the `^{}` peels the annotated tag to its commit; without it the stamp records the tag object) → `$VAULT/.claude/.kennisbank-version` | — | `:101-103` |
 | 11 | Return to the previously checked-out branch | `git -C "$REPO" checkout -` | `:104-105` |
 | 12 | Verify and report the PASS count | `bash "$VAULT/.claude/scripts/doctor.sh"` | `:106` |
 
