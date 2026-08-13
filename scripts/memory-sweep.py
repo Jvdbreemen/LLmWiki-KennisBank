@@ -427,6 +427,14 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
                                         new_volatility=volatility)
                     if rec["action"] == "NOOP":
                         s["reconcile_noop"] += 1
+                        # Vastleggen WAT er weggegooid wordt. De heartbeat telde
+                        # alleen hoe vaak; zonder de inhoud is niet na te gaan
+                        # of de seam goede kennis weggooit (TASK-155).
+                        _memory.log_discard(
+                            title, body,
+                            covered_by=Path(rec.get("covered_by", "")).stem,
+                            reason="reconcile: bestaande memory dekt dit al",
+                            prompt_version=_reconcile_prompt_version())
                         continue
                     verdict = _judge.judge(body)
                     # Fail-safe: alleen bij expliciet hoog-zeker 'current' promoveren.

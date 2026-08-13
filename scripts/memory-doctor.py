@@ -212,6 +212,34 @@ def main(argv=None) -> int:
                     print(f"    reden: {r['reason']}")
             print(f"\nHeropenen: python3 memory-doctor.py reopen <stem>")
         return 0
+    if argv and argv[0] == "discarded":
+        # De tegenhanger van `closed`, een stap eerder in de pijplijn. Een NOOP
+        # gooit de kandidaat weg voordat hij ooit een bestand wordt, dus er is
+        # niets om te heropenen -- alleen om te LEZEN, en te zien of de seam
+        # kennis weggooit die je had willen houden (TASK-155).
+        import json as _json
+        import _memory
+        limit = 20
+        if "--limit" in argv:
+            try:
+                limit = int(argv[argv.index("--limit") + 1])
+            except Exception:
+                limit = 20
+        rows = _memory.recent_discards(limit=limit)
+        if "--json" in argv:
+            print(_json.dumps(rows, ensure_ascii=False))
+        elif not rows:
+            print("geen weggegooide kandidaten geregistreerd")
+        else:
+            for r in rows:
+                print(f"{r.get('ts','')[:19]}  {r.get('title','')}")
+                print(f"    gedekt door: {r.get('covered_by') or '?'}"
+                      f"   promptversie: {r.get('prompt_version')}")
+                body = " ".join(str(r.get("body", "")).split())
+                print(f"    {body[:160]}")
+            print("\nDeze kandidaten zijn NIET geschreven; "
+                  "er is niets te heropenen.")
+        return 0
     if argv and argv[0] == "reopen":
         import _memory
         if len(argv) < 2:
@@ -281,7 +309,8 @@ def main(argv=None) -> int:
               + (" (dry-run)" if kw["dry_run"] else ""))
         return 0
     print("usage: memory-doctor.py nocloud|rot [--hours N]|rejudge [--limit N] [--hours N] [--dry-run]"
-          "|pending [--json] [--limit N]|decide <stem> <approve|reject|skip>",
+          "|pending [--json] [--limit N]|decide <stem> <approve|reject|skip>"
+          "|closed [--json] [--limit N]|reopen <stem>|discarded [--json] [--limit N]",
           file=sys.stderr)
     return 2
 

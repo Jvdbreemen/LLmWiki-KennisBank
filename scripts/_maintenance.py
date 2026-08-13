@@ -63,6 +63,168 @@ def _index_vectors() -> dict:
         return {}
 
 
+def _index_conn():
+    """A read-only connection to kb-index.db, or None when it is not usable.
+
+    Same contract as _index_vectors: a missing index, a missing sqlite-vec
+    extension or a different embed_id yields None and the caller falls back.
+    Comparing vectors across two embedding spaces is silently meaningless, so
+    the embed_id check is a gate and not a hint.
+    """
+    conn = None
+    try:
+        import sqlite3
+        import sqlite_vec
+        db = vault_root() / ".claude" / "kb-index.db"
+        if not db.exists():
+            return None
+        conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=1.0)
+        conn.enable_load_extension(True)
+        sqlite_vec.load(conn)
+        conn.enable_load_extension(False)
+        row = conn.execute("SELECT value FROM meta WHERE key='embed_id'").fetchone()
+        if not row or row[0] != emb.embed_id():
+            conn.close()
+            return None
+        if _kbindex().meta_get(conn, "unit_norm") != "1":
+            # Without normalised vectors the distance-to-cosine conversion is
+            # wrong, and a wrong cosine here decides whether memories get
+            # closed. Fall back rather than guess.
+            conn.close()
+            return None
+        return conn
+    except Exception:
+        # Every early return above closes deliberately; this one catches the
+        # rest -- a missing meta table, a failed extension load, a schema that
+        # does not match. Without it the handle stays open on every fallback,
+        # and the sweep takes this path on every run when the index is stale.
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        return None
+
+
+def _kbindex():
+    import _kbindex as m
+    return m
+
+
+#: Where the neighbour search starts. Measured on the live vault, no memory has
+#: more than three neighbours above 0.75, so 32 is enormous headroom -- but the
+#: number is a starting point, not a cap: see _neighbours_from_index.
+INDEX_PROBE_K = 32
+#: Hard ceiling on the widening loop, matching what vec0 itself accepts.
+INDEX_MAX_K = 4096
+
+
+def _neighbours_from_index(items: list, threshold: float, conn=None):
+    """{path -> [(other_path, cosine), ...]} for every pair above threshold.
+
+    Returns None when the index cannot answer, so the caller keeps the
+    brute-force path. That path stays; this is a shortcut, never a dependency.
+
+    Why this is EXACT and not an approximation. vec0 returns rows ordered by
+    distance, and for unit vectors distance and cosine are monotonically
+    related. So if the k-th row already sits below the threshold, no row beyond
+    k can sit above it -- the answer is provably complete. Only when the whole
+    window is still above the threshold is anything possibly missing, and then
+    k widens. A fixed k would be a silent truncation, which is precisely the
+    class of bug this codebase has been removing all week.
+
+    The index holds every layer, not just memory, so the window is filtered
+    down to the caller's own item set afterwards. That is also why the window
+    has to be able to grow: a memory whose nearest neighbours are all wiki
+    articles would otherwise come back empty.
+    """
+    own = conn is None
+    if own:
+        conn = _index_conn()
+    if conn is None:
+        return None
+    kbi = _kbindex()
+    try:
+        by_path = {it["path"]: it for it in items}
+        doc_ids = {}
+        for doc_id, path in conn.execute("SELECT doc_id, path FROM docs"):
+            doc_ids[doc_id] = str(path)
+        indexed = set(doc_ids.values())
+        out = {p: [] for p in by_path}
+
+        # Een memory die de index nog niet kent, kan er ook niet uit komen. Dat
+        # is niet zeldzaam maar de normale toestand vlak na een sweep: die
+        # schrijft memories, de index loopt erachteraan. Twee ONGEINDEXEERDE
+        # memories zouden elkaar dus nooit vinden, en dat zou een stille
+        # onvolledigheid zijn -- precies wat een index-kortsluiting NIET mag
+        # kosten.
+        #
+        # Daarom een hybride: de index beantwoordt de vraag voor wat hij kent,
+        # en wat hij niet kent wordt tegen alles uitgerekend. Dat laatste is
+        # O(ongeindexeerd x alles), dus goedkoop zolang de achterstand klein is,
+        # en het antwoord is exact ongeacht hoe ver de index achterloopt.
+        onbekend = [it for it in items if it["path"] not in indexed]
+        if onbekend:
+            with Progress(len(onbekend),
+                          f"{len(onbekend)} nog niet geindexeerd, los vergelijken") as p:
+                for a in onbekend:
+                    p.step()
+                    for b in items:
+                        if a["path"] == b["path"]:
+                            continue
+                        s = emb.cosine(a["vec"], b["vec"])
+                        if s > threshold:
+                            out[a["path"]].append((b["path"], s))
+                            out[b["path"]].append((a["path"], s))
+
+        with Progress(len(items), f"neighbours above {threshold} (index)") as p:
+            for it in items:
+                p.step()
+                if it["path"] not in indexed:
+                    continue  # hierboven al exact afgehandeld
+                k = INDEX_PROBE_K
+                while True:
+                    rows = conn.execute(
+                        "SELECT doc_id, distance FROM vec_docs "
+                        "WHERE embedding MATCH ? ORDER BY distance LIMIT ?",
+                        (kbi._serialize(kbi.unit(it["vec"])), k)).fetchall()
+                    if not rows:
+                        break
+                    last_cos = kbi._cosine_from_l2(rows[-1][1])
+                    # Complete when the window has run out of candidates or its
+                    # far edge already falls below the threshold.
+                    if len(rows) < k or last_cos <= threshold or k >= INDEX_MAX_K:
+                        break
+                    k = min(k * 4, INDEX_MAX_K)
+                for doc_id, distance in rows:
+                    other = doc_ids.get(doc_id)
+                    if other is None or other == it["path"] or other not in by_path:
+                        continue
+                    cos = kbi._cosine_from_l2(distance)
+                    if cos > threshold:
+                        out[it["path"]].append((other, cos))
+        # Dedup: de losse tak schrijft beide richtingen, en de index kan een
+        # paar ook al gemeld hebben. Een dubbel geteld paar zou neighbor_counts
+        # laten liegen.
+        for path, buren in out.items():
+            gezien, uniek = set(), []
+            for other, cos in buren:
+                if other in gezien:
+                    continue
+                gezien.add(other)
+                uniek.append((other, cos))
+            out[path] = uniek
+        return out
+    except Exception:
+        return None
+    finally:
+        if own:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 def current_items(get_cached_fn=None, statuses=("current",)) -> list:
     """Laad memories uit 09-memory/ met hun embeddings, gefilterd op status.
 
@@ -149,8 +311,26 @@ def similar_pairs(items: list, threshold: float) -> list:
     24 minuten voorspeld waar 11 resteerde). Tellen in de eenheid waarin het
     werk zit, maakt het percentage en de schatting allebei waar.
     """
-    pairs = []
     n = len(items)
+    # De index draagt precies deze vectoren en is voor deze vraag gebouwd. Op
+    # de levende vault scheelt dat 15m26s tegen enkele seconden (TASK-154). Hij
+    # geeft None zodra hij de vraag niet betrouwbaar kan beantwoorden, en dan
+    # blijft de brute weg hieronder staan -- die is traag maar altijd juist.
+    from_index = _neighbours_from_index(items, threshold)
+    if from_index is not None:
+        by_path = {it["path"]: it for it in items}
+        seen, pairs = set(), []
+        for path, buren in from_index.items():
+            for other, cos in buren:
+                sleutel = (path, other) if path < other else (other, path)
+                if sleutel in seen:
+                    continue
+                seen.add(sleutel)
+                pairs.append((by_path[sleutel[0]], by_path[sleutel[1]], cos))
+        pairs.sort(key=lambda t: t[2], reverse=True)
+        return pairs
+
+    pairs = []
     with Progress(n * (n - 1) // 2, f"paren zoeken boven {threshold}") as p:
         for i in range(n):
             for j in range(i + 1, n):
@@ -170,6 +350,14 @@ def neighbor_counts(items: list, threshold: float) -> dict:
     """
     counts = {it["path"]: 0 for it in items}
     n = len(items)
+    # Zelfde index-kortsluiting als similar_pairs; deze pas liep dezelfde
+    # driehoek een tweede keer af, dus samen was het een half uur per sweep.
+    from_index = _neighbours_from_index(items, threshold)
+    if from_index is not None:
+        for path, buren in from_index.items():
+            counts[path] = len(buren)
+        return counts
+
     # Telt paren, om dezelfde reden als similar_pairs: een driehoekslus die
     # rijen telt geeft een schatting die er structureel naast zit.
     with Progress(n * (n - 1) // 2, "buren tellen") as p:
@@ -182,10 +370,38 @@ def neighbor_counts(items: list, threshold: float) -> dict:
     return counts
 
 
+#: Promptversie: ophogen bij ELKE wijziging aan SUPERSEDE_SYSTEM, zodat een
+#: sluiting herleidbaar blijft tot de prompt die haar veroorzaakte. Wordt in de
+#: reden in de closed-log gestempeld (TASK-150).
+SUPERSEDE_PROMPT_VERSION = 2
+
+#: Dezelfde behandeling als RECONCILE_SYSTEM kreeg in TASK-144: de volgorde van
+#: de vragen expliciet, en de vraag "gaat dit uberhaupt over hetzelfde?"
+#: vooraan.
+#:
+#: Aanleiding is een meting, geen gevoel. Op de 149 echte supersede-paren van
+#: deze vault herkende de oude prompt er 30% in de band 0.70-0.90 (en 0% boven
+#: 0.95, waar de teksten bijna identiek zijn en "er verandert niets" een
+#: verdedigbaar antwoord is). Zeven van de tien echte vervangingen bleven dus
+#: liggen.
+#:
+#: "Bij twijfel: false" blijft staan en hoort te blijven staan. Wat verandert
+#: is wat er VOOR die regel gebeurt: het model kreeg een definitie en geen
+#: procedure, en moest zelf bedenken of "vervangt" ook slaat op een waarde die
+#: is bijgesteld of een probleem dat is opgelost. Nu staat dat er.
 SUPERSEDE_SYSTEM = (
-    "Je beoordeelt of een NIEUWERE memory een OUDERE TEGENSPREEKT of vervangt "
-    "(bv. 'Jim zoekt baan' -> 'Jim heeft baan'). Antwoord UITSLUITEND met JSON: "
-    "{\"supersede\": true|false, \"reason\": \"<kort>\"}. Bij twijfel: false."
+    "Je beoordeelt of een NIEUWERE memory een OUDERE vervangt. Loop deze vragen "
+    "in volgorde af en stop bij de eerste die past:\n"
+    "1. Gaan ze over HETZELFDE onderwerp? Nee -> supersede: false. Klaar.\n"
+    "2. Geeft de nieuwere een ANDERE waarde, status of uitkomst voor dat "
+    "onderwerp dan de oudere? Denk aan: een gewijzigde instelling, een "
+    "teruggedraaid besluit, een opgelost probleem ('knop mist terugkoppeling' "
+    "-> 'knop toont nu een status'), of een veranderde situatie ('Jim zoekt "
+    "baan' -> 'Jim heeft baan'). Ja -> supersede: true.\n"
+    "3. Vullen ze elkaar aan zonder elkaar tegen te spreken, of zeggen ze "
+    "hetzelfde? -> supersede: false.\n"
+    "Antwoord UITSLUITEND met JSON: {\"supersede\": true|false, "
+    "\"reason\": \"<kort>\"}. Bij twijfel: false."
 )
 
 
