@@ -1,7 +1,7 @@
 ---
 id: TASK-152
 title: The upgrade stamps a tag object as if it were a commit
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-13 05:18'
 labels:
@@ -47,7 +47,7 @@ The stamp on this machine has been corrected by hand to `1cb608d`; older vaults 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The upgrade skill peels the tag with ^{} so the stamp records a commit that exists in the history
-- [ ] #2 Both the repo copy and the deployed copy of the skill carry the fix
-- [ ] #3 A note in the skill says why, so the next editor does not simplify it back to the shorter form
+- [x] #1 The upgrade skill peels the tag with ^{} so the stamp records a commit that exists in the history
+- [x] #2 Both the repo copy and the deployed copy of the skill carry the fix
+- [x] #3 A note in the skill says why, so the next editor does not simplify it back to the shorter form
 <!-- AC:END -->

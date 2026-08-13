@@ -4,7 +4,7 @@ title: 'Intake truncation: the extractor reads 6 chunks of a 58-chunk session'
 status: In Progress
 assignee: []
 created_date: '2026-08-12 20:31'
-updated_date: '2026-08-13 04:40'
+updated_date: '2026-08-13 22:26'
 labels:
   - memory
   - capture
@@ -57,7 +57,7 @@ Design context: `docs/superpowers/specs/2026-08-12-self-correcting-memory-layer-
 - [x] #2 max_chunks is raised or removed on the basis of that measurement, with the chosen value and its reason recorded
 - [x] #3 A full sweep over a long transcript completes within the detached background budget, with the wall-clock time recorded before and after
 - [ ] #4 P2 holds: after a re-sweep a memory asserting qwen3-embedding:4b exists in 09-memory
-- [ ] #5 python -m pytest tests -q is green
+- [x] #5 python -m pytest tests -q is green
 - [x] #6 transcript_text() returns content for every transcript format in 01-raw/transcripts, or reports which formats it cannot read; today four of ten sampled transcripts yield zero chunks
 - [ ] #7 P5 holds: kb-eval on the existing question sets shows recall is no worse after the corpus grows than before
 <!-- AC:END -->
@@ -146,3 +146,40 @@ Instead the background sweep drains the backlog across sessions, which is exactl
 
 The vault was left untouched by both interrupted attempts -- 1661 memories, watermark at 202, heartbeat still from the previous day. Verified, not assumed.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+The intake fix works and is measured. The two remaining criteria are answered — one negatively, one not at all — and both for reasons the fix itself exposed rather than for reasons in the fix.
+
+**What the fix delivers.** First sweep under the raised caps, on the live vault: 617 memories from 7 transcripts. Before it, ten swept transcripts produced 99 memories between them. The truncation was real and it is gone.
+
+**AC#7 does NOT hold. Report: docs/research/recall-after-growth-2026-08-14.md.**
+
+    memory recall@5   0.778 -> 0.768   floor was 0.778   FAILS
+    memory recall@1   0.322 -> 0.266
+    wiki   recall@5   1.000 -> 1.000   holds
+
+The rule was fixed before the numbers moved, which is exactly why it is worth
+something now. Growing the recall set from 1531 to 1740 current memories cost
+one point of recall@5 and nearly six of recall@1 — 69 questions.
+
+The mechanism is the one this task was gated on: `retrieve_top_n` is 3, so more
+candidates compete for the same slots. The measurement is one-sided by
+construction — the eval set asks about memories that existed before the sweep,
+so it prices the cost of a bigger corpus and none of its benefit — but that does
+not rescue the number. Deciding the metric is imperfect after seeing the result
+is choosing the interpretation to fit.
+
+**AC#4 is not met, and not for a reason in this task.** No memory asserting
+`qwen3-embedding:4b` exists yet: the two pending transcripts carrying that fact
+sit near the back of an 89-deep queue, and the sweep works oldest-first. It needs
+roughly eighty more transcripts to reach them.
+
+**Consequence: do not drain the rest yet.** Every further transcript enlarges the
+haystack at the current ranking quality. TASK-138 (rerank the top-20 memory
+candidates) moves from "worth doing" to blocking, because it is the only
+direction that lets capture and recall both improve. TASK-158 was opened
+separately: the chunk budget bounds chunks while GPU time is spent on model
+calls, so it does not bound what it was built to bound.
+<!-- SECTION:FINAL_SUMMARY:END -->

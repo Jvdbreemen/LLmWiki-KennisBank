@@ -3,7 +3,7 @@ id: TASK-154
 title: >-
   The maintenance pass spends half an hour comparing every memory with every
   other one
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-13 17:52'
 updated_date: '2026-08-13 19:43'
@@ -39,7 +39,7 @@ Measure before and after on the same corpus, and prove the pair set is identical
 - [x] #2 The brute-force path stays as the fallback when the index is missing, stale or in another embed space
 - [x] #3 The pair set from the fast path is proven identical to the brute-force result on the live corpus, or every difference is listed and justified
 - [x] #4 Before and after timings are recorded on the same corpus
-- [ ] #5 python -m pytest tests -q is green
+- [x] #5 python -m pytest tests -q is green
 <!-- AC:END -->
 
 ## Implementation Notes

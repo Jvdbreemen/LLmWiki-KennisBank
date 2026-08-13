@@ -1,7 +1,7 @@
 ---
 id: TASK-153
 title: 'Long-running scripts run blind: no progress, no estimate'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-13 17:31'
 updated_date: '2026-08-13 18:56'

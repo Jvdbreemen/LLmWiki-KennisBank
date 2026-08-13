@@ -3,10 +3,10 @@ id: TASK-156
 title: >-
   The supersede judge agrees with 30% of the vault's own supersessions, by
   design
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-13 18:41'
-updated_date: '2026-08-13 20:25'
+updated_date: '2026-08-13 20:58'
 labels:
   - memory
   - llm
@@ -42,11 +42,11 @@ What changed underneath the original trade-off: since TASK-150 a closure is reco
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A hand-labelled sample from the 0.70-0.90 band separates 'judge too conservative' from 'historical supersession was wrong'
+- [x] #1 A hand-labelled sample from the 0.70-0.90 band separates 'judge too conservative' from 'historical supersession was wrong'
 - [x] #2 SUPERSEDE_SYSTEM gets the same explicit decision ordering as RECONCILE_SYSTEM, and the agreement rate is measured before and after
-- [ ] #3 Any change to the fail-safe bias is argued against the cost of a wrong closure as it stands TODAY, not as it stood before the closure log existed
+- [x] #3 Any change to the fail-safe bias is argued against the cost of a wrong closure as it stands TODAY, not as it stood before the closure log existed
 - [x] #4 The above-0.95 band is excluded from scoring, with the reason stated in the report
-- [ ] #5 python -m pytest tests -q is green
+- [x] #5 python -m pytest tests -q is green
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -87,3 +87,22 @@ PR #117 review fixes and does not mention it: `git add -A` swept it in. Recorded
 here rather than rewritten, because the commit is already pushed and CI-green,
 and a misleading message is better corrected in the open than quietly amended.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Answered by reading the disagreements rather than counting them. Full report: docs/research/supersede-judge-labelled-2026-08-13.md.
+
+Reordering the prompt (the TASK-144 treatment) took agreement from 30% to 55% on the same 97 pairs. Hand-labelling the first 22 of the 44 remaining disagreements then answered what the rest is:
+
+    the judge was right, no real supersession    19 of 22  (86%)
+    the judge was wrong, a real one missed        3 of 22  (14%)
+
+So the conservatism is largely not conservatism. Almost every "miss" is the same memory captured twice, weeks apart, in slightly different words — several times once in Dutch and once in English. Closing one of those is housekeeping, not a supersession, and scoring the judge as wrong for saying so measures the wrong thing.
+
+The history is demonstrably unreliable in this band: two ADR memories supersede each OTHER, in both directions. And in one case superseding lost information — the older memory said "scan for placeholders and fix what you find", its successor says only "scan".
+
+**AC#3 answered in the negative, which is the opposite of what this task assumed.** Do not loosen the fail-safe bias. Measured, "Bij twijfel: false" costs 3 missed replacements in 97 pairs — about 3% — while the 44 refusals are 86% correct. Loosening it would buy a few genuine closures and pay by closing duplicates automatically, which nothing here shows to be wanted. The bias was priced against permanent loss and TASK-150 changed that price, but the measurement says the price was never the problem.
+
+Two things a future evaluation must carry: `superseded_by` links are not ground truth for this question, because they record housekeeping as often as contradiction; and 19 of 22 disagreements exist because the same knowledge was captured twice with neither capture aware of the other, which is a write-time dedup question, not a supersede question.
+<!-- SECTION:FINAL_SUMMARY:END -->

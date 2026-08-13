@@ -1,7 +1,7 @@
 ---
 id: TASK-146
 title: Add volatility (state | event) so the update rule lives in the structure
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-12 20:32'
 updated_date: '2026-08-13 18:55'

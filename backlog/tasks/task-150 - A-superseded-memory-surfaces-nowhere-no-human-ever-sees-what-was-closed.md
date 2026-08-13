@@ -1,9 +1,10 @@
 ---
 id: TASK-150
 title: 'A superseded memory surfaces nowhere: no human ever sees what was closed'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-12 20:42'
+updated_date: '2026-08-13 20:45'
 labels:
   - memory
   - review

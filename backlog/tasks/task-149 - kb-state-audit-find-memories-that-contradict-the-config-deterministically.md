@@ -1,7 +1,7 @@
 ---
 id: TASK-149
 title: 'kb-state-audit: find memories that contradict the config, deterministically'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-12 20:33'
 updated_date: '2026-08-13 18:56'
