@@ -1,24 +1,23 @@
 #!/usr/bin/env python3
-"""_llmjson.py - JSON uit een modelantwoord halen dat niet alleen JSON is.
+"""_llmjson.py - pull JSON out of a model answer that is not only JSON.
 
-Elke seam deed dit hetzelfde: `raw[raw.find("{"):raw.rfind("}") + 1]`. Dat is
-de BREEDST mogelijke snede, en daarmee precies de verkeerde. Een model dat na
-zijn JSON nog even doorpraat --
+Every seam did this the same way: `raw[raw.find("{"):raw.rfind("}") + 1]`.
+That is the WIDEST possible span, and therefore exactly the wrong one. A model
+that keeps talking after its JSON --
 
-    {"action": "ADD", "reason": "nieuw"}
-    Ik heb hiervoor gekozen omdat {…} niet van toepassing was.
+    {"action": "ADD", "reason": "new"}
+    I chose this because {…} did not apply here.
 
--- levert dan een snede die tot de laatste accolade in het NAPRAATJE loopt, en
-de parse mislukt. Elke seam is fail-safe, dus dat mislukken is stil: extract
-geeft [], reconcile geeft ADD, de judge geeft unverified. Gemeten in de
-TASK-142-sweep: qwen3.5:9b deed dit twee keer in twintig aanroepen; de 4b geen
-enkele keer in vierenvijftig.
+-- yields a span running to the last brace in the COMMENTARY, and the parse
+fails. Every seam is fail-safe, so that failure is silent: extract returns [],
+reconcile returns ADD, the judge returns unverified. Measured in the TASK-142
+sweep: qwen3.5:9b did this twice in twenty calls; the 4b not once in fifty-four.
 
-De oplossing is niet breder maar smaller: pak het EERSTE complete object of
-array, door de haakjes te tellen met besef van strings en escapes. Wat erna
-komt is commentaar van het model, geen data.
+The fix is not wider but narrower: take the FIRST complete object or array, by
+counting brackets with awareness of strings and escapes. What comes after is
+the model's commentary, not data.
 
-Stdlib. Geen side-effects bij import.
+Stdlib. No side effects on import.
 """
 from __future__ import annotations
 
@@ -27,18 +26,18 @@ import json
 _PAREN = {"{": "}", "[": "]"}
 
 
-def _span_vanaf(raw: str, open_ch: str, vanaf: int) -> "tuple[int, int] | None":
-    """(start, eind) van het eerste complete haakjespaar vanaf positie `vanaf`.
+def _span_from(raw: str, open_ch: str, start_at: int) -> "tuple[int, int] | None":
+    """(start, end) of the first complete bracket pair from position `start_at`.
 
-    Telt diepte en slaat alles binnen een string over, want een accolade in
-    een reason-tekst ("gebruik {var} niet") hoort niet mee te tellen -- juist
-    die maakt de brede snede zo onbetrouwbaar.
+    Counts depth and skips everything inside a string, because a brace in a
+    reason text ("do not use {var}") must not count -- that is precisely what
+    makes the wide span so unreliable.
     """
     close_ch = _PAREN[open_ch]
-    start = raw.find(open_ch, vanaf)
+    start = raw.find(open_ch, start_at)
     if start < 0:
         return None
-    diepte = 0
+    depth = 0
     in_string = False
     escaped = False
     for i in range(start, len(raw)):
@@ -54,58 +53,58 @@ def _span_vanaf(raw: str, open_ch: str, vanaf: int) -> "tuple[int, int] | None":
         if c == '"':
             in_string = True
         elif c == open_ch:
-            diepte += 1
+            depth += 1
         elif c == close_ch:
-            diepte -= 1
-            if diepte == 0:
+            depth -= 1
+            if depth == 0:
                 return start, i
     return None
 
 
-#: Hoeveel openingshaakjes we hooguit proberen. Een model dat na twintig
-#: kandidaten nog geen geldige JSON heeft geproduceerd, gaat dat ook niet meer
-#: doen; de grens houdt een pathologisch antwoord goedkoop.
-_MAX_KANDIDATEN = 20
+#: How many opening brackets to try at most. A model that has not produced
+#: valid JSON after twenty candidates is not going to; the bound keeps a
+#: pathological answer cheap.
+_MAX_CANDIDATES = 20
 
 
-def _parse(raw, open_ch: str, verwacht):
-    tekst = str(raw or "")
-    # ELK openingshaakje proberen, niet alleen het eerste. Een model dat zijn
-    # antwoord inleidt met "Ik denk {even} na. {"action": "ADD"}" zet een
-    # accolade VOOR de JSON; wie alleen de eerste probeert, pakt `{even}`,
-    # faalt, en valt terug op de brede snede die ook faalt -- precies de stille
-    # parse-fout die deze module moest wegnemen.
-    vanaf = 0
-    for _ in range(_MAX_KANDIDATEN):
-        span = _span_vanaf(tekst, open_ch, vanaf)
+def _parse(raw, open_ch: str, expected):
+    text = str(raw or "")
+    # Try EVERY opening bracket, not just the first. A model that opens with
+    # "Let me {think} about it. {\"action\": \"ADD\"}" puts a brace BEFORE the
+    # JSON; trying only the first picks `{think}`, fails, and falls back to the
+    # wide span which also fails -- exactly the silent parse error this module
+    # exists to remove.
+    start_at = 0
+    for _ in range(_MAX_CANDIDATES):
+        span = _span_from(text, open_ch, start_at)
         if not span:
             break
         try:
-            waarde = json.loads(tekst[span[0]:span[1] + 1])
-            if isinstance(waarde, verwacht):
-                return waarde
+            value = json.loads(text[span[0]:span[1] + 1])
+            if isinstance(value, expected):
+                return value
         except Exception:
             pass
-        vanaf = span[0] + 1
-    # Terugval op de oude, bredere snede. Die is zwakker, maar hij kan een
-    # geval oplossen dat de teller mist (bv. een niet-gesloten string ergens
-    # achteraan) en nooit een geval breken dat de teller al oploste.
-    s, e = tekst.find(open_ch), tekst.rfind(_PAREN[open_ch])
+        start_at = span[0] + 1
+    # Fall back to the old, wider span. It is weaker, but it can resolve a
+    # case the counter misses (an unterminated string somewhere at the end,
+    # say) and can never break a case the counter already resolved.
+    s, e = text.find(open_ch), text.rfind(_PAREN[open_ch])
     if s >= 0 and e > s:
         try:
-            waarde = json.loads(tekst[s:e + 1])
-            if isinstance(waarde, verwacht):
-                return waarde
+            value = json.loads(text[s:e + 1])
+            if isinstance(value, expected):
+                return value
         except Exception:
             pass
     return None
 
 
 def first_object(raw) -> "dict | None":
-    """Het eerste complete JSON-object in de tekst, of None."""
+    """The first complete JSON object in the text, or None."""
     return _parse(raw, "{", dict)
 
 
 def first_array(raw) -> "list | None":
-    """De eerste complete JSON-array in de tekst, of None."""
+    """The first complete JSON array in the text, or None."""
     return _parse(raw, "[", list)

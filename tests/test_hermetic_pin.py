@@ -39,7 +39,7 @@ class HermeticPinTest(unittest.TestCase):
         while CI, which has no such variable, stayed pinned.
         """
         self.assertNotIn("11434", os.environ.get("KB_LLM_ENDPOINT", ""),
-                         "de suite mag een echt model nooit kunnen bereiken")
+                         "the suite must never be able to reach a real model")
 
     def test_the_pin_points_at_loopback(self):
         """Hermetic first: whatever else changes, it must not leave the machine."""
@@ -60,23 +60,23 @@ class HermeticPinTest(unittest.TestCase):
         try:
             s.connect((parsed.hostname, parsed.port))
         except OSError:
-            pass  # geweigerd is ook goed; het gaat om de TIJD
+            pass  # refused is fine too; what is measured is the TIME
         finally:
             s.close()
-        verstreken = time.monotonic() - start
-        self.assertLess(verstreken, 0.25,
-                        f"de pin wachtte {verstreken * 1000:.0f} ms in plaats van "
-                        f"meteen te falen; dan betaalt elke netwerk-test dat weer")
+        elapsed = time.monotonic() - start
+        self.assertLess(elapsed, 0.25,
+                        f"the pin waited {elapsed * 1000:.0f} ms instead of failing "
+                        f"at once; every network test pays that again")
 
     def test_an_http_call_to_the_pin_fails_fast_too(self):
         """What the seams actually do: urlopen, not a bare socket."""
         start = time.monotonic()
         with self.assertRaises((urllib.error.URLError, OSError)):
             urllib.request.urlopen(_suite.DEAD_ENDPOINT + "/api/tags", timeout=2.0)
-        verstreken = time.monotonic() - start
-        self.assertLess(verstreken, 0.5,
-                        f"urlopen deed {verstreken * 1000:.0f} ms over een dood "
-                        f"endpoint; dat telt op over de hele suite")
+        elapsed = time.monotonic() - start
+        self.assertLess(elapsed, 0.5,
+                        f"urlopen took {elapsed * 1000:.0f} ms on a dead endpoint; "
+                        f"that adds up across the suite")
 
     def test_the_embed_seam_gives_up_quickly(self):
         """End to end: the fail-soft path is fast, not merely correct."""
@@ -86,10 +86,9 @@ class HermeticPinTest(unittest.TestCase):
         import _embeddings as emb
         start = time.monotonic()
         self.assertIsNone(emb.embed("ping"))
-        verstreken = time.monotonic() - start
-        self.assertLess(verstreken, 1.0,
-                        f"emb.embed deed {verstreken * 1000:.0f} ms over een dood "
-                        f"endpoint")
+        elapsed = time.monotonic() - start
+        self.assertLess(elapsed, 1.0,
+                        f"emb.embed took {elapsed * 1000:.0f} ms on a dead endpoint")
 
 
 if __name__ == "__main__":

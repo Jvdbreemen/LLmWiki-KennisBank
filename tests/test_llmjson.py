@@ -130,7 +130,7 @@ class SeamsTest(unittest.TestCase):
         self.assertFalse(_maintenance.judge_recheck("iets"))
 
     def test_the_failsafe_still_holds_on_garbage(self):
-        """Robuuster parsen mag de fail-safe niet vervangen."""
+        """Parsing more robustly must not replace the fail-safe."""
         self._answers("ik weet het niet")
         self.assertEqual(_reconcile.judge_reconcile("n", "o"), "ADD")
         self.assertEqual(_judge.judge("iets")["verdict"], "unverified")

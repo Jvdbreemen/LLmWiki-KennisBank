@@ -1,37 +1,38 @@
 #!/usr/bin/env python3
-"""_progress.py - voortgang en een schatting voor alles wat langer dan even duurt.
+"""_progress.py - progress and an estimate for anything that takes a while.
 
-Elk zwaar pad in deze repo zweeg tot het klaar was. Een sweep die tien minuten
-draait en niets schrijft, een current_items() die 1500 memories inleest, een
-index-build over 1800 documenten: van buiten niet te onderscheiden van een hang.
-Dat is dezelfde klasse als TASK-143/148 een laag lager -- een stilte die je niet
-uit elkaar kunt houden van een crash -- alleen kost hij hier aandacht in plaats
-van kennis.
+Every heavy path in this repo stayed silent until it was done. A sweep that ran
+ten minutes writing nothing, a current_items() reading 1500 memories, an index
+build over 1800 documents: from the outside, indistinguishable from a hang.
+That is the same class as TASK-143/148 one level down -- a silence you cannot
+tell apart from a crash -- except that here it costs attention rather than
+knowledge.
 
-Gebruik:
+Usage:
 
     from _progress import Progress
-    with Progress(len(files), "documenten indexeren") as p:
+    with Progress(len(files), "indexing documents") as p:
         for f in files:
             ...
             p.step()
 
-Rendert naar stderr, zodat stdout bruikbaar blijft voor JSON en pipes:
+Renders to stderr, so stdout stays usable for JSON and pipes:
 
-    documenten indexeren  63% [############.......]  945/1501  1m12s, nog ~42s
+    indexing documents  63% [############.......]  945/1501  1m12s, ~42s left
 
-Op een terminal wordt één regel overschreven. In een pipe, log of
-achtergrondjob (geen tty) worden losse regels geschreven, flink getemperd,
-zodat een logbestand niet uit duizenden carriage returns bestaat.
+On a terminal one line is rewritten in place. In a pipe, a log or a background
+job (no tty) whole lines are written, heavily throttled, so a log file does not
+end up made of thousands of carriage returns.
 
-Stil houden kan en blijft de default waar dat hoort: KB_NO_PROGRESS=1 in de
-omgeving of quiet=True in de aanroep. Hooks en de heartbeat blijven schoon.
+Silence is available and stays the default where it belongs: KB_NO_PROGRESS=1
+in the environment or quiet=True in the call. Hooks and the heartbeat stay
+clean.
 
-Deze module mag NOOIT een fout naar zijn aanroeper laten ontsnappen. Een
-voortgangsbalk die het werk sloopt waarover hij rapporteert is erger dan geen
-balk; elke render zit daarom in een brede except.
+This module must NEVER let an error escape to its caller. A progress bar that
+breaks the work it reports on is worse than no bar, so every render sits inside
+a broad except.
 
-Stdlib, geen dependencies.
+Stdlib, no dependencies.
 """
 from __future__ import annotations
 
@@ -39,23 +40,30 @@ import os
 import sys
 import time
 
-#: Terminal: vaak genoeg om te leven, niet zo vaak dat het flikkert.
+#: Terminal: often enough to feel alive, not so often that it flickers.
 TTY_INTERVAL_SECONDS = 0.25
-#: Geen terminal: elke regel is een regel in iemands log. Veel rustiger.
+#: No terminal: every line is a line in someone's log. Far quieter.
 PIPE_INTERVAL_SECONDS = 10.0
-#: ... en dan nog alleen als er echt iets veranderd is.
+#: ... and then only when something actually changed.
 PIPE_MIN_PERCENT_STEP = 5
 
 BAR_WIDTH = 20
 
 
 def enabled_by_default() -> bool:
-    """False als de omgeving expliciet om stilte vraagt."""
-    return os.environ.get("KB_NO_PROGRESS", "").strip() not in ("1", "true", "yes")
+    """False when the environment explicitly asks for silence.
+
+    Case-insensitive on purpose. People set environment variables as TRUE, True
+    and yes as readily as 1, and a silence contract that only honours some of
+    those spellings is not a contract. (The same case-sensitive comparison
+    still sits in _llm.KB_LLM_THINK; that one only turns a feature on, so it
+    fails towards the safe side rather than towards unexpected output.)
+    """
+    return os.environ.get("KB_NO_PROGRESS", "").strip().lower() not in ("1", "true", "yes")
 
 
 def format_duration(seconds: float) -> str:
-    """Leesbare duur: 45s, 2m14s, 1u03m. Geen 3600.0 seconds."""
+    """Readable duration: 45s, 2m14s, 1h03m. Never 3600.0 seconds."""
     try:
         s = int(max(0, round(seconds)))
     except Exception:
@@ -64,15 +72,15 @@ def format_duration(seconds: float) -> str:
         return f"{s}s"
     if s < 3600:
         return f"{s // 60}m{s % 60:02d}s"
-    return f"{s // 3600}u{(s % 3600) // 60:02d}m"
+    return f"{s // 3600}h{(s % 3600) // 60:02d}m"
 
 
 class Progress:
-    """Voortgangsmelder met een schatting uit de gemeten doorvoer.
+    """Progress reporter with an estimate from measured throughput.
 
-    total=None of 0 betekent 'onbekend hoeveel': dan geen percentage en geen
-    balk, want een verzonnen percentage is erger dan geen percentage. Wel het
-    aantal en de verstreken tijd, zodat zichtbaar blijft dat er iets gebeurt.
+    total=None or 0 means "unknown how many": no percentage and no bar, because
+    an invented percentage is worse than none. The count and the elapsed time
+    are still shown, so it stays visible that something is happening.
     """
 
     def __init__(self, total=None, label: str = "", stream=None,
@@ -84,12 +92,12 @@ class Progress:
         self.started = time.monotonic()
         self._last_render = 0.0
         self._last_percent = -1
-        self._dirty = False  # is er iets geschreven dat nog afgesloten moet?
+        self._dirty = False  # is there a written line still to be terminated?
         self.min_items_for_eta = max(1, int(min_items_for_eta))
         self.enabled = bool(not quiet and enabled_by_default() and self._usable())
         self.is_tty = self._isatty()
 
-    # -- interne helpers ----------------------------------------------------
+    # -- internal helpers ---------------------------------------------------
     def _usable(self) -> bool:
         try:
             return self.stream is not None and hasattr(self.stream, "write")
@@ -103,7 +111,7 @@ class Progress:
             return False
 
     def _eta_seconds(self):
-        """Schatting uit wat er tot nu toe gemeten is; None als dat nog niets zegt."""
+        """Estimate from what has been measured so far; None while that says nothing."""
         if not self.total or self.done < self.min_items_for_eta:
             return None
         elapsed = time.monotonic() - self.started
@@ -115,15 +123,15 @@ class Progress:
         now = time.monotonic()
         if self.is_tty:
             return (now - self._last_render) >= TTY_INTERVAL_SECONDS
-        # Zonder tty is elke regel een regel in een log: alleen bij een
-        # merkbare sprong OF na een lange stilte, zodat een trage stap nog
-        # steeds laat zien dat er iets gebeurt.
+        # Without a tty every line is a line in a log: only on a noticeable
+        # jump OR after a long silence, so that a slow step still shows
+        # something is happening.
         if percent is not None and percent - self._last_percent >= PIPE_MIN_PERCENT_STEP:
             return True
         return (now - self._last_render) >= PIPE_INTERVAL_SECONDS
 
     def render_line(self, note: str = "") -> str:
-        """De regel zoals hij getoond wordt. Apart zodat een test hem kan lezen."""
+        """The line as it is shown. Separate so a test can read it."""
         elapsed = time.monotonic() - self.started
         parts = []
         if self.label:
@@ -135,19 +143,19 @@ class Progress:
             parts.append(f"{percent:3d}% [{bar}]")
             parts.append(f"{self.done}/{self.total}")
         else:
-            parts.append(f"{self.done} verwerkt")
+            parts.append(f"{self.done} done")
         eta = self._eta_seconds()
         tail = format_duration(elapsed)
         if eta is not None:
-            tail += f", nog ~{format_duration(eta)}"
+            tail += f", ~{format_duration(eta)} left"
         parts.append(tail)
         if note:
             parts.append(str(note))
         return "  ".join(parts)
 
-    # -- publieke API -------------------------------------------------------
+    # -- public API ---------------------------------------------------------
     def step(self, n: int = 1, note: str = "") -> None:
-        """Meld n verwerkte items. Rendert hooguit zo vaak als het interval toestaat."""
+        """Report n processed items. Renders at most as often as the interval allows."""
         try:
             self.done += int(n)
             if not self.enabled:
@@ -161,12 +169,12 @@ class Progress:
             if percent is not None:
                 self._last_percent = percent
         except Exception:
-            # Een kapotte balk mag het werk niet raken. Vanaf hier zwijgen we
-            # liever helemaal dan dat we het bij elke stap opnieuw proberen.
+            # A broken bar must not touch the work. From here on, stay silent
+            # entirely rather than retrying on every single step.
             self.enabled = False
 
     def note(self, text: str) -> None:
-        """Een losse mededeling tussendoor, op zijn eigen regel."""
+        """A one-off remark in between, on its own line."""
         try:
             if not self.enabled:
                 return
@@ -177,15 +185,15 @@ class Progress:
             self.enabled = False
 
     def close(self, note: str = "") -> None:
-        """Sluit af met een definitieve regel: wat er gedaan is en hoe lang het duurde."""
+        """Finish with a final line: what was done and how long it took."""
         try:
             if not self.enabled:
                 return
             elapsed = format_duration(time.monotonic() - self.started)
-            geteld = f"{self.done}/{self.total}" if self.total else f"{self.done}"
-            staart = f" {note}" if note else ""
+            counted = f"{self.done}/{self.total}" if self.total else f"{self.done}"
+            tail = f" {note}" if note else ""
             self._finish_line()
-            self.stream.write(f"{self.label or 'klaar'}: {geteld} in {elapsed}{staart}\n")
+            self.stream.write(f"{self.label or 'done'}: {counted} in {elapsed}{tail}\n")
             self.stream.flush()
         except Exception:
             pass
@@ -194,7 +202,7 @@ class Progress:
 
     def _write(self, line: str) -> None:
         if self.is_tty:
-            # \r + wissen tot regeleinde: geen resten van een langere vorige regel.
+            # \r + clear to end of line: no leftovers from a longer previous line.
             self.stream.write("\r\033[K" + line)
             self._dirty = True
         else:
@@ -202,7 +210,7 @@ class Progress:
         self.stream.flush()
 
     def _finish_line(self) -> None:
-        """Sluit een lopende \\r-regel af zodat de volgende output niet overschrijft."""
+        """Terminate a pending \\r line so the next output does not overwrite it."""
         if self._dirty:
             self.stream.write("\n")
             self._dirty = False

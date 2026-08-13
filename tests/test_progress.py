@@ -33,7 +33,7 @@ class DurationTest(unittest.TestCase):
     def test_reads_as_time_not_as_a_float(self):
         self.assertEqual(format_duration(45), "45s")
         self.assertEqual(format_duration(134), "2m14s")
-        self.assertEqual(format_duration(3780), "1u03m")
+        self.assertEqual(format_duration(3780), "1h03m")
 
     def test_nonsense_never_raises(self):
         self.assertEqual(format_duration("nope"), "?")
@@ -41,48 +41,48 @@ class DurationTest(unittest.TestCase):
 
 class RenderTest(unittest.TestCase):
     def test_the_line_carries_percent_bar_counts_and_elapsed(self):
-        p = Progress(200, "documenten", stream=io.StringIO())
+        p = Progress(200, "documents", stream=io.StringIO())
         p.done = 50
         line = p.render_line()
-        self.assertIn("documenten", line)
+        self.assertIn("documents", line)
         self.assertIn(" 25%", line)
         self.assertIn("50/200", line)
         self.assertIn("[#####", line)
 
     def test_an_estimate_appears_once_throughput_is_measurable(self):
-        """De starttijd wordt teruggezet in plaats van te wachten.
+        """The start time is moved back rather than waited out.
 
-        `time.monotonic()` tikt op Windows per 15,6 ms, dus een lus zonder
-        echt werk erin levert elapsed == 0.0 en daaruit valt geen doorvoer te
-        meten. Dat is precies wanneer een schatting ook niets waard is, dus
-        die stilte is gedrag en geen bug -- maar een test die op een lopende
-        klok rekent, meet dan de klok in plaats van de schatting.
+        `time.monotonic()` ticks every 15.6 ms on Windows, so a loop with no
+        real work in it yields elapsed == 0.0, from which no throughput can be
+        measured. That is exactly when an estimate is worthless too, so the
+        silence is behaviour and not a bug -- but a test that relies on a
+        running clock measures the clock instead of the estimate.
         """
         p = Progress(100, "x", stream=io.StringIO(), min_items_for_eta=3)
-        p.started -= 10.0  # alsof de run tien seconden bezig is
+        p.started -= 10.0  # as if the run has been going for ten seconds
         p.done = 1
-        self.assertNotIn("nog ~", p.render_line(),
-                         "een schatting uit een enkel item is een gok, geen schatting")
+        self.assertNotIn("left", p.render_line(),
+                         "an estimate from a single item is a guess, not an estimate")
         p.done = 50
         line = p.render_line()
-        self.assertIn("nog ~", line)
-        # 50 items in 10s -> de resterende 50 duren ook ~10s.
-        self.assertIn("nog ~10s", line)
+        self.assertIn("left", line)
+        # 50 items in 10s -> the remaining 50 take ~10s as well.
+        self.assertIn("~10s left", line)
 
     def test_no_estimate_while_the_clock_has_not_moved(self):
-        """Zonder verstreken tijd is er geen doorvoer, dus ook geen schatting."""
+        """With no time elapsed there is no throughput, so no estimate either."""
         p = Progress(100, "x", stream=io.StringIO(), min_items_for_eta=1)
         p.done = 50
-        p.started = __import__("time").monotonic() + 1  # 'nog niet begonnen'
-        self.assertNotIn("nog ~", p.render_line())
+        p.started = __import__("time").monotonic() + 1  # 'not started yet'
+        self.assertNotIn("left", p.render_line())
 
     def test_an_unknown_total_counts_instead_of_inventing_a_percentage(self):
-        p = Progress(None, "onbekend", stream=io.StringIO())
+        p = Progress(None, "unknown", stream=io.StringIO())
         p.done = 7
         line = p.render_line()
-        self.assertIn("7 verwerkt", line)
+        self.assertIn("7 done", line)
         self.assertNotIn("%", line)
-        self.assertNotIn("nog ~", line)
+        self.assertNotIn("left", line)
 
 
 class OutputShapeTest(unittest.TestCase):
@@ -90,7 +90,7 @@ class OutputShapeTest(unittest.TestCase):
         out = _FakeTTY()
         p = Progress(10, "t", stream=out)
         for _ in range(10):
-            p._last_render = 0.0  # forceer render, anders knijpt het interval
+            p._last_render = 0.0  # force a render; the interval would throttle it
             p.step()
         self.assertIn("\r", out.getvalue())
 
@@ -102,22 +102,22 @@ class OutputShapeTest(unittest.TestCase):
             p.step()
         value = out.getvalue()
         self.assertNotIn("\r", value)
-        # 5%-stappen: hooguit ~20 regels, niet 1000.
+        # 5% steps: at most ~20 lines, not 1000.
         self.assertLessEqual(len(value.strip().splitlines()), 25)
         self.assertGreaterEqual(len(value.strip().splitlines()), 5)
 
     def test_close_reports_what_was_done_and_how_long_it_took(self):
         out = io.StringIO()
-        with Progress(3, "memories inlezen", stream=out) as p:
+        with Progress(3, "reading memories", stream=out) as p:
             for _ in range(3):
                 p.step()
-        self.assertIn("memories inlezen: 3/3 in ", out.getvalue())
+        self.assertIn("reading memories: 3/3 in ", out.getvalue())
 
 
 class SilenceTest(unittest.TestCase):
     def test_quiet_writes_nothing_at_all(self):
         out = io.StringIO()
-        with Progress(5, "stil", stream=out, quiet=True) as p:
+        with Progress(5, "quiet", stream=out, quiet=True) as p:
             for _ in range(5):
                 p.step()
         self.assertEqual(out.getvalue(), "")
@@ -129,7 +129,7 @@ class SilenceTest(unittest.TestCase):
         self.addCleanup(lambda: os.environ.__setitem__("KB_NO_PROGRESS", saved)
                         if saved is not None else os.environ.pop("KB_NO_PROGRESS", None))
         out = io.StringIO()
-        with Progress(5, "stil", stream=out) as p:
+        with Progress(5, "quiet", stream=out) as p:
             for _ in range(5):
                 p.step()
         self.assertEqual(out.getvalue(), "")
@@ -138,21 +138,21 @@ class SilenceTest(unittest.TestCase):
 class NeverBreaksTheCallerTest(unittest.TestCase):
     class _BrokenStream:
         def write(self, *_a, **_k):
-            raise OSError("pipe dicht")
+            raise OSError("pipe closed")
 
         def flush(self):
-            raise OSError("pipe dicht")
+            raise OSError("pipe closed")
 
         def isatty(self):
             return False
 
     def test_a_dead_stream_does_not_reach_the_caller(self):
         """A progress bar that kills the job it reports on is worse than none."""
-        p = Progress(10, "kapot", stream=self._BrokenStream())
+        p = Progress(10, "broken", stream=self._BrokenStream())
         for _ in range(10):
-            p.step()  # mag niet opgooien
+            p.step()  # must not raise
         p.close()
-        self.assertEqual(p.done, 10, "het werk telt door, ook zonder rapportage")
+        self.assertEqual(p.done, 10, "the work keeps counting, reporting or not")
 
     def test_the_counter_keeps_counting_after_the_stream_dies(self):
         p = Progress(None, "x", stream=self._BrokenStream())

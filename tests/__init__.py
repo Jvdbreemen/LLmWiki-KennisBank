@@ -37,6 +37,11 @@ TCP handshake completes against the backlog, the accept loop closes the
 connection at once, and the client sees a reset instead of a wait. Same
 behaviour on Windows and on Linux, and no test ever reaches a model.
 
+If binding fails the pin falls back to port 0, which is not a connectable port
+at all: the client rejects it before opening a socket, measured at 78 ms
+against 2000 ms for a closed-but-valid port. The fallback has to keep both of
+this pin's promises, not just the hermetic one.
+
 Tests that must exercise the model-REACHABLE branch mock ``emb.embed`` / the
 ``hits_fn`` locally, so the dead pin does not interfere with them.
 
@@ -65,41 +70,53 @@ import os
 import socket
 import threading
 
-#: Blijft leven zolang het proces leeft; module-globaal zodat de socket niet
-#: door de garbage collector wordt gesloten zodra de functie terugkeert.
+#: Lives as long as the process does; module-global so the socket is not
+#: garbage-collected the moment the function returns.
 _DEAD_SERVER = None
-#: Waar de pin naar wijst, zodat een test de aanname kan METEN in plaats van
-#: hem te geloven (zie test_hermetic_pin.py).
-DEAD_ENDPOINT = "http://127.0.0.1:1"
+
+#: The fallback when binding fails. Port 0 is not a connectable port, so the
+#: client rejects it before opening anything: measured 78 ms against 2000 ms
+#: for a closed-but-valid port such as 1. That matters because the fallback
+#: has to keep BOTH promises this pin makes -- hermetic and fast. Falling back
+#: to :1 would keep the first and break the second, and the timing test would
+#: then fail rather than merely run slower.
+UNCONNECTABLE_ENDPOINT = "http://127.0.0.1:0"
+
+#: Where the pin points, so a test can MEASURE the premise instead of
+#: believing it (see test_hermetic_pin.py).
+DEAD_ENDPOINT = UNCONNECTABLE_ENDPOINT
 
 
 def _start_dead_listener() -> str:
-    """Luister op een vrije poort en verbreek elke verbinding meteen.
-
-    Fail-soft: lukt binden niet, dan valt de pin terug op de oude dichte
-    poort. Trager, maar nog steeds hermetisch -- en hermetisch is de eis,
-    snelheid is de winst.
-    """
+    """Listen on a free port and drop every connection immediately."""
     global _DEAD_SERVER
+    srv = None
     try:
         srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         srv.bind(("127.0.0.1", 0))
         srv.listen(64)
     except OSError:
-        return "http://127.0.0.1:1"
+        # Close the half-built socket before giving up; returning here without
+        # it leaks the descriptor for the lifetime of the test process.
+        if srv is not None:
+            try:
+                srv.close()
+            except OSError:
+                pass
+        return UNCONNECTABLE_ENDPOINT
 
-    def _accepteer_en_sluit():
+    def _accept_and_close():
         while True:
             try:
-                conn, _adres = srv.accept()
+                conn, _addr = srv.accept()
             except OSError:
-                return  # socket dicht: proces stopt
+                return  # socket closed: the process is going away
             try:
                 conn.close()
             except OSError:
                 pass
 
-    threading.Thread(target=_accepteer_en_sluit, daemon=True).start()
+    threading.Thread(target=_accept_and_close, daemon=True).start()
     _DEAD_SERVER = srv
     return f"http://127.0.0.1:{srv.getsockname()[1]}"
 

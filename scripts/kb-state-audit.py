@@ -1,35 +1,35 @@
 #!/usr/bin/env python3
-"""kb-state-audit.py - welke memories spreken de configuratie tegen?
+"""kb-state-audit.py - which memories contradict the configuration?
 
-Deterministisch, read-only, geen LLM. Vergelijkt de claims in de geheugenlaag
-met een GEZAG: de configuratiebestanden en de constanten in deze scripts. Dat
-is het verschil met een tweede mening -- er is een bron die per definitie
-gelijk heeft over wat er nu draait.
+Deterministic, read-only, no LLM. Compares the claims in the memory layer
+against an AUTHORITY: the configuration files and the constants in these
+scripts. That is the difference from a second opinion -- there is a source that
+is right by definition about what is running now.
 
-De aanleiding: de `second-brain-audit`-skill levert een deterministische
-scanner mee, en die vond op deze vault NUL tegenstrijdigheden terwijl er
-aantoonbaar vier stonden. Hij vergelijkt namelijk alleen geldbedragen, en die
-staan hier niet in. Zijn eigen handleiding zegt precies dat: "A zero is not a
-clean bill of health". Deze audit doet hetzelfde trucje voor de waardesoorten
-die deze vault WEL draagt -- modeltags, drempels, versies, paden, vlaggen --
-en meldt net zo hard waar hij blind was.
+Why it exists: the `second-brain-audit` skill ships a deterministic scanner,
+and on this vault it found ZERO contradictions while four were demonstrably
+present. It only compares monetary values, and this vault holds none. Its own
+guidance says exactly that: "A zero is not a clean bill of health". This audit
+does the same trick for the value types this vault DOES carry -- model tags,
+thresholds, versions, paths, flags -- and reports just as loudly where it was
+blind.
 
-Vier stapels, en de laatste is het punt:
+Four piles, and the last one is the point:
 
-    CONTRADICTED  het geheugen zegt X, het gezag zegt Y
-    UNSUPPORTED   een waarde die in geen enkel gezag voorkomt
-    CONFIRMED     het geheugen klopt met het gezag
-    COVERAGE      current memories zonder toetsbare waarde -- hier was de
-                  audit blind, en dat is geen goedkeuring
+    CONTRADICTED  the memory says X, the authority says Y
+    UNSUPPORTED   a value that appears in no authority at all
+    CONFIRMED     the memory agrees with the authority
+    COVERAGE      current memories with no checkable value -- here the audit
+                  was blind, and that is not an approval
 
-Plus een vijfde die uit TASK-146 komt: memories die een toetsbare waarde
-dragen maar als `event` gelden. Die worden nooit vervangen, dus voor precies
-die verzameling staat zelfcorrectie uit. De veilige default mag zichtbaar
-kosten hebben, niet stille.
+Plus a fifth that comes from TASK-146: memories that carry a checkable value
+but count as an `event`. Those are never replaced, so for exactly that set
+self-correction is switched off. The safe default is allowed to have visible
+costs, not silent ones.
 
-Alleen `status: current`, want dat is exact de verzameling die de recall-hook
-kan injecteren. In deze vault bestaat geen ongevaarlijk archief: wat current
-is, is altijd-geladen.
+Only `status: current`, because that is exactly the set the recall hook can
+inject. In this vault there is no harmless archive: whatever is current is
+always-loaded.
 
 Usage: python3 kb-state-audit.py [--json] [--fail-on-contradiction] [--limit N]
 """
@@ -49,16 +49,16 @@ from _frontmatter import parse_frontmatter  # noqa: E402
 from _progress import Progress  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402
 
-#: Modelnamen komen in twee vormen voor. Ollama gebruikt `familie:tag`
-#: (qwen3-embedding:4b); cloudmodellen dragen hun versie in de naam zelf
-#: (claude-opus-4-8, text-embedding-3-small). Beide moeten herkenbaar zijn,
-#: anders valt precies de stale claim buiten beeld.
+#: Model names come in two shapes. Ollama uses `family:tag`
+#: (qwen3-embedding:4b); cloud models carry their version in the name itself
+#: (claude-opus-4-8, text-embedding-3-small). Both have to be recognisable, or
+#: precisely the stale claim falls outside the picture.
 _OLLAMA_TAG = re.compile(r"\b([a-z][a-z0-9.]*(?:-[a-z0-9.]+)*):([a-z0-9][a-z0-9._-]*)\b")
 
-#: Cloudmodellen worden herkend aan een VASTE familielijst, niet aan een
-#: vendorprefix. Gemeten op de levende vault: een prefixregel las
-#: `Claude-sessiehistorie` en `Claude-cli` als modellen, en de eerste is een
-#: Nederlands woord met een streepje ervoor. Een lijst is saaier en klopt.
+#: Cloud models are recognised from a FIXED family list, not from a vendor
+#: prefix. Measured on the live vault: a prefix rule read `Claude-sessiehistorie`
+#: and `Claude-cli` as models, and the first of those is an ordinary Dutch word
+#: with a hyphen in front of it. A list is duller and correct.
 _VENDOR_FAMILIES = (
     "claude-opus", "claude-sonnet", "claude-haiku", "claude-fable",
     "gpt", "gemini", "llama", "mistral", "mixtral", "phi", "deepseek",
@@ -70,10 +70,10 @@ _VENDOR_MODEL = re.compile(
 
 
 def _clean_config(obj):
-    """Alleen de ACTIEVE sleutels. `_switching` en elke `_`-sleutel zijn
-    voorbeelden en commentaar -- die noemen andere modellen (gemma4:12b,
-    text-embedding-3-small) en zijn dus juist NIET het gezag. Ze meenemen zou
-    van elke stale claim een bevestigde maken."""
+    """Only the ACTIVE keys. `_switching` and every `_`-prefixed key are
+    examples and commentary -- they name OTHER models (gemma4:12b,
+    text-embedding-3-small) and are therefore precisely NOT the authority.
+    Counting them would turn every stale claim into a confirmed one."""
     if not isinstance(obj, dict):
         return {}
     return {k: v for k, v in obj.items() if not k.startswith("_")}
@@ -87,9 +87,9 @@ def _read_json(path: Path) -> dict:
 
 
 def code_constants() -> dict:
-    """Constanten uit de scripts zelf. Ook een gezag: wat de code doet is wat
-    er gebeurt, ongeacht wat een memory erover beweert. Fail-soft per module,
-    want een deploy kan er een missen."""
+    """Constants from the scripts themselves. Also an authority: what the code
+    does is what happens, regardless of what a memory claims about it.
+    Fail-soft per module, because a deploy can be missing one."""
     out = {}
     try:
         import _reconcile
@@ -112,7 +112,7 @@ def code_constants() -> dict:
 
 
 def authorities() -> dict:
-    """Het gezag, als {modelfamilie -> tag} en {sleutel -> waarde}."""
+    """The authority, as {model family -> tag} and {key -> value}."""
     root = vault_root()
     embed = _read_json(root / ".claude" / "kennisbank-embed.json")
     llm = _read_json(root / ".claude" / "kennisbank-llm.json")
@@ -122,97 +122,97 @@ def authorities() -> dict:
         tag = str(cfg.get("model", "")).strip()
         if not tag:
             continue
-        familie = tag.split(":")[0] if ":" in tag else tag
-        models[familie.lower()] = tag
+        family = tag.split(":")[0] if ":" in tag else tag
+        models[family.lower()] = tag
 
-    waarden = {}
-    for sleutel in ("retrieve_top_n", "retrieve_threshold"):
-        if sleutel in embed:
-            waarden[sleutel] = embed[sleutel]
-    # `endpoint` staat er BEWUST niet bij. Het is een gewoon Engels woord, en
-    # deze vault staat vol memories over REST-endpoints van firmware. Gemeten:
-    # acht van de twaalf 'tegenstrijdigheden' waren zulke zinnen, met claims
-    # als "endpoint=2" tegenover "http://localhost:11434". Een sleutel die ook
-    # een woord is, is geen sleutel. Zie _looks_like_key hieronder.
-    # De toggles: de LEVENDE waarde via _settings.get, niet de default uit de
-    # code. Een memory die zegt dat archiveren aanstaat is fout of goed op
-    # grond van wat er in kennisbank-settings.json staat, niet van wat de
-    # broncode als beginwaarde meelevert.
-    for sleutel in getattr(_settings, "DEFAULTS", {}):
+    values = {}
+    for key in ("retrieve_top_n", "retrieve_threshold"):
+        if key in embed:
+            values[key] = embed[key]
+    # `endpoint` is DELIBERATELY absent. It is an ordinary English word, and
+    # this vault is full of memories about firmware REST endpoints. Measured:
+    # eight of twelve "contradictions" were sentences of that kind, claiming
+    # things like "endpoint=2" against "http://localhost:11434". A key that is
+    # also a word is not a key. See _looks_like_key below.
+    #
+    # The toggles: the LIVE value via _settings.get, not the default in the
+    # code. A memory claiming that archiving is on is right or wrong on the
+    # basis of what kennisbank-settings.json says, not of what the source ships
+    # as an initial value.
+    for key in getattr(_settings, "DEFAULTS", {}):
         try:
-            waarden[sleutel] = _settings.get(sleutel)
+            values[key] = _settings.get(key)
         except Exception:
             pass
-    waarden.update(code_constants())
-    return {"models": models, "values": waarden}
+    values.update(code_constants())
+    return {"models": models, "values": values}
 
 
 def model_tokens(text: str, known_families=()) -> list:
-    """Elke modelnaam in de tekst, als (familie, volledige_tag)."""
-    uit = []
-    bekend = set(known_families or ())
+    """Every model name in the text, as (family, full_tag)."""
+    out = []
+    known = set(known_families or ())
     for m in _OLLAMA_TAG.finditer(text):
-        familie, tag = m.group(1), m.group(2)
-        # `familie:tag` matcht ook `adr-kit:adr`, `file:line`, `f1:ab` en
-        # `_kbindex.py:41`. Gemeten op de levende vault leverde die vorm meer
-        # valse modellen op dan echte. Alleen families die een
-        # configuratiebestand daadwerkelijk pint tellen mee; de rest is voor
-        # deze audit gewoon geen modelclaim en valt onder COVERAGE.
-        if familie.lower() not in bekend:
+        family, tag = m.group(1), m.group(2)
+        # `family:tag` also matches `adr-kit:adr`, `file:line`, `f1:ab` and
+        # `_kbindex.py:41`. Measured on the live vault, that shape produced
+        # more false models than real ones. Only families a configuration file
+        # actually pins count; the rest is simply not a model claim this audit
+        # can adjudicate, and falls under COVERAGE.
+        if family.lower() not in known:
             continue
-        uit.append((familie.lower(), f"{familie}:{tag}"))
+        out.append((family.lower(), f"{family}:{tag}"))
     for m in _VENDOR_MODEL.finditer(text):
-        naam = m.group(1)
-        # Familie = de naam zonder het versiestaartje, zodat claude-opus-4-8
-        # en claude-opus-5 dezelfde familie zijn.
-        familie = re.sub(r"-[\d.]+([-.][\d.]+)*$", "", naam).lower()
-        uit.append((familie, naam))
-    # Eén regel per familie per memory. "Gemini" en "Gemini-keys" in dezelfde
-    # tekst zijn één claim over één familie; twee regels lezen als twee
-    # bevindingen en blazen elke telling op.
-    gezien, uniek = set(), []
-    for familie, naam in uit:
-        if familie in gezien:
+        name = m.group(1)
+        # Family = the name without its version tail, so that claude-opus-4-8
+        # and claude-opus-5 are the same family.
+        family = re.sub(r"-[\d.]+([-.][\d.]+)*$", "", name).lower()
+        out.append((family, name))
+    # One row per family per memory. "Gemini" and "Gemini-keys" in the same
+    # text are one claim about one family; two rows read as two findings and
+    # inflate every count.
+    seen, unique = set(), []
+    for family, name in out:
+        if family in seen:
             continue
-        gezien.add(familie)
-        uniek.append((familie, naam))
-    return uniek
+        seen.add(family)
+        unique.append((family, name))
+    return unique
 
 
-#: Een waarde vlak achter een sleutelnaam. Ruim genoeg voor "de drempel
-#: retrieve_threshold is 0.6" en krap genoeg om niet het hele document te
-#: vangen.
+#: A value just after a key name. Wide enough for "the threshold
+#: retrieve_threshold is 0.6" and tight enough not to swallow the document.
 _VALUE_NEAR = r"[^\n]{0,40}?(-?\d+(?:\.\d+)?|true|false|waar|onwaar)\b"
 
 
 def _looks_like_key(key: str) -> bool:
-    """Alleen sleutels die niet ook een gewoon woord kunnen zijn.
+    """Only keys that cannot also be an ordinary word.
 
-    Dezelfde grens als _memory.looks_like_config: een underscore, een punt, of
-    ALL_CAPS. `retrieve_top_n` en `RECONCILE_THRESHOLD` overleven; `endpoint`
-    en `model` niet, en dat is precies de bedoeling -- die woorden staan in
-    tientallen memories over iets heel anders.
+    The same boundary _memory.looks_like_config uses: an underscore, a dot, or
+    ALL_CAPS. `retrieve_top_n` and `RECONCILE_THRESHOLD` survive; `endpoint`
+    and `model` do not, which is the whole point -- those words appear in
+    dozens of memories about something else entirely.
     """
     k = str(key)
     return ("_" in k) or ("." in k) or (k.isupper() and len(k) > 2)
 
 
 def value_claims(text: str, keys) -> list:
-    """(sleutel, geclaimde_waarde) voor elke gezagssleutel die in de tekst
-    staat met een waarde erachter."""
-    uit = []
+    """(key, claimed_value) for every authority key present in the text with a
+    value behind it."""
+    out = []
     for key in keys:
         if not _looks_like_key(key):
             continue
-        patroon = re.compile(r"\b" + re.escape(str(key)) + _VALUE_NEAR, re.IGNORECASE)
-        m = patroon.search(text)
+        pattern = re.compile(r"\b" + re.escape(str(key)) + _VALUE_NEAR, re.IGNORECASE)
+        m = pattern.search(text)
         if m:
-            uit.append((key, m.group(1)))
-    return uit
+            out.append((key, m.group(1)))
+    return out
 
 
 def _same_value(claim: str, truth) -> bool:
-    """Gelijk na normalisatie: 3 == 3.0, 'true' == True."""
+    """Equal after normalisation: 3 == 3.0, 'true' == True."""
     c = str(claim).strip().lower()
     t = str(truth).strip().lower()
     if c == t:
@@ -227,18 +227,18 @@ def _same_value(claim: str, truth) -> bool:
 
 
 def audit(limit=None) -> dict:
-    gezag = authorities()
+    authority = authorities()
     mdir = vault_root() / "09-memory"
     piles = {"contradicted": [], "unsupported": [], "confirmed": [],
              "coverage": [], "self_correction_off": []}
     if not mdir.exists():
-        return {"piles": piles, "authorities": gezag, "current": 0}
+        return {"piles": piles, "authorities": authority, "current": 0}
 
     files = sorted(mdir.glob("**/*.md"))
     if limit:
         files = files[:limit]
     current = 0
-    with Progress(len(files), "memories toetsen") as p:
+    with Progress(len(files), "auditing memories") as p:
         for f in files:
             p.step()
             try:
@@ -248,66 +248,66 @@ def audit(limit=None) -> dict:
             if fm.get("status") != "current":
                 continue
             current += 1
-            tekst = " ".join(body.split())
-            toetsbaar = False
+            text = " ".join(body.split())
+            checkable = False
 
-            for familie, tag in model_tokens(tekst, gezag["models"]):
-                waarheid = gezag["models"].get(familie)
-                if waarheid is None:
-                    toetsbaar = True
+            for family, tag in model_tokens(text, authority["models"]):
+                truth = authority["models"].get(family)
+                if truth is None:
+                    checkable = True
                     piles["unsupported"].append({
                         "stem": f.stem, "claim": tag,
-                        "why": f"geen enkel configuratiebestand pint '{familie}'"})
+                        "why": f"no configuration file pins '{family}'"})
                     continue
-                toetsbaar = True
-                pile = "confirmed" if tag.lower() == waarheid.lower() else "contradicted"
+                checkable = True
+                pile = "confirmed" if tag.lower() == truth.lower() else "contradicted"
                 piles[pile].append({"stem": f.stem, "claim": tag,
-                                    "authority": waarheid, "key": familie})
+                                    "authority": truth, "key": family})
 
-            for key, claim in value_claims(tekst, gezag["values"]):
-                toetsbaar = True
-                waarheid = gezag["values"][key]
-                pile = "confirmed" if _same_value(claim, waarheid) else "contradicted"
+            for key, claim in value_claims(text, authority["values"]):
+                checkable = True
+                truth = authority["values"][key]
+                pile = "confirmed" if _same_value(claim, truth) else "contradicted"
                 piles[pile].append({"stem": f.stem, "claim": f"{key}={claim}",
-                                    "authority": f"{key}={waarheid}", "key": key})
+                                    "authority": f"{key}={truth}", "key": key})
 
-            if not toetsbaar:
+            if not checkable:
                 piles["coverage"].append({"stem": f.stem})
             elif _memory.coerce_volatility(fm.get("volatility"), body) == "event":
-                # TASK-146-mitigatie: deze memory DRAAGT een waarde die kan
-                # verouderen, maar geldt als gebeurtenis en wordt dus nooit
-                # vervangen. Voor deze verzameling staat zelfcorrectie uit.
+                # TASK-146 mitigation: this memory DOES carry a value that can
+                # go stale, but counts as an event and is therefore never
+                # replaced. For this set, self-correction is switched off.
                 piles["self_correction_off"].append({"stem": f.stem})
 
-    return {"piles": piles, "authorities": gezag, "current": current}
+    return {"piles": piles, "authorities": authority, "current": current}
 
 
 def report(res: dict) -> str:
     p = res["piles"]
-    regels = []
-    for naam, kop in (("contradicted", "CONTRADICTED"),
-                      ("unsupported", "UNSUPPORTED")):
-        if not p[naam]:
+    lines = []
+    for name, heading in (("contradicted", "CONTRADICTED"),
+                          ("unsupported", "UNSUPPORTED")):
+        if not p[name]:
             continue
-        regels.append(f"\n{kop}  {len(p[naam])}")
-        for it in p[naam]:
-            regels.append(f"  {it['stem']}")
-            regels.append(f"      zegt: {it['claim']}")
+        lines.append(f"\n{heading}  {len(p[name])}")
+        for it in p[name]:
+            lines.append(f"  {it['stem']}")
+            lines.append(f"      says: {it['claim']}")
             if it.get("authority"):
-                regels.append(f"      gezag: {it['authority']}")
+                lines.append(f"      authority: {it['authority']}")
             elif it.get("why"):
-                regels.append(f"      {it['why']}")
+                lines.append(f"      {it['why']}")
     if p["self_correction_off"]:
-        regels.append(f"\nNOOIT GECORRIGEERD  {len(p['self_correction_off'])}")
-        regels.append("  draagt een toetsbare waarde maar geldt als gebeurtenis, "
-                      "dus wordt nooit vervangen:")
+        lines.append(f"\nNEVER CORRECTED  {len(p['self_correction_off'])}")
+        lines.append("  carries a checkable value but counts as an event, "
+                     "so it is never replaced:")
         for it in p["self_correction_off"][:10]:
-            regels.append(f"  {it['stem']}")
-    regels.append(f"\nCONFIRMED     {len(p['confirmed'])}")
-    regels.append(f"COVERAGE      {len(p['coverage'])} van de {res['current']} current "
-                  f"memories dragen geen toetsbare waarde")
-    regels.append("              -- daar was deze audit blind; dat is geen goedkeuring")
-    return "\n".join(regels)
+            lines.append(f"  {it['stem']}")
+    lines.append(f"\nCONFIRMED     {len(p['confirmed'])}")
+    lines.append(f"COVERAGE      {len(p['coverage'])} of {res['current']} current "
+                 f"memories carry no checkable value")
+    lines.append("              -- there this audit was blind; that is not an approval")
+    return "\n".join(lines)
 
 
 def main(argv=None) -> int:
@@ -331,6 +331,6 @@ def main(argv=None) -> int:
 if __name__ == "__main__":
     try:
         sys.exit(main())
-    except Exception as exc:  # nooit een sessie blokkeren op een audit
-        print(f"kb-state-audit: overgeslagen ({exc})", file=sys.stderr)
+    except Exception as exc:  # never block a session on an audit
+        print(f"kb-state-audit: skipped ({exc})", file=sys.stderr)
         sys.exit(0)

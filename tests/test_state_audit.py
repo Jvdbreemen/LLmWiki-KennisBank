@@ -44,7 +44,7 @@ class StateAuditTest(unittest.TestCase):
         self._saved = os.environ.get("KENNISBANK_VAULT")
         os.environ["KENNISBANK_VAULT"] = str(self.tmp)
         (self.tmp / ".claude" / "kennisbank-embed.json").write_text(json.dumps({
-            "_comment": "voorbeelden horen NIET tot het gezag",
+            "_comment": "examples are NOT the authority",
             "provider": "ollama",
             "model": "qwen3-embedding:4b",
             "retrieve_top_n": 3,
@@ -71,9 +71,9 @@ class StateAuditTest(unittest.TestCase):
     def _piles(self):
         return self.m.audit()["piles"]
 
-    # -- de vier stapels ----------------------------------------------------
+    # -- the four piles -----------------------------------------------------
     def test_a_stale_model_tag_is_contradicted(self):
-        self._mem("Embedding", "Gebruik `qwen3-embedding:8b` als standaardmodel.")
+        self._mem("Embedding", "Use `qwen3-embedding:8b` as the default model.")
         p = self._piles()
         self.assertEqual(len(p["contradicted"]), 1)
         self.assertEqual(p["contradicted"][0]["claim"], "qwen3-embedding:8b")
@@ -81,41 +81,41 @@ class StateAuditTest(unittest.TestCase):
 
     def test_a_matching_claim_is_reported_as_confirmed_not_omitted(self):
         """Silence about agreement makes the report unreadable as evidence."""
-        self._mem("Embedding", "De vault draait op `qwen3-embedding:4b`.")
+        self._mem("Embedding", "The vault runs on `qwen3-embedding:4b`.")
         p = self._piles()
         self.assertEqual(p["contradicted"], [])
         self.assertEqual(len(p["confirmed"]), 1)
 
     def test_a_model_no_authority_pins_is_unsupported(self):
-        self._mem("Default", "Gebruik altijd `claude-opus-4-8` als standaardmodel.")
+        self._mem("Default", "Always use `claude-opus-4-8` as the default model.")
         p = self._piles()
         self.assertEqual(len(p["unsupported"]), 1)
         self.assertIn("claude-opus", p["unsupported"][0]["why"])
 
     def test_a_memory_without_a_checkable_value_lands_in_coverage(self):
         """The pile that stops a zero from reading as a clean bill of health."""
-        self._mem("Les", "Vraag altijd door voordat je een aanname bouwt.")
+        self._mem("Lesson", "Always ask again before building on an assumption.")
         p = self._piles()
         self.assertEqual(len(p["coverage"]), 1)
         self.assertEqual(p["contradicted"], [])
 
     def test_the_report_always_states_what_it_could_not_see(self):
-        self._mem("Les", "Iets zonder toetsbare waarde.")
-        tekst = self.m.report(self.m.audit())
-        self.assertIn("COVERAGE", tekst)
-        self.assertIn("geen goedkeuring", tekst)
+        self._mem("Lesson", "Something with no checkable value.")
+        text = self.m.report(self.m.audit())
+        self.assertIn("COVERAGE", text)
+        self.assertIn("not an approval", text)
 
-    # -- wat het gezag WEL en NIET is ---------------------------------------
+    # -- what IS and IS NOT the authority -----------------------------------
     def test_switching_examples_are_not_the_authority(self):
         """`_switching` names other models on purpose; they are documentation.
 
         Counting them would turn every stale claim into a confirmed one, which
         is the failure mode this audit exists to prevent.
         """
-        self._mem("Oud", "De judge draait op `gemma4:12b`.")
+        self._mem("Old", "The judge runs on `gemma4:12b`.")
         p = self._piles()
         self.assertEqual(p["confirmed"], [],
-                         "gemma4:12b staat alleen in _switching, dus is geen gezag")
+                         "gemma4:12b only appears in _switching, so it is not an authority")
 
     def test_a_key_that_is_also_an_ordinary_word_is_not_compared(self):
         """Eight of twelve findings were this, measured on the live vault.
@@ -130,24 +130,24 @@ class StateAuditTest(unittest.TestCase):
         self.assertTrue(self.m._looks_like_key("RECONCILE_THRESHOLD"))
 
     def test_a_command_or_a_source_reference_is_not_a_model(self):
-        """`familie:tag` matches far more than models.
+        """`family:tag` matches far more than models.
 
         On the live vault it read `adr-kit:adr`, `file:line`, `f1:ab` and
         `_kbindex.py:41` as model claims — more false ones than real.
         """
-        for tekst in ("Gebruik `/kennisbank:settings` om toggles te zetten.",
-                      "De variabele in `_kbindex.py:41` moet hernoemd worden.",
-                      "Rapporteer bevindingen als file:line."):
-            self.assertEqual(self.m.model_tokens(tekst, {"qwen3-embedding"}), [],
-                             tekst)
+        for text in ("Use `/kennisbank:settings` to set toggles.",
+                     "The variable in `_kbindex.py:41` must be renamed.",
+                     "Report findings as file:line."):
+            self.assertEqual(self.m.model_tokens(text, {"qwen3-embedding"}), [],
+                             text)
 
     def test_a_numeric_setting_is_compared_against_the_config(self):
-        self._mem("Retrieval", "De waarde retrieve_top_n staat op 7.")
+        self._mem("Retrieval", "The value retrieve_top_n is set to 7.")
         p = self._piles()
         self.assertEqual(len(p["contradicted"]), 1)
         self.assertIn("retrieve_top_n", p["contradicted"][0]["key"])
 
-    # -- de TASK-146-mitigatie ----------------------------------------------
+    # -- the TASK-146 mitigation --------------------------------------------
     def test_a_checkable_claim_that_can_never_be_corrected_is_listed(self):
         """The safe default may cost something, as long as the cost is visible.
 
@@ -155,35 +155,35 @@ class StateAuditTest(unittest.TestCase):
         is labelled event will therefore keep its stale value forever, and
         nothing else in the system would ever say so.
         """
-        self._mem("Embedding", "Gebruik `qwen3-embedding:8b`.", volatility="event")
+        self._mem("Embedding", "Use `qwen3-embedding:8b`.", volatility="event")
         p = self._piles()
         self.assertEqual(len(p["self_correction_off"]), 1)
 
     def test_a_state_labelled_claim_is_not_in_that_pile(self):
-        self._mem("Embedding", "Gebruik `qwen3-embedding:8b`.", volatility="state")
+        self._mem("Embedding", "Use `qwen3-embedding:8b`.", volatility="state")
         self.assertEqual(self._piles()["self_correction_off"], [])
 
-    # -- grenzen ------------------------------------------------------------
+    # -- boundaries ---------------------------------------------------------
     def test_only_current_memories_are_audited(self):
         """Exactly the set the recall hook can inject; nothing else is loaded."""
-        self._mem("Oud", "Gebruik `qwen3-embedding:8b`.", status="superseded")
+        self._mem("Old", "Use `qwen3-embedding:8b`.", status="superseded")
         p = self._piles()
         self.assertEqual(p["contradicted"], [])
         self.assertEqual(p["coverage"], [])
 
     def test_the_audit_never_writes(self):
         """Read-only is a promise, so it gets a test rather than a comment."""
-        self._mem("Embedding", "Gebruik `qwen3-embedding:8b`.")
-        self._mem("Les", "Iets zonder waarde.")
-        voor = {p: (p.stat().st_mtime_ns, p.read_bytes())
+        self._mem("Embedding", "Use `qwen3-embedding:8b`.")
+        self._mem("Lesson", "Something with no value.")
+        before = {p: (p.stat().st_mtime_ns, p.read_bytes())
                 for p in sorted(self.tmp.rglob("*")) if p.is_file()}
         self.m.audit()
-        na = {p: (p.stat().st_mtime_ns, p.read_bytes())
+        after = {p: (p.stat().st_mtime_ns, p.read_bytes())
               for p in sorted(self.tmp.rglob("*")) if p.is_file()}
-        self.assertEqual(voor, na, "de audit heeft de vault aangeraakt")
+        self.assertEqual(before, after, "the audit touched the vault")
 
     def test_json_output_carries_the_counts_for_the_heartbeat(self):
-        self._mem("Embedding", "Gebruik `qwen3-embedding:8b`.")
+        self._mem("Embedding", "Use `qwen3-embedding:8b`.")
         import io
         import contextlib
         buf = io.StringIO()
@@ -194,7 +194,7 @@ class StateAuditTest(unittest.TestCase):
         self.assertIn("coverage", data)
 
     def test_a_nonzero_exit_only_when_the_caller_asks(self):
-        self._mem("Embedding", "Gebruik `qwen3-embedding:8b`.")
+        self._mem("Embedding", "Use `qwen3-embedding:8b`.")
         import io
         import contextlib
         with contextlib.redirect_stdout(io.StringIO()):

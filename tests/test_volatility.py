@@ -61,22 +61,22 @@ class ConfigShapeTest(unittest.TestCase):
         self.assertFalse(_memory.looks_like_config(body))
 
     def test_a_setting_stated_with_a_copula_counts(self):
-        """Gevonden op de levende vault, niet bedacht.
+        """Found on the live vault, not invented.
 
         "de standaardwaarde voor 'policy.network_allowed' is 'false'" is
-        onmiskenbaar een instelling, en werd gemist zolang alleen `=` en `:`
-        als toekenning golden.
+        unmistakably a setting, and was missed as long as only `=` and `:`
+        counted as an assignment.
         """
         self.assertTrue(_memory.looks_like_config(
             "De standaardwaarde voor 'policy.network_allowed' is 'false'."))
 
     def test_prose_with_a_colon_is_not_a_setting(self):
-        """De ALL-CAPS-tak mag geen willekeurig woord worden.
+        """The ALL-CAPS branch must not become "any word".
 
-        Onder re.IGNORECASE matchte `[A-Z][A-Z0-9_]{2,}` elk woord van drie
-        letters, waardoor `grid-column: 1 / -1` in een CSS-uitleg als
-        instelling las. Dat was op de levende vault de enige reden dat een
-        layout-memory als state werd geclassificeerd.
+        Under re.IGNORECASE, `[A-Z][A-Z0-9_]{2,}` matched every word of three
+        letters, so `grid-column: 1 / -1` in a CSS explanation read as a
+        setting. On the live vault that was the only reason a layout memory
+        classified as state.
         """
         self.assertFalse(_memory.looks_like_config(
             "Elementen in `.settings-group-body` die volledige breedte nodig "
@@ -85,17 +85,18 @@ class ConfigShapeTest(unittest.TestCase):
             "De conclusie was helder: 3 van de 4 pogingen mislukten."))
 
     def test_a_screaming_constant_still_counts(self):
-        """... maar de tak zelf moet blijven werken, hoofdlettergevoelig."""
+        """... but the branch itself must keep working, case-sensitively."""
         self.assertTrue(_memory.looks_like_config("RECONCILE_THRESHOLD: 0.75"))
         self.assertTrue(_memory.looks_like_config("TOP_K = 3"))
 
     def test_a_boolean_hiding_inside_a_dutch_word_is_not_a_setting(self):
-        """Vijf valse instellingen op de levende vault, allemaal deze fout.
+        """Five false settings on the live vault, every one this mistake.
 
-        'aan' zit in "aangepast", 'uit' in "uitgebreid", 'on' in "ontworpen",
-        'off' in "officieel". Zonder woordgrens las "FreeRTOS is officieel
-        afgerond" als `RTOS is off` -- een gebeurtenis die daarmee vervangbaar
-        werd, precies wat deze as moet voorkomen.
+        Dutch swallows the boolean words whole: 'aan' sits inside "aangepast",
+        'uit' inside "uitgebreid", 'on' inside "ontworpen", 'off' inside
+        "officieel". Without a word boundary, "FreeRTOS is officieel afgerond"
+        parsed as `RTOS is off` -- an event made replaceable, which is exactly
+        what this axis has to prevent.
         """
         for body in (
             "De sectie in `vault-CLAUDE.md` is aangepast naar de actieve stijl.",
@@ -108,7 +109,7 @@ class ConfigShapeTest(unittest.TestCase):
             self.assertFalse(_memory.looks_like_config(body), body)
 
     def test_a_real_boolean_setting_still_counts(self):
-        """De keerzijde: de grens mag de echte waarde niet wegsnijden."""
+        """The other side: the boundary must not cut away the real value."""
         self.assertTrue(_memory.looks_like_config("memory_capture staat op true."))
         self.assertTrue(_memory.looks_like_config("`AUTO_LOGIN=true` stopt de server."))
         self.assertTrue(_memory.looks_like_config("sat_onboarded=false is de default."))
@@ -257,7 +258,7 @@ class MaintenanceTest(unittest.TestCase):
         n = _maintenance.supersede_pass(threshold=0.5,
                                         judge_fn=lambda new, old: True,
                                         get_cached_fn=self._get_cached)
-        self.assertEqual(n, 0, "een gebeurtenis wordt nooit gesloten")
+        self.assertEqual(n, 0, "an event is never closed")
 
     def test_supersede_pass_still_closes_a_pair_of_states(self):
         old = self._mem("Judge oud", "De judge draait op gemma3:4b.",
