@@ -100,7 +100,18 @@ idempotent-veilige installer); deze tabel is alleen referentie voor wat waar lan
    als hun gedrag veranderde, her-invoke de relevante skill.
 10. Write `$VAULT/.claude/.kennisbank-version` (de RELEASE-tag-stamp; los van de
     migratie-schema-stamp `.kennisbank-schema-version` die setup.sh in stap 9 zet):
-    `{"tag":"$LATEST","commit":"<git rev-parse --short $LATEST>","installed_at":"<UTC ISO 8601>"}`.
+    `{"tag":"$LATEST","commit":"<git rev-parse --short "$LATEST^{}">","installed_at":"<UTC ISO 8601>"}`.
+
+    De `^{}` is niet optioneel. Elke tag in deze repo is *annotated*, en
+    `git rev-parse v0.29.0` geeft dan de SHA van het TAG-OBJECT, niet van de
+    commit. Twee upgrades op rij stempelden daardoor een SHA die in geen enkele
+    branch voorkomt: v0.28.0 kreeg `80b0285` (tag) in plaats van `86eb290`
+    (commit), v0.29.0 kreeg `1506a9c` in plaats van `1cb608d`. Het valt niet op
+    omdat sommige git-commando's de tag stilzwijgend pellen -- tot iets de
+    stempel vergelijkt met een commit-SHA, of een mens hem naast `git log` legt.
+    Dat is precies wat stap 8 hierboven wél goed doet en deze stap niet deed.
+    `^{}` pelt een annotated tag naar zijn commit en doet niets bij een
+    lightweight tag, dus het is in beide gevallen juist.
 11. `git -C "$REPO" checkout -` (return to the previously checked-out branch,
     regardless of its name).
 12. Run `bash "$VAULT/.claude/scripts/doctor.sh"` and report the PASS count.
