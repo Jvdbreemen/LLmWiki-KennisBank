@@ -1,7 +1,7 @@
 ---
 id: TASK-155
 title: A NOOP throws a memory away and leaves no record of what it was
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-13 18:34'
 updated_date: '2026-08-13 19:23'
@@ -33,7 +33,7 @@ Then the question "is the reconcile seam throwing away good knowledge?" becomes 
 - [x] #2 memory-doctor.py shows recent discards, with --json for the heartbeat
 - [x] #3 A broken log never blocks the sweep, proven by a test
 - [x] #4 The log is bounded so a long --all rebuild cannot fill the disk
-- [ ] #5 python -m pytest tests -q is green
+- [x] #5 python -m pytest tests -q is green
 <!-- AC:END -->
 
 ## Implementation Notes

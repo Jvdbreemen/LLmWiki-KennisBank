@@ -3,7 +3,7 @@ id: TASK-144
 title: >-
   Both judge models read NOOP as "unrelated", and NOOP is the verdict that
   discards knowledge
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-12 19:14'
 updated_date: '2026-08-13 18:55'

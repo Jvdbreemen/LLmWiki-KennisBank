@@ -3,7 +3,7 @@ id: TASK-148
 title: >-
   Maintenance passes report zero whether they worked or failed, and re-embed
   1506 memories to get there
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-12 20:33'
 updated_date: '2026-08-12 22:06'
@@ -50,11 +50,11 @@ Design context: `docs/superpowers/specs/2026-08-12-self-correcting-memory-layer-
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A pass that fails is distinguishable from a pass that had nothing to do, in the heartbeat and in the log
+- [x] #1 A pass that fails is distinguishable from a pass that had nothing to do, in the heartbeat and in the log
 - [x] #2 current_items() no longer re-embeds memories that already have a current-space vector, with the wall-clock time recorded before and after
-- [ ] #3 The decision on the stale embeddings cache is made and recorded: prune, or read vectors from the index
-- [ ] #4 A sweep run shows non-zero maintenance counters on a corpus where work demonstrably exists, or explains in the heartbeat why not
-- [ ] #5 python -m pytest tests -q is green
+- [x] #3 The decision on the stale embeddings cache is made and recorded: prune, or read vectors from the index
+- [x] #4 A sweep run shows non-zero maintenance counters on a corpus where work demonstrably exists, or explains in the heartbeat why not
+- [x] #5 python -m pytest tests -q is green
 <!-- AC:END -->
 
 ## Implementation Notes

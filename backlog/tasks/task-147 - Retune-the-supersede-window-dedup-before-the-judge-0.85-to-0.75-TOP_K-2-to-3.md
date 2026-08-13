@@ -1,7 +1,7 @@
 ---
 id: TASK-147
 title: 'Retune the supersede window: 0.85 to 0.75, TOP_K 2 to 3'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-12 20:32'
 updated_date: '2026-08-13 18:56'

@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-08-13 18:41'
-updated_date: '2026-08-13 20:25'
+updated_date: '2026-08-13 20:45'
 labels:
   - memory
   - llm
@@ -46,8 +46,10 @@ What changed underneath the original trade-off: since TASK-150 a closure is reco
 - [x] #2 SUPERSEDE_SYSTEM gets the same explicit decision ordering as RECONCILE_SYSTEM, and the agreement rate is measured before and after
 - [ ] #3 Any change to the fail-safe bias is argued against the cost of a wrong closure as it stands TODAY, not as it stood before the closure log existed
 - [x] #4 The above-0.95 band is excluded from scoring, with the reason stated in the report
-- [ ] #5 python -m pytest tests -q is green
+- [x] #5 python -m pytest tests -q is green
 <!-- AC:END -->
+
+
 
 ## Implementation Notes
 

@@ -3,7 +3,7 @@ id: TASK-141
 title: >-
   The hermeticity pin assumes a closed port refuses instantly; on Windows it
   times out
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-12 17:48'
 updated_date: '2026-08-13 18:56'

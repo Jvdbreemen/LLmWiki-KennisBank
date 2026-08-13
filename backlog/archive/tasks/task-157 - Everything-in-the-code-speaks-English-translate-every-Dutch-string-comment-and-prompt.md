@@ -3,9 +3,10 @@ id: TASK-157
 title: >-
   Everything in the code speaks English: translate every Dutch string, comment
   and prompt
-status: In Progress
+status: To Do
 assignee: []
 created_date: '2026-08-13 20:21'
+updated_date: '2026-08-13 20:32'
 labels:
   - docs
   - policy
@@ -50,3 +51,29 @@ A checkpoint tag is created before any of this, so the whole thing can be undone
 - [ ] #8 python -m pytest tests -q is green
 - [ ] #9 A checkpoint tag exists from before the first translation commit
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Dropped on request, 2026-08-13, after the inventory and the first translation batch. Archived rather than deleted, because the inventory is the expensive part and it is worth keeping if this is ever picked up again.
+
+What was established before it was stopped:
+
+    PROMPT         6    changes model behaviour, needs re-measurement
+    OUTPUT       544    what users read
+    DOCSTRING    475
+    COMMENT     1245
+    STRING       611
+    FILES        188
+
+The six Dutch prompts are `_extract.EXTRACT_SYSTEM`, `_judge.JUDGE_SYSTEM`, `_reconcile.RECONCILE_SYSTEM`, `_maintenance.SUPERSEDE_SYSTEM`, `_maintenance.RECHECK_SYSTEM` and `_activity._LLM_PROMPT`. `_scenes.SCENE_PROMPT` was already English. All six were translated and the change is preserved in a git stash; it was never committed and never measured.
+
+Two things a future attempt should keep from this one:
+
+1. The prompts are the only category where language changes behaviour, and they are also the smallest — six constants. Everything measured on the memory layer this week (NOOP 25% to 0%, supersede recognition 30% to 55%) was obtained with Dutch prompts against a Dutch vault. Translating them without re-running those measurements would silently invalidate both numbers.
+2. The `type` values in the extract prompt (feit/voorkeur/procedure/beslissing) are wire values written into frontmatter and carried by 1595 existing memories. They are schema, not prose, and translating them means a migration.
+
+The scanner that produced the inventory classifies by cost (prompt / output / docstring / comment / string) rather than by file, which is the distinction that makes the work orderable. It was a scratch script and was not kept.
+
+Checkpoint tag `checkpoint/pre-english-2026-08-13` marks the state before any of this.
+<!-- SECTION:FINAL_SUMMARY:END -->
