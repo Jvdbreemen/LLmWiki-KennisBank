@@ -195,6 +195,34 @@ def _rot_count() -> "int | None":
         return None
 
 
+def _note_pass_failure(s: dict, key: str, exc: BaseException) -> None:
+    """Record WHY a maintenance pass produced nothing.
+
+    Elke pass stond in `try: ... except Exception: 0`. Een time-out, een
+    ImportError en een rustige run leverden daardoor exact dezelfde regel in de
+    heartbeat op: nul. Dat is dezelfde faalvorm als TASK-143 een laag lager --
+    daar slikte de seam een model dat nooit antwoordde, hier slikt de
+    orkestrator een pass die nooit draaide.
+
+    De teller blijft een int (0), want lezers rekenen daarop. De reden komt
+    ernaast te staan, en telt mee in `errors` zodat memory-notify het bij de
+    volgende sessiestart meldt via een kanaal dat al bestaat.
+    """
+    s.setdefault("pass_errors", {})[key] = f"{type(exc).__name__}: {exc}"[:200]
+    s["errors"] = s.get("errors", 0) + 1
+    print(f"memory-sweep: pass '{key}' faalde: {type(exc).__name__}: {exc}",
+          file=sys.stderr)
+
+
+def _run_pass(s: dict, key: str, fn) -> None:
+    """Draai één onderhoudspass en houd vast of hij het gehaald heeft."""
+    try:
+        s[key] = fn()
+    except Exception as e:
+        s[key] = 0
+        _note_pass_failure(s, key, e)
+
+
 def _write_heartbeat(summary: dict) -> None:
     """Schrijf de heartbeat-status naar <vault>/.claude/memory-sweep-status.json."""
     hb = vault_root() / ".claude" / HEARTBEAT
@@ -279,6 +307,9 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
         "chunks_read": 0,
         "chunks_skipped": 0,
         "budget_reached": False,
+        # Leeg = elke pass heeft gedraaid. Een nul in een teller hierboven
+        # betekent dan echt "niets te doen" en niet "gecrasht" (TASK-148).
+        "pass_errors": {},
         "superseded": 0,
         "rechecked_retracted": 0,
         "promote_marked": 0,
@@ -406,9 +437,11 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
                     # current-only) het paar op.
                     if status == "current":
                         for old in rec["supersedes"]:
-                            if _memory.set_status(old["path"], "superseded",
-                                                  superseded_by=[path.stem],
-                                                  valid_until=valid_from):
+                            if _memory.set_status(
+                                    old["path"], "superseded",
+                                    superseded_by=[path.stem],
+                                    valid_until=valid_from,
+                                    reason="reconcile op schrijfmoment: nieuw feit vervangt dit"):
                                 s["reconciled_superseded"] += 1
                                 pool = [it for it in pool if it["path"] != old["path"]]
                     existing.append({"vec": vec, "status": status, "valid_until": ""})
@@ -448,26 +481,13 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
         # Exacte duplicaten EERST, en zonder LLM. Scheelt supersede_pass een
         # judge-aanroep per duplicaatpaar, en belangrijker: een identieke body
         # hoort niet aan een oordeel onderworpen te worden dat fout kan gaan.
-        try:
-            s["exact_duplicates_closed"] = _mnt.exact_duplicate_pass()
-        except Exception:
-            s["exact_duplicates_closed"] = 0
-        try:
-            s["superseded"] = _mnt.supersede_pass()
-        except Exception:
-            s["superseded"] = 0
-        try:
-            s["rechecked_retracted"] = _mnt.recheck_pass()
-        except Exception:
-            s["rechecked_retracted"] = 0
-        try:
-            s["promote_marked"] = _mnt.cluster_promote_pass()
-        except Exception:
-            s["promote_marked"] = 0
-    except Exception:
-        s["superseded"] = s.get("superseded", 0)
-        s["rechecked_retracted"] = s.get("rechecked_retracted", 0)
-        s["promote_marked"] = s.get("promote_marked", 0)
+        _run_pass(s, "exact_duplicates_closed", _mnt.exact_duplicate_pass)
+        _run_pass(s, "superseded", _mnt.supersede_pass)
+        _run_pass(s, "rechecked_retracted", _mnt.recheck_pass)
+        _run_pass(s, "promote_marked", _mnt.cluster_promote_pass)
+    except Exception as e:
+        # De import zelf faalde: geen enkele pass heeft gedraaid.
+        _note_pass_failure(s, "maintenance", e)
 
     _write_heartbeat(s)
     return s

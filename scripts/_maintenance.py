@@ -276,7 +276,8 @@ def exact_duplicate_pass(dry_run: bool = False) -> int:
                 gesloten += 1
                 continue
             if _memory.set_status(dubbel["path"], "superseded",
-                                  superseded_by=[stem]):
+                                  superseded_by=[stem],
+                                  reason="exact_duplicate_pass: byte-identieke body"):
                 gesloten += 1
     return gesloten
 
@@ -303,7 +304,9 @@ def supersede_pass(threshold: float = 0.85, judge_fn=None, get_cached_fn=None) -
             until = newer.get("valid_from") or newer.get("created") or ""
             if _memory.set_status(older["path"], "superseded",
                                   superseded_by=[Path(newer["path"]).stem],
-                                  valid_until=until or None):
+                                  valid_until=until or None,
+                                  reason=("supersede_pass: cosine boven de drempel "
+                                          "en de judge zei dat het nieuwe het oude vervangt")):
                 superseded_paths.add(older["path"])
                 done += 1
     return done
