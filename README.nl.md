@@ -76,7 +76,47 @@ Geheugensystemen van leveranciers (Mem0, Zep, Letta, Cognee) zijn krachtig maar 
 
 De ontwerpvoorkeur is overal dezelfde: **deterministisch waar mogelijk, LLM alleen waar het oordeelsvermogen toevoegt, fail-open overal**. Een dood model blokkeert nooit een sessie, verliest nooit een transcript, en verwijdert nooit geverifieerde kennis.
 
-## Functie-highlights (v0.29.0)
+## Functie-highlights (v0.30.0)
+
+### Nieuw in v0.30.0
+
+v0.29.0 repareerde een geheugenlaag die stil was gestopt met vastleggen. Deze
+release gaat over de beslissingen die hij neemt nu hij weer vastlegt — en over
+het feit dat je daar tot nu toe niets van zag.
+
+- **Een gesloten memory is weer zichtbaar, en werkelijk omkeerbaar.** Het
+  ontwerp leunde erop dat superseden veilig is omdat er niets verdwijnt. Waar op
+  schijf en onwaar in elk ander opzicht: recall filtert op `current` en
+  `/kennisbank:review` loopt alleen de `unverified`-wachtrij, dus een gesloten
+  memory verscheen nergens waar een mens kijkt. Elke sluiting staat nu in een
+  logboek met opvolger en reden, en `memory-doctor.py closed` / `reopen <stem>`
+  is de weg terug.
+- **`volatility: state | event` legt de updateregel in de structuur.** Een state
+  wordt vervangen als de waarde verandert; een event wordt nooit gesloten. Dat
+  uit proza afleiden scoorde 7/20, 5/20 en 4/20 bij drie modellen, dus het wordt
+  nu één keer beslist, op schrijfmoment. Op de levende vault beschermt de guard
+  drie paren die alleen maar op elkaar lijken — waaronder de locaties van twee
+  *verschillende* skills op cosinus 0.867.
+- **`kb-state-audit.py` vergelijkt memories met een gezag**, niet met elkaar: 4
+  tegenstrijdigheden gevonden op deze vault, stuk voor stuk een verouderde
+  `qwen3-embedding:8b`, zonder één modelaanroep — plus een dekkingsregel die
+  zegt waar hij blind was.
+- **Supersede-paren vinden is 11x sneller met identieke uitkomst.** 1.271.215
+  paarsgewijze vergelijkingen (1171,86 s) worden een indexquery (106,94 s) die
+  dezelfde 163 paren teruggeeft. Exact, geen benadering, met het oude pad als
+  terugval.
+- **Twee prompts herordend en hermeten.** Reconcile: NOOP op ongerelateerde
+  paren 25% → **0%**. Supersede: herkenning van echte vervangingen 30% → **55%**.
+- **Voortgang en een schatting op elk langlopend script**, want een sweep die
+  tien minuten draait zonder iets te schrijven is niet te onderscheiden van een
+  hang. `KB_NO_PROGRESS=1` zet het uit.
+
+Twee metingen spraken de taak tegen die erom vroeg, en allebei staan ze in de
+changelog in plaats van stilletjes te verdwijnen: de supersede-judge blijkt
+**niet** te voorzichtig (86% van zijn weigeringen is terecht; de vastgelegde
+geschiedenis zit vol opgeruimde duplicaten), en de corpus laten groeien kostte
+`recall@5` op memory 0,778 → 0,768, onder een ondergrens die een dag eerder was
+vastgelegd.
 
 ### Nieuw in v0.29.0
 
