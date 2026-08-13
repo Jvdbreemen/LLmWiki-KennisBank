@@ -133,3 +133,22 @@ not what actually runs.
 Both of those say the same thing in different words: this window is not the
 self-correcting mechanism. Write-time reconcile is, and it only ever sees what
 intake delivered.
+
+## Postscript: what finding these pairs costs
+
+Producing the tables above took 1171.86 s of pure-Python cosine — 1,271,215
+pairs — and `cluster_promote_pass` walks the same triangle a second time. Half
+an hour of CPU per sweep, to find 163 candidate pairs of which zero currently
+reach a judge.
+
+Routing the same question through `kb-index.db`, which already holds these
+vectors, gives the identical 163 pairs in 106.94 s: 11x, with the largest
+cosine disagreement at 4.01e-07 (float32 storage against float64 arithmetic).
+
+It is exact rather than approximate. vec0 returns rows ordered by distance and
+distance is monotone in cosine for unit vectors, so once the far edge of the
+window falls below the threshold, nothing beyond it can qualify — and while the
+whole window still qualifies, the window widens. Memories the index has not
+seen yet, which is the normal state right after a sweep, are compared the old
+way against everything, so a lagging index costs time and never correctness.
+Details in TASK-154.
