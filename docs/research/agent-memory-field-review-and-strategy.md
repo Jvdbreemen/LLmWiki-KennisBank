@@ -170,16 +170,34 @@ whole class of facts; a prompt that excludes a class is the same failure one
 layer up. If the ratio is low, the fix is a prompt change plus a distinct type
 (`valkuil`), judge-assigned, with its own half-life.
 
-### 3. Automate the distillation proposal, keep the merge human (TASK-174)
+### 3. Dreaming — autonomous wiki drafts from memory clusters (TASK-174)
 
 Principle #3: what requires manual discipline does not happen. Distillation to
-the wiki is human-triggered; `distill-notify.py` counts and mentions. Automate
-the *proposal* — cluster the memory layer off-hours, draft articles for dense
-clusters — and keep the merge human, the same split used for quarantined
-memories. The wiki layer's saturation (recall@5 = 1.000) makes this about
-keeping the curated layer fed, not about its retrieval. TASK-165's finding that
-a third of memories are Dutch summaries of English sources is a caution for the
-drafting half: proposals should carry their sources, not re-summarise them.
+the wiki is human-triggered; `distill-notify.py` counts and mentions. Upgraded
+by owner directive (2026-08-15) from proposal-surfacing to draft-writing: an
+off-hours dream pass clusters the memory layer (LLM consolidation, not the
+graph communities TASK-134 measured as insufficient), detects clusters no wiki
+article covers, and writes real `status: draft` articles into the vault with
+full provenance. Draft-to-published promotion stays the one human act — the
+wiki is the layer the human reads. The wiki layer's saturation (recall@5 =
+1.000) makes this about keeping the curated layer fed, not about its
+retrieval. TASK-165's caution applies to the drafting half: drafts carry
+their sources, in English, rather than re-summarising them.
+
+### Owner decisions, recorded same day
+
+Three directives on 2026-08-15 moved items from "queued analysis" to "decided
+direction": the memory lifecycle runs fully autonomously with no required
+human (TASK-178 — autonomous quarantine exit via grounded verification and
+corroboration, deterministic-only demotion, signal-driven noise once the
+sensor is fixed); skills evolve autonomously between sessions (TASK-177);
+and dreaming writes drafts rather than proposals (TASK-174 above). The
+usage-detection sensor these depend on gets verified and fixed first
+(TASK-179): the current scan counts only tool-call reads, so the most
+successful injections — snippet sufficient, no Read needed — are invisible,
+which is the probable reason usage measured as noise in the factor
+decomposition. Autonomy built on that sensor would down-weight the best
+memories first; the sensor precedes the autonomy.
 
 ### 4. Observer provenance (TASK-170) — now with an empirical argument
 
