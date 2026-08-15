@@ -209,54 +209,66 @@ is for.
 
 ## The two verdicts are not equally trustworthy
 
-**`supported` does not fabricate.** The prompt asks the model to quote the
-passage, and a quote is checkable, so all sixty verdicts were checked
-mechanically rather than by hand. Thirty-one quotes are not verbatim — the
-model reformats, joins lines, normalises whitespace — and for **every one of
-them the quoted substance is in the passage**. Zero absent. It quotes loosely
-and never invents.
+Both were then measured properly, on 27 cases across two samples, each
+adjudicated against the WHOLE transcript by an independent reader and each
+judgement put to a second reader whose instruction was to refute it.
 
-**`unsupported` is wrong half the time.** All eight were adjudicated against
-the *whole* transcript, not the passage. Four are correct. Four are memories
-that are stated in the source, verbatim:
+**`supported` does not fabricate.** The prompt asks the model to quote the
+passage, and a quote is checkable, so every verdict in both runs was checked
+mechanically rather than by hand — 210 of them. Non-verbatim quotes are common
+(the model reformats, joins lines, normalises whitespace) and for **every one
+the quoted substance is in the passage**.
+
+    fabricated quotes    0 / 210    95% CI  0.0% - 1.8%
+
+**`unsupported` is essentially never right.** Every `unsupported`, `partial` and
+`not_found` verdict from both runs — 27 cases — went through the adjudication.
+The result is one-sided:
+
+    adjudicated labels   supported 25   partial 2   unsupported 0   absent 0
+    refuted by the second reader                    0 of 27
+
+Restricted to the verdict that would actually demote a memory:
+
+    unsupported verdicts confirmed as unsupported   0 / 20    95% CI 0.0% - 16.1%
+    ... or at least partial (lenient reading)       2 / 20    95% CI 2.8% - 30.1%
+
+Every one of the twenty was stated in its source. Four examples:
 
 | memory | in the transcript |
 | --- | --- |
 | firmware-versieconsistentie | *"reports alpha.284 while HEAD is alpha.285. For honest receipts (device version == pushed code), I'll rebuild at current HEAD first, then flash"* |
-| contextbeheer-via-bestanden | *"Everything you paste into a dispatch prompt … stays resident in your context for the rest of the session and is re-read on every later turn. Hand artifacts over as files"* |
-| deduplicatie-bij-merging | the merge loop itself: `seen = set()` … `if n['id'] not in seen` |
-| risico-op-informatielekkage | *"Gedistilleerde 'lessen' kunnen gevoelige bedrijfsinhoud bevatten zónder één pad of symbool"* |
+| contextbeheer-via-bestanden | *"Everything you paste into a dispatch prompt … stays resident in your context … and is re-read on every later turn. Hand artifacts over as files"* |
+| deduplicatie-bij-merging | the merge loop itself: `seen = {n['id'] for n in ast['nodes']}` … `if n['id'] not in seen` |
+| v2-feature-parity | *"`.39` runs the full feature set (each task flashed + Chromium-verified, 0 console errors)"* |
 
-**R1 = 4/8 = 50%**, Wilson 95% interval **22–79%**. Eight cases cannot pin a
-rate, and the interval says so; but even its optimistic end means one demotion
-in five is wrong.
+### Two failure modes, and the second is worse
 
-### Why this is structural, not a tuning problem
+**Retrieval missed.** In 10 of 17 run-3 cases the support was elsewhere in the
+transcript. The prompt reserves `not_found` for a passage "about something else
+entirely", so a miss landing on a *topically related* passage — same session,
+same project, same afternoon — does not fit that description and the model
+reaches for `unsupported` instead. From inside a passage, a retrieval miss and a
+false memory are indistinguishable. Only exhaustive search separates them, and
+the verifier does not search.
 
-The prompt offers `not_found` for "the passage is about something else
-entirely". When the selector misses but lands on a *topically related* passage —
-same transcript, same project, same afternoon — that description does not fit,
-so the model correctly reaches for `unsupported` instead. **A retrieval miss and
-a false claim are indistinguishable from inside the passage.** Only an
-exhaustive search of the transcript separates them, and that is exactly what the
-verifier does not do.
+**The model rejected evidence it was holding.** In **7 of 17** the support was
+inside the passage it was given, and it still declined. That is not a retrieval
+problem at any coverage. `risico-op-informatielekkage` shows the mechanism: the
+passage *states* the claim and gives no argument for it, and the model judged
+whether the passage **justified** the claim rather than whether it **said** it.
+For verifying extraction, said is enough.
 
-Three of the four false demotions are that. The fourth is a different mismatch:
-for `risico-op-informatielekkage` the passage *states* the claim while giving no
-argument for it, and the model judged whether the passage **justified** the
-claim rather than whether it **said** it. For verifying extraction, said is
-enough.
+A better prompt might narrow the second. It cannot touch the first.
 
 ### What follows: raise trust, never lower it
 
-The mechanism should feed the ranking in one direction only. `supported`
-confirms a memory; every other verdict changes nothing. That is not a
-compromise, it is what the evidence supports: the positive verdict is backed by
-checkable quotes and no fabrication in sixty cases, and the negative verdict
-cannot tell a retrieval failure from a false memory.
+`supported` may confirm a memory. Nothing may demote one. The positive verdict
+is backed by checkable quotes with no fabrication in 210 cases; the negative one
+was right zero times in twenty.
 
-It also lands where this vault already stands — the human is the authority for
-negative signals, and there is now a measured reason rather than a principle.
+That is where this vault already stands — the human is the authority for
+negative signals — now with a measured reason instead of a principle.
 
 ## What the evidence supports
 
@@ -288,24 +300,34 @@ any coverage short of exhaustive. For a system whose first duty is not to lose
 what it correctly wrote down, a one-in-two — or even a one-in-five — false
 demotion is not a rate to design around.
 
-### The vault's first extraction-accuracy figure
+### The extraction-invention rate I reported does not exist
 
-Two of the sixty memories say something their source does not:
+An earlier version of this section said two of sixty memories stated something
+their source does not — a 3.3% invention rate — and called it the vault's first
+extraction-accuracy figure. **Both cases were my own search failures, and the
+rate is zero.**
 
-- **`hybride-dataverwerkingscyclus`** claims captures are merged *monthly*. The
-  word appears nowhere in its transcript; the source says a daily pass.
-- **`capaciteit-van-capture-mode`** claims a capacity of a million log lines.
-  Neither "miljoen" nor "logberichten" nor "geheugen" occurs anywhere in its
-  491k-character source.
+- **`capaciteit-van-capture-mode`** claims "up to 1 million log lines in
+  memory". I searched for `miljoen`, `logberichten` and `geheugen`, found none
+  of them in 491k characters, and concluded invention. The transcript says, at
+  line 4489: `{"name":"Capture mode toggle", … "desc":"Checkbox to enable
+  high-capacity capture mode (up to 1M lines in memory)"}`.
+- **`hybride-dataverwerkingscyclus`** claims captures are merged monthly. I
+  grepped `maandelijk|monthly`, got zero hits, and concluded invention. Line
+  509 reads: *"Hybride gekozen: atomair capture → maand-merge."*
 
-**2 of 60 = 3.3%**, Wilson 95% interval **0.9–11.4%**. Wide, and worth stating
-as a rate anyway, because it is the number that decides whether a verification
-pass is worth running at all. One memory in thirty carrying a fact nobody said
-is a real defect, and nothing in this system was looking for it before today.
+One failed on language, the other on morphology — and I had already written,
+two sections above, that a Dutch claim against an English source defeats lexical
+search. I diagnosed the trap and then walked into it, using the same instrument
+I had just shown to be inadequate.
 
-Against that, `supported` was returned 49 times with **zero fabricated quotes**
-(0/60, upper bound 6.0%). The verifier is more reliable than the extractor it
-is checking, which is the condition under which checking is worth doing.
+    extraction inventions confirmed    0 / 60    95% CI 0.0% - 6.0%
+
+The corrected figure is the more interesting one. Across 27 acting-class cases
+adjudicated exhaustively, **not one memory was found to state something its
+source does not.** The extractor's accuracy was the premise of this whole
+investigation — a trust factor exists to catch bad extractions — and on this
+evidence there are very few to catch.
 
 ### A third of the corpus is a Dutch summary of an English source
 
@@ -336,6 +358,72 @@ decision, not a retrieval one.
 
 Language here is a stopword ratio, not a classifier, and the cross-language
 bucket is 87 claims from four transcripts.
+
+## Was it worth it? The numbers, and a verdict against the thing it was for
+
+**The trust factor should not be built on this.** Not because the mechanism is
+bad — it is better than expected — but because of what its output distribution
+turns out to be.
+
+    verdict = supported            133 / 150  =  88.7%   (82.6% - 92.8%)
+    anything else                   17 / 150  =  11.3%   ( 7.2% - 17.4%)
+    of those, correct                0 /  20  =   0.0%   ( 0.0% - 16.1%)
+
+Read those three lines together. The factor is **uniform exactly where it is
+reliable, and unreliable exactly where it varies.** Nine memories in ten get the
+same verdict, which is the same defect as `evidence_basis: agent` sitting at
+100% and making `trust_factor` inert — the defect this work set out to fix. The
+one memory in ten that would be scored differently is the one where the verdict
+was wrong every time it was checked.
+
+This investigation began because two of five ranking factors were measured to do
+nothing. It ends by measuring that the proposed replacement would do nearly
+nothing, for a different reason, and would be wrong in the remainder. That is a
+worse outcome for the factor and a better one for the vault, because the factor
+would have been believed.
+
+### What the work did buy, with numbers
+
+| | before | after |
+| --- | --- | --- |
+| Answers silently lost to a parse failure | 4/56 = **7.1%** (2.8–17.0%) | 0/150 = **0%** (0–2.5%) |
+| Passage contains the claim's real source | **62.7%** | **87.8%** (90.2% without the lexical prefilter) |
+| Verifying a memory against its source | retrieve, and hope | a stamped lookup, for every future capture |
+
+- **The parser fix protects five seams**, not just this probe. `extract`,
+  `judge`, `reconcile`, `supersede` and the verifier all read model JSON through
+  `_llmjson`, and all five fail *silently* — to `[]`, to `unverified`, to `ADD`.
+  A 7% silent-failure rate across that surface was real and is now zero on 150
+  calls.
+- **The retrieval finding transfers**, and that is where its value actually is.
+  Granularity, not shortlisting, was the whole problem — and `doc_text` caps
+  every wiki document at 4000 characters, leaving **23.1% of all wiki text
+  unembedded and unreachable** (TASK-164). That is a live defect in the hot
+  path, found sideways by this work, and worth more than the factor it was
+  chasing.
+- **The extractor is trustworthy.** 27 acting-class cases, adjudicated
+  exhaustively against whole transcripts, adversarially verified: zero
+  inventions. The premise of the trust project — that agent-written memories
+  need policing — is not supported on this corpus.
+
+### What it cost
+
+Roughly 1.5 GPU-hours of local inference across four measurement runs, and 3.25M
+subagent tokens for the 27-case adjudication with its refutation pass. The
+adjudication is what produced the decisive number (0 of 20) and it could not
+have been done by hand at that rigour in the time.
+
+### The honest caveats
+
+- The adversarial pass **refuted nothing, 0 of 27**. A check that never fires
+  has not been shown capable of firing. Its value here was in verifying that
+  each quoted piece of evidence actually greps clean in the transcript, which it
+  did, case by case.
+- One corpus, one model (`qwen3.5:4b`), one embedding model. None of this
+  generalises past this vault without re-measuring.
+- The 88.7% `supported` rate is measured on memories that already survived
+  capture-time dedup, reconcile and the judge. It is not the extractor's raw
+  accuracy; it is the accuracy of what got written down.
 
 ## The finding that outranks all of this
 
