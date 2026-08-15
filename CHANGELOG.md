@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.31.1] - 2026-08-15
+
+A patch that ships a fix which had already been written, reviewed and approved —
+and then lost. PR #114 landed as `e314f70`; the follow-up commit that processed
+its Copilot review stayed behind on the branch and sat there for two days. The
+repository's rule is to read the review before merging. This is the step after
+that one: having acted on it, make sure the acting lands.
+
+### Fixed
+
+- **The C4 reference documented the bug the skill it documents warns about.**
+  `C4-Documentation/c4-code-skills.md` described step 10 of the upgrade skill as
+  `git rev-parse --short $LATEST`, with no `^{}`. Every tag in this repository is
+  annotated, so that command returns the SHA of the tag *object* rather than the
+  commit — which is precisely how v0.28.0 came to be stamped `80b0285` instead of
+  `86eb290`, and v0.29.0 `1506a9c` instead of `1cb608d`. Anyone following the
+  reference instead of the skill would have reproduced it a third time.
+
+### Changed
+
+- `skills/kennisbank-upgrade/SKILL.md` reads more clearly at the same step, and
+  its explanation of how step 8 and step 10 differ is corrected. **Not a
+  behaviour fix**: the previous form
+  `"<git rev-parse --short "$LATEST^{}">"` and the new
+  `"<git rev-parse --short $LATEST^{}>"` were tested and behave identically,
+  because a command substitution opens its own quoting context. Recorded as
+  cosmetic rather than folded into the fix above, which is where it would have
+  looked like a second defect.
+
+### Not in this release
+
+`perf/default-embed-qwen3-4b` was examined and deliberately left out. Its content
+is already on main by another route — the default is `qwen3-embedding:4b` and
+`docs/research/embedding-model-sweep-2026-08.md` is present — and the branch is
+behind main elsewhere. Stale, not unreleased.
+
 ## [0.31.0] - 2026-08-15
 
 A release about measurement. Three things this repository believed turned out to
@@ -1788,7 +1824,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.31.0...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.31.1...HEAD
+[0.31.1]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.31.0...v0.31.1
 [0.31.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.30.0...v0.31.0
 [0.30.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.29.0...v0.30.0
 [0.29.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.28.0...v0.29.0

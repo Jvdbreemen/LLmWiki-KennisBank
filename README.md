@@ -73,7 +73,21 @@ Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: 
 
 The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
 
-## Feature highlights (v0.31.0)
+## Feature highlights (v0.31.1)
+
+### New in v0.31.1
+
+A patch carrying a fix that was written, reviewed and approved two days ago and
+then never merged — the follow-up commit that processed PR #114's Copilot review
+stayed behind on its branch.
+
+**The C4 reference prescribed the bug its own skill warns about.** It documented
+the upgrade stamp as `git rev-parse --short $LATEST`, without `^{}`. Tags here
+are annotated, so that records the tag object rather than the commit — how
+v0.28.0 and v0.29.0 both ended up stamped with a SHA present in no branch.
+
+A wording change in `kennisbank-upgrade`'s step 10 rides along. It reads better;
+it does not change behaviour, and both forms were tested to confirm that.
 
 ### New in v0.31.0
 
