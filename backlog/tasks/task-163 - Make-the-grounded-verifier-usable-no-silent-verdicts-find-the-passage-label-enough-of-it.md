@@ -33,9 +33,7 @@ There is a second, better fix for everything captured from now on: **the sweep k
 
 **3. Eleven hand-labelled cases established a direction, not a rate.** Any weight placed on this factor needs a larger set, labelled from the full passage this time.
 
-Scope is the harness and the evidence. Whether the signal enters the ranking is a separate decision, to be made on the numbers this produces.</description>
-<parameter name="acceptanceCriteria">["No verdict is silently absent: unparseable responses are retried, counted, and reported separately from a real verdict", "Passage selection is measured before and after, on the same sample, and the not_found rate is reported for both", "Chunk embeddings are cached per transcript so cost scales with sessions rather than memories", "The sweep records which chunk produced a candidate, so future memories need no retrieval to verify", "A labelled set large enough to state a rate, labelled from the full passage", "python -m pytest tests -q is green"]
-
+Scope is the harness and the evidence. Whether the signal enters the ranking is a separate decision, to be made on the numbers this produces.
 ## Where the acceptance criteria stand
 
 Evidence: `docs/research/llm-trust-verification-2026-08-15.md`. Commits fcf96cb,
@@ -87,3 +85,13 @@ Filed on the way: TASK-164 (the 4000-character cap hid 16.6% of the wiki from th
 and TASK-165 (34% of claims are Dutch from English sources, and the lexical
 prefilter cannot bridge that).
 <!-- SECTION:DESCRIPTION:END -->
+
+## Acceptance Criteria
+<!-- AC:BEGIN -->
+- [x] #1 No verdict is silently absent: unparseable responses are retried, counted, and reported separately from a real verdict
+- [x] #2 Passage selection is measured before and after, on the same sample, and the not_found rate is reported for both
+- [x] #3 Chunk embeddings are cached per transcript so cost scales with sessions rather than memories
+- [x] #4 The sweep records which chunk produced a candidate, so future memories need no retrieval to verify
+- [x] #5 A labelled set large enough to state a rate, labelled from the full passage
+- [x] #6 python -m pytest tests -q is green
+<!-- AC:END -->
