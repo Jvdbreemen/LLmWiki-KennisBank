@@ -20,25 +20,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and what was dropped, because silence would read as "everything was included".
   Sizing is ~4 characters per token, deliberately dependency-free so a cheap path
   stays cheap — leave headroom against an exact count. Without a ceiling the
-  output is byte-identical to before. (TASK-126)
+  output is byte-identical to before. (TASK-160)
 
 ### Documentation
 
 - **Agent-memory field review and strategy**
   (`docs/research/agent-memory-field-review-and-strategy.md`): KennisBank read
-  against the Tsinghua Awesome-Memory-for-Agents taxonomy (~300 papers) and an
-  eight-framework production comparison. Finding: the implementation is at parity
-  with or ahead of funded products on temporal reasoning, retrieval strategy,
-  write-time consolidation, locality and human editorial control — and sits on
-  the wrong half of the field's central distinction, storing experience-shaped
-  content as memory-class records that no task outcome ever validates. Queues six
-  items (TASK-129 through TASK-135), three of them removals, sequenced so the
-  cheap diagnostics run before the expensive builds.
+  against the Tsinghua Awesome-Memory-for-Agents taxonomy (~300 papers), an
+  eight-framework production comparison, and the August research series. Finding:
+  the retrieval half is measured better than the commercial field measures
+  itself, with its remaining gap quantified and a remedy already filed
+  (TASK-138) — while the system still cannot tell whether remembering helped.
+  `recall-after-growth` reached the same wall empirically: the eval set prices
+  the cost of a bigger corpus and cannot price the benefit, so capture decisions
+  are made on half the evidence. Queues five items (TASK-163, TASK-164, TASK-166
+  through TASK-169), three of them removals, with the factor ablation
+  deliberately sequenced *after* the rerank decision rather than before it.
 
 - **Honcho architecture review** (`docs/research/honcho-memory-architecture.md`):
   plastic-labs/honcho compared against KennisBank — four points of independent
   convergence, the one idea adopted above, two queued (observer provenance,
-  TASK-127; a stated-versus-inferred axis gated behind a measurement, TASK-128),
+  TASK-161; a stated-versus-inferred axis gated behind a measurement, TASK-162),
   and the infrastructure rejected with reasons. Records the AGPL-3.0 versus MIT
   boundary: ideas and API shapes transfer, code does not.
 

@@ -1,6 +1,6 @@
 # Honcho as a mirror for KennisBank
 
-Status: research, with one idea adopted (TASK-126) and two queued (TASK-127, TASK-128)
+Status: research, with one idea adopted (TASK-160) and two queued (TASK-161, TASK-162)
 Date: 2026-08-15
 Subject: [plastic-labs/honcho](https://github.com/plastic-labs/honcho) — memory
 infrastructure for stateful agents, AGPL-3.0
@@ -92,7 +92,7 @@ insight their per-session ordering and supersession machinery encodes.
 Independent convergence on four points is reasonable evidence the shared parts
 are right, and it is the most useful thing this review produced.
 
-## Adopted: a real ceiling on assembled context (TASK-126)
+## Adopted: a real ceiling on assembled context (TASK-160)
 
 Honcho's `/context` endpoint takes a token bound as a request parameter and
 packs to fit. KennisBank had the layering but not the bound.
@@ -128,7 +128,7 @@ cheap, which would be a self-defeating trade. The consequence — treat the ceil
 as approximate and leave headroom — is documented at the flag, in
 `CONFIGURATION.md`, and in the module docstring.
 
-## Queued: observer provenance (TASK-127)
+## Queued: observer provenance (TASK-161)
 
 Honcho keys observations by (observer, observed). KennisBank records
 `evidence_basis`, which answers what *kind* of origin a fragment has — `agent` is
@@ -144,7 +144,7 @@ before a second subject exists would be modelling for an imagined future.
 Cheap now, expensive later: it is one optional field today, and a migration
 across every fragment once attribution is needed retroactively.
 
-## Queued behind a measurement: stated versus inferred (TASK-128)
+## Queued behind a measurement: stated versus inferred (TASK-162)
 
 Honcho splits deductive conclusions ("the peer stated this") from inductive ones
 ("the peer probably prefers this"). An initial read of this review suggested
@@ -166,7 +166,7 @@ equally likely and one score cannot express both.
 
 It is still not worth building on that argument alone. This is a schema change to
 the layer whose ranking is already tuned, and the repository's own habit is to
-measure before changing ranking inputs. TASK-128 therefore gates the field behind
+measure before changing ranking inputs. TASK-162 therefore gates the field behind
 a number from the memory eval set: what fraction of wrong-recall cases are
 inferences presented as stated fact. Below a meaningful threshold, the answer is
 to close it and record the measurement.

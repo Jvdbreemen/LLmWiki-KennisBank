@@ -1,5 +1,5 @@
 ---
-id: TASK-134
+id: TASK-168
 title: Promote proven procedures into skills — gated on telemetry
 status: To Do
 assignee: []
@@ -24,6 +24,12 @@ time.
 The destination already exists (`skills/`, `commands/`) and so does the selection
 signal: usage telemetry knows which stems are injected and referenced repeatedly.
 A procedure memory recalled and used N times is a skill trying to be written.
+
+A second argument from the baseline: `procedure` is the worst-performing memory
+type at recall@1 (0.277 against 0.460 for beslissing, on 411 questions — see
+docs/research/recall-baseline-2026-08-13.md). Prose retrieval serves procedures
+least well of all four types, which is consistent with the literature's move away
+from retrieving procedures as text.
 
 GATE BEFORE BUILDING. Query usage telemetry for procedure-typed memories ranked
 by recall frequency. If there is a meaningful head — a handful of procedures

@@ -1,5 +1,5 @@
 ---
-id: TASK-126
+id: TASK-160
 title: Honcho review and token-bounded context assembly
 status: Done
 assignee: []
@@ -71,7 +71,7 @@ principles reject.
 Correction carried into the review document: the first-pass reading claimed
 KennisBank lacks a stated-versus-inferred axis outright. Reading _memory.py
 showed `status`, `evidence_basis` and `memory_type` each cover part of it, so the
-gap is real but narrower — hence TASK-128 gates the schema change behind a
+gap is real but narrower — hence TASK-162 gates the schema change behind a
 measurement rather than assuming it.
 
 One pre-existing fragility fixed in passing: TestEnvIntFailSoft._run inherits the

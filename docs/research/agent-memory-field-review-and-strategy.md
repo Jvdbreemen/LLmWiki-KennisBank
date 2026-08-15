@@ -2,291 +2,267 @@
 
 Status: research and strategic direction
 Date: 2026-08-15
+Baseline: measured against the v0.30.0 line, including the August research
+series (`recall-baseline`, `recall-after-growth`, `embedding-model-sweep`,
+`l2-scene-retrieval`, `judge-model-4b-vs-9b`, `supersede-window`,
+`supersede-judge-labelled`) and the open tasks TASK-137, TASK-138, TASK-145,
+TASK-158
 Sources: [TsinghuaC3I/Awesome-Memory-for-Agents](https://github.com/TsinghuaC3I/Awesome-Memory-for-Agents)
 (~300 papers, 2020–2026), [vectorize.io — best AI agent memory
 systems](https://vectorize.io/articles/best-ai-agent-memory-systems) (eight
-production frameworks compared),
-[plastic-labs/honcho](https://github.com/plastic-labs/honcho) (reviewed
-separately in `honcho-memory-architecture.md`)
+production frameworks), [plastic-labs/honcho](https://github.com/plastic-labs/honcho)
+(reviewed separately in `honcho-memory-architecture.md`)
 Scope: where KennisBank sits in the field, what to improve, what to remove, what
 to deliberately not do
 
+## What this document does and does not add
+
+The August research series already answers several questions an outside review
+would normally raise, and answers them better than a review could: with
+pre-registered gates, oracle ceilings, published null results, and at least one
+report that contradicts the assumption that commissioned it. Nothing below
+proposes re-measuring what those documents measured.
+
+What a field review can add is the frame around them — which of the field's
+problems this system is solving, which it is not, and whether the open roadmap
+is pointed at the largest remaining gap. On that last question the answer is
+mostly yes, with one exception that the project's own measurements have already
+started pointing at without naming.
+
 ## The one-sentence finding
 
-KennisBank's architecture is competitive with or ahead of the commercial field on
-almost every axis the literature measures — and it is built on the *wrong half*
-of the field's central distinction: it promises learning from experience and
-implements retrieval of information.
-
-Everything below elaborates that sentence.
+KennisBank's retrieval work is ahead of the published field in method and near
+its ceiling in scope — and the system still cannot tell whether remembering
+helped, which is both the field's harder problem and the blocker its own
+capture-versus-recall trade-off has now run into.
 
 ## The field's organising distinction
 
-The Tsinghua survey list classifies agent memory on two axes. The first is
-persistence: short-term (within the context window, one task) versus long-term
-(external, across tasks). The second axis applies to long-term memory only, and
-it is the one that matters here:
+The Tsinghua list classifies long-term agent memory on one axis that matters
+here:
 
 > **Experience** — knowledge explicitly validated by task outcomes.
 > **Memory** — information without reference to task outcomes.
 
-The list then maps that onto three application scenarios, each with its own
-mechanisms and its own literature:
+The vectorize comparison reaches the same fork independently, calling it
+*personalization memory* (preferences and conversation history) versus
+*institutional memory* (lessons from experience, domain patterns, improvement
+across repeated tasks), and concludes: "Pick an AI agent memory framework that
+solves the harder problem." Most systems solve the first because the second is
+harder and more valuable.
 
-| Scenario | What is stored | Typical mechanism |
+**By intent KennisBank is institutional.** PRINCIPLES.md #5 is "niet twee keer
+dezelfde fout." `_extract.py` asks for lessons learned, bug fixes with cause and
+fix, decisions, durable facts.
+
+**By mechanism it is a personalization pipeline.** Extract atomic candidates →
+embed → dedup → reconcile → judge → write with a status → hybrid retrieve →
+rerank → inject. Every judgement about a fragment's worth is made *before it is
+ever used*: `importance` and `status` from the judge at capture, `trust_factor`
+from `evidence_basis`, `volatility` from the extractor. Usage telemetry, the one
+post-hoc signal and one the published field largely lacks, answers *was it
+referenced* — not *did it help*.
+
+## The gap is no longer theoretical
+
+`recall-after-growth-2026-08-14.md` reached this conclusion from the opposite
+direction, without framing it as a taxonomy problem:
+
+> The set cannot answer whether new captures are useful, only whether they
+> crowd. Questions generated from memories written after the baseline would
+> measure the other side of the trade, and until that exists every
+> corpus-growth decision is being made on half the evidence.
+
+That is the Experience/Memory distinction, arrived at empirically. The eval set
+prices the *cost* of a bigger corpus (dilution at k) and cannot price the
+*benefit* (a memory that answered something), because benefit is an outcome and
+nothing records outcomes.
+
+It is already binding. TASK-145 raised intake, the corpus grew 14%, memory
+recall@5 fell from 0.778 to 0.768 and the pre-registered gate failed. The
+recommendation was to stop raising caps until ranking improves — the right call
+on the available evidence, and made on half of it. Every future capture-versus-
+precision decision faces the same asymmetry: the cost is measurable and the
+benefit is not.
+
+**This is the highest-value open item in the memory system, and it is not on the
+roadmap.**
+
+## Where the roadmap is already right
+
+The ranking bottleneck is identified and quantified. From TASK-138, on the
+856-question dev split, of 209 questions missed at k=5 the gold memory sits in
+the top 20 for 130, the top 200 for 186, with median rank 11 when found:
+
+| Configuration | recall@5 | recall@1 |
 | --- | --- | --- |
-| Personalization | User profile, facts, interaction history | External pool, embed and retrieve |
-| Learning from experience | Trajectories, successes, failures, skills | Reflection, failure analysis, skill induction |
-| Long-horizon task | Intermediate results, reasoning traces | Summarisation, scratchpad, checkpoint |
+| baseline | 0.756 | 0.334 |
+| L2 scene tier, perfectly clustered (rejected on measurement) | 0.796 | 0.338 |
+| perfect reranking of the top 20 | 0.908 | 0.908 |
 
-The vectorize article reaches the same fork independently and states it more
-bluntly. It splits the market into *personalization memory* (remembering user
-preferences and conversation history) and *institutional memory* (extracting
-lessons from experience, learning domain patterns, improving across repeated
-tasks), and concludes: "Pick an AI agent memory framework that solves the harder
-problem." Its judgement is that most systems solve the first because the second
-is harder and more valuable.
+Retrieval surfaces the right memory and ranking buries it. Reranking the top 20
+is worth more than every other retrieval idea measured, by a wide margin, and it
+is filed as blocking. Nothing in this review displaces it.
 
-Two independent sources, one distinction. That is the lens worth applying to
-this repository.
-
-## Where KennisBank actually sits
-
-**By intent, squarely in institutional memory.** `PRINCIPLES.md` #5 is "Niet twee
-keer dezelfde fout" — do not make the same mistake twice. The README promises
-"decisions, fixes, preferences, architecture trade-offs, dead ends, and lessons
-you do not want to rediscover next week." `_extract.py` asks the model for
-"lessons learned, bug-fixes (cause plus fix), decisions made, durable facts."
-This is the harder problem, chosen deliberately, and it is the right choice.
-
-**By mechanism, a personalization pipeline.** Transcript → chunk → extract atomic
-candidates → embed → dedup → reconcile → judge → write with a status → hybrid
-retrieve → rerank → inject. That is the Mem0/MemoryBank shape, applied to
-experience-flavoured content. Nothing in the loop is validated by a task outcome.
-
-The gap is precise and it is the taxonomy's second axis: **KennisBank stores
-experience-shaped content as memory-class records.** A fragment is judged at
-capture time by an independent LLM opinion about whether it *looks* reusable. It
-is never confirmed by whether reusing it worked.
-
-This is not a flaw in the code. It is a missing loop.
+The scene-tier work deserves separate note: an idea from the literature was
+designed, measured, found not to clear its own pre-registered winner rule, and
+published as a null result — with TASK-137 then catching that the oracle bound
+had been computed against a routing rule the code does not use. That is better
+epistemic practice than the commercial field exhibits anywhere in the vectorize
+comparison, where benchmark numbers are vendor-reported on benchmarks the same
+article calls insufficient.
 
 ## Scorecard against the field
 
 | Dimension | Field's state of the art | KennisBank | Verdict |
 | --- | --- | --- | --- |
-| Temporal reasoning | Zep/Graphiti's bi-temporal knowledge graph, cited as best-in-class | `valid_from`/`valid_until` distinct from `created`, supersession closes the old record, per-type half-lives | **At parity.** Do not spend here |
-| Multi-strategy retrieval | vectorize: "retrieval strategy matters more than storage" | RRF over sqlite-vec KNN + FTS5, graph-neighbour expansion, coupling signal | **At parity**, without a second datastore |
-| Write-time reasoning | Honcho's deriver, Mem0's consolidation | Sweep with extract → dedup → reconcile (ADD/SUPERSEDE/NOOP) → independent judge | **At parity** |
-| Locality and sovereignty | Zep self-hosting deprecated; SuperMemory closed; Mem0 graph behind $249/mo | Local SQLite, local Ollama, markdown source of truth, MIT | **Ahead**, structurally |
-| Human editorial control | Absent across the field — conclusions live in vendor databases | Markdown, Obsidian, git, human merges and supersedes | **Ahead**, uniquely |
-| Retrieval measurement | LongMemEval, LoCoMo, recall metrics | recall@k, MRR, per-layer, per-type, frozen eval runs | **At parity** at personal scale |
-| Usage feedback | Effectively nobody does this | Injected stems logged, exit scan marks those referenced in tool calls, feeds a ranking boost | **Ahead of the published field** |
-| **Outcome validation** | The whole "Learning from Experience" branch: Reflexion, ExpeL, SWE-Exp, Memento, ReasoningBank | **None** | **Behind, and it is the core promise** |
-| Failure/dead-end capture | Reflexion, SWE-Exp, Live-SWE-agent: failures are the highest-value signal | Not a distinct type; extractor told to ignore intermediate steps | **Behind** (hypothesis, see below) |
-| Skill/procedure induction | Memp, SkillWeaver, Agent Workflow Memory, LEGOMem, TokMem | `memory_type: procedure` stores a *description* of a procedure | **Behind**, but cheap to close |
-| Consolidation trigger | Generative Agents' reflection: periodic automatic synthesis | Distillation to wiki is human-triggered (`/destilleer`) | **Behind its own principle #3** |
-
-Read the column, not the rows: the deficits cluster in exactly one place.
+| Temporal reasoning | Zep/Graphiti bi-temporal graph, cited best-in-class | `valid_from`/`valid_until`, supersession, per-type half-lives, and `volatility: state\|event` making the update rule structural | **Ahead** |
+| Retrieval measurement | LongMemEval/LoCoMo, vendor-reported | Pre-registered gates, oracle ceilings, published null results, 1224+329 private questions | **Ahead in method** |
+| Multi-strategy retrieval | vectorize: "retrieval strategy matters more than storage" | RRF over sqlite-vec + FTS5, graph neighbours, coupling — with the lexical half measured as *harmful* on the memory layer | **At parity**, with a known defect |
+| Write-time reasoning | Honcho's deriver, Mem0 consolidation | extract → dedup → reconcile → independent judge, judge model itself measured (TASK-142/143/144) | **At parity or ahead** |
+| Locality and sovereignty | Zep self-hosting deprecated, SuperMemory closed, Mem0 graph paywalled | Local SQLite, local Ollama, markdown truth, MIT | **Ahead**, structurally |
+| Human editorial control | Absent across the field | Markdown, Obsidian, git; closures now logged and reversible (TASK-150/155) | **Ahead**, uniquely |
+| Usage feedback | Effectively nobody | Injected stems logged, exit scan marks referenced ones, feeds ranking | **Ahead of the published field** |
+| Ranking quality | — | recall@1 0.266–0.334 on the memory layer; ceiling 0.908 with perfect rerank | **Known gap, remedy filed** |
+| **Outcome validation** | The whole Learning-from-Experience branch: Reflexion, ExpeL, SWE-Exp, ReasoningBank | **None** | **Behind, and now blocking** |
+| Failure/dead-end capture | Reflexion, SWE-Exp: failures are the highest-value signal | Not a distinct type; extractor told to ignore intermediate steps | **Behind** (hypothesis) |
+| Skill/procedure induction | Memp, SkillWeaver, AWM, LEGOMem | `memory_type: procedure` stores a description, not an artifact | **Behind**, cheap to close |
+| Consolidation trigger | Generative Agents: automatic periodic reflection | Distillation to wiki is human-triggered | **Behind its own principle #3** |
 
 ## What to improve
 
-### 1. Close the outcome loop — the only recommendation that changes the category
+### 1. Close the outcome loop — measurement only (TASK-166)
 
-Everything the system knows about a memory's worth is assigned before that memory
-is ever used: `importance` from the judge, `status` from the judge, `trust_factor`
-from `evidence_basis`. The one post-hoc signal, usage telemetry, answers *was it
-referenced*, not *did it help*. A memory that got injected, got read, and sent the
-session down a wrong path scores identically to one that saved an hour.
+The one item that changes the system's category, and the one its own evidence
+now demands. The cheap version needs no reinforcement learning: the session-end
+hook exists, transcripts are archived, injected stems are logged. What is
+missing is a weak per-session outcome — did it end in a commit, did the suite go
+green, was an injected memory contradicted or superseded shortly after — linked
+back to the stems injected into that session.
 
-This is the difference between Memory and Experience in the taxonomy, and between
-personalization and institutional memory in the vectorize framing. It is the
-harder problem, it is the one KennisBank claims in its own principles, and it is
-open.
+That also supplies the missing half of the capture-versus-recall trade: with an
+outcome signal, "the corpus grew and recall@5 fell 0.010" can be weighed against
+whether the new memories ever helped, instead of being the only number on the
+table.
 
-The cheap version does not need reinforcement learning or trajectory modelling.
-The session already ends with a hook, transcripts are already archived, and
-injected stems are already logged. The missing piece is a weak outcome signal
-attached to that session — did it end in a commit, did the suite go green, was
-the memory contradicted or superseded shortly after being injected — and a link
-from that signal back to the stems injected into it. Weak, noisy, and still
-strictly more information than the system has today.
+Scope discipline: land the measurement, look at the correlation, stop. Ranking on
+a signal this noisy is a separate decision, and it must clear the same bar as any
+other ranking factor (see below).
 
-Two guardrails, both from this repo's own constraints. It must stay off the hot
-path (a write-time or session-end job, never a recall-time computation). And it
-must not silently become a ranking input: land the measurement first, look at
-whether outcome correlates with anything, and only then decide whether it earns a
-factor. See the ablation recommendation below for why that order matters.
+### 2. Sequence the factor ablation *around* the reranker, not before it (TASK-163)
 
-### 2. Test whether dead ends survive extraction — then fix the prompt
+`_rank.py` multiplies seven signals on the memory layer — relevance × recency ×
+importance × trust × usage × noise × coupling — plus graph-neighbour expansion.
+The embedding sweep already found one member of this family failing to earn its
+place, and it is the biggest one: **disabling the FTS5 lexical half raises memory
+recall@5 from 0.641 to 0.796**, across six of nine models. A hand-tuned signal
+costing fifteen points is exactly the failure mode a seven-way product hides.
 
-`_extract.py` instructs: capture lessons learned, bug fixes, decisions, durable
-facts; **ignore smalltalk, intermediate steps, and transient status**. A dead end
-— the approach tried for two hours that did not work — is structurally an
-intermediate step that failed. The instruction that filters noise may also be
-filtering the single highest-value class of experience knowledge, the one the
-Reflexion/SWE-Exp line of work is built on, and the one principle #5 names.
+The strategic point is the interaction with TASK-138. A cross-encoder reranking
+the top 20 *subsumes* most hand-tuned relevance shaping: it re-scores the
+candidate set directly, and factors that exist to nudge ordering within that set
+become redundant at best and contradictory at worst. Tuning seven multipliers
+that a reranker will replace is wasted work; shipping a reranker on top of seven
+unexamined multipliers buries the reason it under-performs.
 
-This is a hypothesis, not a finding: an articulate dead end can present as a
-"lesson learned" and survive. It is also cheap to settle — sample the existing
-memory layer and count how many fragments encode what *did not* work versus what
-does. If the ratio is low, the fix is a prompt change plus a distinct type
-(`valkuil`/anti-pattern) so retrieval can surface "you tried this before and it
-failed" as a first-class answer rather than hoping it hides inside a fact.
+So: **decide the reranker first, then ablate what it makes redundant** — and hold
+the line that no new factor (including the outcome signal) joins the product
+without measured contribution.
 
-Bumping `EXTRACT_PROMPT_VERSION` already exists precisely so a prompt change is
-attributable. The machinery for doing this safely is in place.
+### 3. Test whether dead ends survive extraction (TASK-164)
 
-### 3. Propose consolidation automatically — principle #3 against the current design
+`_extract.py` says: capture lessons learned, bug fixes, decisions, durable facts;
+ignore smalltalk, **intermediate steps**, and transient status. A dead end is
+structurally an intermediate step that failed. The instruction that filters noise
+may also filter the highest-value class of experience knowledge — the one
+Reflexion and SWE-Exp are built on, and the one principle #5 names.
 
-`PRINCIPLES.md` #3: *what requires manual discipline does not happen in
-practice.* Distillation from raw memory to curated wiki is triggered by a human
-running `/destilleer`. `distill-notify.py` counts what is pending and mentions it
-at session start — a notification, not an action.
+A hypothesis, cheap to settle by counting before changing anything. TASK-145
+showed intake truncation had already silenced a whole class of facts; a prompt
+that excludes a class is the same failure one layer up.
 
-By the repo's own stated principle, that pipeline stalls. The Generative Agents
-reflection pattern is the field's answer: periodically cluster related records and
-synthesise higher-level insight, automatically.
+### 4. Automate the distillation proposal, keep the merge human (TASK-167)
 
-The full pattern is wrong here — auto-merging into the wiki would take away
-editor-in-chief control, which is a differentiator, not an inconvenience. The
-right half is: **automate the proposal, keep the merge human.** An off-hours job
-clusters the memory layer, identifies clusters dense enough to be worth an
-article, and drafts the proposal. The human still decides. That is automation of
-the discipline, not of the judgement, and it is exactly the split the vault
-already uses for quarantined memories.
+Principle #3 says what requires manual discipline does not happen. Distillation
+to the wiki is human-triggered; `distill-notify.py` counts what is pending and
+mentions it. Automate the *proposal* — cluster the memory layer off-hours, draft
+articles for dense clusters — and keep the merge human, the same split already
+used for quarantined memories. Note the wiki layer is saturated at recall@5 =
+1.000, so this is about keeping the curated layer fed, not about its retrieval.
 
-### 4. Promote proven procedures into skills
+### 5. Promote proven procedures into skills (TASK-168)
 
-Memp, SkillWeaver, Agent Workflow Memory and LEGOMem converge on one move:
-procedures extracted from experience should become *executable artifacts*, not
-descriptions retrieved as prose. `memory_type: procedure` currently stores a
-description; when it is recalled, an agent reads it and re-derives the steps.
-
-KennisBank already has the destination: `skills/` and `commands/`. The signal for
-which procedures deserve promotion already exists too — usage telemetry knows
-which stems get injected and referenced repeatedly. A procedure memory recalled
-and used N times is a skill trying to be written.
-
-Gate this on the data rather than building it speculatively: query usage
-telemetry for procedure-typed memories by recall frequency. If a meaningful head
-exists, the promotion path is worth building. If recalls are uniformly thin, it
-is not.
-
-### 5. Measure where the hot path actually spends its time
-
-The vectorize article's latency profile: vector-only retrieval 10–50ms, graph
-traversal 50–150ms, multi-strategy 100–600ms, LLM synthesis 800–3000ms.
-KennisBank budgets 2.0s for the prompt hook, and the comment in `kb-retrieve.py`
-attributes it to the embedding call, not the search.
-
-If that holds, the entire retrieval architecture sits inside the noise of one
-Ollama round-trip, and every future ranking refinement optimises the wrong term.
-Land a measurement splitting embed time from search time from rank time. It costs
-almost nothing and it determines whether the next performance work is a smaller
-embed model, a prompt-embedding cache, or nothing at all.
+Memp, SkillWeaver, AWM and LEGOMem converge: procedures learned from experience
+should become executable artifacts, not prose re-derived on every recall. The
+destination (`skills/`, `commands/`) and the selection signal (usage telemetry)
+both exist. Gate on the telemetry distribution before building; procedure is also
+the *worst-performing* memory type at recall@1 (0.277), which is its own argument
+that prose retrieval is not serving it.
 
 ## What to remove
 
-The user asked what to remove, and the answer is not "nothing".
+### 1. The lexical half of the memory-layer fusion — already measured, still shipping
 
-### 1. Ranking factors that have never been measured separately
+Fifteen points of recall@5 on the layer that needs them most, identified in the
+embedding sweep and filed on the v0.30.0 line. It is the clearest instance of the
+general point and the removal with the largest known payoff.
 
-`_rank.py` multiplies, on the memory layer: relevance (hybrid RRF) × recency
-(per-type half-life with a floor) × importance (judge, 1–5) × trust
-(`evidence_basis`) × usage (1.10/1.05 tiers) × noise (up to −20%) × coupling
-(1.05/1.10 tiers) — then adds graph-neighbour expansion on top. Seven
-multiplicative signals, most introduced with their own justification, all judged
-by a single referee: recall@k on the eval set.
+### 2. The legacy one-hop neighbour — TASK-93, overdue
 
-Individually each is defensible. Collectively they are unattributable. A boost of
-1.05 and a penalty floor of 0.80 interact in ways nobody can reason about, a
-regression cannot be traced to a factor, and every new signal makes the next one
-harder to evaluate. This is precisely the "drie clevere mechanismen" that KISS
-warns against, arrived at one reasonable step at a time.
+`_rank.one_hop_neighbor()` was to be removed one release after the graph flip.
+Verified still present on the v0.30.0 line, several releases later. Dual-path
+drift is a documented failure mode in this repo's own instructions.
 
-**Run an ablation and delete what does not earn its place.** Turn each factor off
-individually against the frozen eval set, record the delta, and remove any factor
-whose contribution is indistinguishable from noise. The harness for this already
-exists — TASK-86 built frozen eval runs and TASK-72 added observed rank as a
-selection criterion. Expect at least one deletion; a factor worth 1.05 in a
-seven-way product is likely below the measurement floor.
+### 3. Unused `evidence_basis` values and their trust weights (TASK-169)
 
-This also disciplines the recommendations above: outcome signal and any new
-factor must pass the same bar before joining the product.
-
-### 2. The legacy one-hop neighbour — already queued as TASK-93, now overdue
-
-`_rank.one_hop_neighbor()` is the regex-based expansion superseded by
-`_kbindex.graph_neighbors()` after the A/B gate passed in TASK-87. The task says
-it stays as fallback "for exactly one release, then gets removed." Several
-releases have shipped since. Dual-path drift is a documented failure mode in this
-repo; the removal is written and waiting.
-
-### 3. Unused `evidence_basis` values, and the trust weights attached to them
-
-`EVIDENCE_BASES` has six members: `getypt`, `cc-sessie`, `audio`, `import`,
-`autoresearch`, `agent`. Each feeds `trust_factor()` in ranking. If some are never
-produced in practice, they are dead schema carrying live ranking weight — and
-dead enum members invite future code to handle cases that cannot occur. Count the
-distribution in the real vault; delete what is never written, or document why it
-is retained.
+Six members, each feeding `trust_factor()` and therefore carrying live ranking
+weight. Count the real distribution; delete what is never written. Decide
+together with TASK-161 (observer provenance), which would take over part of what
+`evidence_basis` is doing today, so the enum is not trimmed twice.
 
 ## What to deliberately not do
 
-**Do not chase LongMemEval or LoCoMo scores.** The vectorize article reports
-Hindsight 94.6%, SuperMemory 81.6%, Zep 63.8%, Mem0 49.0% — and then says these
-benchmarks "only test retrieval from chat histories," not whether memory improves
-agent task performance. The numbers are also largely vendor-reported. KennisBank
-is not a conversational memory system, and optimising against a conversational
-benchmark would pull it toward the easier problem it deliberately did not choose.
+**Do not chase LongMemEval or LoCoMo.** Vendor-reported, and the same article
+that publishes the table says these benchmarks only test retrieval from chat
+histories. The private eval sets are better instruments for this system than
+either.
 
-**Do not add a graph database.** Neo4j-backed designs (Zep/Graphiti, Cognee) buy
-entity relationships KennisBank already approximates with wikilinks, graph tables
-in SQLite, and the coupling signal — without a second datastore, and without
-giving up "the index is a rebuildable throwaway."
+**Do not add a graph database.** Wikilinks, graph tables in SQLite and the
+coupling signal already approximate what Zep/Graphiti and Cognee buy with a
+second datastore — and the scene experiment showed graph communities were not
+even good enough clustering to clear a winner rule.
 
-**Do not adopt a framework's memory layer.** The article's clearest warning is
-lock-in: LangMem is severely coupled to LangGraph, LlamaIndex Memory to
-LlamaIndex, Letta requires adopting its whole runtime. KennisBank serves four
-clients (Claude Code, Codex, Copilot CLI, OpenCode) through one local MCP server.
-Any of these would collapse that.
+**Do not adopt a framework's memory layer.** LangMem is coupled to LangGraph,
+LlamaIndex Memory to LlamaIndex, Letta requires its whole runtime. One local MCP
+server serving four clients would not survive any of them.
 
-**Do not add an eighth ranking factor before the ablation.** Including the outcome
-signal from recommendation 1.
+**Do not raise intake caps again before ranking improves** — already the standing
+conclusion of `recall-after-growth`, restated here because the outcome loop is
+what will eventually make that decision on full evidence rather than half.
 
 ## Sequencing
 
-The order is chosen so each step produces information the next one needs, and so
-that the cheap diagnostics come before the expensive builds.
-
-1. **Ablation of the existing ranking factors** (removal, and it gates everything
-   else). Nothing new joins the product until the product is understood.
-2. **Dead-end capture audit** (cheap, and it tests a claim in `PRINCIPLES.md`).
-3. **Hot-path latency split** (cheap, and it decides whether performance work is
-   worth doing at all).
-4. **Outcome loop, measurement only** — link session outcome to injected stems,
-   look at the correlation, do not rank on it yet.
-5. **Automated distillation proposals** (independent of 1–4; resolves the
-   principle #3 tension).
-6. **Procedure-to-skill promotion**, gated on what step 4's telemetry shows.
-
-Steps 1–3 are diagnostics that could each end in "no change needed," which is a
-valid and cheap outcome. Step 4 is the one that changes what kind of system this
-is.
+1. **TASK-138, the rerank ceiling** — already blocking, worth more than anything
+   else measured, and it determines what step 2 should even look at.
+2. **Ablation of what the reranker makes redundant** (TASK-163), starting with
+   the lexical half already measured as harmful.
+3. **Outcome loop, measurement only** (TASK-166) — independent of 1–2 and the
+   thing that changes the category. Can run in parallel; it touches session-end,
+   not retrieval.
+4. **Dead-end audit** (TASK-164) — cheap, tests a claim in PRINCIPLES.md.
+5. **Distillation proposals** (TASK-167) and **procedure promotion** (TASK-168),
+   the latter gated on telemetry.
 
 ## Closing judgement
 
-The commercial field is converging on infrastructure KennisBank does not need and
-benchmarks it should not chase. On the axes the literature actually measures —
-temporal reasoning, retrieval strategy, write-time consolidation — this
-implementation is at parity with funded products while keeping locality, human
-editorial control, and a rebuildable index that none of them offer.
-
-The deficit is singular and it is the thing the project named as its purpose:
-nothing in the loop knows whether remembering helped. Close that, and KennisBank
-is doing the harder half of the problem the field says is more valuable, with an
-architecture already in place to support it.
+The retrieval half of this system is measured better than the commercial field
+measures itself, and its remaining retrieval gap is quantified with a known
+remedy. The strategic risk is not that ranking is at 0.266@1 — that is a solved
+problem awaiting execution. It is that every decision about what to remember is
+being made against a metric that can only see crowding, so the system optimises
+what it can measure: a smaller, tidier corpus. The purpose it was built for is
+the opposite, and closing the outcome loop is what lets those two stop pulling
+against each other.
 
 ## Sources
 
@@ -294,7 +270,8 @@ architecture already in place to support it.
   — taxonomy, ~300 papers, benchmark index. Retrieved 2026-08-15.
 - [vectorize.io, "Best AI agent memory systems"](https://vectorize.io/articles/best-ai-agent-memory-systems)
   — eight-framework comparison, benchmark and latency figures. Retrieved 2026-08-15.
-- Papers referenced by name: Reflexion, ExpeL, Retroformer, SWE-Exp, Memento,
-  ReasoningBank, Memp, SkillWeaver, Agent Workflow Memory, LEGOMem, TokMem,
-  MemGPT, MemoryBank, Mem0, Generative Agents. Benchmarks: LoCoMo, LongMemEval,
-  MemoryAgentBench, MemBench, LifelongAgentBench.
+- Internal: `docs/research/recall-baseline-2026-08-13.md`,
+  `recall-after-growth-2026-08-14.md`, `embedding-model-sweep-2026-08.md`,
+  `l2-scene-retrieval-2026-08.md`; TASK-137, TASK-138, TASK-145, TASK-158.
+- Papers referenced by name: Reflexion, ExpeL, SWE-Exp, ReasoningBank, Memp,
+  SkillWeaver, Agent Workflow Memory, LEGOMem, MemGPT, Mem0, Generative Agents.
