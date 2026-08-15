@@ -100,10 +100,6 @@ def estimate_tokens(value) -> int:
     return -(-len(text) // _CHARS_PER_TOKEN)
 
 
-def _total_tokens(output: dict) -> int:
-    return sum(estimate_tokens(v) for v in output.values())
-
-
 def fit_to_budget(output: dict, max_tokens: int | None) -> tuple[dict, dict | None]:
     """Trim *output* until it fits *max_tokens*; report what that cost.
 
@@ -137,31 +133,61 @@ def fit_to_budget(output: dict, max_tokens: int | None) -> tuple[dict, dict | No
     fitted = dict(output)
     dropped: dict[str, int] = {}
 
+    # Serialize every entry exactly once and track layer sizes analytically.
+    # The obvious loop -- re-summing the whole payload per dropped entry --
+    # is O(n^2) in json.dumps work, and at L3 `bodies` holds full article
+    # texts, so it re-serializes megabytes on the context-assembly path.
+    # json.dumps uses ", " and ": " separators, so a layer keeping its first
+    # k entries measures exactly 2 + sum(parts[:k]) + 2*(k-1) characters --
+    # identical to serializing the trimmed layer, so trim decisions match the
+    # naive version byte for byte.
+    def _entry_parts(layer_value) -> list[int]:
+        if isinstance(layer_value, dict):
+            return [len(json.dumps(k, ensure_ascii=False)) + 2
+                    + len(json.dumps(v, ensure_ascii=False))
+                    for k, v in layer_value.items()]
+        return [len(json.dumps(v, ensure_ascii=False)) for v in layer_value]
+
+    def _layer_tokens(parts_prefix_sum: int, keep: int) -> int:
+        if keep <= 0:
+            return 0  # an emptied layer is deleted, contributing nothing
+        return -(-(2 + parts_prefix_sum + 2 * (keep - 1)) // 4)
+
+    parts_by_layer = {layer: _entry_parts(fitted[layer])
+                      for layer in _TRIM_ORDER if fitted.get(layer)}
+    layer_tokens = {
+        layer: _layer_tokens(sum(parts), len(parts))
+        for layer, parts in parts_by_layer.items()
+    }
+    fixed = sum(estimate_tokens(v) for layer, v in fitted.items()
+                if layer not in layer_tokens)
+    total = fixed + sum(layer_tokens.values())
+
     for layer in _TRIM_ORDER:
-        if _total_tokens(fitted) <= max_tokens:
+        if total <= max_tokens:
             break
-        value = fitted.get(layer)
-        if not value:
+        parts = parts_by_layer.get(layer)
+        if not parts:
             continue
+        keep = len(parts)
+        prefix = sum(parts)
+        while keep and total > max_tokens:
+            keep -= 1
+            prefix -= parts[keep]
+            new_tokens = _layer_tokens(prefix, keep)
+            total += new_tokens - layer_tokens[layer]
+            layer_tokens[layer] = new_tokens
+            dropped[layer] = dropped.get(layer, 0) + 1
+        value = fitted[layer]
         if isinstance(value, dict):
-            keys = list(value.keys())
-            while keys and _total_tokens(fitted) > max_tokens:
-                keys.pop()
-                fitted[layer] = {k: value[k] for k in keys}
-                dropped[layer] = dropped.get(layer, 0) + 1
-        elif isinstance(value, list):
-            while fitted[layer] and _total_tokens(fitted) > max_tokens:
-                fitted[layer] = fitted[layer][:-1]
-                dropped[layer] = dropped.get(layer, 0) + 1
+            kept_keys = list(value.keys())[:keep]
+            fitted[layer] = {k: value[k] for k in kept_keys}
         else:
-            # Scalar layer (only `identity` today): all or nothing, and
-            # `identity` is not in _TRIM_ORDER, so this stays unreachable
-            # until a scalar layer is added that IS trimmable.
-            continue
+            fitted[layer] = value[:keep]
         if not fitted[layer]:
             del fitted[layer]
 
-    estimated = _total_tokens(fitted)
+    estimated = sum(estimate_tokens(v) for v in fitted.values())
     report = {
         "max_tokens": max_tokens,
         "estimated_tokens": estimated,
