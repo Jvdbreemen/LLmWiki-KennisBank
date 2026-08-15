@@ -24,6 +24,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- **Agent-memory field review and strategy**
+  (`docs/research/agent-memory-field-review-and-strategy.md`): KennisBank read
+  against the Tsinghua Awesome-Memory-for-Agents taxonomy (~300 papers) and an
+  eight-framework production comparison. Finding: the implementation is at parity
+  with or ahead of funded products on temporal reasoning, retrieval strategy,
+  write-time consolidation, locality and human editorial control — and sits on
+  the wrong half of the field's central distinction, storing experience-shaped
+  content as memory-class records that no task outcome ever validates. Queues six
+  items (TASK-129 through TASK-135), three of them removals, sequenced so the
+  cheap diagnostics run before the expensive builds.
+
 - **Honcho architecture review** (`docs/research/honcho-memory-architecture.md`):
   plastic-labs/honcho compared against KennisBank — four points of independent
   convergence, the one idea adopted above, two queued (observer provenance,
