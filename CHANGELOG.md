@@ -7,6 +7,82 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.31.0] - 2026-08-15
+
+A release about measurement. Three things this repository believed turned out to
+be wrong when checked, and the most useful change is one line.
+
+### Upgrading
+
+**Rebuild the index once, or you get none of the retrieval gain.** The stored
+text changed but the file hashes did not, so the incremental build sees nothing
+to do:
+
+    python3 "$VAULT/.claude/scripts/build-kb-index.py" --rebuild
+
+Roughly ten minutes for ~1900 documents, entirely from the embedding cache — the
+vectors are unchanged, only the searchable text is rewritten. Nothing else is
+required; `source_chunk` is a new frontmatter field on newly captured memories
+and its absence is normal.
+
+### Fixed
+
+- **Two thirds of long wiki articles were unsearchable, and half of that was for
+  no reason.** `build-kb-index` stored only the first 4000 characters of a
+  document in the full-text index — the same truncation the *embedding* model
+  requires, because it runs at `num_ctx=2048` to keep VRAM free. FTS5 has no
+  such limit and was paying it anyway. 72 of 206 articles run past 4000
+  characters, and 16.6% of all wiki text was reachable by neither half of the
+  hybrid search.
+
+  Measured against a rule fixed before the run: questions about material past
+  the cap go from **recall@5 0.450 to 0.725**, and the existing 329-question set
+  is unchanged at 1.000. The vector arm is still blind past the cap; this lets
+  the lexical arm route around it.
+
+- **A model answer that was not quite JSON is no longer thrown away.** Four
+  verifier replies in 56 were counted unparseable; all four contained a
+  well-formed object with broken string delimiters (`\"…\"` or `'…'`).
+  `_llmjson` repairs both shapes, but only after an honest parse has failed and
+  only if the repair then parses — a repair that yields nothing valid is
+  discarded, so a broken answer stays broken instead of becoming a plausible
+  wrong one.
+
+### Added
+
+- **Memories record where they came from.** A swept memory now carries
+  `source_chunk: "N/M"` — chunk N of M in its source transcript. The sweep knew
+  this and discarded it, so checking a memory against its own source meant
+  retrieving the passage again. M is the whole transcript's chunk count, never
+  the capped slice a run happened to read, so a reader can re-chunk and detect a
+  stale stamp rather than trust a wrong one.
+
+### Decided against
+
+- **The trust factor will not be built on grounded verification.** Two of the
+  five ranking factors were measured to do literally nothing (TASK-160), and the
+  proposed replacement — asking a local model whether a memory is supported by
+  its source — was validated in depth and rejected on its own numbers. It
+  answers `supported` for 88.7% of memories, which is the same near-uniformity
+  that made `trust_factor` inert in the first place; and of the 20 `unsupported`
+  verdicts adjudicated against whole transcripts, **zero** were correct. Uniform
+  where it is reliable, unreliable where it varies.
+
+  What survives: `supported` may raise trust, nothing may lower it — which is
+  where the vault already stood, now for a measured reason. Full evidence in
+  `docs/research/llm-trust-verification-2026-08-15.md`, including six
+  corrections to that document's own earlier claims.
+
+### Research
+
+- `docs/research/wiki-embed-cap-2026-08-15.md` — the embed-cap measurement, with
+  its rule committed before the numbers existed.
+- `docs/research/llm-trust-verification-2026-08-15.md` — grounded verification,
+  end to end.
+- `docs/research/rerank-ceiling-2026-08-14.md` and `rank-factors-2026-08-14.md`
+  — re-sorting the existing candidate pool by raw cosine more than doubles
+  recall@1, and recency carries half of what the current ranking loses.
+
 ## [0.30.0] - 2026-08-14
 
 v0.29.0 fixed a memory layer that had quietly stopped capturing. This release is
@@ -1712,7 +1788,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.30.0...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.31.0...HEAD
+[0.31.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.30.0...v0.31.0
 [0.30.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.29.0...v0.30.0
 [0.29.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.28.0...v0.29.0
 [0.28.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.27.0...v0.28.0

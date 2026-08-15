@@ -76,7 +76,40 @@ Geheugensystemen van leveranciers (Mem0, Zep, Letta, Cognee) zijn krachtig maar 
 
 De ontwerpvoorkeur is overal dezelfde: **deterministisch waar mogelijk, LLM alleen waar het oordeelsvermogen toevoegt, fail-open overal**. Een dood model blokkeert nooit een sessie, verliest nooit een transcript, en verwijdert nooit geverifieerde kennis.
 
-## Functie-highlights (v0.30.0)
+## Functie-highlights (v0.31.0)
+
+### Nieuw in v0.31.0
+
+Een release over meten: drie dingen die deze repository geloofde bleken bij
+controle niet te kloppen, en de nuttigste verandering is één regel.
+
+**Lange wiki-artikelen zijn weer vindbaar.** De full-text-index bewaarde alleen
+de eerste 4000 tekens van een document — de afkapping die het *embedding*-model
+nodig heeft, omdat dat op een contextgrootte draait die VRAM vrijhoudt. FTS5
+kent die limiet niet en betaalde hem toch, waardoor 72 van de 206 artikelen
+deels onzichtbaar waren voor beide helften van de hybride zoekactie. Vragen over
+tekst voorbij dat punt gaan van **recall@5 0,450 naar 0,725**, terwijl de
+bestaande set van 329 vragen onveranderd blijft.
+
+**Draai na de upgrade één keer `build-kb-index.py --rebuild`.** De opgeslagen
+tekst veranderde, de bestands-hashes niet, dus de incrementele build ziet geen
+aanleiding en je houdt anders de oude index.
+
+**Memories leggen vast waar ze vandaan komen.** Een gesweepte memory draagt nu
+`source_chunk: "N/M"`: de chunk van het bron-transcript waaruit hij is
+geëxtraheerd — bekend op het moment van vastleggen en tot nu toe weggegooid.
+
+**Een net-niet-geldig JSON-antwoord verdwijnt niet meer.** Vier van de 56
+verifier-antwoorden telden als onleesbaar; alle vier bevatten een correct
+gevormd object met kapotte string-delimiters. De reparatie draait alleen nadat
+een eerlijke parse is mislukt, en telt alleen als het resultaat dan parseert.
+
+**De trust-factor is gemeten en afgewezen.** Een lokaal model vragen of een
+memory door zijn eigen bron wordt gedragen werkt beter dan verwacht en is toch
+het verkeerde om op te ranken: het antwoordt `supported` voor 88,7% van de
+memories, en van 20 `unsupported`-oordelen die tegen hele transcripts zijn
+nagetrokken klopte er nul. `supported` mag vertrouwen verhogen; niets mag het
+verlagen. Zie `docs/research/llm-trust-verification-2026-08-15.md`.
 
 ### Nieuw in v0.30.0
 

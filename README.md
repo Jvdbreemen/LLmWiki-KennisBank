@@ -73,7 +73,39 @@ Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: 
 
 The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
 
-## Feature highlights (v0.30.0)
+## Feature highlights (v0.31.0)
+
+### New in v0.31.0
+
+A release about measurement: three things this repository believed turned out to
+be wrong when checked, and the most useful change is one line.
+
+**Long wiki articles are searchable again.** The full-text index stored only the
+first 4000 characters of a document — the truncation the *embedding* model
+needs, because it runs at a context size chosen to keep VRAM free. FTS5 has no
+such limit and was paying it anyway, so 72 of 206 articles were partly invisible
+to both halves of the hybrid search. Questions about material past that point go
+from **recall@5 0.450 to 0.725**, with the existing 329-question set unchanged.
+
+**Run `build-kb-index.py --rebuild` once after upgrading.** The stored text
+changed but the file hashes did not, so the incremental build has nothing to
+react to and you would keep the old index.
+
+**Memories record where they came from.** A swept memory now carries
+`source_chunk: "N/M"`, the chunk of its source transcript it was extracted from
+— known at capture time and previously discarded.
+
+**A near-miss JSON answer is no longer thrown away.** Four verifier replies in
+56 were counted unparseable; all four held a well-formed object with broken
+string delimiters. The repair runs only after an honest parse fails, and only
+sticks if the result parses.
+
+**The trust factor was measured and rejected.** Asking a local model whether a
+memory is supported by its own source works better than expected and is still
+the wrong thing to rank on: it answers `supported` for 88.7% of memories, and of
+20 `unsupported` verdicts checked against whole transcripts, zero were right.
+`supported` may raise trust; nothing may lower it. See
+`docs/research/llm-trust-verification-2026-08-15.md`.
 
 ### New in v0.30.0
 
