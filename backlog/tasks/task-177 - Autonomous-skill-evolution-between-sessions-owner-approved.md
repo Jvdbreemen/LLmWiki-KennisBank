@@ -57,6 +57,31 @@ Mechanism (KennisBank-native, not a port of EverOS's):
 - **Silent when idle** (principle #4): no sessions touching a skill means no
   run, no output, no log entry.
 
+**Model policy (owner constraint, 2026-08-15): the rewrite ALWAYS uses the
+client model — the best one available — never the local judge model.** A
+skill is agent-facing prose whose quality ceiling is the model that writes
+it; the local 4b is measured and kept for gating, not authoring. Concretely:
+
+- The evolution rewrite goes through the client channel — `_llm.py` already
+  ships an opt-in `claude-cli` provider that shells the `claude` binary on
+  the user's existing auth; the design doc extends the same pattern to the
+  Codex and Copilot CLIs so every installed client can serve its own model.
+- "Best" is an explicit, documented ordering over the models the installed
+  clients expose (strongest available first), resolved at run time — not a
+  hardcoded model id that rots. If no client channel is available, the pass
+  SKIPS and logs; it never silently falls back to the local model for the
+  rewrite.
+- The division of labor stays: client model writes, local grounded verifier
+  gates (the asymmetry above), deterministic rails decide. The verifier and
+  kb-state-audit remain local, so the quality gate never depends on a cloud
+  call.
+- Consent boundary: the client model is the channel the owner already uses
+  for sessions, but this task sends SKILL CONTENT through it in background
+  runs. That is inside the existing claude-cli consent boundary (C4 records
+  claude-cli as a cloud provider) and must be named in the design doc and
+  the toggle's documentation — the "lokaal, altijd" default is deliberately
+  overridden here by owner decision, for this pass only.
+
 Design-first: this is a behavior-changing subsystem, so a design doc in
 docs/superpowers/specs precedes implementation, and reading EverOS's
 skill-record format and refinement pass (Apache 2.0 — reuse with notice is
@@ -72,6 +97,9 @@ allowed) is part of that design work, as already noted in TASK-175.
 - [ ] #5 An evolution contradicting kb-state-audit's authority does not write
 - [ ] #6 A session that exercises no skill produces no run and no output
 - [ ] #7 Measured on real sessions before default-on ships: a sample of autonomous evolutions is hand-checked and the acceptance rate recorded — if a human would have rejected most of them, the default flips to proposal mode and that is the finding
+- [ ] #8 The rewrite is produced by the client model, selected best-first from an explicit documented ordering resolved at run time; no client available means skip-and-log, never a silent local fallback
+- [ ] #9 Gating stays local: grounded verifier and kb-state-audit run on the local model regardless of which client model wrote the rewrite
+- [ ] #10 The consent boundary documentation names this pass as sending skill content through the client channel in background runs
 <!-- AC:END -->
 
 ## Implementation Notes
