@@ -1,7 +1,7 @@
 ---
 id: TASK-168
 title: Release v0.31.1
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-15 19:07'
 labels:
@@ -32,10 +32,10 @@ Also checked and deliberately excluded: `perf/default-embed-qwen3-4b` (`4274941`
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 801fdef lands on main, having been verified rather than assumed correct
-- [ ] #2 The changelog distinguishes the real fix from the cosmetic hunk in the same commit
-- [ ] #3 README.md and README.nl.md both get a v0.31.1 entry, in the same edit
-- [ ] #4 Full suite green before the docs edit; documentation subset green after
-- [ ] #5 Copilot review processed — comments endpoint AND review body — before merge
-- [ ] #6 Tag placed only on a SHA verified present on origin/main, and published with a non-empty body
+- [x] #1 801fdef lands on main, having been verified rather than assumed correct
+- [x] #2 The changelog distinguishes the real fix from the cosmetic hunk in the same commit
+- [x] #3 README.md and README.nl.md both get a v0.31.1 entry, in the same edit
+- [x] #4 Full suite green before the docs edit; documentation subset green after
+- [x] #5 Copilot review processed — comments endpoint AND review body — before merge
+- [x] #6 Tag placed only on a SHA verified present on origin/main, and published with a non-empty body
 <!-- AC:END -->
