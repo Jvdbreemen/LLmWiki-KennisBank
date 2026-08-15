@@ -62,14 +62,21 @@ Evidence: `docs/research/llm-trust-verification-2026-08-15.md`. Commits fcf96cb,
 - **The sweep records which chunk produced a candidate** — met and proven at
   runtime, not just in the source. `source_chunk: "N/M"`, M = the whole
   transcript's count.
-- **A labelled set large enough to state a rate** — PARTLY MET, and this is the
-  gap. Stratified rather than enlarged: all 8 `unsupported` adjudicated against
-  the whole transcript (R1 = 4/8, Wilson 22-79%), all 60 verdicts quote-checked
-  mechanically (0 fabrications). A 150-memory run that would have tightened the
-  bound was stopped at 147 of 150 and its results were lost, because the probe
-  wrote only at the end — fixed since, but not re-run. The interval is too wide
-  to call a rate. It does not change the decision: both ends of it fail the bar
-  for demoting a memory.
+- **A labelled set large enough to state a rate** — met at n=150. Stratified
+  rather than enlarged: every `unsupported`, `partial` and `not_found` verdict
+  adjudicated against the WHOLE transcript, and every verdict quote-checked
+  mechanically.
+
+  *Correction to an earlier note here.* It said a 150-memory run "was stopped at
+  147 of 150 and its results were lost". That was wrong, and I reported it to
+  the user as well. What the harness stopped was the shell waiting on the run;
+  the Python process finished and wrote its output a minute later. I checked for
+  the file once, saw only the log, and concluded loss instead of checking again.
+  The results were on disk the whole time.
+
+  The per-judgement flush added on that false premise stays — a run costing a
+  GPU-hour should not live only in one process — but the premise was mine, not
+  the harness's.
 - **Suite green** — 1427 passed, 2 skipped.
 
 **The conclusion, which TASK-162 depends on: `supported` raises trust, nothing
