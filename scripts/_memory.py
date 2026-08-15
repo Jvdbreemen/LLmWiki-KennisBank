@@ -304,7 +304,8 @@ def render(title: str, body: str, *, status: str = DEFAULT_STATUS,
            valid_from: str | None = None, valid_until: str | None = None,
            expires: str | None = None, superseded_by=None, tags=None,
            memory_type: str = DEFAULT_MEMORY_TYPE, importance: int = 3,
-           volatility: str = "", model_id: str = "", prompt_version=None) -> str:
+           volatility: str = "", model_id: str = "", prompt_version=None,
+           source_chunk: str = "") -> str:
     if status not in STATUSES:
         raise ValueError(f"ongeldige status: {status!r} (verwacht een van {STATUSES})")
     if evidence_basis not in EVIDENCE_BASES:
@@ -331,6 +332,15 @@ def render(title: str, body: str, *, status: str = DEFAULT_STATUS,
              f"created: {created}",
              f"updated: {updated}",
              f"valid_from: {valid_from}"]
+    # WHERE in the source this claim came from, as "N/M": chunk N of M. The
+    # sweep knows this at capture time and used to discard it, which meant that
+    # checking a memory against its own transcript required RETRIEVING the
+    # passage again -- and that retrieval finds the right chunk only about half
+    # the time (TASK-163). M is the total chunk count of the whole transcript,
+    # never the capped slice the run happened to read: a verifier re-chunks the
+    # transcript and can only trust N if M matches what it sees.
+    if source_chunk:
+        lines.append(f"source_chunk: {_yaml_scalar(source_chunk)}")
     if valid_until:
         lines.append(f"valid_until: {valid_until}")
     if expires:
@@ -350,6 +360,26 @@ def render(title: str, body: str, *, status: str = DEFAULT_STATUS,
     lines.append("")
     lines.append(body.rstrip() + "\n")
     return "\n".join(lines)
+
+
+def chunk_from_stamp(source_chunk: str, chunks: list):
+    """The chunk this memory was captured from, or None if the stamp is stale.
+
+    The stamp is self-validating on purpose. It records "N/M" and the reader
+    re-chunks the transcript itself: if the chunker's settings changed since
+    capture, M no longer matches and every N is off by an unknown amount. Then
+    the stamp is worth nothing and saying so is the only safe answer -- a
+    confidently wrong passage would make the verifier judge a claim against
+    text it never came from.
+    """
+    try:
+        n_str, m_str = str(source_chunk or "").split("/")
+        n, m = int(n_str), int(m_str)
+    except Exception:
+        return None
+    if m != len(chunks) or not 1 <= n <= len(chunks):
+        return None
+    return chunks[n - 1]
 
 
 def write_capture(title: str, body: str, **kw) -> "tuple[Path, bool]":

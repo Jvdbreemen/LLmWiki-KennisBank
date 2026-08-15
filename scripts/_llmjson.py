@@ -17,11 +17,25 @@ The fix is not wider but narrower: take the FIRST complete object or array, by
 counting brackets with awareness of strings and escapes. What comes after is
 the model's commentary, not data.
 
+A SECOND failure shape, found while validating the grounded verifier: the model
+emits an object whose STRUCTURE is right and whose string delimiters are wrong.
+Two variants, both from qwen3.5:4b, four times in fifty-six calls:
+
+    {"verdict": "supported", "reason": \"the passage states …\"}
+    {"verdict": "unsupported", "reason": 'the passage describes …'}
+
+No span-finding fixes those, because there is nothing wrong with the span. They
+are repaired here instead -- but only after an honest parse has already failed,
+and only if the repaired text then parses. A repair that does not yield valid
+JSON is discarded, so a broken answer stays broken rather than becoming a
+plausible wrong one.
+
 Stdlib. No side effects on import.
 """
 from __future__ import annotations
 
 import json
+import re
 
 _PAREN = {"{": "}", "[": "]"}
 
@@ -67,8 +81,39 @@ def _span_from(raw: str, open_ch: str, start_at: int) -> "tuple[int, int] | None
 _MAX_CANDIDATES = 20
 
 
-def _parse(raw, open_ch: str, expected):
-    text = str(raw or "")
+#: A string value the model delimited with single quotes instead of double.
+#: Anchored on the colon so it can only ever touch a VALUE: a key in single
+#: quotes stays broken, because rewriting one was never observed and guessing
+#: is how a repair pass starts inventing data. The lookahead keeps the closing
+#: delimiter unconsumed so two such values in a row both match.
+_SINGLE_QUOTED_VALUE = re.compile(
+    r"(:\s*)'((?:[^'\\]|\\.)*)'(?=\s*(?:[,}\]\n]|$))")
+
+
+def _single_to_double(text: str) -> str:
+    def swap(m):
+        inner = m.group(2).replace('\\"', '"').replace('"', '\\"')
+        return f'{m.group(1)}"{inner}"'
+    return _SINGLE_QUOTED_VALUE.sub(swap, text)
+
+
+def _variants(text: str):
+    """The text as written, then repairs, each tried only if the last failed.
+
+    Order is not cosmetic: the unmodified text goes first, so an answer that
+    parses today parses identically tomorrow and no repair can reinterpret it.
+    """
+    yield text
+    seen = {text}
+    for candidate in (text.replace('\\"', '"'),
+                      _single_to_double(text),
+                      _single_to_double(text.replace('\\"', '"'))):
+        if candidate not in seen:
+            seen.add(candidate)
+            yield candidate
+
+
+def _scan(text: str, open_ch: str, expected):
     # Try EVERY opening bracket, not just the first. A model that opens with
     # "Let me {think} about it. {\"action\": \"ADD\"}" puts a brace BEFORE the
     # JSON; trying only the first picks `{think}`, fails, and falls back to the
@@ -97,6 +142,14 @@ def _parse(raw, open_ch: str, expected):
                 return value
         except Exception:
             pass
+    return None
+
+
+def _parse(raw, open_ch: str, expected):
+    for candidate in _variants(str(raw or "")):
+        value = _scan(candidate, open_ch, expected)
+        if value is not None:
+            return value
     return None
 
 

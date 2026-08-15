@@ -82,23 +82,39 @@ three times where a careless human reader did not, and over-reached once.
 
 ## Two defects, both in the probe rather than the idea
 
-**Unparseable responses: 4 of 56 (7%).** The model answered without emitting a
-JSON object at all. `_llmjson` cannot rescue what was never written. A retry or
-a stricter instruction would fix it; until then, 7% of memories would silently
-get no verdict — and a silent no-verdict is the failure mode this codebase has
-spent a week removing.
+*Both entries below were wrong when first written. The corrected versions
+follow, with what the mistake was, because the mistakes are the more useful
+part.*
 
-**Passage selection misses about half the time.** Five of eleven were
-`not_found` by both reader and model. The first selector scored chunks by raw
-token overlap and returned slash-command definitions for most memories, because
-those blocks are long, word-rich and injected into every transcript. Replacing
-it with IDF-weighted overlap plus an embedding rerank of the top-8 helped and
-did not solve it.
+**Unparseable responses: 4 of 56 (7%).** ~~The model answered without emitting
+a JSON object at all.~~ It emitted one every time. All four objects have the
+right structure and the wrong string delimiters, in two shapes:
 
-That bounds the mechanism honestly: **it can only judge memories whose source
-passage it can find**, and today that is roughly half. A trust signal available
-for half the corpus is still a signal — `not_found` is not `unsupported` — but
-the coverage belongs in any decision about it.
+    {"verdict": "supported",   "reason": \"the passage states …\"}
+    {"verdict": "unsupported", "reason": 'the passage describes …'}
+
+The first backslash-escapes the delimiters of its own value; the second uses
+single quotes. Neither is valid JSON and no span-finding helps, because nothing
+is wrong with the span. I did not capture the raw text on the first run and
+wrote down the plausible explanation instead of the observed one — and the fix
+that follows from the plausible explanation, a retry, would have been the wrong
+fix. `_llmjson` now repairs both shapes, but only after an honest parse has
+already failed and only if the repaired text then parses; a repair that yields
+no valid JSON is discarded, so a broken answer stays broken rather than
+becoming a plausible wrong one.
+
+**Passage selection.** ~~It misses about half the time.~~ The five-of-eleven
+figure is from the hand-labelled subset, and that subset was chosen, not drawn.
+On the random 56, the verifier answered `not_found` 11 times — **20%**, not
+half. Generalising a rate from a set I had selected is the same error as
+labelling from a window narrower than the model's, one paragraph later.
+
+There is a deeper problem with reading that 20% as a retrieval score at all:
+`not_found` means "the passage I was given is about something else", which
+covers both *the selector missed* and *this claim was never in the transcript*.
+The second one is precisely what a trust signal exists to detect. Tuning toward
+fewer `not_found`s would therefore tune the signal away. Retrieval needs a
+measurement that owes nothing to the verdict — see the next section.
 
 ## What the evidence supports
 

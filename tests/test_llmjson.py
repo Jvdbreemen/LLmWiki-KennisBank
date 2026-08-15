@@ -162,5 +162,65 @@ class ReconcilePromptTest(unittest.TestCase):
         self.assertGreaterEqual(_reconcile.RECONCILE_PROMPT_VERSION, 2)
 
 
+class BrokenDelimiterTest(unittest.TestCase):
+    """The object is there; only its string delimiters are wrong.
+
+    Found while validating the grounded verifier (TASK-163): four of fifty-six
+    qwen3.5:4b answers were counted `unparseable`, and the report said the model
+    had emitted no JSON. It had. Both shapes below are verbatim from that run —
+    no span-finding helps, because nothing is wrong with the span.
+    """
+
+    def test_a_value_the_model_escaped_its_own_delimiters_around(self):
+        raw = ('{\n"verdict": "supported",\n'
+               '"reason": \\"the passage states this, quoting '
+               "'Patch step 2'.\\\"\n}")
+        obj = _llmjson.first_object(raw)
+        self.assertEqual(obj["verdict"], "supported")
+        self.assertIn("Patch step 2", obj["reason"])
+
+    def test_a_single_quoted_value(self):
+        raw = ('{"verdict": "unsupported", '
+               "\"reason\": 'the passage describes something else'}")
+        obj = _llmjson.first_object(raw)
+        self.assertEqual(obj["verdict"], "unsupported")
+        self.assertEqual(obj["reason"], "the passage describes something else")
+
+    def test_a_single_quoted_KEY_is_left_alone(self):
+        """The repair is anchored on the colon, so it can only touch values.
+
+        Rewriting keys was never observed, and a repair pass that starts
+        guessing is how one ends up inventing the data it was meant to rescue.
+        """
+        self.assertIsNone(_llmjson.first_object("{'verdict': \"supported\"}"))
+
+    def test_two_single_quoted_values_in_a_row(self):
+        """The closing delimiter is a lookahead so the next match still sees it."""
+        raw = "{\"a\": 'one', \"b\": 'two'}"
+        self.assertEqual(_llmjson.first_object(raw), {"a": "one", "b": "two"})
+
+    def test_a_double_quote_inside_a_single_quoted_value_survives(self):
+        raw = "{\"reason\": 'he wrote \"yes\" there'}"
+        self.assertEqual(_llmjson.first_object(raw)["reason"], 'he wrote "yes" there')
+
+    def test_valid_json_is_never_reinterpreted(self):
+        """The unmodified text is tried first, so a legitimately escaped quote
+        keeps its meaning instead of being 'repaired' into a delimiter."""
+        raw = '{"reason": "he said \\"yes\\" and left"}'
+        self.assertEqual(_llmjson.first_object(raw)["reason"], 'he said "yes" and left')
+
+    def test_an_apostrophe_inside_a_single_quoted_value_stays_broken(self):
+        """Fail closed. Repairing this needs a guess about where the value ends,
+        and a guessed verdict is worse than a missing one."""
+        self.assertIsNone(_llmjson.first_object("{\"reason\": 'it's broken'}"))
+
+    def test_prose_with_braces_and_quotes_yields_nothing(self):
+        self.assertIsNone(_llmjson.first_object(
+            "I think {this} is 'supported' but cannot say."))
+
+    def test_repairs_apply_to_arrays_too(self):
+        self.assertEqual(_llmjson.first_array("[{\"t\": 'a'}]"), [{"t": "a"}])
+
+
 if __name__ == "__main__":
     unittest.main()
