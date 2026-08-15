@@ -41,7 +41,12 @@ import sys
 import time
 from pathlib import Path
 
-os.environ.setdefault("KENNISBANK_VAULT", str(Path(__file__).resolve().parents[2]))
+# NOTE: deliberately no os.environ.setdefault("KENNISBANK_VAULT", ...) here.
+# `_vaultpath._script_vault()` makes the same parents[2] guess but only
+# accepts it when a `.claude/` directory is actually there. The bare
+# setdefault has no such guard, so in a repo checkout it points the vault
+# at the directory ABOVE the repo and every later caller inherits that --
+# including tests, which import this module at collection time.
 SCRIPTS = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPTS)
 

@@ -98,8 +98,11 @@ class SweepStampsTheFullCountTest(unittest.TestCase):
 
         saved = os.environ.get("KENNISBANK_VAULT")
         os.environ["KENNISBANK_VAULT"] = str(vault)
+        # `is not None`, not truthiness: an empty KENNISBANK_VAULT is a value a
+        # caller may have set on purpose, and popping it would not restore it.
         self.addCleanup(lambda: os.environ.__setitem__("KENNISBANK_VAULT", saved)
-                        if saved else os.environ.pop("KENNISBANK_VAULT", None))
+                        if saved is not None
+                        else os.environ.pop("KENNISBANK_VAULT", None))
 
         # Long enough to chunk several times, with a marker per paragraph so a
         # candidate can be traced to exactly one chunk.
