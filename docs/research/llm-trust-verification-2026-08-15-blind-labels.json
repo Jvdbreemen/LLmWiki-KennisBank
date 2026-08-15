@@ -1,0 +1,20 @@
+{
+  "_method": "Labelled from the passage alone, before the verifier ran. Rule: does THIS passage support THIS claim? not_found = the passage is about something else, which is a failure of passage selection rather than a finding about the memory.",
+  "_labeller": "assistant, blind to verifier output",
+  "labels": {
+    "2026-07-06-user-review-gate": "partial",
+    "2026-07-13-fix-voor-settings-command": "supported",
+    "2026-08-03-naming-convention-kbindex": "not_found",
+    "2026-07-02-dns-herstel-bij-reboot": "not_found",
+    "2026-08-13-python-versie-vereiste": "partial",
+    "2026-07-25-verwerking-van-externe-bronnen": "not_found",
+    "2026-07-02-gebruik-qwen3-embedding8b-op-gpu": "not_found",
+    "2026-07-12-fix-speaker-tokenisatie": "not_found",
+    "2026-07-28-deduplicatie-bij-merging": "not_found",
+    "2026-07-02-consistentie-van-embedding-modellen": "not_found",
+    "2026-07-24-kennisbank-scope-en-kiss": "supported",
+    "2026-07-02-uitgestelde-reboot-bij-ota": "not_found",
+    "2026-07-02-beperking-pic-flash-op-otgw32": "partial",
+    "2026-07-02-firmware-versieconsistentie": "partial"
+  }
+}
