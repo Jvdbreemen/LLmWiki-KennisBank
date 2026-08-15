@@ -181,33 +181,126 @@ a half points for a twentyfold reduction is not a close call.
 reproduced within 2 of 255. Close, not identical; the arms were measured in
 separate processes and nothing here rests on the difference.)
 
+## Run 2: same memories, working parser, better passages
+
+| | run 1 | run 2 |
+| --- | --- | --- |
+| supported | 32 | **49** |
+| unsupported | 11 | 8 |
+| not_found | 11 | **1** |
+| partial | 2 | 1 |
+| unparseable | 4 | 1 |
+
+Paired over the 60 memories: 34 unchanged, and of the eleven run-1 `not_found`
+cases seven became `supported` and three `unsupported`.
+
+**The prediction in the section above was wrong.** `unsupported` did not go up;
+it went down, from 11 to 8, and C1 variance fell from 42.9% to **16.9%**. Still
+past the pre-registered 10%, with much less room. A large part of the original
+distrust was the instrument, not the memories — which is the same lesson as the
+four unparseables and the five-of-eleven, for the third time in one document.
+
+The one remaining unparseable is a third delimiter shape: escaped delimiters
+*and* a doubled closing quote *and* invalid `\'` escapes inside. `_llmjson` was
+not extended to cover it. Two repairs grounded in observed data are worth
+having; a third, chasing one case in sixty, is where a repair pass starts
+inventing. It is counted as `unparseable` and reported, which is what the seam
+is for.
+
+## The two verdicts are not equally trustworthy
+
+**`supported` does not fabricate.** The prompt asks the model to quote the
+passage, and a quote is checkable, so all sixty verdicts were checked
+mechanically rather than by hand. Thirty-one quotes are not verbatim — the
+model reformats, joins lines, normalises whitespace — and for **every one of
+them the quoted substance is in the passage**. Zero absent. It quotes loosely
+and never invents.
+
+**`unsupported` is wrong half the time.** All eight were adjudicated against
+the *whole* transcript, not the passage. Four are correct. Four are memories
+that are stated in the source, verbatim:
+
+| memory | in the transcript |
+| --- | --- |
+| firmware-versieconsistentie | *"reports alpha.284 while HEAD is alpha.285. For honest receipts (device version == pushed code), I'll rebuild at current HEAD first, then flash"* |
+| contextbeheer-via-bestanden | *"Everything you paste into a dispatch prompt … stays resident in your context for the rest of the session and is re-read on every later turn. Hand artifacts over as files"* |
+| deduplicatie-bij-merging | the merge loop itself: `seen = set()` … `if n['id'] not in seen` |
+| risico-op-informatielekkage | *"Gedistilleerde 'lessen' kunnen gevoelige bedrijfsinhoud bevatten zónder één pad of symbool"* |
+
+**R1 = 4/8 = 50%**, Wilson 95% interval **22–79%**. Eight cases cannot pin a
+rate, and the interval says so; but even its optimistic end means one demotion
+in five is wrong.
+
+### Why this is structural, not a tuning problem
+
+The prompt offers `not_found` for "the passage is about something else
+entirely". When the selector misses but lands on a *topically related* passage —
+same transcript, same project, same afternoon — that description does not fit,
+so the model correctly reaches for `unsupported` instead. **A retrieval miss and
+a false claim are indistinguishable from inside the passage.** Only an
+exhaustive search of the transcript separates them, and that is exactly what the
+verifier does not do.
+
+Three of the four false demotions are that. The fourth is a different mismatch:
+for `risico-op-informatielekkage` the passage *states* the claim while giving no
+argument for it, and the model judged whether the passage **justified** the
+claim rather than whether it **said** it. For verifying extraction, said is
+enough.
+
+### What follows: raise trust, never lower it
+
+The mechanism should feed the ranking in one direction only. `supported`
+confirms a memory; every other verdict changes nothing. That is not a
+compromise, it is what the evidence supports: the positive verdict is backed by
+checkable quotes and no fabrication in sixty cases, and the negative verdict
+cannot tell a retrieval failure from a false memory.
+
+It also lands where this vault already stands — the human is the authority for
+negative signals, and there is now a measured reason rather than a principle.
+
 ## What the evidence supports
 
-All three pre-registered criteria pass. The mechanism produces a varied,
-deterministic verdict that agrees with a careful human reader and, on this
-sample, does not fabricate support.
+All three pre-registered criteria pass, and the three blockers named in the
+first version are answered:
 
-Of the three things named as standing between this and the ranking, the first
-two are resolved and the third is in progress:
+1. **The unparseable rate.** Not a retry problem; a parser problem. 4 of 56 →
+   1 of 60, and the survivor is counted rather than swallowed.
+2. **Passage selection.** At the budget the judge actually gets, 62.7% → 87.8%
+   coverage — by retrieving on *smaller* windows, not by embedding more. For
+   everything captured from now on the question does not arise: the sweep
+   stamps `source_chunk: "N/M"` and the passage is looked up. No memory carries
+   that stamp yet; it applies to new captures, and backfilling would mean
+   re-running the extractor over every transcript.
+3. **A larger labelled sample.** Stratified rather than enlarged. The eight
+   `unsupported` verdicts — the ones that would act — were adjudicated against
+   the whole transcript, and all sixty verdicts were quote-checked
+   mechanically.
 
-1. **The unparseable rate.** Not a retry problem; a parser problem, now fixed.
-2. **Passage selection.** At the budget the judge actually gets, from 62.7% to
-   87.8% coverage — by retrieving on smaller windows, not by embedding more.
-   And for everything captured from now on the question does not arise: the
-   sweep stamps `source_chunk: "N/M"`, so the passage is looked up rather than
-   retrieved. No memory in the vault carries that stamp yet; it applies to new
-   captures only, and backfilling it would mean re-running the extractor over
-   every transcript.
-3. **A larger labelled sample.** Still the open one, and it needs stratifying
-   rather than enlarging: the rate that matters is the precision of
-   `unsupported`, because that is the verdict that would demote a memory.
+**The recommendation is to use it, in one direction.** `supported` raises
+trust. Nothing lowers it.
 
-One thing to expect and not misread when this is re-run: **`unsupported` should
-go up.** Cases that were `not_found` because the selector missed will now
-resolve into real verdicts, and some of those will be extractions that were
-never supported. That number is the first extraction-accuracy figure this vault
-has ever had, and it is more interesting than the trust factor it was gathered
-for. More `supported` is not better.
+That is narrower than the factor this was gathered for, and it is the part the
+evidence actually carries. `supported` is backed by quotes that check out, with
+no fabrication in sixty cases. `unsupported` is right about half the time, and
+its errors are not noise to be tuned away: a retrieval miss and a false memory
+look identical from inside a passage, so the verdict cannot separate them at
+any coverage short of exhaustive. For a system whose first duty is not to lose
+what it correctly wrote down, a one-in-two — or even a one-in-five — false
+demotion is not a rate to design around.
+
+Two things this produced that were not what it was looking for:
+
+- **`hybride-dataverwerkingscyclus` claims captures are merged *monthly*.** The
+  word appears nowhere in its transcript; the source says a daily pass. That is
+  a real extraction error, correctly caught. So is
+  `capaciteit-van-capture-mode`, which invents a 1-million-line capacity that
+  no part of its 491k-character source mentions.
+- **Memories are written in Dutch; the transcripts are largely English.** The
+  settings-watcher memory says *"de watcher monitort alleen mappen"* while its
+  source says *"it only watches directories that had a settings file when this
+  session started"*. Lexical retrieval cannot bridge that, and the IDF stage
+  kept for cost is exactly the lexical one. How much of the remaining miss rate
+  is cross-language is unmeasured and worth measuring.
 
 ## The finding that outranks all of this
 
@@ -217,14 +310,26 @@ While building the probe: **every one of the 2389 memories has a
 are no human labels to validate anything against, which is why this validation
 had to invent its own.
 
-That is a larger gap than the trust factor. A verification pass, even at 50%
-coverage, would be the first time this system has ever asked whether what it
-wrote down was actually said.
+That is a larger gap than the trust factor. A verification pass would be the
+first time this system has ever asked whether what it wrote down was actually
+said — and on this sample it would confirm about eight memories in ten and
+correctly catch a handful of inventions, while demoting nothing.
 
 ## Reproducing
 
-The probe is a scratch harness, not a shipped script. Sample seed 7, 60
-memories, `qwen3.5:4b` at temperature 0, passages selected by IDF-weighted
-overlap plus embedding rerank over the top 8 chunks of the source transcript.
-Blind labels were recorded before the run; the corrected labels were made from
-the full passage and are the ones tabulated above.
+Scratch harnesses, not shipped scripts. `qwen3.5:4b` at temperature 0
+throughout, `qwen3-embedding:4b` for retrieval.
+
+| what | how |
+| --- | --- |
+| run 1 | 60 memories, seed 7; IDF top-8 chunks, embedding rerank, top 2 joined and cut at 6000 |
+| run 2 | the same 60; IDF top-8, then 1500-character windows inside them, best 4 by cosine, joined in reading order |
+| retrieval ground truth | the extractor over every chunk of 4 transcripts (11–18 chunks), seed 42 — 255 claims with a known originating chunk |
+| labels | all 8 `unsupported`, adjudicated against the whole transcript by exhaustive search, not against the passage |
+| quote check | all 60 verdicts, mechanically: every quoted span located in the passage the model was given |
+
+Three claims in the first version of this document were wrong and are corrected
+above rather than quietly edited: the unparseable answers did contain JSON,
+passage selection did not miss half the time, and embedding every chunk does not
+fix retrieval. Each was a plausible explanation written down instead of an
+observed one.
