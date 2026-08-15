@@ -3,7 +3,7 @@ id: TASK-163
 title: >-
   Make the grounded verifier usable: no silent verdicts, find the passage, label
   enough of it
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-15 11:25'
 labels:
@@ -83,7 +83,7 @@ Evidence: `docs/research/llm-trust-verification-2026-08-15.md`. Commits fcf96cb,
 lowers it.** `unsupported` cannot distinguish a retrieval miss from a false
 memory, and that is structural rather than tunable.
 
-Filed on the way: TASK-164 (the 4000-character embed cap hides 23% of the wiki)
+Filed on the way: TASK-164 (the 4000-character cap hid 16.6% of the wiki from the FTS arm; shipped in v0.31.0)
 and TASK-165 (34% of claims are Dutch from English sources, and the lexical
 prefilter cannot bridge that).
 <!-- SECTION:DESCRIPTION:END -->

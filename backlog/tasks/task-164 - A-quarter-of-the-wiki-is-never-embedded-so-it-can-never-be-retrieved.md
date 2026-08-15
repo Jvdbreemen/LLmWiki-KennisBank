@@ -1,7 +1,7 @@
 ---
 id: TASK-164
 title: 'A quarter of the wiki is never embedded, so it can never be retrieved'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-15 11:54'
 labels: []

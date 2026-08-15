@@ -1,7 +1,7 @@
 ---
 id: TASK-166
 title: Release v0.31.0
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-15 15:50'
 labels: []
