@@ -152,6 +152,35 @@ A miss here is a lower bound: chunks overlap by 200 characters and a session
 returns to its subjects, so a claim from chunk 7 may be genuinely supported by
 chunk 8. Every arm pays that same bound, so the comparison survives it.
 
+### `hit@2` was flattering every arm
+
+The verifier caps its prompt at 6000 characters and a chunk runs to 6000, so
+"the top two chunks" reaches the judge as the first chunk and a stump of the
+second. Most rank-2 hits were never actually seen. The question is not which
+ranking is best but: **given 6000 characters of passage, which selection is most
+likely to contain the text the claim came from?** A window arm can spend that
+budget in four places; a chunk arm spends all of it in one.
+
+| selection, at a 6000-character budget | contains the source | vs. one chunk | |
+| --- | --- | --- | --- |
+| one chunk — the shape the probe actually used | 62.7% | — | |
+| **best windows, 4 × 1500, wherever they fall** | **90.2%** | +70 −0 | p=1.7e-21 |
+| IDF shortlist of 8 first, then windows | 87.8% | +70 −6 | p=6.3e-15 |
+
+Strictly dominant: the window arm wins seventy cases and loses none. Coverage
+goes from roughly three cases in five to nine in ten, at the same prompt cost,
+because the budget stops being spent on one long stretch of mostly-irrelevant
+transcript.
+
+The shortlist is worth keeping despite being 2.4 points behind. It bounds the
+work at about 40 embeddings per memory instead of ~990 on a 198-chunk
+transcript, and on this machine the embedding round-trip *is* the cost. Two and
+a half points for a twentyfold reduction is not a close call.
+
+(The two runs share one arm — "one chunk" here is arm D at rank 1 — and it
+reproduced within 2 of 255. Close, not identical; the arms were measured in
+separate processes and nothing here rests on the difference.)
+
 ## What the evidence supports
 
 All three pre-registered criteria pass. The mechanism produces a varied,
@@ -162,10 +191,13 @@ Of the three things named as standing between this and the ranking, the first
 two are resolved and the third is in progress:
 
 1. **The unparseable rate.** Not a retry problem; a parser problem, now fixed.
-2. **Passage selection.** From 43.5% to 63.5% hit@1 — by retrieving on smaller
-   windows, not by embedding more. And for everything captured from now on the
-   question does not arise: the sweep stamps `source_chunk: "N/M"`, so the
-   passage is looked up rather than retrieved.
+2. **Passage selection.** At the budget the judge actually gets, from 62.7% to
+   87.8% coverage — by retrieving on smaller windows, not by embedding more.
+   And for everything captured from now on the question does not arise: the
+   sweep stamps `source_chunk: "N/M"`, so the passage is looked up rather than
+   retrieved. No memory in the vault carries that stamp yet; it applies to new
+   captures only, and backfilling it would mean re-running the extractor over
+   every transcript.
 3. **A larger labelled sample.** Still the open one, and it needs stratifying
    rather than enlarging: the rate that matters is the precision of
    `unsupported`, because that is the verdict that would demote a memory.
