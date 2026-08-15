@@ -296,6 +296,62 @@ Confirmed rather than new: Mem0's ADD/UPDATE/DELETE/NOOP loop is already the
 human-edited CLAUDE.md identity layer does deliberately by hand; LangMem and
 LlamaIndex Memory are the lock-in cautionary tales already recorded above.
 
+### Memanto (added 2026-08-15, via an @moorcheh_ai post)
+
+Memanto (github.com/moorcheh-ai/memanto, **MIT**, ~1.8k stars, arXiv
+2604.22085) is Moorcheh's agent-memory layer: "storage is a filing cabinet,
+Memanto is the chief of staff." Local Docker+Ollama mode exists alongside the
+hosted engine. One real steal, several convergences worth recording, and one
+claimed differentiator that does not survive contact with this vault's
+architecture.
+
+**The steal: OKF has a second implementation (TASK-176).** Memanto exports its
+estate "as plain Markdown in the Open Knowledge Format... intentionally
+supporting competitor implementations" — the same
+GoogleCloudPlatform/knowledge-catalog v0.2 spec TASK-92 adopted for export.
+That changes what TASK-92's bundle is: not only a rendered view but an
+interchange surface another shipping system reads and writes. TASK-176 queues
+the interop check — outbound bundle ingested by a local Memanto, trust tiers
+surviving the round trip, and a mapping table between their 13 memory
+categories and this vault's 4 types. Divergences are findings about a young
+spec, worth filing upstream.
+
+**Determinism is their headline; this vault already has the property and does
+not claim it.** Their pitch — deterministic retrieval, no behavioral drift
+from approximate-nearest-neighbour search — is a property KennisBank gets
+structurally: brute-force vec0 KNN plus FTS5, proven bit-reproducible in the
+L2 scene report (two bracketing baseline runs, zero flips). At personal-vault
+scale, exact search is affordable and ANN drift is a problem other people
+have. The one leak is known and recorded: day-granular recency reordered 146
+of 856 near-ties across a midnight boundary — under the same TASK-161 freeze
+as every other `_rank` change. A 1.8k-star product marketing this property as
+its differentiator suggests the README here could afford one sentence
+claiming it.
+
+**Convergences, at this point unremarkable and therefore load-bearing:**
+supersede-rather-than-append "preserving what was believed and when" is this
+vault's supersession + closed-log + `valid_until`, verbatim; their scheduled
+daily curation (merge duplicates, flag contradictions, expire) is the
+maintenance pass family; typed memories with confidence are `memory_type` +
+`importance`. Their `--as-of` / `--changed-since` recall filters are the
+**second independent sighting** of a point-in-time query surface (Graphiti's
+was the first) — still unqueued here for lack of a use case, but two
+sightings upgrade it from idea to pattern, and the bi-temporal frontmatter
+already contains everything such a surface would read.
+
+**What does not transfer: "no ingestion cost, no indexing delay."** That is a
+property of their hosted binarization engine (MIB/ITS), not of their memory
+design. KennisBank's ingestion cost *is* the local embed, which no scoring
+trick removes, and its SQLite index is searchable the moment the embed lands.
+The 13-category taxonomy is also not adopted: thirteen types is
+over-taxonomization by this repo's standards, though `goal` and `instruction`
+name real classes the current four types do not — worth remembering if the
+TASK-172 dead-end audit ends up touching the extraction taxonomy anyway.
+
+Their README's benchmark note deserves quoting because it is the position
+this document keeps arguing: "cross-project scores on these benchmarks are
+not comparable" — from a project reporting 89.8% on LongMemEval.
+
 ## Closing judgement
 
 Three derivations of this review each found the same thing at different
@@ -325,3 +381,7 @@ snapshot overtakes the rest of it.
 - Follow-up primary sources: Hindsight (arXiv 2512.12818), Zep/Graphiti (arXiv
   2501.13956, github.com/getzep/graphiti), PROJECTMEM (arXiv 2606.12329,
   github.com/riponcm/projectmem). Retrieved 2026-08-15.
+- Memanto (arXiv 2604.22085, github.com/moorcheh-ai/memanto, MIT) and the
+  Moorcheh engine docs (docs.moorcheh.ai). Retrieved 2026-08-15, via an
+  @moorcheh_ai X post (the post itself is login-walled; the org and paper are
+  primary).
