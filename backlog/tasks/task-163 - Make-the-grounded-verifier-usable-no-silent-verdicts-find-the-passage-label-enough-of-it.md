@@ -53,8 +53,12 @@ Evidence: `docs/research/llm-trust-verification-2026-08-15.md`. Commits fcf96cb,
   instead: the extractor over every chunk of four transcripts, 255 claims with a
   known originating chunk. 62.7% → 87.8% at the 6000-character budget the judge
   actually receives.
-- **Chunk embeddings cached per transcript** — met in the harness: memoised on
-  (kind, text), so every memory from a session after the first is a lookup.
+- **Chunk embeddings cached per transcript** — met WITHIN a run and not across
+  runs. It is a per-process memo on (kind, text), not a cache file: every memory
+  from a session after the first is a lookup, and all of it dies when the
+  process exits. That is precisely why the stopped 150-memory run could not be
+  resumed. Anyone building on this will look for a cache on disk and not find
+  one.
 - **The sweep records which chunk produced a candidate** — met and proven at
   runtime, not just in the source. `source_chunk: "N/M"`, M = the whole
   transcript's count.
