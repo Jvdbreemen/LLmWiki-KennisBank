@@ -1,5 +1,5 @@
 ---
-id: TASK-162
+id: TASK-171
 title: Stated versus inferred axis on memories — measure before building
 status: To Do
 assignee: []
@@ -42,6 +42,17 @@ Above it, add the field and let the quality gate weigh it.
 
 Anti-goal: a fourth overlapping axis that authors must reason about at capture
 time. If it ships it must be judge-assigned, never hand-maintained.
+
+Instrument note (added after the v0.31.1 rebase): the grounded verifier from
+docs/research/llm-trust-verification-2026-08-15.md is the natural measuring
+tool here — it already judges a memory against its own source passage,
+deterministically at temperature 0, and TASK-163 is making its verdicts usable.
+"Stated versus inferred" is a finer cut of the same question that verifier
+answers ("does this passage say this"), so the measurement this task gates on
+should reuse that machinery rather than invent a second judge. Its measured
+asymmetry also applies here: `supported` is trustworthy, `unsupported` is right
+about half the time, so a fragment may be *promoted* to stated on evidence but
+never demoted to inferred on a single verdict.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria

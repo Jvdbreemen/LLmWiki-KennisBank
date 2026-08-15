@@ -1,5 +1,5 @@
 ---
-id: TASK-161
+id: TASK-170
 title: Observer provenance on memory fragments
 status: To Do
 assignee: []
@@ -22,6 +22,13 @@ answers *what kind of origin* a fragment has — `agent` is one of six values �
 but not *which* agent produced it. With Claude Code, Codex and the Copilot CLI
 all writing into one vault, `evidence_basis: agent` is now ambiguous at exactly
 the moment it starts to matter.
+
+The TASK-160 decomposition made this concrete: all 1732 current memories carry
+`evidence_basis: agent`, so `trust_factor` is a constant multiplier that cannot
+reorder anything — a single-valued field is no field. `observer` is the
+dimension that actually varies across captures today, and TASK-162's
+corroboration proposal (count *distinct sessions* asserting a memory) gets
+strictly stronger when the sessions can also be distinguished by client.
 
 Proposal: one optional `observer` frontmatter field on memory fragments,
 carrying the writing client's identifier (`claude-code`, `codex`, `copilot`,

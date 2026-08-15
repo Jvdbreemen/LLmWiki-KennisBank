@@ -20,27 +20,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and what was dropped, because silence would read as "everything was included".
   Sizing is ~4 characters per token, deliberately dependency-free so a cheap path
   stays cheap — leave headroom against an exact count. Without a ceiling the
-  output is byte-identical to before. (TASK-160)
+  output is byte-identical to before. (TASK-169)
 
 ### Documentation
 
 - **Agent-memory field review and strategy**
   (`docs/research/agent-memory-field-review-and-strategy.md`): KennisBank read
   against the Tsinghua Awesome-Memory-for-Agents taxonomy (~300 papers), an
-  eight-framework production comparison, and the August research series. Finding:
-  the retrieval half is measured better than the commercial field measures
-  itself, with its remaining gap quantified and a remedy already filed
-  (TASK-138) — while the system still cannot tell whether remembering helped.
-  `recall-after-growth` reached the same wall empirically: the eval set prices
-  the cost of a bigger corpus and cannot price the benefit, so capture decisions
-  are made on half the evidence. Queues five items (TASK-163, TASK-164, TASK-166
-  through TASK-169), three of them removals, with the factor ablation
-  deliberately sequenced *after* the rerank decision rather than before it.
+  eight-framework production comparison, and the full August research series
+  through the v0.31.1 rerank and factor measurements. Finding: the retrieval
+  loop now measures and corrects itself faster than external review can track —
+  everything retrieval-side this review recommended was independently done, in
+  flight, or measured obsolete on the same days it was written, which the
+  document records rather than smooths over. The one gap that survived all
+  three derivations: the system cannot tell whether remembering *helped*.
+  Three August documents hit that wall independently ("none says what the user
+  needs"), and the outcome loop (TASK-173) is the queued answer. Also queued:
+  dead-end capture audit (TASK-172), automated distillation proposals
+  (TASK-174), procedure-to-skill promotion (TASK-175). Two earlier
+  recommendations were deleted as superseded by `rank-factors-2026-08-14` and
+  TASK-162's design.
 
 - **Honcho architecture review** (`docs/research/honcho-memory-architecture.md`):
   plastic-labs/honcho compared against KennisBank — four points of independent
   convergence, the one idea adopted above, two queued (observer provenance,
-  TASK-161; a stated-versus-inferred axis gated behind a measurement, TASK-162),
+  TASK-170; a stated-versus-inferred axis gated behind a measurement, TASK-171),
   and the infrastructure rejected with reasons. Records the AGPL-3.0 versus MIT
   boundary: ideas and API shapes transfer, code does not.
 

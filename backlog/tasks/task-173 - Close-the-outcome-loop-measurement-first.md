@@ -1,5 +1,5 @@
 ---
-id: TASK-166
+id: TASK-173
 title: Close the outcome loop — measurement first
 status: To Do
 assignee: []
@@ -54,8 +54,10 @@ and noisy, and still strictly more than the system has now.
 
 SCOPE OF THIS TASK IS MEASUREMENT ONLY. Land the link, look at whether outcome
 correlates with anything, and stop. Ranking on it is a separate decision that
-must pass the TASK-163 bar; a signal this noisy could easily make retrieval worse
-while looking principled.
+clear the bar TASK-160/TASK-161 established for ranking changes: the factor
+decomposition showed hand-tuned multipliers can cost 272 questions while
+looking principled, and the eval set cannot currently see what an outcome
+signal is for — the same blindness TASK-161 records for recency.
 
 Constraints: off the hot path entirely (session-end or idle, never recall-time);
 local only; and no outcome heuristic that requires the user to remember to do
@@ -68,7 +70,7 @@ something, per principle #3.
 - [ ] #2 Injected stems are linked to the outcome of the session they were injected into
 - [ ] #3 Nothing runs on the hot path; recall latency is unchanged and shown to be unchanged
 - [ ] #4 A first correlation report: do stems in good-outcome sessions differ measurably from stems in bad-outcome ones
-- [ ] #5 Explicitly out of scope: using the signal in ranking (separate task, must pass the TASK-163 bar)
+- [ ] #5 Explicitly out of scope: using the signal in ranking (separate task, gated on an eval set that can see it — the TASK-161 requirement applies to this signal too)
 - [ ] #6 States what it would take to price the benefit side of a corpus-growth decision, so the TASK-145 cap question can eventually be reopened on full evidence
 <!-- AC:END -->
 
