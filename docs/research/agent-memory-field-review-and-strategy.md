@@ -352,6 +352,61 @@ Their README's benchmark note deserves quoting because it is the position
 this document keeps arguing: "cross-project scores on these benchmarks are
 not comparable" — from a project reporting 89.8% on LongMemEval.
 
+### EverMind / EverOS / EverMemOS (added 2026-08-15, via an evermind.ai listicle)
+
+The listicle itself (evermind.ai ranks itself #3 in its own comparison,
+without publishing its own scores) is the weakest source in this document.
+What it led to is not.
+
+**EverOS (github.com/EverMind-AI/EverOS, Apache 2.0, ~12k stars) is the
+closest direct competitor to KennisBank found in this entire review.** Its
+stack is this vault's stack, independently arrived at: markdown files as "the
+canonical source of truth (readable, editable, Git-versioned)", SQLite for
+local indexing, vectors beside it (LanceDB where this vault uses sqlite-vec),
+offline "memory evolution that merges episode clusters and refines profiles
+and skills between sessions" — the cold-path sweep — plus a Claude Code
+plugin and MCP surface into the same clients. A 12k-star Apache project now
+occupies the "local-first, Markdown-native, user-owned" lane by name.
+
+What that narrows, and what it does not. The positioning sentence "plain
+markdown, local index, your machine" is no longer unique. What remains
+KennisBank's and not theirs: **fully local models** (EverOS's minimum tier
+requires an OpenRouter API key; this vault's floor is Ollama and no key at
+all), the **editorial quality gate** (judge, quarantine, human review-log —
+their evolution is autonomous), **bi-temporality with a reversible
+supersession lifecycle**, and the **measurement discipline** (private eval
+sets, pre-registered gates, published retractions). Those four are the
+differentiators worth stating in the README now that the lane is shared.
+Apache 2.0 also means their code is inspectable and reusable with notice —
+their skill-record format and episode-cluster merge are worth reading when
+TASK-175 and TASK-174 respectively come up, since EverOS ships a version of
+both ("agent skill records stored as .md files", refined between sessions).
+
+**EverMemOS (arXiv 2601.02163) is the scene tier this vault already
+falsified — with the one variable the local experiment said would matter.**
+Their pipeline is MemCells (episodic traces from dialogue) consolidated into
+thematic MemScenes, with "reconstructive recollection" doing scene-guided
+retrieval. The L2 scene experiment here (TASK-134) measured exactly that
+architecture with graph-community clustering and rejected it against a
+pre-registered winner rule — while recording that the oracle bound (+0.040
+recall@5, p < 0.0001) would pay "if a clustering five times better than graph
+communities existed." LLM-consolidated thematic scenes are precisely the
+candidate for that better clusterer. This does not reopen TASK-134: their
+SOTA claim is on conversational benchmarks, and TASK-137 established the
+local oracle was computed against a routing rule the code does not use, so
+any re-run owes that fix first. But if the scene question ever returns, the
+first arm to test is LLM consolidation, not another graph algorithm — the
+door the null result left open now has a named occupant.
+
+**The benchmark tables have stopped agreeing, which is the strongest
+do-not-chase evidence yet.** The same systems, scored by two vendor
+comparisons in the same month: Mem0 at 49.0% LongMemEval (vectorize's table)
+and 94.4% (EverMind's); Zep at 63.8% and 90.2%. Forty-five-point swings on
+the same benchmark mean the number measures the evaluation harness, not the
+system. Memanto's caveat, EverMind's self-ranking, and this spread together
+close the question of whether public memory benchmarks can arbitrate
+anything for this project: they cannot.
+
 ## Closing judgement
 
 Three derivations of this review each found the same thing at different
@@ -385,3 +440,7 @@ snapshot overtakes the rest of it.
   Moorcheh engine docs (docs.moorcheh.ai). Retrieved 2026-08-15, via an
   @moorcheh_ai X post (the post itself is login-walled; the org and paper are
   primary).
+- EverOS (github.com/EverMind-AI/EverOS, Apache 2.0) and EverMemOS (arXiv
+  2601.02163, github.com/EverMind-AI/EverMemOS). Retrieved 2026-08-15, via
+  evermind.ai's own comparison listicle — a vendor source; the repos and paper
+  are primary.

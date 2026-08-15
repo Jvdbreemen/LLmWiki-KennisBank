@@ -41,6 +41,15 @@ distribution is flat afterwards is the expensive order.
 If it proceeds: promotion proposes, the human writes or approves the skill. The
 same rule as everywhere else in this vault — the system proposes, the human
 merges.
+
+Shipped prior art (added 2026-08-15): EverOS (github.com/EverMind-AI/EverOS,
+Apache 2.0, ~12k stars) stores "agent skill records as .md files" and refines
+them between sessions as part of its offline memory evolution — a live
+implementation of this task's promotion target, in a markdown-native local
+stack very close to this vault's. Apache 2.0 permits reading and reusing with
+notice. Read their skill-record format and refinement pass before designing;
+the difference to preserve is the human gate — their evolution is autonomous,
+this vault's promotion must propose and stop.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
