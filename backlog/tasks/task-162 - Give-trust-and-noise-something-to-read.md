@@ -4,6 +4,7 @@ title: Give trust and noise something to read
 status: To Do
 assignee: []
 created_date: '2026-08-14 16:32'
+updated_date: '2026-08-15 12:42'
 labels:
   - retrieval
   - memory
@@ -18,6 +19,8 @@ ordinal: 155700
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
 Design: `docs/superpowers/specs/2026-08-14-trust-and-noise-design.md`. Written first, on request, before any code.
+
+> **Settled by TASK-163 before this starts: grounded verification may raise trust and may never lower it.** `supported` was returned 49 times in 60 with zero fabricated quotes (0/60, upper bound 6.0%), while `unsupported` is right about half the time (4/8, Wilson 22–79%) — and its errors are structural, not tunable: from inside a passage, a retrieval miss and a false memory are indistinguishable, so no coverage short of exhaustive separates them. Evidence and reasoning in `docs/research/llm-trust-verification-2026-08-15.md`. Note also that the same work found a real extraction-invention rate of 2 in 60 (3.3%, 0.9–11.4%), which is what a verification pass would be catching.
 
 Two of the five factors in `_rank.rerank` were measured to do literally nothing (TASK-160): `no trust` and `no noise` produce byte-identical results to production, zero flips at k=1 and k=5. The reasons differ and so do the fixes.
 
@@ -35,6 +38,5 @@ Grounded in the field rather than invented: an ablation over seven cognitively g
 
 **Two problems are stated in the design before anything is built.** At the current dedup threshold (0.92) corroboration would fire on 0.9% of candidates — a factor that is zero everywhere, which is the failure this work exists to fix. And corroboration correlates with age, so it may cancel the recency distortion or merely replace it. Both need TASK-161's labelled pairs.
 
-Blocked on TASK-161 for everything except the contradiction penalty and the noise queue.</description>
-<parameter name="acceptanceCriteria">["The contradiction penalty reads kb-state-audit's output, is bounded, and is exactly 1.0 when the audit finds nothing", "Corroboration counts distinct sessions, not repeated chunks of one transcript, and is capped", "The corroboration threshold is justified against labelled pairs rather than chosen", "trust_factor's behaviour when the first non-agent memory appears is decided explicitly, not discovered", "The noise queue proposes candidates and never marks autonomously", "Every change is measured on TASK-161's set as well as the existing one, and both are reported", "python -m pytest tests -q is green"]
+Blocked on TASK-161 for everything except the contradiction penalty and the noise queue.
 <!-- SECTION:DESCRIPTION:END -->
