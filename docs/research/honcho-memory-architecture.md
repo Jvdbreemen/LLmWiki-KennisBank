@@ -210,7 +210,79 @@ LongMemEval and LoCoMo; KennisBank has an eval harness and eval sets but no
 comparable public number. That is a gap in evidence, not in architecture, and it
 is worth remembering the next time a design argument here is settled by taste.
 
+## Addendum: the product site (honcho.dev, same day)
+
+The repository shows their architecture; the landing page shows their bets —
+what a funded team in the same problem space believes is worth paying Google
+for. (The page was reached through a paid ad on the query "memory for ai
+agents"; the category has commercial heat.) What is new relative to the
+repository review, and what each item means here:
+
+**The pitch is token economics, not recall quality.** Headline "Memory That
+Reasons"; tagline "Better context. Fewer tokens."; the closing line "Use the
+10K tokens you need, not the 100K you don't", with a claimed 60–90% token
+saving. They sell memory as *cost reduction on the context window*. That is a
+direct market validation of the token-ceiling work adopted in this review
+(TASK-169): the bound on assembled context is not a hygiene feature, it is the
+thing the market prices. KennisBank's version of "fewer tokens" is fewer
+injected tokens per prompt — same lever, no invoice.
+
+**Reasoning effort at recall time is a dial, and they charge per position on
+it.** Query pricing runs $0.001 (Minimal) to $0.50 (Max) per query — a 500×
+range for the same question answered with more or less reasoning. That is a
+product expression of an architectural knob KennisBank also has but frames as
+levels (L0–L3, cheap lookup versus full bodies). The lesson is not to add
+recall-time reasoning to the hot path — that rejection stands — but that
+*tiered effort with an explicit opt-in* is a validated shape: the default stays
+sub-second, and a deeper pass is something the user asks for, knowing it costs.
+
+**Custom small models for the memory task** ("Neuromancer reasoning engine",
+claiming SOTA at lower cost and latency). The same move this vault already
+made empirically: the judge-model measurement picked qwen3.5:4b over 9b, and
+the embedding sweep picked the 4b embedder. Smallest model that does the job —
+independently converged on, again.
+
+**"Dreaming" is productized background reasoning**: Pattern Identification,
+Hypothesis Testing, Conflict Resolution. KennisBank has deterministic analogs
+for two of the three already shipped — `conflict-scan.py` and `kb-state-audit`
+are Conflict Resolution; the supersede pass is a narrow Hypothesis Test — and
+the third, Pattern Identification, is exactly the queued distillation-proposal
+job (TASK-174). A funded competitor naming that background triad as a headline
+feature is decent evidence the queue is pointed at the right thing.
+
+**They are distributing into KennisBank's exact niche.** A Claude Code plugin,
+an OpenAI Codex integration, an agent skill installed via npx, and "Coding
+Agents" as a named use case. The overlap is no longer conceptual; it is the
+same clients. This sharpens rather than weakens the differentiation, because
+their model is ingestion priced per million tokens into a hosted service —
+the structural opposite of local, readable, diffable, MIT.
+
+**Benchmark numbers now exist** (LoCoMo 89.9%, LongMemEval-S 90.4%, BEAM
+0.630/0.618, ~200ms response) where the repository only had a claim. Still
+vendor-reported, still the benchmarks the field's own comparison calls
+insufficient, so the do-not-chase position stands. One honest comparative
+footnote: their ~200ms is a hosted service's network round-trip; the local
+recall path here measures 460–520ms p50 including a local embed. Same order of
+magnitude, no server, no per-query bill.
+
+**Global versus local representations, with knowledge asymmetry.** The docs
+detail what the repo README implied: a message updates the writer's global
+self-representation and each observer's local representation of the writer —
+and a peer learns nothing from conversations it was not in. Elegant, genuinely
+multi-party, and still the half of the model TASK-170 deliberately does not
+adopt while the vault has one observed subject.
+
+**What nobody is selling, still.** Their cadence-driven summaries (short every
+20 messages, long every 60) automate consolidation on a schedule; their
+dreaming optimizes representations in the background. Nothing on the site —
+or anywhere in the field's marketing — claims to know whether an injected
+memory *helped the task*. The outcome loop (TASK-173) remains white space, in
+the market as much as in the literature.
+
 ## Sources
 
 - [plastic-labs/honcho](https://github.com/plastic-labs/honcho) — repository and
   README, retrieved 2026-08-15.
+- [honcho.dev](https://www.honcho.dev/) landing page and
+  [architecture docs](https://honcho.dev/docs/v2/documentation/core-concepts/architecture),
+  retrieved 2026-08-15.
