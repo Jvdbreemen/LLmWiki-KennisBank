@@ -390,11 +390,24 @@ would have been believed.
 | Passage contains the claim's real source | **62.7%** | **87.8%** (90.2% without the lexical prefilter) |
 | Verifying a memory against its source | retrieve, and hope | a stamped lookup, for every future capture |
 
-- **The parser fix protects five seams**, not just this probe. `extract`,
-  `judge`, `reconcile`, `supersede` and the verifier all read model JSON through
-  `_llmjson`, and all five fail *silently* — to `[]`, to `unverified`, to `ADD`.
-  A 7% silent-failure rate across that surface was real and is now zero on 150
-  calls.
+- **The parser fix is insurance, not a measured gain.** I claimed it removed a
+  7% silent-failure rate across five seams. That was an extrapolation from one
+  prompt, and measuring it refutes it:
+
+        extract   40 calls | repaired 0 (0.0%) | unparseable 0 (0.0%)
+        judge     69 calls | repaired 0 (0.0%) | unparseable 0 (0.0%)
+
+  109 calls to the seams that actually ship, and the repair path never fired.
+  There is a mechanism for that: the broken-delimiter shape appears when a
+  prompt asks the model to QUOTE source text inside a field, which is what makes
+  it nest quotation marks. The verifier's `reason` field does exactly that;
+  `extract` and `judge` never ask for a quotation. So the defect is real, and it
+  belongs to a prompt shape that does not currently ship.
+
+  Keeping the repair: it is forty lines, it runs only after an honest parse has
+  already failed, it cannot change any answer that parses today, and the shape
+  will return the moment a seam starts asking for quoted evidence. But its
+  measured benefit to production right now is zero (0/109, upper bound 3.4%).
 - **The retrieval finding transfers**, and that is where its value actually is.
   Granularity, not shortlisting, was the whole problem — and `doc_text` caps
   every wiki document at 4000 characters, leaving **23.1% of all wiki text
