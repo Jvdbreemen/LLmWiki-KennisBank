@@ -453,8 +453,31 @@ The five env vars below control the behavior of the vault-onderhoud scripts
   - `2` — L2: extended (L0 + L1 + relevant articles via `kb-search.py`, requires `--query`).
   - `3` — L3: full (L0 + L1 + L2 + full article bodies for the matched articles).
   Higher levels consume more tokens; use L0 or L1 for long coding sessions, L3
-  for deep knowledge-work sessions.
+  for deep knowledge-work sessions. Levels nest content but do not bound size —
+  for a hard ceiling see `KB_CONTEXT_MAX_TOKENS` below.
 - **To change**: set the environment variable or pass the level explicitly to
+  `context-budget.py`.
+
+### KB_CONTEXT_MAX_TOKENS
+
+- **Default**: `0` (no ceiling — output is exactly what the level selects).
+- **Where set**: `scripts/context-budget.py`.
+- **Effect**: caps the assembled context. An L3 answer over three long articles
+  is an order of magnitude larger than one over a short article; the level says
+  *what* is included, this says *how much* fits. Above the ceiling, whole
+  entries are dropped in a fixed order — `bodies`, then `relevant`, then
+  `active` — lowest-ranked entry first, so the weakest match goes before the
+  best one. `identity` is never trimmed: it is the vault contract the rest of
+  the answer is read against, and half a contract is worse than an honest
+  overrun.
+- **No silent truncation**: whenever a ceiling is requested the output carries a
+  `_budget` block with the ceiling, the estimate, whether it fitted, and how
+  many entries were dropped per layer. If `identity` alone exceeds the ceiling,
+  `within_budget` reports `false` rather than the text being cut.
+- **Estimate, not a tokenizer**: sizing is ~4 characters per token, deliberately
+  dependency-free so a cheap path stays cheap. Leave headroom against a model's
+  exact count. The `_budget` block itself sits outside the ceiling.
+- **To change**: set the environment variable or pass `--max-tokens` to
   `context-budget.py`.
 
 ### Usage-telemetrie (`scripts/_usage.py`, `scripts/kb-usage-scan.py`)

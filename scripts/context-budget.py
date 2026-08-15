@@ -8,12 +8,20 @@ L1 — actief:      L0 + recente sessienamen, wiki-statustellingen, open loops
 L2 — relevant:    L0 + L1 + zoekresultaten via kb-search.py (vereist --query)
 L3 — volledig:    L0 + L1 + L2 + volledige artikelteksten
 
+Levels nest content; they do not bound size. An L3 answer over three long
+articles is an order of magnitude larger than one over a short article, and the
+caller gets no signal either way. `--max-tokens` adds the missing half: a hard
+ceiling on the assembled result, trimmed deterministically and reported rather
+than silently applied. Without it, output is exactly what it always was.
+
 Gebruik:
     python3 context-budget.py [--level N] [--query "zoekterm"] [--top N]
+                              [--max-tokens N]
 
 Omgevingsvariabelen:
-    KB_CONTEXT_LEVEL   Standaard level (0..3), default 1
-    KENNISBANK_VAULT   Vaultpad, default ~/KennisBank
+    KB_CONTEXT_LEVEL       Standaard level (0..3), default 1
+    KB_CONTEXT_MAX_TOKENS  Standaard token-plafond, default 0 (= geen plafond)
+    KENNISBANK_VAULT       Vaultpad, default ~/KennisBank
 """
 from __future__ import annotations
 
@@ -60,6 +68,107 @@ def select_layers(level: int, state: dict) -> dict:
     level = max(0, min(3, level))
     allowed = _LAYERS[: level + 1]
     return {k: state[k] for k in allowed if k in state}
+
+
+# ---------------------------------------------------------------------------
+# Token-plafond — pure functies, geen I/O
+# ---------------------------------------------------------------------------
+
+# A local, dependency-free estimate. Four characters per token is the usual
+# rough figure for prose and holds well enough for markdown; it is deliberately
+# NOT a real tokenizer, because pulling one in would put a model load on a path
+# whose whole point is to be cheap. Consequence: treat the ceiling as
+# approximate and leave headroom for the exact figure.
+_CHARS_PER_TOKEN = 4
+
+# Trim order: cheapest loss first. Bodies are recoverable from `relevant`
+# (which keeps path plus snippet), `relevant` is recoverable by searching
+# again, `active` is a convenience summary. `identity` is never trimmed — it is
+# the vault contract the rest of the answer is read against, and half a
+# contract is worse than an honest overrun.
+_TRIM_ORDER = ("bodies", "relevant", "active")
+
+
+def estimate_tokens(value) -> int:
+    """Deterministic token estimate for a string or JSON-serialisable value.
+
+    Rounded up, so an empty value costs 0 and any content costs at least 1.
+    """
+    if value is None:
+        return 0
+    text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
+    return -(-len(text) // _CHARS_PER_TOKEN)
+
+
+def _total_tokens(output: dict) -> int:
+    return sum(estimate_tokens(v) for v in output.values())
+
+
+def fit_to_budget(output: dict, max_tokens: int | None) -> tuple[dict, dict | None]:
+    """Trim *output* until it fits *max_tokens*; report what that cost.
+
+    Trims whole entries in `_TRIM_ORDER`, lowest-ranked first: `relevant` is
+    score-ordered and `bodies` is built in that same order, so dropping from the
+    tail drops the weakest match rather than an arbitrary one. A layer that
+    empties out is removed entirely rather than left as `{}`.
+
+    Parameters
+    ----------
+    output:
+        The already level-selected layers (see :func:`select_layers`).
+    max_tokens:
+        The ceiling. ``None`` or ``<= 0`` means no ceiling — *output* is
+        returned untouched and the report is ``None``, so callers that never
+        ask for a budget see byte-identical behaviour.
+
+    Returns
+    -------
+    (fitted, report) where report is None when no ceiling was requested. A
+    report is always emitted when one was, including when nothing was dropped
+    — "it fitted" is information too.
+
+    Note that `within_budget` can be False after trimming: if identity alone
+    exceeds the ceiling there is nothing left to drop, and the caller is told
+    so instead of being handed a silently truncated contract.
+    """
+    if max_tokens is None or max_tokens <= 0:
+        return output, None
+
+    fitted = dict(output)
+    dropped: dict[str, int] = {}
+
+    for layer in _TRIM_ORDER:
+        if _total_tokens(fitted) <= max_tokens:
+            break
+        value = fitted.get(layer)
+        if not value:
+            continue
+        if isinstance(value, dict):
+            keys = list(value.keys())
+            while keys and _total_tokens(fitted) > max_tokens:
+                keys.pop()
+                fitted[layer] = {k: value[k] for k in keys}
+                dropped[layer] = dropped.get(layer, 0) + 1
+        elif isinstance(value, list):
+            while fitted[layer] and _total_tokens(fitted) > max_tokens:
+                fitted[layer] = fitted[layer][:-1]
+                dropped[layer] = dropped.get(layer, 0) + 1
+        else:
+            # Scalar layer (only `identity` today): all or nothing, and
+            # `identity` is not in _TRIM_ORDER, so this stays unreachable
+            # until a scalar layer is added that IS trimmable.
+            continue
+        if not fitted[layer]:
+            del fitted[layer]
+
+    estimated = _total_tokens(fitted)
+    report = {
+        "max_tokens": max_tokens,
+        "estimated_tokens": estimated,
+        "within_budget": estimated <= max_tokens,
+        "dropped": dropped,
+    }
+    return fitted, report
 
 
 # ---------------------------------------------------------------------------
@@ -236,6 +345,10 @@ def _build_parser() -> argparse.ArgumentParser:
             "  L1  active     + recente sessies, wiki-tellingen, open loops\n"
             "  L2  relevant   + zoekresultaten (vereist --query)\n"
             "  L3  bodies     + volledige artikelteksten\n"
+            "\n"
+            "Levels nesten inhoud; --max-tokens begrenst omvang. Trimvolgorde:\n"
+            "  bodies -> relevant -> active (laagst gerankt eerst).\n"
+            "  identity wordt nooit getrimd.\n"
         ),
     )
     default_level = _env_int("KB_CONTEXT_LEVEL", 1)
@@ -256,6 +369,17 @@ def _build_parser() -> argparse.ArgumentParser:
         default=_env_int("KB_RETRIEVE_TOP_N", 3),
         help="Aantal zoekresultaten voor L2/L3 (default: 3)",
     )
+    default_max_tokens = _env_int("KB_CONTEXT_MAX_TOKENS", 0)
+    p.add_argument(
+        "--max-tokens",
+        type=int,
+        default=default_max_tokens,
+        help=(
+            "Token-plafond voor de samengestelde output; 0 = geen plafond "
+            f"(default: {default_max_tokens} via KB_CONTEXT_MAX_TOKENS). "
+            "Geschat op ~4 tekens per token, niet exact getokeniseerd."
+        ),
+    )
     return p
 
 
@@ -268,6 +392,15 @@ def main(argv: list[str] | None = None) -> None:
 
     state = assemble_state(level, vault, args.query, args.top)
     output = select_layers(level, state)
+    output, report = fit_to_budget(output, args.max_tokens)
+
+    # The report rides along under a reserved key rather than a separate
+    # stream, so a consumer reading one JSON blob cannot miss that content was
+    # dropped. Absent entirely when no ceiling was asked for. The ceiling
+    # covers the content layers; this block itself (a few dozen tokens) sits
+    # outside it, so the emitted JSON is marginally larger than the estimate.
+    if report is not None:
+        output = {**output, "_budget": report}
 
     print(json.dumps(output, ensure_ascii=False, indent=2))
 
