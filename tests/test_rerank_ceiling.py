@@ -55,7 +55,7 @@ class SplitTest(unittest.TestCase):
         questions = [{"q": f"q{i}", "expect": [f"m{i}"]} for i in range(100)]
         a = [q["q"] for q in M.split_questions(questions, "dev")]
         b = [q["q"] for q in M.split_questions(questions, "dev")]
-        self.assertEqual(a, b, "een wisselende split maakt elke vergelijking zinloos")
+        self.assertEqual(a, b, "a shifting split makes every comparison meaningless")
 
 
 class GoldRankTest(unittest.TestCase):
@@ -128,7 +128,7 @@ class McNemarTest(unittest.TestCase):
         rows = [{"rank": 9, "rank_cos": 1}] * 5 + [{"rank": 1, "rank_cos": 9}] * 4
         r = M.mcnemar(rows, 5)
         self.assertEqual((r["gained"], r["lost"]), (5, 4))
-        self.assertGreater(r["p"], 0.5, "5 tegen 4 is geen effect")
+        self.assertGreater(r["p"], 0.5, "5 against 4 is not an effect")
 
     def test_a_one_sided_result_is_significant(self):
         rows = [{"rank": 9, "rank_cos": 1}] * 20

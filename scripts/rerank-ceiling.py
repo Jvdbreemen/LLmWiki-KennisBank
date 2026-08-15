@@ -101,7 +101,7 @@ def measure(questions: list, pool_size: int, cache, kb_recall,
             min_cos=None) -> list:
     """One retrieval per question; everything else is read off afterwards."""
     rows = []
-    with Progress(len(questions), f"pool van {pool_size} ophalen") as p:
+    with Progress(len(questions), f"retrieving a pool of {pool_size}") as p:
         for item in questions:
             p.step()
             q = item.get("q", "")
@@ -239,7 +239,7 @@ def main(argv=None) -> int:
         Path(args.out).write_text(
             json.dumps({"summary": report, "results": rows},
                        indent=2, ensure_ascii=False), encoding="utf-8")
-        print(f"\nper-vraag detail: {args.out}", file=sys.stderr)
+        print(f"\nper-question detail: {args.out}", file=sys.stderr)
     return 0
 
 

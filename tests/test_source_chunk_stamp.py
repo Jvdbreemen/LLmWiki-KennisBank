@@ -103,7 +103,7 @@ class SweepStampsTheFullCountTest(unittest.TestCase):
 
         # Long enough to chunk several times, with a marker per paragraph so a
         # candidate can be traced to exactly one chunk.
-        paras = [f"MARKER{i:03d} " + ("filler tekst over het onderwerp. " * 40)
+        paras = [f"MARKER{i:03d} " + ("filler text about the subject at hand. " * 40)
                  for i in range(24)]
         (vault / "01-raw" / "transcripts" / "s1.jsonl").write_text(
             json.dumps({"type": "user",
@@ -137,8 +137,8 @@ class SweepStampsTheFullCountTest(unittest.TestCase):
             looked like the sweep failing.
             """
             found = re.search(r"MARKER\d+", text)
-            marker = found.group(0) if found else "GEEN"
-            return [{"title": f"Bevinding {marker}", "body": f"Dit gaat over {marker}."}]
+            marker = found.group(0) if found else "NONE"
+            return [{"title": f"Finding {marker}", "body": f"This is about {marker}."}]
 
         def fake_embed(text, timeout=30.0, kind=""):
             """One axis per marker, so different candidates are orthogonal.
@@ -155,7 +155,7 @@ class SweepStampsTheFullCountTest(unittest.TestCase):
 
         _llm.generate = lambda *a, **k: "ok"
         _extract.extract_candidates = fake_extract
-        _judge.judge = lambda cand, context="": {"verdict": "current", "reason": "duidelijk"}
+        _judge.judge = lambda cand, context="": {"verdict": "current", "reason": "clear"}
         emb.embed = fake_embed
         emb.get_cached = lambda f, cache, recompute=True: None
 

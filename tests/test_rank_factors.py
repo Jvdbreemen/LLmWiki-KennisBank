@@ -71,7 +71,7 @@ class NeutralisedTest(unittest.TestCase):
             for n in names:
                 with self.subTest(arm=arm, factor=n):
                     self.assertTrue(hasattr(_rank, n),
-                                    f"arm {arm} noemt onbekende factor {n}")
+                                    f"arm {arm} names a factor that does not exist: {n}")
 
     def test_the_all_neutral_arm_covers_every_other_arm(self):
         """The control is only a control if it neutralises everything the
@@ -81,7 +81,7 @@ class NeutralisedTest(unittest.TestCase):
             if arm not in ("all_neutral", "production"):
                 union |= set(names)
         self.assertTrue(union <= set(M.ARMS["all_neutral"]),
-                        "all_neutral mist een factor die een andere arm wel test")
+                        "all_neutral is missing a factor that another arm neutralises")
 
 
 class RecallsTest(unittest.TestCase):
