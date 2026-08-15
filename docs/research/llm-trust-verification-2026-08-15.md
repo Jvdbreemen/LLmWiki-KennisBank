@@ -116,23 +116,66 @@ The second one is precisely what a trust signal exists to detect. Tuning toward
 fewer `not_found`s would therefore tune the signal away. Retrieval needs a
 measurement that owes nothing to the verdict — see the next section.
 
+## Measuring retrieval without asking the verifier
+
+Ground truth came from the process that creates memories in the first place.
+The extractor was run over **every** chunk of four transcripts, exactly as the
+sweep does, and each candidate it produced was tagged with the chunk it came
+from. That pair — claim, originating chunk — is generative truth. It is not a
+second lexical scorer agreeing with the first, which is what any "grep for the
+claim's distinctive words" ground truth would have been.
+
+**255 claims, four transcripts of 11–18 chunks.** Then four selectors, ranking
+the chunks of the claim's own transcript:
+
+| arm | hit@1 | hit@2 | vs. current, at rank 1 | |
+| --- | --- | --- | --- | --- |
+| A current — IDF shortlist of 8, chunk cut at 4000 | 43.5% | 66.7% | — | |
+| B untruncated + the model's trained query prefix | 47.1% | 69.4% | +26 −17 | p=0.22 |
+| C no shortlist: every chunk embedded | 46.3% | 67.8% | +28 −21 | p=0.39 |
+| D retrieve on 1500-char windows, return the chunk | **63.5%** | **83.1%** | +69 −18 | **p=3.3e-08** |
+
+**The fix I proposed in this document was wrong.** "Embedding every chunk of the
+source transcript would do it" — arm C — gains nothing measurable over the
+shortlist it replaces, at roughly twice the embedding cost. The shortlist was
+never the bottleneck.
+
+Granularity was. A 6000-character chunk holds several subjects and one vector
+has to average them; a 1500-character window keeps whatever made the chunk the
+right one. Twenty points of hit@1 for a change that embeds *less* text per
+comparison, not more. The two one-line defects in arm B — a 4000-character
+truncation on chunks built up to 6000, and embedding the claim without the query
+prefix this model is trained with — are real and both point the same way, but
+neither is significant on its own.
+
+A miss here is a lower bound: chunks overlap by 200 characters and a session
+returns to its subjects, so a claim from chunk 7 may be genuinely supported by
+chunk 8. Every arm pays that same bound, so the comparison survives it.
+
 ## What the evidence supports
 
 All three pre-registered criteria pass. The mechanism produces a varied,
 deterministic verdict that agrees with a careful human reader and, on this
 sample, does not fabricate support.
 
-It is not ready for the ranking. Three things stand between here and there:
+Of the three things named as standing between this and the ranking, the first
+two are resolved and the third is in progress:
 
-1. **The 7% unparseable rate has to go to zero**, or the factor is silently
-   absent for one memory in fourteen.
-2. **Passage selection needs to beat 50%.** Embedding every chunk of the source
-   transcript would do it and costs roughly 200 embeddings per memory; a
-   cheaper option is to record the chunk index at capture time, which the sweep
-   knows and discards.
-3. **A larger labelled sample.** Eleven hand-labelled cases established the
-   direction. They cannot establish a rate, and any weight put on this factor
-   should be justified against something better than eleven.
+1. **The unparseable rate.** Not a retry problem; a parser problem, now fixed.
+2. **Passage selection.** From 43.5% to 63.5% hit@1 — by retrieving on smaller
+   windows, not by embedding more. And for everything captured from now on the
+   question does not arise: the sweep stamps `source_chunk: "N/M"`, so the
+   passage is looked up rather than retrieved.
+3. **A larger labelled sample.** Still the open one, and it needs stratifying
+   rather than enlarging: the rate that matters is the precision of
+   `unsupported`, because that is the verdict that would demote a memory.
+
+One thing to expect and not misread when this is re-run: **`unsupported` should
+go up.** Cases that were `not_found` because the selector missed will now
+resolve into real verdicts, and some of those will be extractions that were
+never supported. That number is the first extraction-accuracy figure this vault
+has ever had, and it is more interesting than the trust factor it was gathered
+for. More `supported` is not better.
 
 ## The finding that outranks all of this
 
