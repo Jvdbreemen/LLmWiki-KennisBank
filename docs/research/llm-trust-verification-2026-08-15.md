@@ -288,19 +288,54 @@ any coverage short of exhaustive. For a system whose first duty is not to lose
 what it correctly wrote down, a one-in-two — or even a one-in-five — false
 demotion is not a rate to design around.
 
-Two things this produced that were not what it was looking for:
+### The vault's first extraction-accuracy figure
 
-- **`hybride-dataverwerkingscyclus` claims captures are merged *monthly*.** The
-  word appears nowhere in its transcript; the source says a daily pass. That is
-  a real extraction error, correctly caught. So is
-  `capaciteit-van-capture-mode`, which invents a 1-million-line capacity that
-  no part of its 491k-character source mentions.
-- **Memories are written in Dutch; the transcripts are largely English.** The
-  settings-watcher memory says *"de watcher monitort alleen mappen"* while its
-  source says *"it only watches directories that had a settings file when this
-  session started"*. Lexical retrieval cannot bridge that, and the IDF stage
-  kept for cost is exactly the lexical one. How much of the remaining miss rate
-  is cross-language is unmeasured and worth measuring.
+Two of the sixty memories say something their source does not:
+
+- **`hybride-dataverwerkingscyclus`** claims captures are merged *monthly*. The
+  word appears nowhere in its transcript; the source says a daily pass.
+- **`capaciteit-van-capture-mode`** claims a capacity of a million log lines.
+  Neither "miljoen" nor "logberichten" nor "geheugen" occurs anywhere in its
+  491k-character source.
+
+**2 of 60 = 3.3%**, Wilson 95% interval **0.9–11.4%**. Wide, and worth stating
+as a rate anyway, because it is the number that decides whether a verification
+pass is worth running at all. One memory in thirty carrying a fact nobody said
+is a real defect, and nothing in this system was looking for it before today.
+
+Against that, `supported` was returned 49 times with **zero fabricated quotes**
+(0/60, upper bound 6.0%). The verifier is more reliable than the extractor it
+is checking, which is the condition under which checking is worth doing.
+
+### A third of the corpus is a Dutch summary of an English source
+
+The settings-watcher memory says *"de watcher monitort alleen mappen"* while
+its source says *"it only watches directories that had a settings file when
+this session started"*. Lexical overlap cannot bridge that — by construction,
+not by tuning — and the IDF stage kept for cost is the lexical one.
+
+Measured on the same 255 claims, by the language of the claim and of its true
+source chunk:
+
+| claim → source | n | one chunk | windows | IDF prefilter + windows |
+| --- | --- | --- | --- | --- |
+| nl → nl | 133 | 62.4% | 91.7% | **93.2%** |
+| **nl → en** | **87** | 59.8% | **86.2%** | **78.2%** |
+| en → en | 25 | 64.0% | 96.0% | 96.0% |
+
+**34% of claims are Dutch from an English source.** The multilingual embedding
+model handles them; the prefilter does not. So the cost-driven choice made two
+sections above is not neutral: it **gains 1.5 points on same-language retrieval
+and loses 8 on cross-language**. The 2.4-point average concealed a group.
+
+That is worth stating plainly, because I chose the prefilter on the average and
+would have kept choosing it. Filed as TASK-165, with the retrieval fix (route
+around the prefilter on a language mismatch) separated from the question of
+what language the extractor should write in at all — the second is a product
+decision, not a retrieval one.
+
+Language here is a stopword ratio, not a classifier, and the cross-language
+bucket is 87 claims from four transcripts.
 
 ## The finding that outranks all of this
 

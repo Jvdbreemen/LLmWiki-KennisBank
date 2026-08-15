@@ -12,7 +12,13 @@ verifier would judge a claim against text it never came from.
 """
 from __future__ import annotations
 
+import importlib.util
+import json
+import os
+import re
+import shutil
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -20,6 +26,7 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 import _memory  # noqa: E402
+import _sweeputil as su  # noqa: E402
 from _frontmatter import parse_frontmatter  # noqa: E402
 
 
@@ -71,6 +78,114 @@ class SweepStampsTheFullCountTest(unittest.TestCase):
     the other from the SAME transcript, and a verifier -- which always re-chunks
     the whole thing -- would reject every normally captured memory forever.
     """
+
+    def test_a_written_memory_points_back_at_the_chunk_it_came_from(self):
+        """End to end, against a real multi-chunk transcript.
+
+        The source check below proves the stamp is SPELLED right. It cannot
+        prove the value is right, and the two came apart once already: the
+        first validation run reported `stamped: 0` because no memory in the
+        vault had ever been written with one. This runs the sweep, reads the
+        frontmatter it produced, and follows the stamp back to a chunk that has
+        to contain the marker the candidate was extracted from.
+        """
+        tmp = Path(tempfile.mkdtemp(prefix="kb-stamp-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        vault = tmp / "vault"
+        (vault / "01-raw" / "transcripts").mkdir(parents=True)
+        (vault / "09-memory").mkdir(parents=True)
+        (vault / ".claude").mkdir(parents=True)
+
+        saved = os.environ.get("KENNISBANK_VAULT")
+        os.environ["KENNISBANK_VAULT"] = str(vault)
+        self.addCleanup(lambda: os.environ.__setitem__("KENNISBANK_VAULT", saved)
+                        if saved else os.environ.pop("KENNISBANK_VAULT", None))
+
+        # Long enough to chunk several times, with a marker per paragraph so a
+        # candidate can be traced to exactly one chunk.
+        paras = [f"MARKER{i:03d} " + ("filler tekst over het onderwerp. " * 40)
+                 for i in range(24)]
+        (vault / "01-raw" / "transcripts" / "s1.jsonl").write_text(
+            json.dumps({"type": "user",
+                        "message": {"role": "user", "content": "\n\n".join(paras)}}),
+            encoding="utf-8")
+
+        spec = importlib.util.spec_from_file_location(
+            "memory_sweep_stamp", str(SCRIPTS / "memory-sweep.py"))
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+
+        import _embeddings as emb
+        import _extract
+        import _judge
+        import _llm
+        originals = (_extract.extract_candidates, _judge.judge, emb.embed,
+                     emb.get_cached, _llm.generate)
+
+        def restore():
+            (_extract.extract_candidates, _judge.judge, emb.embed,
+             emb.get_cached, _llm.generate) = originals
+        self.addCleanup(restore)
+
+        def fake_extract(text, max_n=8):
+            """The first marker IN the chunk, not its first word.
+
+            Chunks carry 200 characters of the previous one, and that tail is
+            filler, so `text.split()[0]` returned the same non-marker word for
+            every chunk after the first. Five identical bodies, five dedup
+            skips, one memory written -- the fixture failing in a way that
+            looked like the sweep failing.
+            """
+            found = re.search(r"MARKER\d+", text)
+            marker = found.group(0) if found else "GEEN"
+            return [{"title": f"Bevinding {marker}", "body": f"Dit gaat over {marker}."}]
+
+        def fake_embed(text, timeout=30.0, kind=""):
+            """One axis per marker, so different candidates are orthogonal.
+
+            Not a detail: the sweep drops a candidate whose cosine against an
+            existing memory exceeds 0.92. A cheap fake vector made every
+            candidate look like a near-duplicate, one memory got written, and
+            this test passed while exercising a single stamp.
+            """
+            v = [0.0] * 32
+            found = re.search(r"MARKER(\d+)", text)
+            v[int(found.group(1)) % 32 if found else 31] = 1.0
+            return v
+
+        _llm.generate = lambda *a, **k: "ok"
+        _extract.extract_candidates = fake_extract
+        _judge.judge = lambda cand, context="": {"verdict": "current", "reason": "duidelijk"}
+        emb.embed = fake_embed
+        emb.get_cached = lambda f, cache, recompute=True: None
+
+        m.run_sweep()
+
+        import _sweepstate as ss
+        chunks = su.chunk(ss.transcript_text(
+            vault / "01-raw" / "transcripts" / "s1.jsonl"))
+        self.assertGreater(len(chunks), 1, "transcript must chunk for this to mean anything")
+
+        written = sorted((vault / "09-memory").glob("**/*.md"))
+        self.assertTrue(written, "the sweep wrote nothing, so nothing was verified")
+        stamps = set()
+        for f in written:
+            fm, body = parse_frontmatter(f.read_text(encoding="utf-8"))
+            with self.subTest(memory=f.stem):
+                stamp = fm.get("source_chunk", "")
+                self.assertTrue(stamp, "every swept memory carries a stamp")
+                self.assertEqual(stamp.split("/")[1], str(len(chunks)),
+                                 "the denominator is the whole transcript")
+                chunk = _memory.chunk_from_stamp(stamp, chunks)
+                self.assertIsNotNone(chunk, f"stamp {stamp} did not resolve")
+                marker = body.strip().rsplit(" ", 1)[-1].rstrip(".")
+                self.assertIn(marker, chunk,
+                              f"{f.stem} points at a chunk without its own marker")
+                stamps.add(stamp)
+        # One memory with stamp "1/N" would satisfy every assertion above while
+        # proving nothing about whether the index tracks the chunk.
+        self.assertGreater(len(stamps), 1,
+                           f"only one distinct stamp ({stamps}) — the test is vacuous")
 
     def test_the_stamp_uses_the_full_chunk_count(self):
         src = (SCRIPTS / "memory-sweep.py").read_text(encoding="utf-8")
