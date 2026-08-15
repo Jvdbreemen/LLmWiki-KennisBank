@@ -159,12 +159,19 @@ class SweepStampsTheFullCountTest(unittest.TestCase):
         emb.embed = fake_embed
         emb.get_cached = lambda f, cache, recompute=True: None
 
-        m.run_sweep()
-
         import _sweepstate as ss
         chunks = su.chunk(ss.transcript_text(
             vault / "01-raw" / "transcripts" / "s1.jsonl"))
         self.assertGreater(len(chunks), 1, "transcript must chunk for this to mean anything")
+
+        # The cap MUST bite, or this test cannot see the bug it exists for.
+        # `max_chunks` defaults to 40 and this fixture makes about six chunks,
+        # so `chunk_iter` would be the whole list and `len(chunk_iter)` would
+        # equal `len(chunks)` -- the wrong denominator and the right one would
+        # be the same number, and stamping the slice would pass unnoticed.
+        cap = len(chunks) - 2
+        self.assertGreater(cap, 0)
+        m.run_sweep(max_chunks=cap)
 
         written = sorted((vault / "09-memory").glob("**/*.md"))
         self.assertTrue(written, "the sweep wrote nothing, so nothing was verified")
@@ -187,15 +194,13 @@ class SweepStampsTheFullCountTest(unittest.TestCase):
         self.assertGreater(len(stamps), 1,
                            f"only one distinct stamp ({stamps}) — the test is vacuous")
 
-    def test_the_stamp_uses_the_full_chunk_count(self):
-        src = (SCRIPTS / "memory-sweep.py").read_text(encoding="utf-8")
-        stamps = [ln.strip() for ln in src.splitlines() if "source_chunk=" in ln]
-        self.assertEqual(len(stamps), 1, f"expected one stamp, got {stamps}")
-        # `chunk_iter` is the capped slice and is fine in the progress note,
-        # which reports position in what this run reads. In the stamp it would
-        # be a lie the verifier cannot detect.
-        self.assertNotIn("chunk_iter", stamps[0])
-        self.assertIn("len(chunks)", stamps[0])
+    # There was a second test here that read memory-sweep.py and string-matched
+    # the `source_chunk=` line for `len(chunks)`. It is gone. It was written
+    # because the end-to-end test above could not tell the two denominators
+    # apart -- with the cap above the real chunk count, `len(chunk_iter)` and
+    # `len(chunks)` are the same number. Now that the cap bites, the behavioural
+    # assertion catches the bug directly, and a source-string guard only adds a
+    # failure on harmless refactors.
 
 
 if __name__ == "__main__":
