@@ -35,4 +35,44 @@ There is a second, better fix for everything captured from now on: **the sweep k
 
 Scope is the harness and the evidence. Whether the signal enters the ranking is a separate decision, to be made on the numbers this produces.</description>
 <parameter name="acceptanceCriteria">["No verdict is silently absent: unparseable responses are retried, counted, and reported separately from a real verdict", "Passage selection is measured before and after, on the same sample, and the not_found rate is reported for both", "Chunk embeddings are cached per transcript so cost scales with sessions rather than memories", "The sweep records which chunk produced a candidate, so future memories need no retrieval to verify", "A labelled set large enough to state a rate, labelled from the full passage", "python -m pytest tests -q is green"]
+
+## Where the acceptance criteria stand
+
+Evidence: `docs/research/llm-trust-verification-2026-08-15.md`. Commits fcf96cb,
+4052bca, 12f4357, 4cb0382, a89468e, 88ccc5f on `research/rerank-ceiling` (PR #121).
+
+- **No verdict silently absent** — met, but NOT by a retry. The four unparseable
+  answers all contained JSON with broken string delimiters, so the fix was in
+  the parser, not a second call. A retry is a no-op here anyway: C3 established
+  the model is deterministic at temperature 0, so asking again returns the same
+  malformed text. Stating that rather than implementing a retry that could not
+  have worked. 4/56 → 1/60, and the survivor is counted and reported.
+- **Passage selection measured before and after** — met, and measured better
+  than asked. `not_found` is not a retrieval score (it conflates a selector miss
+  with a false claim), so retrieval was measured against generative ground truth
+  instead: the extractor over every chunk of four transcripts, 255 claims with a
+  known originating chunk. 62.7% → 87.8% at the 6000-character budget the judge
+  actually receives.
+- **Chunk embeddings cached per transcript** — met in the harness: memoised on
+  (kind, text), so every memory from a session after the first is a lookup.
+- **The sweep records which chunk produced a candidate** — met and proven at
+  runtime, not just in the source. `source_chunk: "N/M"`, M = the whole
+  transcript's count.
+- **A labelled set large enough to state a rate** — PARTLY MET, and this is the
+  gap. Stratified rather than enlarged: all 8 `unsupported` adjudicated against
+  the whole transcript (R1 = 4/8, Wilson 22-79%), all 60 verdicts quote-checked
+  mechanically (0 fabrications). A 150-memory run that would have tightened the
+  bound was stopped at 147 of 150 and its results were lost, because the probe
+  wrote only at the end — fixed since, but not re-run. The interval is too wide
+  to call a rate. It does not change the decision: both ends of it fail the bar
+  for demoting a memory.
+- **Suite green** — 1427 passed, 2 skipped.
+
+**The conclusion, which TASK-162 depends on: `supported` raises trust, nothing
+lowers it.** `unsupported` cannot distinguish a retrieval miss from a false
+memory, and that is structural rather than tunable.
+
+Filed on the way: TASK-164 (the 4000-character embed cap hides 23% of the wiki)
+and TASK-165 (34% of claims are Dutch from English sources, and the lexical
+prefilter cannot bridge that).
 <!-- SECTION:DESCRIPTION:END -->
