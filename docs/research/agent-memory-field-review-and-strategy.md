@@ -236,6 +236,66 @@ is what will eventually let that decision be made on full evidence.
    sweep path.
 6. **TASK-175 procedure promotion**, gated on telemetry.
 
+## Follow-up: the primary sources behind the eight frameworks
+
+Added 2026-08-15, after chasing the vectorize comparison down to papers and
+repositories. Licences first, because they decide what can transfer:
+
+| System | Primary source | Licence | Transfer allowed |
+| --- | --- | --- | --- |
+| Hindsight | arXiv 2512.12818, github.com/vectorize-io | **MIT** | Ideas *and* code |
+| Zep/Graphiti | arXiv 2501.13956, github.com/getzep/graphiti | **Apache 2.0** | Ideas and code (with notice) |
+| Mem0 | arXiv 2504.19413 | Apache 2.0 | Already transferred — `_reconcile` cites the pattern |
+| Honcho | reviewed separately | AGPL-3.0 | Ideas only |
+| PROJECTMEM | arXiv 2606.12329, github.com/riponcm/projectmem | paper CC-BY-4.0 | Prior art to read |
+
+Note the article ranking these systems is published by vectorize.io, which also
+builds Hindsight — the 94.6% at the top of its own comparison table is the
+publisher's product. The paper and ablations stand on their own, but the
+ranking should be read as a vendor's.
+
+Four findings change or sharpen queued work; the rest confirmed what the
+August measurements already established.
+
+**Hindsight's ablation is external evidence for TASK-171.** The top LongMemEval
+scorer is built on three epistemically distinct networks — world facts,
+experience, opinions — extracted and retrieved separately, and collapsing them
+"substantially reduces reasoning quality, particularly when distinguishing
+between observed facts and derived beliefs." That is the stated-versus-inferred
+axis, load-bearing in the best-scoring public system. The local measurement
+still gates the task; the expected outcome moved.
+
+**PROJECTMEM is prior art for TASK-173.** "A local-first, event-sourced memory
+and judgment layer for AI coding agents", whose judgment layer assesses whether
+memories "proved beneficial or harmful during task execution" — the outcome
+loop, in this exact niche, under the same local-first constraint. Maturity
+unknown; read before designing, especially their outcome definition and their
+attribution of outcomes to individual memories. The white-space claim needs
+qualifying: no product sells this, but the literature has an attempt.
+
+**Graphiti does bi-temporality at the fact level; KennisBank does it at the
+document level.** Automatic edge invalidation on contradiction, full lineage
+preserved, and point-in-time queries ("what was true on date X"). KennisBank's
+frontmatter supports the same reconstruction in principle — `valid_from`,
+`valid_until`, the closed-log — but no query surface exposes it. Not queued:
+there is no demonstrated use case yet, and a point-in-time view is a rendered
+view of data that already exists, buildable the day a question needs it. Their
+requirement list (Neo4j or equivalent) is also the reminder of what the
+SQLite-and-markdown constraint buys.
+
+**Hindsight's recall weights strategies per query** rather than uniformly — the
+opposite of the uniform factor product that `rank-factors-2026-08-14` caught
+overwriting the ranking here. Their ablation says multi-method recall beats any
+single strategy on their corpus; this vault's measurement says the lexical arm
+hurt its memory layer. Both can be true — per-query routing is exactly the kind
+of mechanism that would reconcile them — but it is tuning-by-instrument work
+and sits behind TASK-161's eval set like every other ranking change.
+
+Confirmed rather than new: Mem0's ADD/UPDATE/DELETE/NOOP loop is already the
+`_reconcile` pattern; Letta/MemGPT's self-editing core blocks are what the
+human-edited CLAUDE.md identity layer does deliberately by hand; LangMem and
+LlamaIndex Memory are the lock-in cautionary tales already recorded above.
+
 ## Closing judgement
 
 Three derivations of this review each found the same thing at different
@@ -262,3 +322,6 @@ snapshot overtakes the rest of it.
 - Papers referenced by name: Reflexion, ExpeL, SWE-Exp, ReasoningBank, Memp,
   SkillWeaver, Agent Workflow Memory, LEGOMem, MemGPT, Mem0, Generative Agents,
   Knowledge Vault. Benchmarks: LoCoMo, LongMemEval, MemoryAgentBench, MemBench.
+- Follow-up primary sources: Hindsight (arXiv 2512.12818), Zep/Graphiti (arXiv
+  2501.13956, github.com/getzep/graphiti), PROJECTMEM (arXiv 2606.12329,
+  github.com/riponcm/projectmem). Retrieved 2026-08-15.

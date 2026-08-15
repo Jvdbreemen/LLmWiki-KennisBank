@@ -62,6 +62,21 @@ signal is for — the same blindness TASK-161 records for recency.
 Constraints: off the hot path entirely (session-end or idle, never recall-time);
 local only; and no outcome heuristic that requires the user to remember to do
 something, per principle #3.
+
+PRIOR ART, found 2026-08-15 and to be read before designing: PROJECTMEM
+(arXiv 2606.12329, https://github.com/riponcm/projectmem, paper CC-BY-4.0) —
+"a local-first, event-sourced memory and judgment layer for AI coding agents",
+whose judgment layer assesses "whether specific memories or decisions proved
+beneficial or harmful during task execution". That is this task's question,
+asked in this task's niche, with the same local-first constraint. Maturity
+unknown (single-author repo), so treat it as a design to learn from and a
+mistake-list to avoid, not a dependency. Two things to extract on reading: how
+they define the outcome signal for a coding session, and how they attribute an
+outcome to individual memories rather than to the session as a whole — the
+attribution step is where this task expects the noise to live. Note the market
+observation from the Honcho addendum still stands (no *product* sells this),
+but "nobody has tried" is now false in the literature and the task descriptions
+should not claim otherwise.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
