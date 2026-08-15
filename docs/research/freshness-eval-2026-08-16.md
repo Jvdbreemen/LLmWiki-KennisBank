@@ -27,9 +27,13 @@ Labelling: twelve parallel readers over batches of twenty, every REPLACED and
 NARROWED re-checked by an independent skeptic. A batching fault caused one batch
 to be labelled three times by different readers, which became a free
 inter-rater measurement: **13 of 17 unanimous, 3 at 2–1, 1 three-way split.**
-The five disputes were adjudicated against the actual code (e.g.
-`BACKEND_NAMES = ("host",)` settles whether an old switching instruction is
-outdated), not by preference.
+The five disputes were adjudicated against the actual code, not by preference —
+where "the code" is whatever repository the memory is about, not this one. The
+deciding example: whether an old model-switching instruction is outdated was
+settled by `BACKEND_NAMES = ("host",)` in the **adr-kit** repository's
+`bin/adr_llm.py`, which retires two of the three backends the old memory
+recommends. Memories describe several codebases; adjudicating them requires
+reading the codebase they describe.
 
 Questions are built from the OLD memory's title only — never from the
 successor's body, which would recreate the paraphrase bias this set exists to
