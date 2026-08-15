@@ -93,4 +93,57 @@ pre-registration is the only reason that was reported instead of rationalised.
 
 ## Results
 
-*(to be filled in by the run — this section is empty at commit time on purpose)*
+**Both pre-registered conditions are met, and the fix is one line.**
+
+| | tail set (n=80) | head set (n=329) |
+| --- | --- | --- |
+| recall@1 | 0.200 → **0.487** (+0.287) | 0.854 → 0.851 (−0.003) |
+| recall@3 | 0.388 → **0.662** (+0.274) | 1.000 → 0.991 (−0.009) |
+| **recall@5** | **0.450 → 0.725 (+0.275)** | **1.000 → 1.000 (±0.000)** |
+| MRR | 0.302 → 0.517 | 0.924 → 0.921 |
+
+Rule 2 asked for at least +15 points on the tail and no more than −1 on the
+head. The tail gained **27.5** and the head lost **nothing** on the registered
+metric.
+
+### The fix, and why it is not the one the task proposed
+
+Not chunked indexing. Not a bigger `num_ctx`. **The lexical arm was paying the
+embedding model's context limit for no reason.**
+
+`build-kb-index` stored `body=emb.doc_text(f)` in `fts_docs` — the same
+4000-character truncation the embedder needs. FTS5 has no context window. The
+search is hybrid (vec0 KNN + FTS5 fused by RRF), so uncapping the lexical side
+gives it sight of exactly the material the vector side structurally cannot
+reach, at the cost of under a megabyte of text and no VRAM at all.
+
+    body=emb.doc_text(f)  ->  body=emb.doc_text(f, cap=FTS_BODY_CAP)
+
+The head set was already saturated at recall@5 = 1.000, which is what makes it a
+regression guard and nothing else: it cannot show an improvement, only a loss.
+It shows none at @5. It does show a small cost further up — three questions of
+329 leave the top 3, one leaves the top 1 — which is what a longer body matching
+more queries looks like. Real, small, and not the registered metric; recorded
+here rather than left out.
+
+### What this does not settle
+
+The vector arm is still blind past 4000 characters. This measures that a
+hybrid search can route around that blindness through its lexical half, not
+that the blindness is gone. A query whose tail relevance is *semantic* rather
+than lexical — a paraphrase with no shared vocabulary — still cannot reach it,
+and this question set cannot see that case, because its questions are headings
+and headings share vocabulary by construction.
+
+Chunked vector indexing remains the fix for that, and it now has a measured
+baseline to beat: 0.725, not 0.450. It also has a much weaker case, because the
+cheap half of the problem is solved and the remaining half needs a schema change
+(`vec_docs` has `doc_id` as PRIMARY KEY, so multiple vectors per document is a
+migration). Filed rather than built.
+
+### Cost
+
+One line plus a named constant. Index rebuild: 10m24s for 1938 documents, 0
+failures, entirely from the embedding cache — the vectors did not change, only
+the stored text. Index size 24 MB. The hot path is untouched; nothing was added
+to query time.

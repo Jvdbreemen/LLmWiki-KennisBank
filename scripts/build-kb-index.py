@@ -27,6 +27,21 @@ WIKI = VAULT / "02-wiki"
 MEMORY = VAULT / "09-memory"
 WIKI_SKIP = {"index.md", "log.md"}
 
+#: How much of a document reaches the FTS index. Deliberately NOT the embedding
+#: cap, which is what it used to share.
+#:
+#: `doc_text` caps at 4000 characters because the embedding model runs at
+#: num_ctx=2048 -- a setting chosen to free 2.18 GB of VRAM, and above which the
+#: embed call does not truncate but FAILS. That constraint is real and belongs
+#: to the vector arm alone. FTS5 has no context window; it was paying an
+#: embedding model's limit for no reason.
+#:
+#: The cost of the whole corpus is under a megabyte of text, and the search is
+#: hybrid (vec0 KNN + FTS5 fused by RRF), so this gives the lexical arm sight of
+#: material the vector arm structurally cannot reach: 72 of 206 articles run
+#: past 4000 characters and 16.6% of all wiki text sat beyond it (TASK-164).
+FTS_BODY_CAP = 200_000
+
 
 def _doc_meta(path, layer):
     """(title, created, sources) uit één read; fail-soft naar leeg.
@@ -186,7 +201,8 @@ def main(rebuild: bool = False) -> None:
                 continue
             title, created, sources = _doc_meta(f, layer)
             _kbindex.upsert(conn, path=sp, layer=layer, status=status,
-                            body=emb.doc_text(f), vector=vec, file_hash=fh,
+                            body=emb.doc_text(f, cap=FTS_BODY_CAP),
+                            vector=vec, file_hash=fh,
                             title=title, created=created, sources=sources)
             indexed += 1
     total_before = conn.execute("SELECT count(*) FROM docs").fetchone()[0]
