@@ -74,13 +74,13 @@ ACTIONS = ("ADD", "SUPERSEDE", "NOOP")
 #: actie waar modellen de mist in gaan (TASK-144), dus het gat is bekend en
 #: staat als aparte taak genoteerd, niet als stilzwijgende aanname.
 #:
-#: v3 (TASK-169): SUPERSEDE eist voortaan volledige dekking. De oude vraag 2
-#: sloot het bestaande geheugen zodra het nieuwe iets anders zei, zonder te
-#: toetsen of het nieuwe alles van blijvende waarde meenam. Handlabeling van
-#: alle 237 historische sluitingen: 27% was versmallend -- de opvolger liet
-#: feiten vallen waarvan het gesloten geheugen de enige drager was, en sluiten
-#: haalde die feiten definitief uit recall (status-filter, geen ranking).
-#: Slechts 11% was echte vervanging. Gedeeltelijke dekking wordt daarom ADD.
+#: v3 (TASK-169): SUPERSEDE now requires full coverage. The old question 2
+#: closed the existing memory as soon as the new one said something different,
+#: without asking whether the new one carried everything of lasting value.
+#: Hand-labelling all 237 historic closures: 27% NARROWED -- the successor
+#: dropped facts whose only carrier was the closed memory, and closing removed
+#: those facts from recall outright (the status filter, not the ranking).
+#: Only 11% genuinely replaced substance. Partial coverage therefore ADDs.
 RECONCILE_PROMPT_VERSION = 3
 
 #: De volgorde van de vragen IS de fix (TASK-144).

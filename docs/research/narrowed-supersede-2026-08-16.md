@@ -27,7 +27,7 @@ prompt that caused it.
 closing was fine). Historic behaviour is 100% closed by definition — these
 pairs are in the set because they were closed.
 
-| population | v2 closes | v3 closes | |
+| population | v2 closes | v3 closes | change |
 | --- | --- | --- | --- |
 | NARROWED (64) — should stay open | 57.8% | **37.5%** | −20.3 points of knowledge loss |
 | DUPLICATE (145) — may close | 34.5% | 26.2% | judge closes slightly fewer |

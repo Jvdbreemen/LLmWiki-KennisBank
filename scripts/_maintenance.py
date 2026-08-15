@@ -374,10 +374,10 @@ def neighbor_counts(items: list, threshold: float) -> dict:
 #: sluiting herleidbaar blijft tot de prompt die haar veroorzaakte. Wordt in de
 #: reden in de closed-log gestempeld (TASK-150).
 #:
-#: v3 (TASK-169): supersede eist volledige dekking, zelfde correctie als
-#: RECONCILE_SYSTEM v3. Van 237 handgelabelde historische sluitingen was 27%
-#: versmallend (opvolger liet feiten vallen) en maar 11% echte vervanging;
-#: sluiten op "andere waarde" alleen verliest kennis via het status-filter.
+#: v3 (TASK-169): supersede requires full coverage, the same correction as
+#: RECONCILE_SYSTEM v3. Of 237 hand-labelled historic closures 27% narrowed
+#: (the successor dropped facts) and only 11% genuinely replaced substance;
+#: closing on "a different value" alone loses knowledge via the status filter.
 SUPERSEDE_PROMPT_VERSION = 3
 
 #: Dezelfde behandeling als RECONCILE_SYSTEM kreeg in TASK-144: de volgorde van
