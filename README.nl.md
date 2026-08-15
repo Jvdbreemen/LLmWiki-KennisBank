@@ -76,7 +76,23 @@ Geheugensystemen van leveranciers (Mem0, Zep, Letta, Cognee) zijn krachtig maar 
 
 De ontwerpvoorkeur is overal dezelfde: **deterministisch waar mogelijk, LLM alleen waar het oordeelsvermogen toevoegt, fail-open overal**. Een dood model blokkeert nooit een sessie, verliest nooit een transcript, en verwijdert nooit geverifieerde kennis.
 
-## Functie-highlights (v0.31.0)
+## Functie-highlights (v0.31.1)
+
+### Nieuw in v0.31.1
+
+Een patch met een fix die twee dagen geleden al geschreven, gereviewd en
+goedgekeurd was en daarna nooit gemerged — de commit die de Copilot-review op
+PR #114 verwerkte bleef op zijn branch achter.
+
+**De C4-referentie schreef de bug voor waar zijn eigen skill voor waarschuwt.**
+Hij documenteerde de upgrade-stempel als `git rev-parse --short $LATEST`, zonder
+`^{}`. Tags zijn hier annotated, dus dat legt het tag-object vast in plaats van
+de commit — precies hoe v0.28.0 en v0.29.0 allebei een SHA kregen die in geen
+enkele branch voorkomt.
+
+Een tekstuele verduidelijking in stap 10 van `kennisbank-upgrade` rijdt mee. Die
+leest prettiger maar verandert niets aan het gedrag; beide vormen zijn getest om
+dat vast te stellen.
 
 ### Nieuw in v0.31.0
 
