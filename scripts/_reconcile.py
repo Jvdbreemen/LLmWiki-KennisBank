@@ -73,7 +73,15 @@ ACTIONS = ("ADD", "SUPERSEDE", "NOOP")
 #: wordt weggegooid, de heartbeat telt alleen hoevaak. Dat is precies de
 #: actie waar modellen de mist in gaan (TASK-144), dus het gat is bekend en
 #: staat als aparte taak genoteerd, niet als stilzwijgende aanname.
-RECONCILE_PROMPT_VERSION = 2
+#:
+#: v3 (TASK-169): SUPERSEDE eist voortaan volledige dekking. De oude vraag 2
+#: sloot het bestaande geheugen zodra het nieuwe iets anders zei, zonder te
+#: toetsen of het nieuwe alles van blijvende waarde meenam. Handlabeling van
+#: alle 237 historische sluitingen: 27% was versmallend -- de opvolger liet
+#: feiten vallen waarvan het gesloten geheugen de enige drager was, en sluiten
+#: haalde die feiten definitief uit recall (status-filter, geen ranking).
+#: Slechts 11% was echte vervanging. Gedeeltelijke dekking wordt daarom ADD.
+RECONCILE_PROMPT_VERSION = 3
 
 #: De volgorde van de vragen IS de fix (TASK-144).
 #:
@@ -98,7 +106,12 @@ RECONCILE_SYSTEM = (
     "Geen overlap is ALTIJD ADD, nooit NOOP.\n"
     "2. Zegt het nieuwe iets ANDERS over dat onderwerp dan het bestaande -- een "
     "andere waarde, een teruggedraaid besluit, een weerlegging "
-    "(bv. 'Jim zoekt baan' -> 'Jim heeft baan')? Ja -> SUPERSEDE.\n"
+    "(bv. 'Jim zoekt baan' -> 'Jim heeft baan')? Kies dan SUPERSEDE, maar "
+    "ALLEEN als het nieuwe ook alles van blijvende waarde uit het bestaande "
+    "meeneemt. Bevat het bestaande feiten die het nieuwe NIET heeft -- een "
+    "terugvalpad, een concrete parameter, een procedure -- dan is SUPERSEDE "
+    "kennisverlies: het bestaande wordt gesloten en die feiten zijn weg. "
+    "Kies in dat geval ADD, zodat beide blijven staan.\n"
     "3. Staat alles wat het nieuwe zegt AL in het bestaande, zodat opslaan "
     "letterlijk niets toevoegt? Ja -> NOOP. Let op: bij NOOP wordt het nieuwe "
     "geheugen WEGGEGOOID, dus kies dit alleen als je zeker bent.\n"

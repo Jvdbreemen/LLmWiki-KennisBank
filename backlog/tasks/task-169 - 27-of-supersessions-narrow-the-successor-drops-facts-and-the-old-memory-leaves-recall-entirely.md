@@ -3,7 +3,7 @@ id: TASK-169
 title: >-
   27% of supersessions narrow: the successor drops facts and the old memory
   leaves recall entirely
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-15 22:05'
 labels:
@@ -35,12 +35,39 @@ Directions worth weighing, not decided here:
 
 Ready-made regression gate: the oldest-wins half of `06-claude/kb-freshness-eval.{dev,holdout}.json` scores zero today by construction. The day a NARROWED-aware supersede lands, those questions must stop scoring zero — no new instrument needed.
 
+
+## Where the acceptance criteria stand
+
+Evidence: `docs/research/narrowed-supersede-2026-08-16.md`.
+
+- #1 met as keep-both, not merge. Both closing judges (RECONCILE_SYSTEM v3,
+  SUPERSEDE_SYSTEM v3) require full coverage; partial coverage routes to
+  ADD / supersede:false. Replayed on all 209 adjudicated pairs: knowledge-losing
+  closures on NARROWED drop 57.8% -> 37.5%; the duplicate defence never rested
+  on this judge (write-time dedup + exact_duplicate_pass) and is unchanged.
+  Merge-forward was deliberately rejected: it would use the operation class
+  being repaired as the repair.
+- #2 met: 64/64 reopened via _memory.reopen(), 0 failed, exactly 64 files
+  re-indexed. Gate: oldest-wins dev 0.000 -> 0.333 r@5 (production) / 0.600
+  (cosine). Bonus finding for TASK-162: with old answers finally in the pool,
+  recency buries them (0.333 vs 0.600).
+- #3 met: healing touched only NARROWED stems; 145 DUPLICATE closures untouched,
+  and v3 does not weaken the non-LLM duplicate paths.
+- #4 met: 1436 passed, 2 skipped. Memory-layer regression eval (n=1224):
+  +0.000/+0.002/+0.001 — reopening added answers without disturbing existing
+  ones.
+
+Residual risk, stated: v3 still closes 37.5% of NARROWED pairs on replay. The
+healed 64 are events (pre-volatility) and the maintenance pass never closes
+events; the exposure is write-time reconcile against future candidates, and
+every such closure carries `promptversie 3` in the closed-log, so the rate is
+auditable rather than silent.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A supersede decision can produce a merge-or-keep outcome when coverage is partial, measured against the 64 adjudicated NARROWED pairs
-- [ ] #2 The 64 historic NARROWED closures are healed (reopened or merged forward), with the freshness oldest-wins questions as the gate
-- [ ] #3 No regression on DUPLICATE handling: the 145 adjudicated duplicates must stay closed
-- [ ] #4 python -m pytest tests -q is green
+- [x] #1 A supersede decision can produce a merge-or-keep outcome when coverage is partial, measured against the 64 adjudicated NARROWED pairs
+- [x] #2 The 64 historic NARROWED closures are healed (reopened or merged forward), with the freshness oldest-wins questions as the gate
+- [x] #3 No regression on DUPLICATE handling: the 145 adjudicated duplicates must stay closed
+- [x] #4 python -m pytest tests -q is green
 <!-- AC:END -->

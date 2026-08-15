@@ -373,7 +373,12 @@ def neighbor_counts(items: list, threshold: float) -> dict:
 #: Promptversie: ophogen bij ELKE wijziging aan SUPERSEDE_SYSTEM, zodat een
 #: sluiting herleidbaar blijft tot de prompt die haar veroorzaakte. Wordt in de
 #: reden in de closed-log gestempeld (TASK-150).
-SUPERSEDE_PROMPT_VERSION = 2
+#:
+#: v3 (TASK-169): supersede eist volledige dekking, zelfde correctie als
+#: RECONCILE_SYSTEM v3. Van 237 handgelabelde historische sluitingen was 27%
+#: versmallend (opvolger liet feiten vallen) en maar 11% echte vervanging;
+#: sluiten op "andere waarde" alleen verliest kennis via het status-filter.
+SUPERSEDE_PROMPT_VERSION = 3
 
 #: Dezelfde behandeling als RECONCILE_SYSTEM kreeg in TASK-144: de volgorde van
 #: de vragen expliciet, en de vraag "gaat dit uberhaupt over hetzelfde?"
@@ -397,7 +402,11 @@ SUPERSEDE_SYSTEM = (
     "onderwerp dan de oudere? Denk aan: een gewijzigde instelling, een "
     "teruggedraaid besluit, een opgelost probleem ('knop mist terugkoppeling' "
     "-> 'knop toont nu een status'), of een veranderde situatie ('Jim zoekt "
-    "baan' -> 'Jim heeft baan'). Ja -> supersede: true.\n"
+    "baan' -> 'Jim heeft baan'). Kies dan supersede: true, maar ALLEEN als de "
+    "nieuwere ook alles van blijvende waarde uit de oudere meeneemt. Bevat de "
+    "oudere feiten die de nieuwere NIET heeft -- een terugvalpad, een concrete "
+    "parameter, een procedure -- dan is sluiten kennisverlies: die feiten "
+    "verdwijnen uit recall. Dan supersede: false.\n"
     "3. Vullen ze elkaar aan zonder elkaar tegen te spreken, of zeggen ze "
     "hetzelfde? -> supersede: false.\n"
     "Antwoord UITSLUITEND met JSON: {\"supersede\": true|false, "
