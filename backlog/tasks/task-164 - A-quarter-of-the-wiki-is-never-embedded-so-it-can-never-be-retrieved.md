@@ -4,7 +4,11 @@ title: 'A quarter of the wiki is never embedded, so it can never be retrieved'
 status: Done
 assignee: []
 created_date: '2026-08-15 11:54'
-labels: []
+labels:
+  - retrieval
+  - embeddings
+  - measurement
+  - wiki
 dependencies: []
 priority: high
 ordinal: 157700
@@ -30,7 +34,15 @@ Two things to establish before building anything, in this order:
 1. **Does it actually cost recall?** Run kb-eval on the existing question sets against both indexing schemes. The cap has been there all along, so the current numbers already include the damage; only an A/B says how much of it is recoverable.
 2. **What does it cost to build and hold?** Roughly 3-4x the vectors for the wiki. Cheap in absolute terms at this corpus size, but the recall path is the hot path and it stays sub-second only if the cost is paid at write time.
 
-Do not skip step 1. TASK-145 pre-registered a rule that looked obviously right and lost (recall@5 0.778 → 0.768), and the pre-registration is the only reason that was reported rather than rationalised.</description>
-<parameter name="acceptanceCriteria">["The recall cost of the 4000-character cap is measured with kb-eval on existing question sets, not assumed", "If windowed indexing wins, it wins on a pre-registered rule stated before the run", "Whatever the outcome, the numbers are written down — including a loss", "The hot path stays sub-second: any added cost is paid at write time", "python -m pytest tests -q is green"]</parameter>
-<parameter name="labels">["retrieval", "embeddings", "measurement", "wiki"]
+Do not skip step 1. TASK-145 pre-registered a rule that looked obviously right and lost (recall@5 0.778 → 0.768), and the pre-registration is the only reason that was reported rather than rationalised.
+
 <!-- SECTION:DESCRIPTION:END -->
+
+## Acceptance Criteria
+<!-- AC:BEGIN -->
+- [ ] #1 The recall cost of the 4000-character cap is measured with kb-eval on existing question sets, not assumed
+- [ ] #2 If windowed indexing wins, it wins on a pre-registered rule stated before the run
+- [ ] #3 Whatever the outcome, the numbers are written down — including a loss
+- [ ] #4 The hot path stays sub-second: any added cost is paid at write time
+- [ ] #5 python -m pytest tests -q is green
+<!-- AC:END -->

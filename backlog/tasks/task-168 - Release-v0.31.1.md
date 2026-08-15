@@ -4,7 +4,9 @@ title: Release v0.31.1
 status: To Do
 assignee: []
 created_date: '2026-08-15 19:07'
-labels: []
+labels:
+  - release
+  - docs
 dependencies: []
 ordinal: 161700
 ---
@@ -24,7 +26,16 @@ with no `^{}`. Every tag in this repo is annotated, so that command yields the S
 
 **What it does not fix, despite appearances.** The same commit rewrites `"<git rev-parse --short "$LATEST^{}">"` to `"<git rev-parse --short $LATEST^{}>"` in `skills/kennisbank-upgrade/SKILL.md`. Tested both forms: they behave identically, because a command substitution opens a fresh quoting context. That hunk is readability, not correctness, and the changelog should not claim otherwise.
 
-Also checked and deliberately excluded: `perf/default-embed-qwen3-4b` (`4274941`). Its content is already on main by another route — the default is `qwen3-embedding:4b` and `docs/research/embedding-model-sweep-2026-08.md` exists — and the branch is behind main in places. Stale, not unreleased.</description>
-<parameter name="acceptanceCriteria">["801fdef lands on main, having been verified rather than assumed correct", "The changelog distinguishes the real fix from the cosmetic hunk in the same commit", "README.md and README.nl.md both get a v0.31.1 entry, in the same edit", "Full suite green before the docs edit; documentation subset green after", "Copilot review processed — comments endpoint AND review body — before merge", "Tag placed only on a SHA verified present on origin/main, and published with a non-empty body"]</parameter>
-<parameter name="labels">["release", "docs"]
+Also checked and deliberately excluded: `perf/default-embed-qwen3-4b` (`4274941`). Its content is already on main by another route — the default is `qwen3-embedding:4b` and `docs/research/embedding-model-sweep-2026-08.md` exists — and the branch is behind main in places. Stale, not unreleased.
+
 <!-- SECTION:DESCRIPTION:END -->
+
+## Acceptance Criteria
+<!-- AC:BEGIN -->
+- [ ] #1 801fdef lands on main, having been verified rather than assumed correct
+- [ ] #2 The changelog distinguishes the real fix from the cosmetic hunk in the same commit
+- [ ] #3 README.md and README.nl.md both get a v0.31.1 entry, in the same edit
+- [ ] #4 Full suite green before the docs edit; documentation subset green after
+- [ ] #5 Copilot review processed — comments endpoint AND review body — before merge
+- [ ] #6 Tag placed only on a SHA verified present on origin/main, and published with a non-empty body
+<!-- AC:END -->

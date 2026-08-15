@@ -6,7 +6,11 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-08-15 12:26'
-labels: []
+labels:
+  - retrieval
+  - memory
+  - language
+  - measurement
 dependencies: []
 priority: high
 ordinal: 158700
@@ -36,7 +40,15 @@ Three distinct questions, deliberately not merged:
 
 Do 1 first — it is measured, local, and reversible. Treat 3 as a proposal that needs the user's call and a kb-eval A/B, not as a follow-on.
 
-Caveats on the evidence, stated so the next reader can weigh it: language is detected by a stopword ratio, not a real classifier; the cross-language bucket is n=87 from four transcripts; and all of this is retrieval-of-source measurement, not the production recall path.</description>
-<parameter name="acceptanceCriteria">["The prefilter is skipped on a language mismatch, and the cross-language hit rate is re-measured on the same 255 claims to confirm the 8 points come back", "Same-language retrieval does not regress: it keeps the prefilter and its 93.2%", "Any change to the judge prompt is measured before and after, or not made", "Extraction language is put to the user as a decision with its trade-offs, not implemented on the strength of the retrieval numbers alone", "python -m pytest tests -q is green"]</parameter>
-<parameter name="labels">["retrieval", "memory", "language", "measurement"]
+Caveats on the evidence, stated so the next reader can weigh it: language is detected by a stopword ratio, not a real classifier; the cross-language bucket is n=87 from four transcripts; and all of this is retrieval-of-source measurement, not the production recall path.
+
 <!-- SECTION:DESCRIPTION:END -->
+
+## Acceptance Criteria
+<!-- AC:BEGIN -->
+- [ ] #1 The prefilter is skipped on a language mismatch, and the cross-language hit rate is re-measured on the same 255 claims to confirm the 8 points come back
+- [ ] #2 Same-language retrieval does not regress: it keeps the prefilter and its 93.2%
+- [ ] #3 Any change to the judge prompt is measured before and after, or not made
+- [ ] #4 Extraction language is put to the user as a decision with its trade-offs, not implemented on the strength of the retrieval numbers alone
+- [ ] #5 python -m pytest tests -q is green
+<!-- AC:END -->

@@ -31,6 +31,15 @@ What a freshness-aware set needs, and it is a different construction rather than
 
 Only with such a set does the tuning question become answerable: `RECENCY_FLOOR = 0.6` permits a 40% swing against RRF gaps of 1.6%, and the question is whether raising the floor keeps the preference for fresh knowledge while stopping it from overwriting the ranking.
 
-Until then, do not change `_rank`. Two reports say what the current metric measures; none says what the user needs.</description>
-<parameter name="acceptanceCriteria">["The set contains questions whose correct answer is the newest of several matching memories, and questions where it is an older one", "Pairs derived from superseded_by are hand-checked, because those links record housekeeping as often as replacement", "The set is held out from any tuning it is used to justify", "Running the existing arms against it reports whether recency helps, hurts or does nothing on the case it exists for", "The construction is documented well enough that someone can say what the set can and cannot measure", "python -m pytest tests -q is green"]
+Until then, do not change `_rank`. Two reports say what the current metric measures; none says what the user needs.
 <!-- SECTION:DESCRIPTION:END -->
+
+## Acceptance Criteria
+<!-- AC:BEGIN -->
+- [ ] #1 The set contains questions whose correct answer is the newest of several matching memories, and questions where it is an older one
+- [ ] #2 Pairs derived from superseded_by are hand-checked, because those links record housekeeping as often as replacement
+- [ ] #3 The set is held out from any tuning it is used to justify
+- [ ] #4 Running the existing arms against it reports whether recency helps, hurts or does nothing on the case it exists for
+- [ ] #5 The construction is documented well enough that someone can say what the set can and cannot measure
+- [ ] #6 python -m pytest tests -q is green
+<!-- AC:END -->
