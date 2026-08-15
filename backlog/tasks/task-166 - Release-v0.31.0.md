@@ -4,7 +4,8 @@ title: Release v0.31.0
 status: Done
 assignee: []
 created_date: '2026-08-15 15:50'
-labels: []
+labels:
+  - release
 dependencies: []
 ordinal: 159700
 ---
@@ -23,7 +24,17 @@ Carries TASK-138, TASK-160, TASK-162 (design only), TASK-163 and TASK-164 — th
 
 **What it explicitly does not do:** the trust factor. TASK-163 set out to make `trust_factor` work and concluded, on measurement, that it should not be built on grounded verification. That belongs in the changelog as a decision, not omitted because nothing shipped.
 
-Follow the `kennisbank-release` skill. Two steps that have burned this repo before and apply here: wait for the Copilot review and read the review BODY as well as the comments endpoint (its suppressed findings live only in the body, and one of them this session was the best finding of the review); and tag only a SHA confirmed present on `origin/main` after the merge, using `^{}` when stamping the deployed version.</description>
-<parameter name="acceptanceCriteria">["Version proposed from the commit delta with a stated reason, and confirmed", "CHANGELOG has a dated section saying what changes for the user, including that kb-index.db needs a rebuild", "README.md and README.nl.md both updated in the same edit", "Full suite green before the docs edit; documentation subset green after", "Copilot review processed — comments endpoint AND review body — before merge", "Tag placed only on a SHA verified present on origin/main", "Release published with a non-empty body"]</parameter>
-<parameter name="labels">["release"]
+Follow the `kennisbank-release` skill. Two steps that have burned this repo before and apply here: wait for the Copilot review and read the review BODY as well as the comments endpoint (its suppressed findings live only in the body, and one of them this session was the best finding of the review); and tag only a SHA confirmed present on `origin/main` after the merge, using `^{}` when stamping the deployed version.
+
 <!-- SECTION:DESCRIPTION:END -->
+
+## Acceptance Criteria
+<!-- AC:BEGIN -->
+- [ ] #1 Version proposed from the commit delta with a stated reason, and confirmed
+- [ ] #2 CHANGELOG has a dated section saying what changes for the user, including that kb-index.db needs a rebuild
+- [ ] #3 README.md and README.nl.md both updated in the same edit
+- [ ] #4 Full suite green before the docs edit; documentation subset green after
+- [ ] #5 Copilot review processed — comments endpoint AND review body — before merge
+- [ ] #6 Tag placed only on a SHA verified present on origin/main
+- [ ] #7 Release published with a non-empty body
+<!-- AC:END -->

@@ -4,7 +4,10 @@ title: '48 scripts set KENNISBANK_VAULT from an unguarded parents[2] guess'
 status: To Do
 assignee: []
 created_date: '2026-08-15 16:00'
-labels: []
+labels:
+  - hygiene
+  - adr-0002
+  - scripts
 dependencies: []
 ordinal: 160700
 ---
@@ -30,7 +33,14 @@ Found by Copilot on PR #121, as a *suppressed* comment (they appear only in the 
 
 Why it has not bitten: in practice `KENNISBANK_VAULT` is set — by the hooks, by `setup.sh`, by the user's environment — so `setdefault` is a no-op. The exposure is a bare `python3 scripts/x.py` from a checkout, and tests.
 
-The work is mechanical but wants care in one place: `vault_root()` sets the variable itself when it identifies a real vault, specifically so detached child processes stay on the same vault when the harness did not propagate the environment. Removing the setdefault must not remove that, and a test should pin it — a detached warm-up child landing on a different vault would be silent and awful.</description>
-<parameter name="acceptanceCriteria">["The unguarded setdefault is gone from every script, with vault resolution left to _vaultpath", "A test pins that a detached child process still resolves the same vault as its parent", "Running any script directly from a repo checkout does not create or write to a path outside the repo", "python -m pytest tests -q is green"]</parameter>
-<parameter name="labels">["hygiene", "adr-0002", "scripts"]
+The work is mechanical but wants care in one place: `vault_root()` sets the variable itself when it identifies a real vault, specifically so detached child processes stay on the same vault when the harness did not propagate the environment. Removing the setdefault must not remove that, and a test should pin it — a detached warm-up child landing on a different vault would be silent and awful.
+
 <!-- SECTION:DESCRIPTION:END -->
+
+## Acceptance Criteria
+<!-- AC:BEGIN -->
+- [ ] #1 The unguarded setdefault is gone from every script, with vault resolution left to _vaultpath
+- [ ] #2 A test pins that a detached child process still resolves the same vault as its parent
+- [ ] #3 Running any script directly from a repo checkout does not create or write to a path outside the repo
+- [ ] #4 python -m pytest tests -q is green
+<!-- AC:END -->
