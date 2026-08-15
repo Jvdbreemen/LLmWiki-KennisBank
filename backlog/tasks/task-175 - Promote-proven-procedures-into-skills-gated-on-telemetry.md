@@ -47,9 +47,15 @@ Apache 2.0, ~12k stars) stores "agent skill records as .md files" and refines
 them between sessions as part of its offline memory evolution — a live
 implementation of this task's promotion target, in a markdown-native local
 stack very close to this vault's. Apache 2.0 permits reading and reusing with
-notice. Read their skill-record format and refinement pass before designing;
-the difference to preserve is the human gate — their evolution is autonomous,
-this vault's promotion must propose and stop.
+notice. Read their skill-record format and refinement pass before designing.
+
+Scope split (owner decision, 2026-08-15): the autonomous-evolution half of the
+EverOS idea is adopted and lives in TASK-177 — an EXISTING skill evolves
+autonomously behind quality gates, git-reversible. THIS task stays the
+creation half: promoting a procedure memory into a NEW skill still proposes,
+because a new behavior surface is a different risk than refining one that
+exists. The asymmetry is recorded in TASK-177 as a decision the owner can
+flatten later.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria

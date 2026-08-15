@@ -382,6 +382,17 @@ their skill-record format and episode-cluster merge are worth reading when
 TASK-175 and TASK-174 respectively come up, since EverOS ships a version of
 both ("agent skill records stored as .md files", refined between sessions).
 
+Update, same day: the owner adopted the autonomous-evolution half of that
+idea outright — TASK-177 copies EverOS's between-session skill refinement,
+with KennisBank-native rails (grounded-verifier asymmetry, git-commit
+reversibility, closed-log auditability, kb-state-audit as a hard gate) in
+place of a human gate. Creation of new skills (TASK-175) still proposes; the
+split between autonomous refinement and gated creation is recorded as a
+deliberate decision the owner can flatten later. This narrows the editorial
+differentiator above to "the quality gate on knowledge a human reads" —
+skills are executed, not read, and now evolve on the memory subsystem's
+default-on precedent instead.
+
 **EverMemOS (arXiv 2601.02163) is the scene tier this vault already
 falsified — with the one variable the local experiment said would matter.**
 Their pipeline is MemCells (episodic traces from dialogue) consolidated into
