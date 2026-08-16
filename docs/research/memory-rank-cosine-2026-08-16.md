@@ -1,7 +1,9 @@
 # Ordering memory recall by cosine — pre-registration
 
-**2026-08-16 — TASK-162 (ranking half). Committed before the changed code is
-measured; the Results section is empty on purpose.**
+**2026-08-16 — TASK-162 (ranking half). The registration below was committed
+with an empty Results section (`dc16eb7`) before the changed code produced any
+number; the Results were appended afterwards in a separate commit. The git
+history is the proof of that order.**
 
 ## Why now
 
@@ -94,8 +96,10 @@ instead of adjusting the rule to fit.
   ranking is weak on its own favourite slice out of sample.
 - The one-question loss sits in an 11-question slice. That is not an argument
   against the rule — it is the reason the next attempt needs a larger
-  newest-wins pool before it can register a distinguishable gate. REPLACED
-  pairs accrue naturally as v3-era supersessions accumulate.
+  newest-wins pool before it can register a distinguishable gate. New
+  `REPLACED` pairs — TASK-161's label for a supersession that genuinely
+  changed substance, the raw material for newest-wins questions — accrue
+  naturally as v3-era supersessions accumulate.
 - **This holdout is spent.** It has been seen; it can never again serve as an
   untouched gate. A future attempt must build a fresh one.
 
