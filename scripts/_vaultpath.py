@@ -26,11 +26,20 @@ DEFAULT_VAULT = Path.home() / "KennisBank"
 
 
 def _script_vault() -> Path | None:
-    """Return the vault that owns this installed script, when identifiable."""
+    """Return the vault that owns this installed script, when identifiable.
+
+    Installed layout is ``<vault>/.claude/scripts/_vaultpath.py``, so the
+    signature is this file's grandparent directory being *named* ``.claude``.
+    A repo checkout (``<repo>/scripts/``) must never match: there
+    ``parents[2]`` is the checkout's PARENT (often ``$HOME``), and a
+    ``.claude`` directory merely existing next to the repo does not make that
+    directory a vault — the old existence check resolved exactly such a
+    checkout to ``$HOME`` and stamped it into every child process (TASK-181).
+    """
     try:
-        candidate = Path(__file__).resolve().parents[2]
-        if (candidate / ".claude").is_dir():
-            return candidate
+        here = Path(__file__).resolve()
+        if here.parents[1].name == ".claude":
+            return here.parents[2]
     except (OSError, IndexError):
         pass
     return None

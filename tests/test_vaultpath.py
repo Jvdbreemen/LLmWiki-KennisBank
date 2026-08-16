@@ -13,8 +13,10 @@ test that would have caught the importer scripts shipping to the wrong vault.
 """
 from __future__ import annotations
 
+import importlib.util
 import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -55,10 +57,53 @@ class TestVaultRootResolver(unittest.TestCase):
         os.environ[_vaultpath.ENV_VAR] = "~/some-vault"
         self.assertEqual(_vaultpath.vault_root(), Path.home() / "some-vault")
 
+    def _load_vaultpath_copy(self, scripts_dir: Path):
+        """Load a copy of the real _vaultpath.py from a constructed tree, so
+        its __file__ points into that layout — the module under test is the
+        real source text, no __file__ monkeypatching."""
+        src = SCRIPTS_DIR / "_vaultpath.py"
+        dst = scripts_dir / "_vaultpath.py"
+        dst.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+        spec = importlib.util.spec_from_file_location(
+            f"_vaultpath_copy_{id(self)}", dst)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_checkout_layout_never_treats_repo_parent_as_vault(self):
+        """TASK-181: in a checkout, parents[2] is the repo's PARENT (often
+        $HOME). A .claude directory existing there does not make it a vault;
+        the old existence check resolved to it AND stamped it into the env."""
+        os.environ.pop(_vaultpath.ENV_VAR, None)
+        with tempfile.TemporaryDirectory() as td:
+            fake_home = Path(td).resolve() / "fakehome"
+            (fake_home / ".claude").mkdir(parents=True)
+            scripts = fake_home / "repo" / "scripts"
+            scripts.mkdir(parents=True)
+            mod = self._load_vaultpath_copy(scripts)
+            self.assertEqual(mod.vault_root(), mod.DEFAULT_VAULT)
+            self.assertIsNone(os.environ.get(_vaultpath.ENV_VAR),
+                              "a checkout must not export a vault root")
+
+    def test_deployed_layout_resolves_own_vault_and_exports_it(self):
+        """The deployed layout (<vault>/.claude/scripts/) must keep working,
+        including the env export that detached warm-up children rely on."""
+        os.environ.pop(_vaultpath.ENV_VAR, None)
+        try:
+            with tempfile.TemporaryDirectory() as td:
+                vault = Path(td).resolve() / "vault"
+                scripts = vault / ".claude" / "scripts"
+                scripts.mkdir(parents=True)
+                mod = self._load_vaultpath_copy(scripts)
+                self.assertEqual(mod.vault_root(), vault)
+                self.assertEqual(os.environ.get(_vaultpath.ENV_VAR), str(vault))
+        finally:
+            os.environ.pop(_vaultpath.ENV_VAR, None)
+
     def test_scripts_use_the_resolver(self):
         # Loading a script with the env var set must propagate to its vault paths.
         os.environ[_vaultpath.ENV_VAR] = "/tmp/kb-resolver-test"
-        from _loader import load_script
+        from tests._loader import load_script
 
         stale = load_script("stale-check.py")
         self.assertEqual(stale.VAULT_ROOT, Path("/tmp/kb-resolver-test"))
@@ -79,7 +124,7 @@ class TestVaultRootResolver(unittest.TestCase):
         # The importer scripts expose VAULT_DEFAULT as the argparse default;
         # it must resolve via the env var, not a Path.home() hardcode.
         os.environ[_vaultpath.ENV_VAR] = "/tmp/kb-importer-test"
-        from _loader import load_script
+        from tests._loader import load_script
 
         for name in (
             "build-karpathy-index.py",
