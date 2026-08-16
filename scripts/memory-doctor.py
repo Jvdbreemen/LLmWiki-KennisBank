@@ -240,6 +240,50 @@ def main(argv=None) -> int:
             print("\nDeze kandidaten zijn NIET geschreven; "
                   "er is niets te heropenen.")
         return 0
+    if argv and argv[0] == "promotions":
+        # De andere helft van de audit-view naast `closed`: wat is er
+        # autonoom gepromoveerd, langs welke route, en op welk bewijs. Sinds
+        # TASK-195 zit er geen mens meer in de promotielus, dus dit logboek
+        # IS de review — achteraf, met `demote <stem>` als terugweg.
+        import json as _json
+        import _memory
+        limit = 20
+        if "--limit" in argv:
+            try:
+                limit = int(argv[argv.index("--limit") + 1])
+            except Exception:
+                limit = 20
+        rows = _memory.recent_promotions(limit=limit)
+        if "--json" in argv:
+            print(_json.dumps(rows, ensure_ascii=False))
+        elif not rows:
+            print("geen promoties geregistreerd")
+        else:
+            for r in rows:
+                act = "DEMOTE " if r.get("action") == "demote" else ""
+                print(f"{r.get('at','')[:19]}  {act}{r.get('stem','')}"
+                      f"  [{r.get('route','?')}/{r.get('prompt_version') or '-'}]")
+                if r.get("reason"):
+                    reason = " ".join(str(r["reason"]).split())
+                    print(f"    bewijs: {reason[:160]}")
+            print(f"\nTerugdraaien: python3 memory-doctor.py demote <stem>")
+        return 0
+    if argv and argv[0] == "demote":
+        import _memory
+        if len(argv) < 2:
+            print("gebruik: memory-doctor.py demote <stem>", file=sys.stderr)
+            return 2
+        stem = argv[1]
+        path = _memory.memory_dir() / f"{stem}.md"
+        if not path.exists():
+            print(f"niet gevonden: {path}", file=sys.stderr)
+            return 1
+        if _memory.demote(path, reason="handmatig teruggedraaid via audit-view"):
+            print(f"{stem} -> unverified (promotie teruggedraaid)")
+            print("Draai build-kb-index zodat recall de wijziging ziet.")
+            return 0
+        print(f"{stem}: niets gewijzigd (status is niet current)", file=sys.stderr)
+        return 1
     if argv and argv[0] == "reopen":
         import _memory
         if len(argv) < 2:
@@ -310,7 +354,8 @@ def main(argv=None) -> int:
         return 0
     print("usage: memory-doctor.py nocloud|rot [--hours N]|rejudge [--limit N] [--hours N] [--dry-run]"
           "|pending [--json] [--limit N]|decide <stem> <approve|reject|skip>"
-          "|closed [--json] [--limit N]|reopen <stem>|discarded [--json] [--limit N]",
+          "|closed [--json] [--limit N]|reopen <stem>|discarded [--json] [--limit N]"
+          "|promotions [--json] [--limit N]|demote <stem>",
           file=sys.stderr)
     return 2
 

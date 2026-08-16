@@ -597,6 +597,50 @@ def recent_promotions(limit: int = 20) -> list:
         return []
 
 
+def demote(path, reason: str = "") -> bool:
+    """current -> unverified, with an audit line. Anything else is refused.
+
+    The undo edge for promote(): a promotion the owner disagrees with goes
+    back to quarantine, it does not get retracted — retraction asserts the
+    content is wrong, demotion only withdraws the promotion. Exactly one
+    legal edge, for the same reason promote() has one: an undo pass that
+    could touch closed statuses would reopen closures made for cause.
+
+    The audit line lands in the promote log (action=demote) so the
+    promotion and its undo tell one story in one file.
+    """
+    import re
+    p = Path(path)
+    try:
+        raw = p.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    fm, body = split_frontmatter(raw)
+    if not fm:
+        return False
+    m = re.search(r"^status:\s*(\S+)\s*$", fm, re.MULTILINE)
+    if not m or m.group(1) != "current":
+        return False
+    new_fm = re.sub(r"^status:.*$", "status: unverified", fm, count=1, flags=re.MULTILINE)
+    try:
+        p.write_text("---\n" + new_fm.strip("\n") + "\n---\n" + body, encoding="utf-8")
+    except OSError:
+        return False
+    try:
+        import json
+        from datetime import datetime, timezone
+        log = vault_root() / ".claude" / PROMOTE_LOG
+        log.parent.mkdir(parents=True, exist_ok=True)
+        rec = {"stem": p.stem, "reason": reason[:300], "route": "undo",
+               "action": "demote",
+               "at": datetime.now(timezone.utc).isoformat()}
+        with log.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    except Exception:
+        pass  # het logboek mag de demotie zelf nooit blokkeren
+    return True
+
+
 def reopen(path, status: str = "current") -> bool:
     """Draai een sluiting terug: status naar current, sluitingsvelden eruit.
 

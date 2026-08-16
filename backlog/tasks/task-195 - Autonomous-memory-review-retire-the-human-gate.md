@@ -36,15 +36,27 @@ Remaining: Trap 2/3 behind `auto_review_llm` (default OFF) and the
 /kennisbank:review audit view — build steps 4-6. Note for the next session:
 Trap 1's sweep pass reaches the vault only with the next release+upgrade; the
 backlog itself is already drained from the checkout.
+
+## Progress (2026-08-16, later)
+
+Build steps 4-5 shipped on PR #132 (`kb-autoreview.py` + command + 8 tests,
+three hand-checked mutants): bundle/apply behind `auto_review_llm`, promote
+on `supported`, retract only on absent + failed refutation, capped,
+reversible. First real run on this vault (toggle explicitly ON): 134
+escalated cases -> 90 promoted with evidence, 2 retracted after double
+agreement, 42 left unverified. Build step 6 on branch
+`feat/review-audit-view`: `_memory.demote()` (single-edge undo for promote),
+`memory-doctor.py promotions|demote`, and /kennisbank:review rewritten as an
+audit view — no step waits for a human.
 <!-- SECTION:DESCRIPTION:END -->
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [x] #1 G0 runs before any product code: a stratified 60-case quarantine sample, exhaustively adjudicated, with the base rates written down
 - [x] #2 Gates G1-G3 are committed with their thresholds before the gated code produces its first measurement
 - [x] #3 Trap 1 (grounded promotion) is local-only, runs as a sweep pass, and promotes nothing below the registered precision bar
-- [ ] #4 Traps 2 and 3 sit behind auto_review_llm, default OFF in the shipped repo
-- [ ] #5 A retraction requires two independent methods plus a failed refutation, is capped per run, logs both verdicts, and reverses with one reopen()
-- [ ] #6 /kennisbank:review becomes an audit view with per-line undo; no step in the pipeline waits for a human
+- [x] #4 Traps 2 and 3 sit behind auto_review_llm, default OFF in the shipped repo
+- [x] #5 A retraction requires two independent methods plus a failed refutation, is capped per run, logs both verdicts, and reverses with one reopen()
+- [x] #6 /kennisbank:review becomes an audit view with per-line undo; no step in the pipeline waits for a human
 - [ ] #7 python -m pytest tests -q is green
 <!-- AC:END -->
 
