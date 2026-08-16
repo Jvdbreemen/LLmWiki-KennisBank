@@ -69,12 +69,14 @@ class BuildKbIndexTest(unittest.TestCase):
             os.environ["KENNISBANK_VAULT"] = self._saved
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def _build(self, rebuild=False):
+    def _build(self, rebuild=False, fts_cap=None):
         import importlib.util
         spec = importlib.util.spec_from_file_location(
             "build_kb_index", str(SCRIPTS_DIR / "build-kb-index.py"))
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
+        if fts_cap is not None:
+            mod.FTS_BODY_CAP = fts_cap
         mod.main(rebuild=rebuild)
         return mod
 
@@ -227,6 +229,71 @@ class BuildKbIndexTest(unittest.TestCase):
         conn.close()
         self.assertEqual(n_first, n_second,
                          "incremental build mag het doc-aantal niet wijzigen als files ongewijzigd zijn")
+
+    # -- TASK-186: een cap-wijziging moet bestaande FTS-rijen bereiken --------
+
+    def _fts_len(self, name):
+        import _kbindex
+        conn = _kbindex.connect()
+        row = conn.execute(
+            "SELECT length(f.body) FROM fts_docs f JOIN docs d ON d.doc_id=f.rowid "
+            "WHERE d.path LIKE ?", (f"%{name}",)).fetchone()
+        conn.close()
+        return row[0] if row else None
+
+    def test_fts_cap_change_refreshes_truncated_row_without_rebuild(self):
+        """De kern van TASK-186: hash-gelijke bestanden hielden hun afgekapte
+        FTS-rij voor altijd; de cap-stempel + gerichte lengte-reparatie niet."""
+        (self.vault / "02-wiki" / "long.md").write_text(
+            "---\ntitle: Long\nstatus: concept\n---\n\n" + "x" * 6000,
+            encoding="utf-8")
+        self._build(rebuild=True, fts_cap=4000)
+        self.assertEqual(self._fts_len("long.md"), 4000)
+        # incrementeel, bestand onaangeraakt, echte (grote) cap:
+        self._build(rebuild=False)
+        self.assertGreater(self._fts_len("long.md"), 4000)
+
+    def test_fts_cap_stamp_is_written(self):
+        mod = self._build(rebuild=True)
+        import _kbindex
+        conn = _kbindex.connect()
+        self.assertEqual(_kbindex.meta_get(conn, "fts_body_cap"),
+                         str(mod.FTS_BODY_CAP))
+        conn.close()
+
+    def test_steady_state_second_build_does_no_upserts(self):
+        """De stempel herstelt het pure hash-skip-pad: geen permanente
+        lengte-scan-taks."""
+        self._build(rebuild=True)
+        import _kbindex
+        calls = []
+        orig = _kbindex.upsert
+        _kbindex.upsert = lambda *a, **k: calls.append(1) or orig(*a, **k)
+        try:
+            self._build(rebuild=False)
+        finally:
+            _kbindex.upsert = orig
+        self.assertEqual(len(calls), 0)
+
+    def test_failed_embed_is_reported_by_name(self):
+        import contextlib
+        import io
+        orig = self.emb.get_cached
+        self.emb.get_cached = (lambda f, cache:
+                               None if Path(f).name == "alpha.md"
+                               else orig(f, cache))
+        buf = io.StringIO()
+        try:
+            with contextlib.redirect_stderr(buf):
+                self._build(rebuild=True)
+        finally:
+            self.emb.get_cached = orig
+        self.assertIn("alpha.md", buf.getvalue())
+
+    def test_doc_text_default_is_the_named_constant(self):
+        import inspect
+        sig = inspect.signature(self.emb.doc_text)
+        self.assertIs(sig.parameters["cap"].default, self.emb.EMBED_DOC_CAP)
 
 
 if __name__ == "__main__":

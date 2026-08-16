@@ -94,6 +94,15 @@ def cache_file() -> Path:
 #: and silently invalidate the index.
 OLLAMA_NUM_CTX = env_int("KB_EMBED_NUM_CTX", 2048)
 
+#: Character cap for document embed input, coupled to OLLAMA_NUM_CTX above:
+#: past num_ctx TOKENS the Ollama embed call FAILS (returns None), it does not
+#: truncate — measured 2026-08-15/16, docs/research/wiki-embed-cap-2026-08-15.md.
+#: 4000 chars of prose stays under 2048 tokens; token-dense text (CJK, code,
+#: hex paths) can cross it even under this cap, and build-kb-index then
+#: reports the document by name (TASK-186). The doc prefix is prepended AFTER
+#: the cap, tightening the margin slightly.
+EMBED_DOC_CAP = 4000
+
 #: Never unload on a timer. A cold load takes 30-60 s while the retrieval hook
 #: has a 2 s budget, so an idle gap turns retrieval off without saying so.
 #: This does not protect against eviction by another model -- only fitting in
@@ -503,7 +512,7 @@ def file_hash(path) -> str:
     return hashlib.md5(Path(path).read_bytes()).hexdigest()[:8]
 
 
-def doc_text(path, cap: int = 4000) -> str:
+def doc_text(path, cap: int = EMBED_DOC_CAP) -> str:
     """Body text of a markdown note (frontmatter stripped), capped for embedding."""
     try:
         _, body = split_frontmatter(Path(path).read_text(encoding="utf-8"))
