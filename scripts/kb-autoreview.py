@@ -88,8 +88,10 @@ def _unverified_with_source():
         src = str(fm.get("source_session", "")).strip()
         if not src or not (tdir / src).exists():
             continue
+        # Body verbatim: claim.md promises "exactly as the memory states it",
+        # and flattening whitespace would mangle lists and code blocks.
         out.append({"stem": f.stem, "path": str(f), "src": src,
-                    "body": " ".join(body.split()),
+                    "body": body.strip(),
                     "created": str(fm.get("created", ""))})
     out.sort(key=lambda r: r["created"])
     return out
@@ -107,7 +109,9 @@ def bundle(max_n: int | None = None) -> int:
         return 0
     v = vault_root()
     tdir = v / "01-raw" / "transcripts"
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    # Microseconds included: two bundle runs within the same second would
+    # otherwise collide on the batch name (mkdir has exist_ok=False by design).
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
     batch = v / ".claude" / "autoreview" / f"batch-{stamp}"
     batch.mkdir(parents=True, exist_ok=False)
 
@@ -139,6 +143,12 @@ def apply(results_path: str, retract_cap: int = RETRACT_CAP) -> int:
     except Exception as e:
         print(f"kb-autoreview: cannot read results: {e}", file=sys.stderr)
         return 1
+    if not isinstance(rows, list):
+        # A dict at the top level is a common LLM mistake; refusing up front
+        # beats crashing halfway through a run that already changed state.
+        print("kb-autoreview: results must be a JSON LIST of verdict rows",
+              file=sys.stderr)
+        return 1
 
     by_stem = {r["stem"]: r for r in _unverified_with_source()}
     import collections
@@ -146,6 +156,9 @@ def apply(results_path: str, retract_cap: int = RETRACT_CAP) -> int:
     retracted = 0
     applied = []
     for row in rows:
+        if not isinstance(row, dict):
+            tally["invalid_row"] += 1
+            continue
         stem = str(row.get("stem", ""))
         verdict = str(row.get("verdict", "")).strip().lower()
         target = by_stem.get(stem)

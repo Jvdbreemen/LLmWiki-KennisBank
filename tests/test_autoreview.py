@@ -7,9 +7,11 @@ per-run cap, and everything else changes nothing. The privacy gate refuses to
 run at all while `auto_review_llm` is off, because bundles exist to be read by
 a client LLM and that is cloud.
 
-Imports happen inside setUp, after the env points at a temp vault: module-
-level imports here would freeze _embeddings.CACHE_FILE onto the real vault
-during collection and tax every later test (TASK-196, measured at 835s).
+Vault-dependent imports happen inside setUp, after the env points at a temp
+vault: at module level they would freeze _embeddings.CACHE_FILE onto the
+real vault during collection and tax every later test (TASK-196, measured
+at 835s). _frontmatter is the exception below — pure parsing, no vault
+state, safe at collection time.
 """
 from __future__ import annotations
 
@@ -148,7 +150,33 @@ class AutoReviewTest(unittest.TestCase):
                       "refuted": False}])
         self.assertEqual(self._status(m), "unverified")
 
+    def test_a_malformed_results_file_is_refused_or_skipped(self):
+        """Top-level dict -> refused before any state change; non-dict rows
+        -> counted and skipped, valid rows still applied."""
+        m = self._mem("m")
+        rp = self.tmp / "bad.json"
+        rp.write_text(json.dumps({"stem": "m", "verdict": "supported"}),
+                      encoding="utf-8")
+        self.assertEqual(self.mod.apply(str(rp)), 1)
+        self.assertEqual(self._status(m), "unverified")
+        self._apply(["not-a-row", 42,
+                     {"stem": "m", "verdict": "supported",
+                      "evidence": "x", "refuted": None}])
+        self.assertEqual(self._status(m), "current")
+
     # -- bundle ---------------------------------------------------------------
+
+    def test_bundle_preserves_the_body_verbatim(self):
+        """claim.md says "exactly as the memory states it" — lists and code
+        keep their line structure."""
+        p = self.vault / "09-memory" / "m.md"
+        p.write_text("---\ntitle: m\ntype: memory\nstatus: unverified\n"
+                     'source_session: "s1.jsonl"\ncreated: 2026-08-01\n---\n\n'
+                     "Regel een.\n\n- punt A\n- punt B\n", encoding="utf-8")
+        self.assertEqual(self.mod.bundle(), 0)
+        batch = next((self.vault / ".claude" / "autoreview").iterdir())
+        claim = (batch / "case-001" / "claim.md").read_text(encoding="utf-8")
+        self.assertIn("Regel een.\n\n- punt A\n- punt B", claim)
 
     def test_bundle_writes_cases_and_manifest(self):
         self._mem("m1")

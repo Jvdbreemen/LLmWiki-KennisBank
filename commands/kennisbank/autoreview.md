@@ -6,9 +6,11 @@ quarantine needs a reading of the WHOLE transcript, which is your job in this
 command. You adjudicate; `kb-autoreview.py apply` disposes — the promotion and
 retraction rules live in that script, not in you.
 
-## Vault root (VERPLICHT — bepaal eerst)
+## Vault root (REQUIRED — resolve first)
 
-`VAULT="${KENNISBANK_VAULT:-$HOME/KennisBank}"` — resolve once, use everywhere.
+`VAULT="${KENNISBANK_VAULT:-$HOME/KennisBank}"` — resolve once, use
+everywhere. The fallback is the documented default deploy location; the
+env var always wins (ADR-0002).
 
 ## Procedure
 
@@ -62,7 +64,7 @@ retraction rules live in that script, not in you.
    `python3 "$VAULT/.claude/scripts/build-kb-index.py"` and give the user the
    apply summary plus the batch path for the audit trail.
 
-## Wat dit command NIET doet
+## What this command does NOT do
 
 It never touches `current`, `superseded` or `retracted` memories; it never
 deletes; every action is a status change with a log line, and
