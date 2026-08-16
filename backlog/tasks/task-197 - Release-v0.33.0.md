@@ -1,7 +1,7 @@
 ---
 id: TASK-197
 title: Release v0.33.0
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-17 00:30'
 labels: []
@@ -22,8 +22,15 @@ origin/main SHA with ^{}.
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 CHANGELOG section + compare links, README highlights in both languages
-- [ ] #2 Doc-subset tests green after the doc edits
-- [ ] #3 PR merged, merge verified on origin/main, tag on the peeled SHA
-- [ ] #4 Release published with non-empty body
+- [x] #1 CHANGELOG section + compare links, README highlights in both languages
+- [x] #2 Doc-subset tests green after the doc edits
+- [x] #3 PR merged, merge verified on origin/main, tag on the peeled SHA
+- [x] #4 Release published with non-empty body
 <!-- AC:END -->
+
+## Close-out (2026-08-17)
+
+Merged as PR #137 (eabfbed, verified on origin/main), tagged v0.33.0 on the
+peeled SHA (verification: tag^{} == origin/main), published with a 10.8KB
+body. Doc subset 56 passed; full suite on the released content 1574 passed,
+3 skipped.
