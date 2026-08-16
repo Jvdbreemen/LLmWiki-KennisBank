@@ -32,7 +32,7 @@ class KbMcpTest(unittest.TestCase):
             self.skipTest("kb_recall niet beschikbaar (sqlite_vec ontbreekt?)")
         import _embeddings as emb
         self._orig_embed = emb.embed
-        emb.embed = lambda text, timeout=30.0: [0.1, 0.2, 0.3]
+        emb.embed = lambda text, timeout=30.0, kind="": [0.1, 0.2, 0.3]
         self.emb = emb
         self._orig_recall = self.m.kb_recall.recall_hits
         self.m.kb_recall.recall_hits = lambda *a, **k: [

@@ -46,7 +46,11 @@ class FormatTest(unittest.TestCase):
 
         class FakeEmb:
             @staticmethod
-            def embed(q, timeout=None):
+            def embed(q, timeout=None, kind=""):
+                return [0.1, 0.2]
+
+            @staticmethod
+            def embed_query(q, timeout=None):
                 return [0.1, 0.2]
 
         class FakeRecall:
