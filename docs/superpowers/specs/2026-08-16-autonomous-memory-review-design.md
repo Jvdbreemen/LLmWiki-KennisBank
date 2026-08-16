@@ -115,10 +115,18 @@ surface improves, because today's queue shows no evidence at all.
   the full trap-2 treatment before any code ships, yielding the base rates:
   what fraction of the quarantine is supported / elsewhere-supported / absent.
   Every later gate is calibrated on this.
-- **G1 — promotion precision ≥ 0.95** on that adjudicated sample, judged
-  against the exhaustive verdicts. (The asymmetry is stated: even 0.90 beats a
-  status quo of 100% invisible, but 0.95 is the bar because promotion is
-  autonomous.)
+- **G1 — nothing the exhaustive reading calls `absent` may be promoted.**
+  Resolved after G0 and before any trap-1 code, with the owner's sign-off:
+  the original "precision ≥ 0.95" did not define whether `partial` counts as
+  a miss. G0 measured the quarantine at 0/60 absent, and every one of trap
+  1's 51 `supported` verdicts was confirmed supported-or-partial (51/51,
+  Wilson lower bound 93%) — so the risk the bar existed for (promoting
+  invented facts) measured zero, while the strict reading (88.2%) would only
+  push work to the client LLM. Partials (~12% of promotions) are accepted:
+  a mostly-right memory as a ranked hit beats a correct one that is
+  invisible, `kb-state-audit` catches over-specific claims against config
+  authority, and the audit view shows every promotion with its evidence
+  quote.
 - **G2 — zero false retractions** on the sample, with the dual-reader
   requirement exercised, before the retraction path is enabled anywhere.
 - **G3 — no regression** on the 1224-question memory eval and the freshness
