@@ -21,7 +21,7 @@ correct knowledge held invisible by a capture judge that demands certainty in
 the moment, feeding a review queue with one log line ever. Two thirds of
 everything captured lands here, and none of it can be recalled.
 
-## G1 calibration — trap 1's local verdicts against the exhaustive reading
+## G1 calibration — Trap 1's local verdicts against the exhaustive reading
 
 | trap-1 route | n supported | confirmed supported | confirmed supported-or-partial |
 | --- | --- | --- | --- |
@@ -65,11 +65,11 @@ Trap 1 ran over the full quarantine on 2026-08-16 (kb-verify, one resumable
 run, ~5 hours sharing the GPU with another session):
 
     993 judged -> 859 promoted (86.5%)
-    left for trap 2: 76 unsupported, 28 partial, 20 unparseable, 10 not_found
+    left for Trap 2: `unsupported` 76, `partial` 28, `unparseable` 20, `not_found` 10
 
 G0's base rate predicted 86.7% supported; the full population delivered 86.5%.
 The calibration sample was representative to within two tenths of a point.
-Every promotion carries its evidence quote, route and prompt version in
+Every promotion carries its evidence quote, route, and prompt version in
 `memory-promote-log.jsonl`; exactly 859 files were re-indexed afterwards with
 zero failures.
 
@@ -93,7 +93,7 @@ it matters most, marginally noisier at the tail.
 
 The quarantine's steady state changes shape: the rot warning drops from 993
 to 134, new captures leave quarantine within a sweep cycle via the capped
-pass, and the 134 escalated cases wait for trap 2 — which now has a measured
+pass, and the 134 escalated cases wait for Trap 2 — which now has a measured
 job description: 76 of them are the verdict class that was wrong every time
 it was checked from one passage, which is exactly why only the exhaustive
 client reading may decide them.
