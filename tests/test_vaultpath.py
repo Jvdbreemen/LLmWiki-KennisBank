@@ -13,7 +13,6 @@ test that would have caught the importer scripts shipping to the wrong vault.
 """
 from __future__ import annotations
 
-import importlib.util
 import os
 import sys
 import tempfile
@@ -57,18 +56,15 @@ class TestVaultRootResolver(unittest.TestCase):
         os.environ[_vaultpath.ENV_VAR] = "~/some-vault"
         self.assertEqual(_vaultpath.vault_root(), Path.home() / "some-vault")
 
-    def _load_vaultpath_copy(self, scripts_dir: Path):
-        """Load a copy of the real _vaultpath.py from a constructed tree, so
-        its __file__ points into that layout — the module under test is the
-        real source text, no __file__ monkeypatching."""
-        src = SCRIPTS_DIR / "_vaultpath.py"
-        dst = scripts_dir / "_vaultpath.py"
-        dst.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
-        spec = importlib.util.spec_from_file_location(
-            f"_vaultpath_copy_{id(self)}", dst)
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        return mod
+    def _pretend_located_at(self, script_path: Path):
+        """Point the REAL module's __file__ into a constructed layout for the
+        duration of the test. _script_vault() reads Path(__file__) at call
+        time, so this exercises the genuine code. Deliberately not a temp-dir
+        COPY of the source: coverage would register the copy's path and fail
+        the CI report step once the temp dir is gone ("No source for code")."""
+        old = _vaultpath.__file__
+        _vaultpath.__file__ = str(script_path)
+        self.addCleanup(setattr, _vaultpath, "__file__", old)
 
     def test_checkout_layout_never_treats_repo_parent_as_vault(self):
         """TASK-181: in a checkout, parents[2] is the repo's PARENT (often
@@ -80,8 +76,8 @@ class TestVaultRootResolver(unittest.TestCase):
             (fake_home / ".claude").mkdir(parents=True)
             scripts = fake_home / "repo" / "scripts"
             scripts.mkdir(parents=True)
-            mod = self._load_vaultpath_copy(scripts)
-            self.assertEqual(mod.vault_root(), mod.DEFAULT_VAULT)
+            self._pretend_located_at(scripts / "_vaultpath.py")
+            self.assertEqual(_vaultpath.vault_root(), _vaultpath.DEFAULT_VAULT)
             self.assertIsNone(os.environ.get(_vaultpath.ENV_VAR),
                               "a checkout must not export a vault root")
 
@@ -94,8 +90,8 @@ class TestVaultRootResolver(unittest.TestCase):
                 vault = Path(td).resolve() / "vault"
                 scripts = vault / ".claude" / "scripts"
                 scripts.mkdir(parents=True)
-                mod = self._load_vaultpath_copy(scripts)
-                self.assertEqual(mod.vault_root(), vault)
+                self._pretend_located_at(scripts / "_vaultpath.py")
+                self.assertEqual(_vaultpath.vault_root(), vault)
                 self.assertEqual(os.environ.get(_vaultpath.ENV_VAR), str(vault))
         finally:
             os.environ.pop(_vaultpath.ENV_VAR, None)
@@ -189,8 +185,8 @@ class TestVaultRootResolver(unittest.TestCase):
                 vault = Path(td).resolve() / "vault"
                 scripts = vault / ".claude" / "scripts"
                 scripts.mkdir(parents=True)
-                mod = self._load_vaultpath_copy(scripts)
-                mod.vault_root()  # stamps the env
+                self._pretend_located_at(scripts / "_vaultpath.py")
+                _vaultpath.vault_root()  # stamps the env
                 r = subprocess.run(
                     [sys.executable, "-c",
                      "import os; print(os.environ['KENNISBANK_VAULT'])"],
