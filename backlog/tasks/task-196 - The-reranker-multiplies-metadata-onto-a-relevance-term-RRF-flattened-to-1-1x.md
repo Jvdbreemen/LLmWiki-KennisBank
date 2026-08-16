@@ -61,8 +61,10 @@ two-layer path FTS does run and a doc present in both rankings gets up to 2x —
 the only large relevance signal RRF emits — which is still small against 5.68x.
 
 **The cosine is already there.** `_kbindex.search` computes `cos` via
-`_cosine_from_l2` (its own comment: "Dat is gratis: de afstand komt uit dezelfde
-KNN-query en werd tot nu toe weggegooid"), returns it on every hit, and
+`_cosine_from_l2` — whose own comment says it is free, because the distance
+comes out of the same KNN query and was being thrown away until now (original
+Dutch: "Dat is gratis: de afstand komt uit dezelfde KNN-query en werd tot nu
+toe weggegooid") — returns it on every hit, and
 `kb-recall.recall_hits` carries it through into the dicts `rerank` receives.
 `rerank` reads `h.get("score")` and ignores `h.get("cos")`. The signal with the
 real gradient is computed, carried, and then not used.

@@ -5,7 +5,7 @@ Date: 2026-08-16
 Reviewed: [mackerson/eaves](https://github.com/mackerson/eaves) v0.4.2 at
 `fce7f20` (2026-08-15), read in full on the memory, shadow and channel paths
 Baseline: the v0.32.0 line, after `honcho-memory-architecture.md`,
-`agent-memory-field-review-and-strategy.md` and `narrowed-supersede-2026-08-16`
+`agent-memory-field-review-and-strategy.md` and `narrowed-supersede-2026-08-16.md`
 Question this answers: does Eaves hold anything that makes KennisBank's memory
 work better when several agents use it at the same time?
 
@@ -263,10 +263,12 @@ which is the largest relevance signal RRF can emit and still small against
 5.68x.
 
 The fix does not require importing anything. `_kbindex.search` already computes
-the cosine via `_cosine_from_l2` — its own comment calls it "gratis: de afstand
-komt uit dezelfde KNN-query en werd tot nu toe weggegooid" — already returns it
-on every hit, and `kb-recall.recall_hits` already carries it through to the
-dicts `rerank` receives. `rerank` reads `score` and ignores `cos`. The signal
+the cosine via `_cosine_from_l2` — its own comment calls it free, because the
+distance comes out of the same KNN query and was being thrown away until now
+(in the original Dutch: "Dat is gratis: de afstand komt uit dezelfde KNN-query
+en werd tot nu toe weggegooid") — already returns it on every hit, and
+`kb-recall.recall_hits` already carries it through to the dicts `rerank`
+receives. `rerank` reads `score` and ignores `cos`. The signal
 with the gradient is computed, carried, and dropped one function short of where
 it is needed.
 
