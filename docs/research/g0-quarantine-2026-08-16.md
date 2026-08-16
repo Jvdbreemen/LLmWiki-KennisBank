@@ -57,3 +57,43 @@ double-agreement requirement: a rare act can afford an expensive check.
 
 Trap-1 local pass: 60 memories in 9m11s (qwen3.5:4b + windowed retrieval for
 the unstamped). Client adjudication: 14 agents, ~1.0M tokens, ~8 minutes.
+
+
+## The drain, and gate G3 — added after the backlog run
+
+Trap 1 ran over the full quarantine on 2026-08-16 (kb-verify, one resumable
+run, ~5 hours sharing the GPU with another session):
+
+    993 judged -> 859 promoted (86.5%)
+    left for trap 2: 76 unsupported, 28 partial, 20 unparseable, 10 not_found
+
+G0's base rate predicted 86.7% supported; the full population delivered 86.5%.
+The calibration sample was representative to within two tenths of a point.
+Every promotion carries its evidence quote, route and prompt version in
+`memory-promote-log.jsonl`; exactly 859 files were re-indexed afterwards with
+zero failures.
+
+**G3 — the recall pool grew by 56% (1532 -> 2391 current), measured:**
+
+| metric | 1224-question set | freshness dev, newest | freshness dev, oldest |
+| --- | --- | --- | --- |
+| recall@1 | 0.234 → 0.269 (+0.035) | 0.286 → 0.357 | 0.100 → 0.100 |
+| recall@3 | 0.590 → 0.626 (+0.036) | 0.429 → 0.429 | 0.233 → 0.233 |
+| recall@5 | 0.758 → 0.752 (−0.006) | 0.643 → 0.571 | 0.333 → 0.333 |
+| MRR | 0.427 → 0.453 (+0.026) | | |
+
+Read honestly, both directions: the top-rank gains on the large set come from
+eval-gold memories that were themselves quarantined — those questions could
+not score at all before the drain. The −0.006 at recall@5 (seven questions of
+1224) and the one-question wobble on the 14-question newest slice are
+displacement: 859 new pool members outrank a previous gold occasionally. G3
+was registered without a numeric threshold, so no pass/fail is claimed —
+the numbers are simply here, and the direction is: substantially better where
+it matters most, marginally noisier at the tail.
+
+The quarantine's steady state changes shape: the rot warning drops from 993
+to 134, new captures leave quarantine within a sweep cycle via the capped
+pass, and the 134 escalated cases wait for trap 2 — which now has a measured
+job description: 76 of them are the verdict class that was wrong every time
+it was checked from one passage, which is exactly why only the exhaustive
+client reading may decide them.
