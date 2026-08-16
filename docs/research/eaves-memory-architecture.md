@@ -30,12 +30,13 @@ The three findings, in descending order of value:
    memory-health notice, no distillation notice, no orientation and no
    upstream warning. This is ours, not Eaves' — asking their question of our
    code is what surfaced it. **TASK-195.**
-2. **Weighted min-max fusion instead of RRF.** Eaves fuses its lexical and
-   semantic arms by weight, not by rank, and renormalises the weights onto
-   whichever arms actually fired. That is precisely the mechanism that would
-   have let the memory layer keep a lexical arm at a small weight, instead of
-   `_kbindex.py` having to delete it because RRF weighs a weak ranking equally
-   with a strong one. Eval-gated. **TASK-196.**
+2. **Our reranker multiplies metadata onto a relevance term RRF has
+   flattened.** Checking Eaves' criticism of RRF against our code turned up
+   more than a fusion choice: on a top-8 memory recall the RRF relevance spread
+   is 1.12x while the six `_rank.py` multipliers span 5.68x, so recency alone
+   outweighs the entire relevance ordering. The cosine that carries the real
+   gradient is already computed and already returned on every hit — and
+   `rerank` ignores it. **TASK-196.**
 3. **A working-state tier that is held, not retrieved.** Eaves keeps small,
    always-in-context, agent-edited core-memory blocks alongside the searchable
    archive. KennisBank has the archive and the retrieval, and its only
@@ -223,45 +224,71 @@ small block, hard character cap, written by the existing off-hot-path sweep,
 injected at SessionStart, no retrieval and no index. If it needs a rank factor,
 it has become something else and the task is wrong.
 
-## Queued behind a measurement
+## Adopted, pending measurement
 
-### TASK-196 — weighted fusion versus RRF
+### TASK-196 — the relevance term is flattened, and the fix is already in the row
 
-The sharpest technical idea in the repository, and it lands on a decision we
-have already made and measured.
+The sharpest outcome of the review, and it is not a thing to copy — it is a
+thing their comment made us go and check.
 
-`_kbindex.py` fuses its arms with RRF and, on the memory layer, has had to drop
-the lexical arm entirely. The comment there is precise about why: "RRF weighs
-both rankings equally, which pays off only when they are comparably strong: a
-weak ranking pushes good hits out of the top k." On wiki the arms are close and
-fusion beats both; on memory they differ by nearly a factor two in MRR and
-fusion beat neither, so it was removed (TASK-128,
-`embedding-model-sweep-2026-08.md`).
+Eaves' `fuseScores` carries this justification: RRF "keeps only rank and, on a
+small corpus, collapses every hit into a ~0.03 blur", while weighted min-max
+"preserves the gradient". The obvious reading here was that this bears on
+TASK-128, where the memory layer's lexical arm was measured worthless and
+removed. The larger consequence is downstream.
 
-Eaves' `fuseScores` does not have that failure mode. It min-max normalises each
-signal within the candidate pool, weights them (`SEMANTIC_WEIGHT = 0.65`), and
-— the part that matters — renormalises the weights onto whichever signals
-actually fired, so a query that only hits one arm still tops out near 1.0
-instead of being scaled down by its weight. Their own comment names the
-motivation exactly: RRF "keeps only rank and, on a small corpus, collapses
-every hit into a ~0.03 blur", while weighted min-max "preserves the gradient".
+`_kbindex.search` emits `score = 1/(60 + rank)`. `_rank.rerank` multiplies that
+by recency x importance x trust x usage x noise x coupling. The two ranges do
+not meet:
 
-So the question TASK-128 could not ask is now askable: **is the memory layer's
-lexical arm worthless, or was it only worthless at equal weight?** A literal
-term match is an independent relevance signal — our own `min_cos` code path
-says so, letting FTS hits bypass the cosine floor — and dropping the arm threw
-that signal away along with the fusion that mishandled it.
+| term | spread |
+|---|---|
+| RRF relevance, top-5 | 1.07x |
+| RRF relevance, top-8 | 1.12x |
+| RRF relevance, top-20 | 1.32x |
+| recency alone | 1.67x |
+| all six multipliers combined | 5.68x |
 
-One caveat from their code carries over unchanged, and it is the reason this is
-eval-gated rather than adopted: min-max is intra-query relative, never
-cross-query calibrated. The best item in any pool lands near 1.0 even when the
-query is off-topic. So the fused score can order results and express confidence
-*within* one result set, and can never become a `score > X` gate. Our `min_cos`
-floor stays on the cosine, exactly where it is now.
+On a top-8 memory recall, recency alone outweighs the entire relevance
+ordering, and the six factors together outweigh it by roughly five to one. A
+rank-7 hit that is fresh, important and recently used displaces the rank-0 hit
+by construction. The reranker is not reweighting relevance on the memory layer;
+it is substantially replacing it.
 
-Winner rule as usual: it flips only if it beats the current default on the
-frozen eval set. If it does not, the finding is that the arm really is
-worthless on short atomic fragments, which is worth knowing too.
+Two honest qualifications. With one arm — the memory layer's configuration
+since TASK-128 — RRF is a monotone transform of the vector ranking, so the
+order going *into* `rerank` is right; only its magnitude is gone. And in the
+two-layer path FTS does run, so a document in both rankings earns up to 2x,
+which is the largest relevance signal RRF can emit and still small against
+5.68x.
+
+The fix does not require importing anything. `_kbindex.search` already computes
+the cosine via `_cosine_from_l2` — its own comment calls it "gratis: de afstand
+komt uit dezelfde KNN-query en werd tot nu toe weggegooid" — already returns it
+on every hit, and `kb-recall.recall_hits` already carries it through to the
+dicts `rerank` receives. `rerank` reads `score` and ignores `cos`. The signal
+with the gradient is computed, carried, and dropped one function short of where
+it is needed.
+
+So: use the cosine as the relevance term on the single-arm memory path, and
+reach for Eaves' weighted min-max only on the two-arm wiki path, where a fused
+score is genuinely required. Their caveat carries over unchanged and is why the
+`min_cos` floor stays on the raw cosine: min-max is intra-query relative, never
+cross-query calibrated, so neither a normalised nor a fused score may become a
+`score > X` gate.
+
+This reopens two closed questions. TASK-128 could not distinguish "the lexical
+arm is worthless" from "equal weight is wrong", because RRF has no weights.
+And TASK-160 warned that the eval set "structurally favours similarity and
+penalises recency and importance" — while the arithmetic above says production
+carries the opposite bias. Both can hold at once, and together they mean the
+factor defaults were tuned against a metric tilted the other way from the
+system it was tuning.
+
+The spread table is arithmetic and needs no vault. The cosine's spread across a
+real candidate pool does, and it is the first thing to measure: if the cosine is
+nearly as flat as the RRF score on this corpus, the finding weakens a lot, and
+that should be said plainly rather than worked around.
 
 ## Rejected, with reasons
 
@@ -294,6 +321,38 @@ for ours — see TASK-197.
 **Everything about channels.** No agent-to-agent messaging here, so no loop
 budget needed. The generalisable half — a storage event must never authorise
 work — is already the shape of TASK-183.
+
+## Checked and deliberately not filed
+
+Two ideas that looked adoptable, were measured, and did not survive the
+measurement. Recorded so the next review does not re-derive them.
+
+**Deferred tool schemas.** `toolDeferral.ts` keeps expensive, rarely-called
+tools off the wire until something enables them, on the reasoning that "tool
+schemas are resent on every step of every turn". They measured ~7,400 tokens of
+tool schema against a 151-token system prompt — about 88% of each step's input.
+Measuring `kb-mcp.py` the same way: 8 tools, **5,947 characters ≈ 1,486 tokens**
+of tool surface, plus ~200 for `instructions=`. Of that, the temporal family
+(`what_did_i_do`, `timeline`, `weeklog`, `topic_timeline`) is 54% and the review
+family (`review_pending`, `review_decide`) is 21% — so ~75% goes to tools used
+in a deliberate minority of turns, which is exactly their deferral criterion.
+
+It still does not transfer. Their mechanism works because they own the agent
+loop and can withhold a registered tool from a step. An MCP server does not own
+its client's loop; the client decides what to put in front of the model. What
+is left is collapsing the temporal family into fewer tools, which trades ~400
+tokens against a model's ability to pick the right one — a real cost, on the
+retrieval path, for a fifth of what Eaves was paying. Not worth a task until
+something says the tool surface is actually hurting.
+
+**A live "what is running right now" registry.** `ActiveWorkRegistry` exists
+because "the activity log answers what happened; nothing answered what is
+happening", with live state scattered across five private maps. KennisBank has
+the same shape — `_activity.py` answers what happened, `agent-status.py`
+answers what is *installed*, and nothing answers what is running. But we have
+exactly one long-running thing (the index/sweep worker), `memory-notify.py`
+already reads its lock via `_worker_running()`, and TASK-183 covers the one real
+coordination defect. A registry for a single worker is ceremony. KISS says no.
 
 ## What this says about KennisBank's position
 
