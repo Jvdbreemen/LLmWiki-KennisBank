@@ -76,7 +76,33 @@ Geheugensystemen van leveranciers (Mem0, Zep, Letta, Cognee) zijn krachtig maar 
 
 De ontwerpvoorkeur is overal dezelfde: **deterministisch waar mogelijk, LLM alleen waar het oordeelsvermogen toevoegt, fail-open overal**. Een dood model blokkeert nooit een sessie, verliest nooit een transcript, en verwijdert nooit geverifieerde kennis.
 
-## Functie-highlights (v0.32.0)
+## Functie-highlights (v0.33.0)
+
+### Nieuw in v0.33.0
+
+De mens verlaat de geheugenlus.
+
+**Gequarantineerde memories reviewen zichzelf.** Drie vangnetten, elk
+gepoort door vooraf geregistreerde metingen: het lokale model promoveert wat
+het eigen brontranscript van een memory ondersteunt (nooit gefabuleerd in
+210 controles); de client-LLM beoordeelt hele transcripts voor de rest —
+achter een expliciete `auto_review_llm`-toggle, standaard UIT, want dat is
+cloud; intrekken vergt dubbele overeenstemming plus een mislukte
+weerlegging, begrensd en omkeerbaar. Eerste echte run: 993 gequarantineerde
+memories teruggebracht tot 42, recall@1 +0.035.
+
+**`/kennisbank:review` is nu een audit-view**, geen werkwachtrij: wat het
+systeem besloot, op welk bewijs, met terugdraaien per regel (`demote` /
+`reopen`). Geen stap wacht op een mens.
+
+**Een golf stil-falende defecten is weg**, elk adversarieel geverifieerd
+vóór de fix: een checkout die de vault naar `$HOME` resolvede, één
+env-var-typfout die retrieval voor elke sessie uitschakelde, een
+sweep-fallback die nul memories schreef, een default-modelflip waarvan de
+doctor-check valse geruststelling gaf, een lock-race die twee indexbouwers
+tegelijk draaide, FTS-rijen die een cap-fix nooit bereikte, en memories
+beoordeeld met de embedding van hun vorige inhoud. De open backlog ging
+naar nul, elke taak met zijn bewijs of zijn parkeer-reden.
 
 ### Nieuw in v0.32.0
 
