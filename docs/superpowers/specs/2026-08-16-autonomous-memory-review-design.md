@@ -29,7 +29,7 @@ Two consequences fix the design's priorities:
 | --- | --- | --- |
 | `supported` verdicts never fabricate their evidence | 0 fabricated quotes / 210, CI 0–1.8% | TASK-163 |
 | grounded verification is deterministic | 56/56 same-run, 11/11 cross-run | TASK-163 |
-| `unsupported` from one passage is wrong about half the time | 0/20 confirmed on exhaustive adjudication | TASK-163 |
+| `unsupported` from one passage was never right when checked | 0 of 20 confirmed on exhaustive adjudication | TASK-163 |
 | whole-transcript adjudication by the client LLM survives adversarial review | 0 refuted / 27, and 0 / 40 | TASK-161/163 |
 | the extractor does not invent facts | 0 confirmed inventions in every exhaustive check | TASK-163 |
 | passage coverage without a stamp | 87.8% (windowed retrieval) | TASK-163 |
@@ -52,8 +52,9 @@ this passage say this?* — against its own source:
   cosine), 87.8% measured coverage.
 
 Verdict `supported` → **promote to current**, logged with prompt version.
-Anything else → escalate. Never demote here: that verdict class was measured
-wrong half the time.
+Anything else → escalate. Never demote here: of the twenty `unsupported`
+verdicts this session adjudicated exhaustively, not one survived — a single
+passage cannot distinguish a retrieval miss from a false memory.
 
 Cost: one local LLM call per memory (~6–8s). The backlog is ~2 hours of GPU;
 the steady state is ~40 memories per sweep, minutes, off the hot path.

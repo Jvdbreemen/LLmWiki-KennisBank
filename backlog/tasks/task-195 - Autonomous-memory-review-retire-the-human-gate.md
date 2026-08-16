@@ -27,7 +27,7 @@ Build order is in the design; each step lands separately. `/kennisbank:review` e
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [ ] #1 G0 runs before any product code: a stratified 60-case quarantine sample, exhaustively adjudicated, with the base rates written down
-- [ ] #2 Gates G1-G3 are committed with their numbers before the code that they gate produces any
+- [ ] #2 Gates G1-G3 are committed with their thresholds before the gated code produces its first measurement
 - [ ] #3 Trap 1 (grounded promotion) is local-only, runs as a sweep pass, and promotes nothing below the registered precision bar
 - [ ] #4 Traps 2 and 3 sit behind auto_review_llm, default OFF in the shipped repo
 - [ ] #5 A retraction requires two independent methods plus a failed refutation, is capped per run, logs both verdicts, and reverses with one reopen()
