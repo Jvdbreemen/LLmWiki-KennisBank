@@ -27,12 +27,14 @@ sys.path.insert(0, str(SCRIPTS))
 from _frontmatter import parse_frontmatter  # noqa: E402
 
 # _groundcheck (and through it _embeddings) is imported INSIDE setUp, after
-# KENNISBANK_VAULT points at the test's temp vault. _embeddings freezes
-# CACHE_FILE at import time, and on a machine whose profile exports
-# KENNISBANK_VAULT a module-level import here freezes it onto the REAL vault's
-# multi-megabyte embeddings cache -- which every later sweep test then parses
+# KENNISBANK_VAULT points at the test's temp vault. _embeddings USED to freeze
+# its cache path at import time; on a machine whose profile exports
+# KENNISBANK_VAULT a module-level import here froze it onto the REAL vault's
+# multi-megabyte embeddings cache -- which every later sweep test then parsed
 # on each maintenance pass. Measured: the combined groundcheck+sweep run went
-# from 2s to 14 minutes on exactly that. Import order is load-bearing.
+# from 2s to 14 minutes on exactly that. Root-caused since (TASK-196):
+# _embeddings.cache_file() resolves per call. The lazy import stays as
+# defense-in-depth against the next import-time constant.
 
 
 def _mods():

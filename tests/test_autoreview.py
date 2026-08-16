@@ -8,10 +8,11 @@ run at all while `auto_review_llm` is off, because bundles exist to be read by
 a client LLM and that is cloud.
 
 Vault-dependent imports happen inside setUp, after the env points at a temp
-vault: at module level they would freeze _embeddings.CACHE_FILE onto the
-real vault during collection and tax every later test (TASK-196, measured
-at 835s). _frontmatter is the exception below — pure parsing, no vault
-state, safe at collection time.
+vault: at module level they froze the embeddings cache path onto the real
+vault during collection and taxed every later test (TASK-196, measured at
+835s; root-caused since — _embeddings.cache_file() now resolves per call).
+_frontmatter is the exception below — pure parsing, no vault state, safe at
+collection time.
 """
 from __future__ import annotations
 

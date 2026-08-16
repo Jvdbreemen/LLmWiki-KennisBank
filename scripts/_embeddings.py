@@ -60,7 +60,17 @@ _DEFAULTS = {
     "voyage": {"endpoint": "https://api.voyageai.com/v1", "model": "voyage-3"},
 }
 
-CACHE_FILE = vault_root() / ".claude" / "embeddings-cache.json"
+def cache_file() -> Path:
+    """The embeddings cache path, resolved at CALL time — deliberately not a
+    module constant (TASK-196). Frozen at import, the path captured whatever
+    KENNISBANK_VAULT happened to hold when the module was FIRST imported
+    anywhere in the process. Under pytest that is collection time, before any
+    setUp points the env at a temp vault — so on a machine whose profile
+    exports the real vault, every later load_cache() parsed the real
+    multi-megabyte cache (measured: 2s -> 835s for two test files, purely on
+    import order). Per-call resolution is an env read plus a Path join;
+    load_cache()'s JSON parse dwarfs it."""
+    return vault_root() / ".claude" / "embeddings-cache.json"
 
 #: Ollama allocates its KV cache from the context size, not from the document
 #: length, so an embedding model loads far larger than its weights. Measured on
@@ -312,7 +322,7 @@ def embed(text: str, timeout: float = 30.0, kind: str = ""):
 # prompt is hot, without ever waiting.
 
 def _warm_marker() -> Path:
-    return CACHE_FILE.parent / ".embed-warm.marker"
+    return cache_file().parent / ".embed-warm.marker"
 
 
 def _pid_alive(pid: int) -> bool:
@@ -423,7 +433,7 @@ def warm_async(min_interval: float = 60.0) -> None:
     pileup (one prompt per minute at worst). Silent and fail-open throughout.
 
     The child re-runs this module with --warm; it inherits the parent env so
-    vault_root() (evaluated at import for CACHE_FILE) resolves. Callers on the
+    vault_root() (evaluated per call by cache_file()) resolves. Callers on the
     hot path must ensure KENNISBANK_VAULT is set before invoking this."""
     try:
         import time as _time
@@ -467,7 +477,7 @@ def warm_async(min_interval: float = 60.0) -> None:
 
 def load_cache() -> dict:
     try:
-        return json.loads(CACHE_FILE.read_text(encoding="utf-8"))
+        return json.loads(cache_file().read_text(encoding="utf-8"))
     except Exception:
         return {}
 
@@ -482,11 +492,12 @@ def save_cache(cache: dict) -> None:
     permanent tot een no-op maken. Aanroepers schrijven alleen als er
     daadwerkelijk iets is toegevoegd of gesnoeid.
     """
-    CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    tmp = CACHE_FILE.with_name(f"{CACHE_FILE.name}.{os.getpid()}.tmp")
+    cf = cache_file()
+    cf.parent.mkdir(parents=True, exist_ok=True)
+    tmp = cf.with_name(f"{cf.name}.{os.getpid()}.tmp")
     try:
         tmp.write_text(json.dumps(cache, indent=2, ensure_ascii=False), encoding="utf-8")
-        os.replace(tmp, CACHE_FILE)
+        os.replace(tmp, cf)
     finally:
         if tmp.exists():
             tmp.unlink(missing_ok=True)
