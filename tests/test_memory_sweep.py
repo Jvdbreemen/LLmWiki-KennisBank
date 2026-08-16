@@ -86,6 +86,31 @@ class MemorySweepTest(unittest.TestCase):
         # tweede run verwerkt niets nieuws (watermark)
         self.assertEqual(self.m.run_sweep()["processed"], 0)
 
+    def test_partial_deploy_fallback_still_writes(self):
+        # TASK-180: without _reconcile (partial deploy) the fallback must
+        # still ADD candidates. Regression: the fallback lambda lacked
+        # new_volatility -> TypeError per transcript -> 0 written, only an
+        # error counter, and the sweep wedged the same way every run.
+        had = "_reconcile" in sys.modules
+        orig = sys.modules.get("_reconcile")
+        # None in sys.modules makes the call-time `import _reconcile` in
+        # run_sweep raise ImportError -- same effect as a missing file.
+        sys.modules["_reconcile"] = None
+
+        def _restore():
+            if had:
+                sys.modules["_reconcile"] = orig
+            else:
+                sys.modules.pop("_reconcile", None)
+        self.addCleanup(_restore)
+
+        summary = self.m.run_sweep()
+        self.assertEqual(summary.get("errors", 0), 0)
+        self.assertEqual(summary.get("written"), 1)
+        mems = list((self.vault / "09-memory").glob("*.md"))
+        self.assertEqual(len(mems), 1)
+        self.assertIn("status: current", mems[0].read_text(encoding="utf-8"))
+
     def test_doubt_writes_unverified(self):
         self._judge.judge = lambda cand, context="": {"verdict": "unverified", "reason": "vaag"}
         self.m.run_sweep()

@@ -372,7 +372,12 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
         _reconcile_fn = _reconcile.reconcile
         pool = _mnt_pool.current_items(statuses=("current", "unverified"))
     except Exception:
-        _reconcile_fn = lambda body, vf, vec, items: {"action": "ADD", "supersedes": []}  # noqa: E731
+        # Star-args on purpose: the fallback's contract is "always ADD,
+        # never supersede" regardless of inputs. A fixed parameter list here
+        # is how TASK-180 happened — reconcile() grew new_volatility, the
+        # callsite passed it, and the fallback raised TypeError on every
+        # candidate: zero writes, only an error counter.
+        _reconcile_fn = lambda *_a, **_k: {"action": "ADD", "supersedes": []}  # noqa: E731
         pool = []
 
     # Eén balk over de transcripts -- de eenheid die de gebruiker kent ("54
