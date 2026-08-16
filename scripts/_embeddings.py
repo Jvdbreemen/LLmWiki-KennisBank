@@ -55,8 +55,16 @@ from _common import env_int  # noqa: E402
 from _frontmatter import split_frontmatter  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402
 
+#: The one authoritative spelling of the default local embed model. The judge
+#: model has the same pattern (_copilot.KB_LLM_MODEL_DEFAULT) for the same
+#: reason: the v0.28.0 default flip (8b -> 4b) left bare literals drifting in
+#: three writers and a stale :8b in doctor.sh, which then reported the OLD
+#: model as "installed" — false assurance on exactly the vaults whose recall
+#: had gone dark (TASK-182).
+OLLAMA_DEFAULT_EMBED_MODEL = "qwen3-embedding:4b"
+
 _DEFAULTS = {
-    "ollama": {"endpoint": "http://localhost:11434", "model": "qwen3-embedding:4b"},
+    "ollama": {"endpoint": "http://localhost:11434", "model": OLLAMA_DEFAULT_EMBED_MODEL},
     "openai": {"endpoint": "https://api.openai.com/v1", "model": "text-embedding-3-small"},
     "voyage": {"endpoint": "https://api.voyageai.com/v1", "model": "voyage-3"},
 }
@@ -539,6 +547,12 @@ def get_cached(path, cache: dict, recompute: bool = True):
 
 
 if __name__ == "__main__":
+    if "--print-model" in sys.argv:
+        # Shell callers (doctor.sh, setup.sh) resolve the ACTIVE model through
+        # the one config chain (env > kennisbank-embed.json > default) instead
+        # of hardcoding a literal that goes stale on the next default flip.
+        print(_resolve()[1])
+        sys.exit(0)
     # Detached warm entrypoint (see warm_async). Loads the model, then exits.
     # Never raises: this runs unattended and must not spew.
     if "--warm" in sys.argv:

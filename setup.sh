@@ -452,6 +452,20 @@ if command -v python3 >/dev/null 2>&1 && [ -f "$VAULT/.claude/scripts/build-acti
     || echo "  activity-index niet opgebouwd; doctor meldt de herstelactie." >&2
 fi
 
+# Pull the resolved embed model up front when it is missing, so the validate
+# step below verifies a model that exists instead of failing on a default
+# flip nobody migrated (TASK-182: the v0.28.0 8b -> 4b flip shipped with zero
+# `ollama pull` anywhere in setup). Resolves through the config chain, so a
+# vault that pins a model in kennisbank-embed.json pulls THAT model — and a
+# pull failure only announces; validate_models still fails loudly after it.
+if [ "$SKIP_MODEL_CHECK" != "1" ] && command -v ollama >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
+  EMBED_MODEL="$(KENNISBANK_VAULT="$VAULT" python3 "$SCRIPT_DIR/scripts/_embeddings.py" --print-model 2>/dev/null)"
+  if [ -n "$EMBED_MODEL" ] && ! ollama list 2>/dev/null | grep -qF "$EMBED_MODEL"; then
+    echo "  Embedmodel $EMBED_MODEL ontbreekt; ollama pull gestart (~GB's, eenmalig)..."
+    ollama pull "$EMBED_MODEL" || echo "  WAARSCHUWING: ollama pull $EMBED_MODEL mislukte; de validatie hieronder meldt dit hard." >&2
+  fi
+fi
+
 # Agent-integraties (Codex/OpenCode) en harde post-install validatie. Dit is
 # idempotent en bedoeld voor zowel initiële installatie als upgrades.
 if command -v python3 >/dev/null 2>&1; then

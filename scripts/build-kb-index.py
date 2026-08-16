@@ -156,7 +156,13 @@ def main(rebuild: bool = False) -> None:
     # Probe EERST: bij mislukking de bestaande index NIET wissen.
     probe = emb.embed("dimensie-probe")
     if not probe:
-        print("kb-index: embedmodel onbereikbaar, overgeslagen", file=sys.stderr)
+        # One line, but a complete one: name the backend and the remedy. The
+        # bare "onbereikbaar" hid the difference between Ollama-down and
+        # model-never-pulled for weeks after the default flip (TASK-182).
+        print(f"kb-index: embed-backend {eid} gaf geen vector (model niet "
+              f"gepulled of Ollama down); bestaande index blijft staan. "
+              f"Herstel: ollama pull <model> en draai met --rebuild",
+              file=sys.stderr)
         return
     if rebuild and idx.exists():
         idx.unlink()

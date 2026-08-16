@@ -107,6 +107,20 @@ def is_valid_for(conn: sqlite3.Connection, embed_id: str) -> bool:
     return meta_get(conn, "embed_id") == embed_id
 
 
+def embed_mismatch(conn: sqlite3.Connection, live_id: str) -> "tuple | None":
+    """(stored, live) when the index was built with a DIFFERENT embed backend
+    than the live one; None when they match or the index carries no stamp.
+
+    This is the condition under which recall_hits returns [] without a word —
+    is_valid_for gates it silently. doctor.sh renders this tuple as a warning
+    with the remedy, so a default flip without a migration (the v0.28.0
+    8b -> 4b flip, TASK-182) is VISIBLE instead of just dark."""
+    stored = meta_get(conn, "embed_id")
+    if not stored or stored == live_id:
+        return None
+    return (stored, live_id)
+
+
 def set_unit_norm(conn: sqlite3.Connection, ok: bool) -> None:
     """Markeer of de opgeslagen vectoren genormaliseerd zijn.
 

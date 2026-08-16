@@ -126,13 +126,14 @@ De graph-update zit in Stap 2 item 5 als DAGELIJKSE BATCH om tokens te sparen: e
 
 ## Stap 4: Semantische deduplicatie (tiling)
 
-Check of het embedding-model beschikbaar is (default `qwen3-embedding:8b`, meertalig; `nomic-embed-text` is de lichtere Engels-only fallback):
+Check of het ACTIEVE embedding-model beschikbaar is — bepaal het via de configuratieketen, niet via een vaste naam (de default is eerder geflipt terwijl commands de oude naam bleven noemen):
 ```bash
-ollama list 2>/dev/null | grep -E 'qwen3-embedding|nomic-embed-text'
+EMBED_MODEL=$(python3 "$VAULT/.claude/scripts/_embeddings.py" --print-model)
+ollama list 2>/dev/null | grep -F "$EMBED_MODEL"
 ```
-Als niet beschikbaar: sla over, rapporteer installatie-instructie (`ollama pull qwen3-embedding:8b`).
+Als niet beschikbaar: sla over, rapporteer installatie-instructie (`ollama pull $EMBED_MODEL`).
 Als beschikbaar: python3 $VAULT/.claude/scripts/semantic-tiling.py [pad-naar-artikel]
-- >= 0.85: mogelijke duplicaat (error)  ← drempels voor default `qwen3-embedding:8b`
+- >= 0.85: mogelijke duplicaat (error)  ← drempels voor de qwen3-embedding-familie
 - 0.62–0.84: verwant (review)
 (nomic-embed-text spreidt hoger: gebruik dan 0.90 / 0.80, zie CONFIGURATION.md)
 
@@ -185,7 +186,7 @@ python3 "$VAULT/.claude/scripts/kb-checkpoint.py" --done
 ## Bevestiging
 - Pad naar het geschreven sessie-log
 - Welke wiki-artikelen nieuw of bijgewerkt zijn
-- Tiling-resultaten (of "overgeslagen — installeer qwen3-embedding:8b")
+- Tiling-resultaten (of "overgeslagen — installeer het actieve embedmodel")
 - Welke learnings-entries toegevoegd zijn (of "overgeslagen — geen learnings-bestand geconfigureerd")
 - Het ene resultaat van `kb-session-log.py` (alleen wijzigingen of acties)
 - Als Decision Log entries aanwezig: overweeg of deze beslissingen een ADR (Architecture Decision Record) verdienen in het betreffende project. Als je een /adr workflow gebruikt: draai die nu.
