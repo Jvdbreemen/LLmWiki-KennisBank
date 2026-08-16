@@ -166,8 +166,9 @@ def select_passage(claim: str, chunks: list) -> str:
 def verify_grounded(body: str, chunks: list, stamp: str = "") -> dict:
     """One grounded verdict for a memory body against its transcript chunks.
 
-    Returns {"verdict", "reason", "route"}; verdict is one of VERDICTS or
-    "unparseable". Only "supported" may promote; the caller enforces that.
+    Returns {"verdict", "reason", "route"}; verdict is one of VERDICTS,
+    "unparseable", or "no_transcript" when no passage could be produced at
+    all. Only "supported" may promote; the caller enforces that.
     """
     exact = _memory.chunk_from_stamp(stamp, chunks) if stamp else None
     if exact:

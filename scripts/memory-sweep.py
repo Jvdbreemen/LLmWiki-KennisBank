@@ -526,10 +526,10 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
         _run_pass(s, "superseded", _mnt.supersede_pass)
         _run_pass(s, "rechecked_retracted", _mnt.recheck_pass)
         _run_pass(s, "promote_marked", _mnt.cluster_promote_pass)
-        # Trap 1 van de autonome review (TASK-195): unverified memories waarvan
-        # de eigen bron ze draagt worden gepromoveerd. Alleen 'supported'
-        # promoveert; niets wordt hier ooit gesloten. Gecapt per run zodat de
-        # sweep-staart begrensd blijft; de backlog draint via kb-verify.py.
+        # Trap 1 of the autonomous review (TASK-195): unverified memories that
+        # their own source supports get promoted. Only 'supported' promotes;
+        # nothing is ever closed here. Capped per run so the sweep's tail stays
+        # bounded; the backlog drains through kb-verify.py.
         try:
             import _groundcheck
             _run_pass(s, "verified_promoted", _groundcheck.verify_pass)

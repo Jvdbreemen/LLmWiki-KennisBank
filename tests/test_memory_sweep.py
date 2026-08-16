@@ -54,6 +54,13 @@ class MemorySweepTest(unittest.TestCase):
         # for existing 09-memory files — ensures dedup test exercises the path.
         emb.get_cached = lambda f, cache, recompute=True: [0.1, 0.2, 0.3]
         self.emb, self._extract, self._judge = emb, _extract, _judge
+        # Trap 1 (TASK-195) has its own test file; inside the sweep tests it is
+        # a stub, so a groundcheck regression cannot masquerade as a sweep one
+        # and the sweep tests stay hermetic (no path to real LLM/embed calls).
+        import _groundcheck
+        self._orig_verify_pass = _groundcheck.verify_pass
+        _groundcheck.verify_pass = lambda *a, **k: 0
+        self._groundcheck = _groundcheck
 
     def tearDown(self):
         import shutil
@@ -63,6 +70,7 @@ class MemorySweepTest(unittest.TestCase):
          self.emb.get_cached) = self._orig
         self._llm.generate = self._orig_generate
         self._ss.transcript_text = self._orig_transcript_text
+        self._groundcheck.verify_pass = self._orig_verify_pass
         if self._saved is None:
             os.environ.pop("KENNISBANK_VAULT", None)
         else:

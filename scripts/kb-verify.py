@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import os
 import sys
-from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _groundcheck  # noqa: E402
@@ -52,10 +51,10 @@ def main(argv=None) -> int:
             max_n = None
 
     if not _settings.get("memory_capture", True):
-        print("kb-verify: memory_capture staat uit; niets te doen")
+        print("kb-verify: memory_capture is off; nothing to do")
         return 0
     if not (_llm.generate("ping") and emb.embed("ping")):
-        print("kb-verify: model of embedding-backend onbereikbaar", file=sys.stderr)
+        print("kb-verify: model or embedding backend unreachable", file=sys.stderr)
         return 1
 
     v = vault_root()
@@ -96,8 +95,8 @@ def main(argv=None) -> int:
                                    prompt_version=_groundcheck.VERIFY_PROMPT_VERSION):
                     tally["promoted"] += 1
 
-    mode = " (dry-run, niets geschreven)" if dry else ""
-    print(f"kb-verify{mode}: {len(todo)} beoordeeld -> " +
+    mode = " (dry-run, nothing written)" if dry else ""
+    print(f"kb-verify{mode}: {len(todo)} judged -> " +
           ", ".join(f"{k} {v}" for k, v in tally.most_common()))
     return 0
 

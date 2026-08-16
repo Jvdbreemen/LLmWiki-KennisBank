@@ -13,7 +13,6 @@ the maintenance machinery made for cause.
 """
 from __future__ import annotations
 
-import importlib
 import json
 import os
 import shutil
@@ -25,9 +24,21 @@ from pathlib import Path
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-import _groundcheck  # noqa: E402
-import _memory  # noqa: E402
 from _frontmatter import parse_frontmatter  # noqa: E402
+
+# _groundcheck (and through it _embeddings) is imported INSIDE setUp, after
+# KENNISBANK_VAULT points at the test's temp vault. _embeddings freezes
+# CACHE_FILE at import time, and on a machine whose profile exports
+# KENNISBANK_VAULT a module-level import here freezes it onto the REAL vault's
+# multi-megabyte embeddings cache -- which every later sweep test then parses
+# on each maintenance pass. Measured: the combined groundcheck+sweep run went
+# from 2s to 14 minutes on exactly that. Import order is load-bearing.
+
+
+def _mods():
+    import _groundcheck
+    import _memory
+    return _groundcheck, _memory
 
 
 class PromoteTest(unittest.TestCase):
@@ -38,14 +49,14 @@ class PromoteTest(unittest.TestCase):
         (self.vault / ".claude").mkdir(parents=True)
         self._saved = os.environ.get("KENNISBANK_VAULT")
         os.environ["KENNISBANK_VAULT"] = str(self.vault)
-        importlib.reload(sys.modules["_vaultpath"])
+        global _groundcheck, _memory
+        _groundcheck, _memory = _mods()
 
     def tearDown(self):
         if self._saved is None:
             os.environ.pop("KENNISBANK_VAULT", None)
         else:
             os.environ["KENNISBANK_VAULT"] = self._saved
-        importlib.reload(sys.modules["_vaultpath"])
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def _write(self, stem, status):
@@ -92,7 +103,9 @@ class VerifyPassTest(unittest.TestCase):
         (self.vault / ".claude").mkdir(parents=True)
         self._saved = os.environ.get("KENNISBANK_VAULT")
         os.environ["KENNISBANK_VAULT"] = str(self.vault)
-        importlib.reload(sys.modules["_vaultpath"])
+
+        global _groundcheck, _memory
+        _groundcheck, _memory = _mods()
 
         (self.vault / "01-raw" / "transcripts" / "s1.jsonl").write_text(
             json.dumps({"type": "user", "message": {
@@ -109,7 +122,6 @@ class VerifyPassTest(unittest.TestCase):
             os.environ.pop("KENNISBANK_VAULT", None)
         else:
             os.environ["KENNISBANK_VAULT"] = self._saved
-        importlib.reload(sys.modules["_vaultpath"])
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def _mem(self, stem, status="unverified", created="2026-08-01",
@@ -194,6 +206,10 @@ class VerifyPassTest(unittest.TestCase):
 
 
 class PromptContractTest(unittest.TestCase):
+    def setUp(self):
+        global _groundcheck, _memory
+        _groundcheck, _memory = _mods()
+
     def test_the_prompt_is_the_validated_one(self):
         """Byte-level anchors of the prompt 210 checked verdicts validated.
         Change the prompt -> bump the version, or every promote-log line lies
