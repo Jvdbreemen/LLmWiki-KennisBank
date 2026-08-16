@@ -38,3 +38,9 @@ NOT PROVEN, and deliberately not attempted: server/discover, the required result
 
 Also recorded rather than smoothed over: the earlier brief contained three claims that the verification pass refuted - mcp 2.0.0 does have field time (a seven-week public pre-release train; the real gap is zero post-GA patches), GitHub Copilot DOES support MCP resources on both surfaces (the opposite claim lived in kb-mcp.py and README.md and was the stated justification for the instructions= work, now corrected in the source), and DiscoverResult.instructions is unreachable in every client inspected, so the copilot-instructions duplication stays.
 <!-- SECTION:NOTES:END -->
+
+## Close-out (2026-08-16) — superseded
+
+The provable half shipped: the legacy-era wire evidence is stored in docs/superpowers/plans/mcp-2026-07-28-evidence.md, permanently asserted by tests/test_kb_mcp_wire.py, and released in v0.26.0. The unproven half (ACs #1-6: server/discover, resultType, ttlMs/cacheScope under mcp 2.x) was deliberately not attempted because it would validate a configuration the plan decided not to ship; that exact scope is embedded in TASK-110 (modern-era wire assertions, dual-era proof AC#3, validator re-run AC#4). Closing this task loses nothing — the evidence is in the repo and the gated remainder travels with TASK-110.
+
+**Evidence:** docs/superpowers/plans/mcp-2026-07-28-evidence.md (wire transcript captured 2026-07-30 on mcp 1.28.1); tests/test_kb_mcp_wire.py (asserts every claim); CHANGELOG.md [0.26.0] 2026-07-30 ('A wire-level MCP test harness' under Added; 'Not in this release, on purpose' section); TASK-110 description and ACs #3/#4 carry the modern-era wire assertions, dual-era proof, and install-agent-envs.py validator re-run.

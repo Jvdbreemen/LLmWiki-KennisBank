@@ -152,6 +152,17 @@ class GraphNeighborTest(unittest.TestCase):
         self.assertEqual(entry["title"], "zware-buur")
         self.assertTrue(entry["neighbor"])
 
+    def test_settings_get_raising_keeps_default_on(self):
+        """TASK-188: _settings onleesbaar is niet 'feature uit'. get() is
+        zelf al fail-open, dus een crash daar mag de default-ON buur niet
+        stil uitschakelen."""
+        self._default_graph()
+        import _settings
+        with patch.object(_settings, "get", side_effect=RuntimeError):
+            entry = self.kb._neighbor_entry(self._hits())
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry["title"], "zware-buur")
+
     def test_toggle_on_stale_graph_yields_no_entry(self):
         self._default_graph(fresh=False)
         import _settings

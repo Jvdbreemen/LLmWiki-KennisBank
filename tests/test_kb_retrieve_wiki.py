@@ -47,7 +47,7 @@ class WikiBlockTest(unittest.TestCase):
         wpath = str(self.vault / "02-wiki" / "art.md")
         emb.embed_id = lambda: "ollama:test"
         emb.load_cache = lambda: {wpath: {"id": "ollama:test", "embedding": [0.1, 0.2], "dim": 2}}
-        emb.embed = lambda text, timeout=20.0: [0.1, 0.2]
+        emb.embed = lambda text, timeout=20.0, kind="": [0.1, 0.2]
         emb.doc_text = lambda p, cap=280: "wiki body"
 
     def tearDown(self):
@@ -101,7 +101,7 @@ class WikiBlockTest(unittest.TestCase):
             ):
                 self.m.main()
 
-        self.emb.embed.assert_called_once_with(prompt, timeout=2.0)
+        self.emb.embed.assert_called_once_with(prompt, timeout=2.0, kind="query")
         self.emb.warm_async.assert_called_once_with()
 
     def test_cosine_relevant_injects_hybrid(self):

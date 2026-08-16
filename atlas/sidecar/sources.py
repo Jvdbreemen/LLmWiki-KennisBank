@@ -565,7 +565,7 @@ def live_recall(vault: Path, query: str, k: int = 3) -> dict:
     try:
         emb = _load_vault_module(vault, "_embeddings", "_embeddings.py")
         kbrecall = _load_vault_module(vault, "kb_recall", "kb-recall.py")
-        vector = emb.embed(query)
+        vector = getattr(emb, "embed_query", emb.embed)(query)
         if not vector:
             return {**empty, "status": "degraded"}
         hits = kbrecall.recall_hits(vector, query_text=query, k=k)
@@ -694,7 +694,7 @@ def recall_waterfall(vault: Path, query: str, k: int = 8) -> dict:
         except Exception:
             last_used_of = None
 
-        vector = emb.embed(query)
+        vector = getattr(emb, "embed_query", emb.embed)(query)
         if not vector:
             return {**empty, "status": "degraded"}
 
@@ -943,7 +943,10 @@ def _activity_heatmap(vault: Path, *, days: int = 365,
     return [{"day": d, "n": n} for d, n in pairs if d >= cutoff]
 
 
-_OVERVIEW_CACHE: dict[str, tuple[float, dict]] = {}
+# Keyed on (vault, effective date): `today` shapes the freshness buckets,
+# memory-health ages and the heatmap cutoff, so payloads for different dates
+# must never be swapped within the TTL (TASK-187).
+_OVERVIEW_CACHE: dict[tuple[str, str], tuple[float, dict]] = {}
 _OVERVIEW_TTL_S = 30.0
 
 
@@ -952,7 +955,9 @@ def _invalidate_overview_cache(vault: Path) -> None:
 
     Called after the one write path (decide_memory) so an approve/reject
     is reflected on the very next dashboard fetch, not up to TTL later."""
-    _OVERVIEW_CACHE.pop(str(vault), None)
+    v = str(vault)
+    for key in [k for k in _OVERVIEW_CACHE if k[0] == v]:
+        del _OVERVIEW_CACHE[key]
 
 
 def build_overview(vault: Path, *, today: date | None = None) -> dict:
@@ -972,12 +977,17 @@ def build_overview(vault: Path, *, today: date | None = None) -> dict:
     rglob to 01-raw or caching collect_session_stems(), tracked separately.
     Repeat views inside the TTL drop to low-ms; the first, cold view still
     pays the full cost below -- this does not move the first-render number."""
-    cache_key = str(vault)
+    today = today or date.today()
+    cache_key = (str(vault), today.isoformat())
     now = time.monotonic()
     cached = _OVERVIEW_CACHE.get(cache_key)
     if cached is not None and (now - cached[0]) < _OVERVIEW_TTL_S:
         return cached[1]
     result = _build_overview_uncached(vault, today=today)
+    # Prune expired entries: date-keyed leftovers would otherwise accumulate
+    # one dead entry per vault per day in a long-lived sidecar process.
+    for k in [k for k, (t, _) in _OVERVIEW_CACHE.items() if now - t >= _OVERVIEW_TTL_S]:
+        del _OVERVIEW_CACHE[k]
     _OVERVIEW_CACHE[cache_key] = (now, result)
     return result
 

@@ -22,6 +22,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _common import outside_window  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402
 
 LOCK_NAME = ".sweep.lock"
@@ -46,7 +47,7 @@ def is_stale(lock: Path) -> bool:
     op en gaf single-flight weg (TASK-140)."""
     try:
         age = time.time() - lock.stat().st_mtime
-        return abs(age) > STALE_SEC
+        return outside_window(age, STALE_SEC)
     except OSError:
         return True
 

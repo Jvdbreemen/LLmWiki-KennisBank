@@ -29,3 +29,11 @@ GATED - do not execute yet. The definitive plan (docs/superpowers/plans/mcp-2026
 - [ ] #6 GATE PROVEN before any code change: a client observed sending protocolVersion 2026-07-28, AND mcp 2.0.1 released
 - [ ] #7 requirements.txt uses mcp>=2.0.1,<3 and the dual-path import at kb-mcp.py is unchanged
 <!-- AC:END -->
+
+## Close-out (2026-08-16) — parked
+
+Correctly gated and the gate has not fired: requirements.txt still pins mcp==1.28.1 and the server has no _meta logging, so a 2026-07-28-speaking client could not even be observed yet. This is the sole live carrier of the whole MCP step-8 tail — the modern-era validation from TASK-108 and the docs/release step from TASK-109 both fold into it. The full analysis, gate definition, and refuted alternatives live in docs/superpowers/plans/mcp-2026-07-28-migration.md section 1 and the v0.26.0 changelog section; this task file itself holds the concrete implementation recipe (file/line pointers), so keep it findable if archived.
+
+**Evidence:** requirements.txt:2 (mcp==1.28.1, unchanged); scripts/kb-mcp.py has no inbound _meta/protocolVersion logging (gate condition 1 uninstrumented); docs/superpowers/plans/mcp-2026-07-28-migration.md section 1 'The gate on the pin bump' (lines 105-113) and 'Step 8 — [GATED]' (line 746); CHANGELOG.md [0.26.0] 'Not in this release, on purpose'.
+
+**Remaining work (when reopened):** Nothing until the AND-gate fires: (1) a client observed sending protocolVersion 2026-07-28 — instrumenting this is the described ten-line stderr log of inbound _meta, which does not exist in kb-mcp.py yet; (2) mcp 2.0.1+ on PyPI. Then: version-aware install_python_dep in setup.sh, SDK install whenever kb-mcp.py is registered, requirements.txt to mcp>=2.0.1,<3, dual-era wire proof, install-agent-envs.py validator re-run, plus the modern-era evidence from TASK-108 and release docs per TASK-109.

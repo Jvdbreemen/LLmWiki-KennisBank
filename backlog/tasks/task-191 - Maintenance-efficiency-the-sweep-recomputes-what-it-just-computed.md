@@ -1,7 +1,7 @@
 ---
 id: TASK-191
 title: Maintenance efficiency: the sweep recomputes what it just computed
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-15 23:30'
 updated_date: '2026-08-15 23:30'
@@ -47,3 +47,9 @@ for each of ~1700 files; precompile once.
 - [ ] #4 Session-start residency check reads a marker, not the network
 - [ ] #5 state-audit precompiles per-key patterns once
 <!-- AC:END -->
+
+## Close-out (2026-08-16)
+
+Shipped on chore/backlog-zero: (1) the correctness bug - _index_vectors returns (file_hash, vector) via _index_conn's full gate and current_items serves an index vector only on a hash match, so an edited memory is never judged with its previous content's embedding; (2) one corpus snapshot + one neighbour_map per sweep (passes prune what they closed; shared maps filter exactly - equivalence pinned by tests); (3) the embed config is memoized on (path, mtime, size), killing ~5000 redundant reads (~1.4s) per index build.
+
+Deliberately parked (skip advice from verification, measurements recorded there): the session-start residency probe (typical cost ~3ms measured, 200ms only when Ollama is down, inside the declared 250ms budget; the marker alternative would make the status line lie in exactly the eviction cases it exists to catch) and the state-audit regex precompile (re's internal cache already absorbs it; measured saving ~215ms per full audit).

@@ -221,18 +221,20 @@ def cluster_llm(path_meta, llm_fn, max_scenes: int = 15) -> dict:
     scenes", which the recall path treats as baseline. A model that answers
     with prose must not take retrieval down with it.
     """
-    import json as _json
+    import _llmjson
 
     notes = "\n".join(f"- {p}: {(meta or {}).get('title', '')}"
                       for p, meta in sorted(path_meta.items()))
     prompt = SCENE_PROMPT.format(max_scenes=int(max_scenes), notes=notes)
     try:
         raw = llm_fn(prompt) or ""
-        start, end = raw.find("{"), raw.rfind("}")
-        if start < 0 or end <= start:
-            return {}
-        scenes = (_json.loads(raw[start:end + 1]) or {}).get("scenes") or []
     except Exception:
+        return {}
+    # _llmjson, not a wide find/rfind span: a model that appends commentary
+    # containing a brace made the slice unparseable and the except returned
+    # {} -> "no scenes" -> baseline recall, silently (TASK-189).
+    scenes = (_llmjson.first_object(raw) or {}).get("scenes") or []
+    if not isinstance(scenes, list):
         return {}
 
     known = set(path_meta)

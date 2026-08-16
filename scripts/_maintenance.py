@@ -23,43 +23,38 @@ from _vaultpath import vault_root  # noqa: E402
 
 
 def _index_vectors() -> dict:
-    """path -> vector for the memory layer, straight out of kb-index.db.
+    """path -> (file_hash, vector) for the memory layer out of kb-index.db.
 
-    Fail-soft and best-effort: a missing index, a missing sqlite-vec extension or
-    a schema that does not match simply yields {}, and every caller falls back to
-    the embedding cache. This is a shortcut, never a dependency.
+    Fail-soft and best-effort: a missing index, a missing sqlite-vec extension
+    or a schema that does not match simply yields {}, and every caller falls
+    back to the embedding cache. This is a shortcut, never a dependency.
 
-    Only vectors in the index's own embed_id space are returned, because the
-    index stores exactly one space and records it in meta. Mixing spaces would be
-    silently wrong: cosine across two models means nothing.
+    Reuses _index_conn's gate (embed_id AND unit_norm) instead of a private
+    copy of half of it, and returns the stored file hash next to the vector:
+    the index lags the filesystem by design after every sweep, and serving a
+    stale vector for an edited memory meant judging it with the embedding of
+    its PREVIOUS content (TASK-191). Callers must verify the hash.
     """
+    conn = _index_conn()
+    if conn is None:
+        return {}
     try:
-        import sqlite3
-        import sqlite_vec
-        db = vault_root() / ".claude" / "kb-index.db"
-        if not db.exists():
-            return {}
-        conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=1.0)
-        try:
-            conn.enable_load_extension(True)
-            sqlite_vec.load(conn)
-            conn.enable_load_extension(False)
-            row = conn.execute("SELECT value FROM meta WHERE key='embed_id'").fetchone()
-            if not row or row[0] != emb.embed_id():
-                return {}
-            import array
-            out = {}
-            for path, blob in conn.execute(
-                    "SELECT d.path, v.embedding FROM docs d "
-                    "JOIN vec_docs v ON v.doc_id = d.doc_id WHERE d.layer='memory'"):
-                a = array.array("f")
-                a.frombytes(blob)
-                out[str(path)] = list(a)
-            return out
-        finally:
-            conn.close()
+        import array
+        out = {}
+        for path, fhash, blob in conn.execute(
+                "SELECT d.path, d.hash, v.embedding FROM docs d "
+                "JOIN vec_docs v ON v.doc_id = d.doc_id WHERE d.layer='memory'"):
+            a = array.array("f")
+            a.frombytes(blob)
+            out[str(path)] = (fhash, list(a))
+        return out
     except Exception:
         return {}
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 
 def _index_conn():
@@ -263,12 +258,20 @@ def current_items(get_cached_fn=None, statuses=("current",)) -> list:
         for f in files:
             p.step()
             try:
-                fm, body = parse_frontmatter(f.read_text(encoding="utf-8"))
+                raw = f.read_bytes()
+                fm, body = parse_frontmatter(raw.decode("utf-8"))
             except Exception:
                 continue
             if fm.get("status") not in statuses:
                 continue
-            vec = from_index.get(str(f))
+            # The index vector counts only when its stored hash matches the
+            # file AS IT IS NOW: the index lags the filesystem by design, and
+            # an edited memory served its previous content's embedding to the
+            # very passes that close memories (TASK-191).
+            entry = from_index.get(str(f))
+            vec = None
+            if entry and entry[0] == emb.bytes_hash(raw):
+                vec = entry[1]
             if not vec:
                 vec = gc(f, cache)
                 embedded += 1
@@ -294,78 +297,83 @@ def current_items(get_cached_fn=None, statuses=("current",)) -> list:
     return out
 
 
-def similar_pairs(items: list, threshold: float) -> list:
-    """Vind alle paren current-items met cosine(a, b) > threshold.
+def neighbour_map(items: list, threshold: float) -> dict:
+    """{path -> [(other_path, cos), ...]} for every pair with cos > threshold.
 
-    Returns list[tuple(a, b, sim)] gesorteerd van hoog naar laag sim.
+    The ONE neighbour computation per sweep (TASK-191): similar_pairs and
+    neighbor_counts previously each ran their own probe — via the index a
+    duplicated KNN sweep, and on the brute fallback two full O(n^2)
+    triangles of 15m26s each ("samen was het een half uur per sweep").
+    Computed once at the LOWEST consumer threshold, it filters exactly:
+    every comparison downstream is strict '>', so a 0.75 map filtered at
+    0.80 equals the 0.80 map.
 
-    Kwadratisch in het aantal memories: op de levende vault (1595 current
-    memories) zijn dat 1,27 miljoen cosinussen en ruim een kwartier rekenen,
-    dat tot TASK-153 zwijgend afliep.
-
-    De voortgang telt PAREN, niet rijen. Dat lijkt een detail en is het niet:
-    rij i doet n-i vergelijkingen, dus elke volgende rij is korter. Een
-    schatting die uit "rijen gedaan" extrapoleert rekent met het gemiddelde
-    van de brede rijen aan het begin en zit er ruim twee keer naast (gemeten:
-    24 minuten voorspeld waar 11 resteerde). Tellen in de eenheid waarin het
-    werk zit, maakt het percentage en de schatting allebei waar.
+    De voortgang telt PAREN, niet rijen: rij i doet n-i vergelijkingen, dus
+    een schatting uit "rijen gedaan" zit er ruim twee keer naast (gemeten:
+    24 minuten voorspeld waar 11 resteerde, TASK-153).
     """
-    n = len(items)
     # De index draagt precies deze vectoren en is voor deze vraag gebouwd. Op
     # de levende vault scheelt dat 15m26s tegen enkele seconden (TASK-154). Hij
     # geeft None zodra hij de vraag niet betrouwbaar kan beantwoorden, en dan
     # blijft de brute weg hieronder staan -- die is traag maar altijd juist.
     from_index = _neighbours_from_index(items, threshold)
     if from_index is not None:
-        by_path = {it["path"]: it for it in items}
-        seen, pairs = set(), []
-        for path, buren in from_index.items():
-            for other, cos in buren:
-                sleutel = (path, other) if path < other else (other, path)
-                if sleutel in seen:
-                    continue
-                seen.add(sleutel)
-                pairs.append((by_path[sleutel[0]], by_path[sleutel[1]], cos))
-        pairs.sort(key=lambda t: t[2], reverse=True)
-        return pairs
-
-    pairs = []
+        return from_index
+    n = len(items)
+    out: dict = {it["path"]: [] for it in items}
     with Progress(n * (n - 1) // 2, f"paren zoeken boven {threshold}") as p:
         for i in range(n):
             for j in range(i + 1, n):
                 s = emb.cosine(items[i]["vec"], items[j]["vec"])
                 if s > threshold:
-                    pairs.append((items[i], items[j], s))
+                    out[items[i]["path"]].append((items[j]["path"], s))
+                    out[items[j]["path"]].append((items[i]["path"], s))
             p.step(n - i - 1)
+    return out
+
+
+def similar_pairs(items: list, threshold: float, neighbours: dict = None) -> list:
+    """Vind alle paren current-items met cosine(a, b) > threshold.
+
+    Returns list[tuple(a, b, sim)] gesorteerd van hoog naar laag sim.
+    ``neighbours`` mag een gedeelde neighbour_map zijn, ook een die op een
+    LAGERE drempel of een ruimere item-set is berekend: de drempel- en
+    lidmaatschapsfilters hieronder maken hem exact equivalent aan een verse
+    berekening (strikte '>' overal; membership via by_path).
+    """
+    nmap = neighbours if neighbours is not None else neighbour_map(items, threshold)
+    by_path = {it["path"]: it for it in items}
+    seen, pairs = set(), []
+    for path, buren in nmap.items():
+        if path not in by_path:
+            continue
+        for other, cos in buren:
+            if cos <= threshold or other not in by_path:
+                continue
+            sleutel = (path, other) if path < other else (other, path)
+            if sleutel in seen:
+                continue
+            seen.add(sleutel)
+            pairs.append((by_path[sleutel[0]], by_path[sleutel[1]], cos))
     pairs.sort(key=lambda t: t[2], reverse=True)
     return pairs
 
 
-def neighbor_counts(items: list, threshold: float) -> dict:
+def neighbor_counts(items: list, threshold: float, neighbours: dict = None) -> dict:
     """Tel het aantal verwante buren (cosine > threshold) per item.
 
-    Returns dict[path -> int]. Symmetric: als a en b elkaars buren zijn
-    telt het voor beide.
+    Returns dict[path -> int]. Symmetric: als a en b elkaars buren zijn telt
+    het voor beide. Zelfde deel-contract als similar_pairs: een gedeelde map
+    op een lagere drempel/ruimere set wordt hier exact gefilterd.
     """
-    counts = {it["path"]: 0 for it in items}
-    n = len(items)
-    # Zelfde index-kortsluiting als similar_pairs; deze pas liep dezelfde
-    # driehoek een tweede keer af, dus samen was het een half uur per sweep.
-    from_index = _neighbours_from_index(items, threshold)
-    if from_index is not None:
-        for path, buren in from_index.items():
-            counts[path] = len(buren)
-        return counts
-
-    # Telt paren, om dezelfde reden als similar_pairs: een driehoekslus die
-    # rijen telt geeft een schatting die er structureel naast zit.
-    with Progress(n * (n - 1) // 2, "buren tellen") as p:
-        for i in range(n):
-            for j in range(i + 1, n):
-                if emb.cosine(items[i]["vec"], items[j]["vec"]) > threshold:
-                    counts[items[i]["path"]] += 1
-                    counts[items[j]["path"]] += 1
-            p.step(n - i - 1)
+    nmap = neighbours if neighbours is not None else neighbour_map(items, threshold)
+    own = {it["path"] for it in items}
+    counts = {p: 0 for p in own}
+    for path, buren in nmap.items():
+        if path not in own:
+            continue
+        counts[path] = sum(1 for other, cos in buren
+                           if cos > threshold and other in own)
     return counts
 
 
@@ -571,13 +579,18 @@ SUPERSEDE_THRESHOLD = 0.75
 
 
 def supersede_pass(threshold: float = SUPERSEDE_THRESHOLD, judge_fn=None,
-                   get_cached_fn=None) -> int:
+                   get_cached_fn=None, items=None, neighbours=None) -> int:
     import _memory
     judge_fn = judge_fn or judge_supersede
-    items = current_items(get_cached_fn=get_cached_fn)
+    # items mag een gedeelde snapshot zijn (TASK-191): drie passes laadden elk
+    # het volledige corpus (~1600 file-reads per pass). De snapshot wordt aan
+    # het einde gepruned van wat DEZE pass sloot, zodat de volgende pass
+    # dezelfde wereld ziet als een verse reload zou tonen.
+    if items is None:
+        items = current_items(get_cached_fn=get_cached_fn)
     done = 0
     superseded_paths = set()
-    for a, b, _sim in similar_pairs(items, threshold):
+    for a, b, _sim in similar_pairs(items, threshold, neighbours=neighbours):
         # Bepaal nieuwer/ouder op EVENT-tijd (valid_from, fallback created;
         # tie-break op created). Ordenen op created alleen zou een laat
         # gecaptured OUD feit als 'nieuwer' aanmerken en het echt nieuwere
@@ -605,10 +618,12 @@ def supersede_pass(threshold: float = SUPERSEDE_THRESHOLD, judge_fn=None,
                                           "en de judge zei dat het nieuwe het oude vervangt")):
                 superseded_paths.add(older["path"])
                 done += 1
+    if superseded_paths:
+        items[:] = [it for it in items if it["path"] not in superseded_paths]
     return done
 
 
-def recheck_pass(judge_fn=None, limit: int = 20) -> int:
+def recheck_pass(judge_fn=None, limit: int = 20, items=None) -> int:
     """Hercontrole van current memories: retract ALLEEN bij expliciete ruis-signaal.
 
     judge_fn(text: str) -> bool: True = retract, False = keep.
@@ -617,20 +632,32 @@ def recheck_pass(judge_fn=None, limit: int = 20) -> int:
     """
     import _memory
     judge_fn = judge_fn or judge_recheck
-    items = current_items()
+    if items is None:
+        items = current_items()
     done = 0
+    retracted = set()
     for it in items[:limit]:
         if judge_fn(it["body"]):
             if _memory.set_status(it["path"], "retracted"):
+                retracted.add(it["path"])
                 done += 1
+    if retracted:
+        items[:] = [it for it in items if it["path"] not in retracted]
     return done
 
 
-def cluster_promote_pass(threshold: float = 0.80, min_neighbors: int = 2,
-                         get_cached_fn=None) -> int:
+#: Buurdrempel voor cluster-promotie; als constante zodat de sweep de map op
+#: min(SUPERSEDE_THRESHOLD, CLUSTER_THRESHOLD) kan berekenen zonder een tweede
+#: kopie van het getal.
+CLUSTER_THRESHOLD = 0.80
+
+
+def cluster_promote_pass(threshold: float = CLUSTER_THRESHOLD, min_neighbors: int = 2,
+                         get_cached_fn=None, items=None, neighbours=None) -> int:
     import re
-    items = current_items(get_cached_fn=get_cached_fn)
-    counts = neighbor_counts(items, threshold)
+    if items is None:
+        items = current_items(get_cached_fn=get_cached_fn)
+    counts = neighbor_counts(items, threshold, neighbours=neighbours)
     done = 0
     for it in items:
         if counts.get(it["path"], 0) < min_neighbors:

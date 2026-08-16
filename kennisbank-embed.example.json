@@ -7,12 +7,28 @@
   "retrieve_timeout": 2.0,
   "prompt_hook_max_embed_timeout": 2.0,
   "retrieve_top_n": 3,
-  "retrieve_threshold": 0.50,
+  "retrieve_threshold": 0.5,
+  "memory_threshold": 0.45,
   "_threshold_note": "Model-specific; recalibrate after a model switch. Measured on qwen3-embedding:4b over 329 wiki eval questions, all retrieved in the top 5: true-match cosine min 0.387, p10 0.648, p50 0.761. Recall@5 by floor: 0.50 keeps 327 of 329, 0.60 keeps 316. The inherited 0.60 came from qwen3-embedding:8b (true match 0.73-0.80, noise <=0.51) and costs 13 genuine hits on this model.",
   "_switching": {
     "_comment": "Set api_key_env to the NAME of the env var holding the key; never put the key itself here. Anthropic/Claude has no native embeddings API; Voyage is their recommended path. OpenRouter embeddings support is thin/unconfirmed, so verify a gateway serves /embeddings before using provider=openai against it.",
-    "openai": {"provider": "openai", "model": "text-embedding-3-small", "endpoint": "https://api.openai.com/v1", "api_key_env": "OPENAI_API_KEY"},
-    "voyage_anthropic_path": {"provider": "voyage", "model": "voyage-3", "endpoint": "https://api.voyageai.com/v1", "api_key_env": "VOYAGE_API_KEY"},
-    "openai_compatible_gateway": {"provider": "openai", "model": "<model>", "endpoint": "https://<gateway>/v1", "api_key_env": "<KEY_ENV_NAME>"}
+    "openai": {
+      "provider": "openai",
+      "model": "text-embedding-3-small",
+      "endpoint": "https://api.openai.com/v1",
+      "api_key_env": "OPENAI_API_KEY"
+    },
+    "voyage_anthropic_path": {
+      "provider": "voyage",
+      "model": "voyage-3",
+      "endpoint": "https://api.voyageai.com/v1",
+      "api_key_env": "VOYAGE_API_KEY"
+    },
+    "openai_compatible_gateway": {
+      "provider": "openai",
+      "model": "<model>",
+      "endpoint": "https://<gateway>/v1",
+      "api_key_env": "<KEY_ENV_NAME>"
+    }
   }
 }

@@ -48,49 +48,9 @@ def _load(filename: str):
     return mod
 
 
-class QueryCache:
-    """Disk-backed query-embedding cache, keyed by model identity.
-
-    Mixing vectors from two embedding models would compare nonsense while
-    looking perfectly healthy, so the model id is part of the cache identity
-    and a mismatch discards the file rather than merging with it.
-    """
-
-    def __init__(self, path: Path, embed_id: str):
-        self.path = Path(path)
-        self.embed_id = embed_id
-        self.data = {}
-        self.hits = 0
-        self.misses = 0
-        if self.path.exists():
-            try:
-                blob = json.loads(self.path.read_text(encoding="utf-8"))
-                if blob.get("embed_id") == embed_id:
-                    self.data = blob.get("vectors", {})
-            except Exception:
-                self.data = {}
-
-    @staticmethod
-    def key(text: str) -> str:
-        return hashlib.sha256(text.encode("utf-8")).hexdigest()[:32]
-
-    def get_or_embed(self, text: str, embed_fn):
-        k = self.key(text)
-        vec = self.data.get(k)
-        if vec is not None:
-            self.hits += 1
-            return vec
-        self.misses += 1
-        vec = embed_fn(text, kind="query")
-        if vec is not None:
-            self.data[k] = list(vec)
-        return vec
-
-    def save(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(
-            json.dumps({"embed_id": self.embed_id, "vectors": self.data}),
-            encoding="utf-8")
+# QueryCache verhuisde naar _querycache.py (TASK-190); de re-export houdt
+# scene_exp.QueryCache-consumenten (tests, oudere harnas-runs) werkend.
+from _querycache import QueryCache  # noqa: E402
 
 
 def build_hits_fn(kb_recall, cache, embed_fn, scene_prior):
@@ -197,11 +157,11 @@ def main(argv=None) -> int:
 
     cache_path = Path(args.cache) if args.cache else \
         Path(args.out).with_name("query-vectors.json")
-    cache = QueryCache(cache_path, emb.embed_id())
+    cache = QueryCache(cache_path, emb.query_embed_id())
 
     prior = (None if args.no_prior else
          {"floor": args.floor, "boost": args.boost, "seeds": args.seeds})
-    hits_fn = build_hits_fn(kb_recall, cache, emb.embed, prior)
+    hits_fn = build_hits_fn(kb_recall, cache, emb.embed_query, prior)
 
     t0 = time.perf_counter()
     report = kb_eval.evaluate(entries, hits_fn, measure_latency=True)

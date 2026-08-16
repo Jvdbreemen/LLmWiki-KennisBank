@@ -83,3 +83,11 @@ is the finding.
 
 <!-- SECTION:NOTES:BEGIN -->
 <!-- SECTION:NOTES:END -->
+
+## Close-out (2026-08-16) — parked
+
+Parked, owner directive intact and untouched: no research note comparing the four dreaming variants exists, no clustering or draft-writing code exists, and 'dream' appears in the repo only inside the two research reviews that motivated the task. This description is itself the design document — it carries the TASK-134 clustering lesson (graph communities did not clear the winner rule; start from LLM-consolidated themes, per docs/research/l2-scene-retrieval-2026-08.md), the TASK-165 language lesson, the human-promotion assumption, and the anti-noise gates — so archive it intact or move that design into a docs/design note first. Prior-art pointers (Honcho dream pass, Generative Agents reflection, EverMemOS MemScenes, EverOS offline evolution) are also recorded in docs/research/agent-memory-field-review-and-strategy.md. Not do-now: AC#1 alone (the comparative research note) is more than an hour, and the pass itself is a full feature with a measured default-on gate.
+
+**Evidence:** 'dream' matches nothing in the repo outside docs/research/agent-memory-field-review-and-strategy.md and docs/research/honcho-memory-architecture.md; no dream-pass script in scripts/, no four-variant research note in docs/research/ (glob of all 18 files checked); commit 1b2f855 records the owner directive ('three owner directives — autonomous memory, dreaming, and the usage sensor they stand on'); CHANGELOG.md:38-40 lists it as queued.
+
+**Remaining work (when reopened):** Write the four-variant research note (AC#1); build the off-hours dream pass: LLM-consolidation clustering over kb-index.db vectors, gap detection against the wikilink/provenance graph, bounded draft articles with status: draft and full provenance, update proposals for dense-but-covered clusters; keep draft-to-published human; hand-check an acceptance-rate sample before default-on and let the number decide the default.

@@ -22,6 +22,7 @@ from typing import Callable
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _hooks_manifest  # noqa: E402
+from _common import outside_window  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402
 
 
@@ -277,7 +278,7 @@ def acquire_lock(path: Path, now: float | None = None) -> bool:
             # geleden meet gerust -0,001 s (gemeten: 586 van 5000). De oude
             # `0 <= age` liet die door naar unlink + hercreatie en gaf
             # single-flight weg op de plek die hem moest garanderen (TASK-140).
-            if abs(age) <= LOCK_STALE_SECONDS:
+            if not outside_window(age, LOCK_STALE_SECONDS):
                 return False
             path.unlink()
             fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)

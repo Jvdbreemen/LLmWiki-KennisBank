@@ -45,3 +45,9 @@ Found while measuring TASK-134; see docs/research/l2-scene-retrieval-2026-08.md,
 - [ ] #3 docs/research/l2-scene-retrieval-2026-08.md is not silently invalidated: any ceiling it quotes states the routing rule it assumes
 - [ ] #4 python -m pytest tests -q is green
 <!-- AC:END -->
+
+## Close-out (2026-08-16) — superseded
+
+The seeds-aware oracle_ceiling was never built: scripts/scene-report.py:64-92 still counts any-hit reachability and no pinning test exists (AC#1/#2 unmet). The need the task protected — never quote the ceiling without the routing rule it assumes — was met two hours after filing by commit 78ab4aa: the Follow-up of docs/research/l2-scene-retrieval-2026-08.md now prints the top-hit and any-hit bounds side by side with explicit labels (community 14 vs 47, oracle 120 vs 166) and states the shipped configuration's real ceiling was +0.016, below the +0.02 winner rule, satisfying AC#3. The same section replaces the ceiling-vs-winner-rule gate for any future attempt with a routing-aware bar (~75 top-hit-reachable misses), so the misleading number no longer gates anything. With the L2 experiment closed by its pre-registered rule (TASK-134 Done, scene_retrieval off by default), scene-report.py is a diagnostic for a closed experiment; anyone reviving the tier enters through the research doc, which carries both bounds and the warning.
+
+**Evidence:** scripts/scene-report.py:64-92 (oracle_ceiling unchanged, counts any-hit); scripts/_settings.py:68 (scene_retrieval: False); commit 78ab4aa (2026-08-11 08:15) rewrote docs/research/l2-scene-retrieval-2026-08.md 'Follow-up' + 'The bar a real clusterer has to clear'; backlog/tasks/task-134 status: Done

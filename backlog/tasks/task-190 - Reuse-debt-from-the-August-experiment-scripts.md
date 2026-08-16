@@ -1,7 +1,7 @@
 ---
 id: TASK-190
 title: Reuse debt from the August experiment scripts
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-15 23:30'
 updated_date: '2026-08-15 23:30'
@@ -50,3 +50,9 @@ experiments whose point is comparability.
 - [ ] #6 embed-sweep resolves the endpoint via _embeddings
 - [ ] #7 One shared gold-rank/recall@k helper used by all experiment scripts
 <!-- AC:END -->
+
+## Close-out (2026-08-16)
+
+Six of seven duplications consolidated on chore/backlog-zero (verified per item by adversarial agents before fixing): JSONL log helpers in _memory, QueryCache -> _querycache.py, the kb-mcp activity dispatcher, the config-key predicate (one _CFG_KEY boundary, parity-pinned), embed-sweep endpoint resolution, and the canonical rank helper in kb-eval with delegating wrappers.
+
+Deliberately parked (skip advice from verification): (a) the five script-side loader copies were replaced-by-alias where touched, but the ~40 LEGACY test files with hand-rolled importlib loaders stay - mechanical churn, near-zero drift risk, and the seven in-scope test files were the new ones; (b) the recall@k AGGREGATION tables (kb-eval/_metrics/_report/rank-factors/rerank-ceiling) differ in schema and rounding on purpose - merging them changes published experiment-result JSON shapes for no comparability gain.

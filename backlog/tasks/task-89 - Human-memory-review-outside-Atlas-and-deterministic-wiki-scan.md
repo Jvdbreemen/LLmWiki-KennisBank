@@ -1,7 +1,7 @@
 ---
 id: TASK-89
 title: Human memory review outside Atlas + deterministic wiki-scan (Spoor D)
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-28 08:00'
 updated_date: '2026-08-03 21:23'
@@ -45,3 +45,9 @@ wiki-scan.py --days 7 on the real vault: 40 session logs scanned, 45 candidates 
 
 AC#7 (shadow week) remains genuinely open -- it needs a week of calendar time comparing scan output against manual /wiki runs, which cannot be produced today regardless of effort. Plan: run wiki-scan.py --days 7 at the start of each /wiki invocation for the next 7 days, log any manual-run finding the scan missed, record the tally here when the week closes.
 <!-- SECTION:NOTES:END -->
+
+## Close-out (2026-08-16) — delivered
+
+D1 and D2 both shipped in v0.24.0 (commit 457e786): shared decide() in _memory.py with crash-safe write ordering, memory-doctor.py pending/decide, /kennisbank:review, MCP review_pending/review_decide, and wiki-scan.py wired into /wiki steps 1-2 (commands/wiki.md:20), with AC#9's real-vault numbers recorded in this file. The one open box, AC#7's shadow week, was never tallied and is now moot twice over: wiki-scan has been the production /wiki step 1-2 since 2026-08-03 with no recorded miss, and the human review flow D1 built was retired by TASK-195 (PRs #130-#133) — /kennisbank:review is now an audit view with per-line undo and no step waits for a human. Closing as done; the review surface's current shape is documented in docs/superpowers/specs/2026-08-16-autonomous-memory-review-design.md.
+
+**Evidence:** Commit 457e786 (feat(memory+wiki): human review queue outside Atlas + deterministic wiki-scan, TASK-89); shipped in v0.24.0 (CHANGELOG.md:927-942); scripts/memory-doctor.py and scripts/wiki-scan.py exist; commands/wiki.md:20 runs wiki-scan.py as /wiki step 1-2; AC#9 real-vault evidence recorded in the task (2026-08-03); TASK-195 Done (PRs #129-#133, commits d9e3b45, 10993ac, 05074ba) retired the human gate.

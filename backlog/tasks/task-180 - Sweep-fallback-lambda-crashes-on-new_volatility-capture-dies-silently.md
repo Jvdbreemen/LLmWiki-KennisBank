@@ -1,7 +1,7 @@
 ---
 id: TASK-180
 title: Sweep fallback lambda crashes on new_volatility — capture dies silently
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-15 23:30'
 updated_date: '2026-08-15 23:30'
@@ -32,3 +32,7 @@ promises to prevent. The old fallback wrote everything as plain ADD.
 - [ ] #2 A test simulates the failed-import path and asserts memories are still written as ADD
 - [ ] #3 A grep-style guard or shared signature keeps fallback and real function from drifting again
 <!-- AC:END -->
+
+## Close-out (2026-08-16)
+
+Shipped in PR #135: the fallback lambda takes *args/**kwargs so it can never drift out of sync with reconcile() again; test_partial_deploy_fallback_still_writes proves the sweep writes under a failed _reconcile import (live repro: unfixed 0 written/1 error, fixed 1/0).

@@ -1,7 +1,7 @@
 ---
 id: TASK-187
 title: Overview TTL cache ignores the today parameter
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-15 23:30'
 updated_date: '2026-08-15 23:30'
@@ -29,3 +29,7 @@ and the heatmap cutoff silently wrong, the parameter dead on every hit.
 - [ ] #1 Cache key includes the effective date (or today invalidates the entry)
 - [ ] #2 A test calls build_overview twice within TTL with different dates and asserts distinct payloads
 <!-- AC:END -->
+
+## Close-out (2026-08-16)
+
+Fixed on chore/backlog-zero: the overview TTL cache keys on (vault, ISO date), resolved once so key and computation share the date; invalidation drops every date entry; expired entries pruned. Live repro before, three tests after.

@@ -280,19 +280,29 @@ def _write_heartbeat(summary: dict) -> None:
 MAX_CHUNKS = env_int("KB_SWEEP_MAX_CHUNKS", 40)
 MAX_MEMORIES_PER_TRANSCRIPT = env_int("KB_SWEEP_MAX_MEMORIES", 60)
 
-#: Bovengrens op één sweep-run, in chunks. De sweep is losgekoppeld maar deelt de
-#: GPU met het embedding-model dat de retrieval-hot-path bedient; tien transcripts
-#: van 40 chunks zou 40 minuten aaneengesloten modelwerk zijn. Bij 5-6 s per chunk
-#: is 150 chunks ongeveer een kwartier. Wat niet past blijft pending en komt de
-#: volgende run aan de beurt -- de watermark wordt alleen gezet voor transcripts
-#: die HELEMAAL verwerkt zijn.
+#: Secundaire bovengrens op één sweep-run, in chunks. Historisch de ENIGE rem,
+#: gebudgetteerd op "5-6 s per chunk" -- maar dat was alleen de extract-call;
+#: per chunk volgen nog dedup-embeds, reconcile en judge (~5-6 modelcalls),
+#: dus 150 chunks begrensde bijna twee uur GPU, geen kwartier (TASK-158). De
+#: wandkloktijd hieronder is nu de primaire rem; deze teller blijft staan als
+#: vangnet voor het geval chunks pathologisch snel (en dus talrijk) zijn.
 CHUNK_BUDGET = env_int("KB_SWEEP_CHUNK_BUDGET", 150)
+
+#: Primaire bovengrens op één sweep-run: wandkloktijd in seconden. De sweep
+#: deelt de GPU met het embedding-model dat de retrieval-hot-path bedient, dus
+#: de rem moet in de eenheid staan waarin de GPU betaalt: tijd, niet chunks.
+#: Gemeten 2026-08-13 (zeven transcripts, ~50 min, 617 memories): ~430 s per
+#: transcript, dus de default van 900 s laat ongeveer twee transcripts toe per
+#: run. Wat niet past blijft pending -- de stop valt alleen TUSSEN
+#: transcripts, nooit erbinnen (de watermark is append-only, TASK-145).
+TIME_BUDGET_SEC = env_int("KB_SWEEP_TIME_BUDGET", 900)
 
 
 def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
               max_memories_per_transcript: int = MAX_MEMORIES_PER_TRANSCRIPT,
               ignore_watermark: bool = False,
-              chunk_budget: int = CHUNK_BUDGET) -> dict:
+              chunk_budget: int = CHUNK_BUDGET,
+              time_budget: int = TIME_BUDGET_SEC) -> dict:
     """Verwerk pending (of alle) transcripts naar memory-files.
 
     Bij ignore_watermark=True worden ALLE *.jsonl in 01-raw/transcripts/ verwerkt,
@@ -319,7 +329,8 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
         # onderscheiden van "5 memories geschreven en 300 chunks genegeerd".
         "chunks_read": 0,
         "chunks_skipped": 0,
-        "budget_reached": False,
+        "budget_reached": False,   # False of de naam van de rem ("time"/"chunks")
+        "pending_left": 0,         # transcripts die door de rem bleven liggen
         # Leeg = elke pass heeft gedraaid. Een nul in een teller hierboven
         # betekent dan echt "niets te doen" en niet "gecrasht" (TASK-148).
         "pass_errors": {},
@@ -384,14 +395,29 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
     # noemer niet op maar laat de regel wel bewegen, zodat een transcript van
     # veertig chunks met een LLM-aanroep per chunk niet minutenlang zwijgt.
     voortgang = Progress(len(todo), "transcripts verwerken")
+    started = time.monotonic()
+    done_count = 0
     for tp in todo:
         # Budget-stop TUSSEN transcripts, nooit erbinnen: een half verwerkt
         # transcript zou gemarkeerd worden als gedaan en de rest voorgoed
         # kwijtraken. Wat hier afvalt blijft pending voor de volgende run.
-        if not ignore_watermark and chunk_budget and s["chunks_read"] >= chunk_budget:
-            s["budget_reached"] = True
-            voortgang.note(f"chunk-budget ({chunk_budget}) op; de rest blijft pending")
-            break
+        # budget_reached noemt WELKE rem viel (truthy string), zodat een
+        # budget-stop in de heartbeat te onderscheiden is van "klaar"
+        # (TASK-158); pending_left zegt hoeveel er blijft liggen.
+        if not ignore_watermark:
+            bound = None
+            if time_budget and time.monotonic() - started >= time_budget:
+                bound = "time"
+            elif chunk_budget and s["chunks_read"] >= chunk_budget:
+                bound = "chunks"
+            if bound:
+                s["budget_reached"] = bound
+                s["pending_left"] = len(todo) - done_count
+                voortgang.note(
+                    f"budget op ({bound}: "
+                    f"{time_budget}s / {chunk_budget} chunks); "
+                    f"{s['pending_left']} transcript(s) blijven pending")
+                break
         try:
             transcript = ss.transcript_text(tp)
             valid_from = _session_date(tp.name, today)
@@ -500,6 +526,7 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
         except Exception:
             s["errors"] += 1
         finally:
+            done_count += 1
             voortgang.step()
     voortgang.close(f"({s['written']} memories geschreven, "
                     f"{s['duplicates']} duplicaten)")
@@ -527,9 +554,24 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
         # judge-aanroep per duplicaatpaar, en belangrijker: een identieke body
         # hoort niet aan een oordeel onderworpen te worden dat fout kan gaan.
         _run_pass(s, "exact_duplicates_closed", _mnt.exact_duplicate_pass)
-        _run_pass(s, "superseded", _mnt.supersede_pass)
-        _run_pass(s, "rechecked_retracted", _mnt.recheck_pass)
-        _run_pass(s, "promote_marked", _mnt.cluster_promote_pass)
+        # Eén corpus-snapshot en één buurberekening voor de drie passes
+        # (TASK-191): elk laadde voorheen alle ~1600 files en de hele
+        # vectortabel opnieuw, en de buurprobe liep dubbel. De snapshot valt
+        # NA exact_duplicate_pass (die sluit byte-duplicaten die er niet meer
+        # in horen); elke pass pruned wat hij sloot. snapshot=None degradeert
+        # elke pass naar zijn eigen load — de oude faal-isolatie blijft.
+        try:
+            snapshot = _mnt.current_items()
+            nmap = _mnt.neighbour_map(
+                snapshot, min(_mnt.SUPERSEDE_THRESHOLD, _mnt.CLUSTER_THRESHOLD))
+        except Exception:
+            snapshot, nmap = None, None
+        _run_pass(s, "superseded",
+                  lambda: _mnt.supersede_pass(items=snapshot, neighbours=nmap))
+        _run_pass(s, "rechecked_retracted",
+                  lambda: _mnt.recheck_pass(items=snapshot))
+        _run_pass(s, "promote_marked",
+                  lambda: _mnt.cluster_promote_pass(items=snapshot, neighbours=nmap))
         # Trap 1 of the autonomous review (TASK-195): unverified memories that
         # their own source supports get promoted. Only 'supported' promotes;
         # nothing is ever closed here. Capped per run so the sweep's tail stays

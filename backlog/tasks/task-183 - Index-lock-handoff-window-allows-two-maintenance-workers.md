@@ -1,7 +1,7 @@
 ---
 id: TASK-183
 title: Index lock handoff window allows two maintenance workers
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-15 23:30'
 updated_date: '2026-08-15 23:30'
@@ -40,3 +40,7 @@ lock/proc helper would fix the race once and end the divergence.
 - [ ] #3 One shared pid_alive with PermissionError=alive semantics, used by all callers
 - [ ] #4 A test drives the launcher->worker handoff with a delayed adopt and asserts single-flight holds
 <!-- AC:END -->
+
+## Close-out (2026-08-16)
+
+Fixed on chore/backlog-zero: dead-pid locks respect PID_GRACE_SEC (the launcher->worker handoff is not an orphan), every lock-file mutation runs under an OS-level mutex with a re-judge inside it (the reclaim-vs-adopt race deleted a live lock, reproduced deterministically), and _pid_alive/outside_window live once in _common (the _embeddings copy read PermissionError as dead; explicit ctypes prototypes; never os.kill-probe on Windows).

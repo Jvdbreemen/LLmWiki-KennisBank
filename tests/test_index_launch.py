@@ -64,11 +64,58 @@ class IndexLaunchTest(unittest.TestCase):
         os.utime(lock, (future, future))
         self.assertTrue(self.m.is_stale(lock))
 
-    def test_recent_lock_with_dead_pid_counts_as_stale(self):
-        """Een gecrashte worker mag geen uur lang onderhoud blokkeren."""
+    def test_dead_pid_lock_past_the_grace_counts_as_stale(self):
+        """Een gecrashte worker mag geen uur lang onderhoud blokkeren — maar
+        pas ná de handoff-grace (TASK-183): vers-met-dode-pid is de
+        launcher->worker-overdracht, geen wees."""
         lock = self.m._lock_path()
         lock.write_text("2147483647\nlegacy-token\n", encoding="ascii")
+        old = time.time() - self.m.PID_GRACE_SEC - 1
+        os.utime(lock, (old, old))
         self.assertTrue(self.m.is_stale(lock))
+
+    def test_dead_pid_lock_within_grace_is_not_stale(self):
+        """TASK-183: tijdens de handoff noemt het lock legitiem de geëindigde
+        launcher; een tweede sessie mag het dan niet stelen."""
+        lock = self.m._lock_path()
+        lock.write_text("12345\ntok\n", encoding="ascii")
+        orig = self.m._pid_alive
+        self.m._pid_alive = lambda pid: False
+        try:
+            self.assertFalse(self.m.is_stale(lock))
+            self.assertFalse(self.m.acquire_lock())
+        finally:
+            self.m._pid_alive = orig
+
+    def test_second_session_cannot_steal_the_lock_mid_handoff(self):
+        """De volledige TASK-183-interleave: launcher exit, worker nog niet
+        geadopteerd, tweede SessionStart. Er mag precies één worker komen."""
+        spawned = []
+        orig_spawn = self.m.spawn_worker
+        self.m.spawn_worker = lambda token: spawned.append(token)
+        orig_alive = self.m._pid_alive
+        try:
+            self.assertEqual(self.m.main([]), 0)
+            lock = self.m._lock_path()
+            token = self.m._lock_token(lock)
+            # simuleer de geëindigde launcher: pid dood, token + mtime vers
+            self.m._pid_alive = lambda pid: False
+            self.assertEqual(self.m.main([]), 0)
+            self.assertEqual(len(spawned), 1)
+            self.assertEqual(self.m._lock_token(lock), token)
+        finally:
+            self.m.spawn_worker = orig_spawn
+            self.m._pid_alive = orig_alive
+
+    def test_reclaim_and_adopt_are_mutually_exclusive(self):
+        """Elke mutatie van het lock-bestand loopt onder de mutex."""
+        self.assertTrue(self.m.acquire_lock())
+        token = self.m._lock_token(self.m._lock_path())
+        with self.m._lock_mutex() as got:
+            self.assertTrue(got)
+            self.assertFalse(self.m._adopt_lock(token))
+        # na vrijgave slaagt de adoptie wel
+        self.assertTrue(self.m._adopt_lock(token))
 
     def test_stale_window_exceeds_the_worst_case_run(self):
         """Anders kan een tweede sessie een NOG DRAAIENDE worker verweesd noemen.

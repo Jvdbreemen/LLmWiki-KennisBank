@@ -59,7 +59,7 @@ def gather(query: str, k: int) -> list:
         return []
     try:
         import _embeddings as emb
-        qvec = emb.embed(q)
+        qvec = emb.embed_query(q)
         if not qvec:
             return []
         return kb_recall.recall_hits(qvec, query_text=q, k=int(k),

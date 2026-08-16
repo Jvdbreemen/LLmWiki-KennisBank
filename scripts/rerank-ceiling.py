@@ -53,6 +53,7 @@ sys.path.insert(0, SCRIPTS)
 
 import _embeddings as emb  # noqa: E402
 from _progress import Progress  # noqa: E402
+from _querycache import QueryCache  # noqa: E402
 
 #: The split that every L2 measurement used, kept identical so this ceiling can
 #: sit beside those numbers. 1224 questions, 70/30, seed 42 -> 856 dev.
@@ -88,19 +89,18 @@ def split_questions(questions: list, which: str = "dev") -> list:
     return [q for i, q in enumerate(questions) if i in keep]
 
 
+_kb_eval = _load("kb-eval.py")
+
+
 def gold_rank(pool: list, expect) -> int:
     """1-based rank of the expected memory in the pool, or 0 if absent.
 
-    `expect` may list several acceptable answers; the best-ranked one counts,
-    because a reranker only has to surface one of them.
+    `expect` may list several acceptable answers or one bare stem/None; the
+    best-ranked one counts, because a reranker only has to surface one of
+    them. Delegates to kb-eval's canonical rank_of_first_expected
+    (TASK-190); the name stays because rank-factors calls CEIL.gold_rank.
     """
-    wanted = expect if isinstance(expect, list) else [expect]
-    best = 0
-    for w in wanted:
-        if w in pool:
-            r = pool.index(w) + 1
-            best = r if best == 0 else min(best, r)
-    return best
+    return _kb_eval.rank_of_first_expected(pool, expect)
 
 
 def measure(questions: list, pool_size: int, cache, kb_recall,
@@ -111,7 +111,7 @@ def measure(questions: list, pool_size: int, cache, kb_recall,
         for item in questions:
             p.step()
             q = item.get("q", "")
-            qv = cache.get_or_embed(q, emb.embed)
+            qv = cache.get_or_embed(q, emb.embed_query)
             if qv is None:
                 rows.append({"q": q, "expect": item.get("expect"), "pool": 0,
                              "rank": 0, "type": item.get("type", ""),
@@ -216,7 +216,6 @@ def main(argv=None) -> int:
                          "ranking problem from a floor problem")
     args = ap.parse_args(argv)
 
-    scene_exp = _load("scene-experiment.py")
     kb_recall = _load("kb-recall.py")
 
     questions = json.loads(Path(args.set_path).read_text(encoding="utf-8"))
@@ -225,7 +224,7 @@ def main(argv=None) -> int:
     chosen = split_questions(questions, args.split)
 
     cache_path = Path(args.cache) if args.cache else Path("rerank-ceiling-cache.json")
-    cache = scene_exp.QueryCache(cache_path, emb.embed_id())
+    cache = QueryCache(cache_path, emb.query_embed_id())
 
     started = time.monotonic()
     rows = measure(chosen, args.pool, cache, kb_recall, args.min_cos)
@@ -234,7 +233,7 @@ def main(argv=None) -> int:
     report["split"] = args.split
     report["set"] = Path(args.set_path).name
     report["total_questions_in_set"] = len(questions)
-    report["embed_id"] = emb.embed_id()
+    report["embed_id"] = emb.query_embed_id()
     report["min_cos"] = (kb_recall.MEMORY_MIN_COS if args.min_cos is None
                          else args.min_cos)
     report["min_cos_is_production"] = args.min_cos is None

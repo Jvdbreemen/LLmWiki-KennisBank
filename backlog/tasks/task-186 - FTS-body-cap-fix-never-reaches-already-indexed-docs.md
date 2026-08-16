@@ -1,7 +1,7 @@
 ---
 id: TASK-186
 title: FTS body-cap fix never reaches already-indexed docs
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-15 23:30'
 updated_date: '2026-08-15 23:30'
@@ -39,3 +39,7 @@ the margin.
 - [ ] #2 Existing vaults get the corrected FTS rows without a manual --rebuild
 - [ ] #3 Docs failing the num_ctx ceiling are reported by name, not only counted; the cap/ctx margin is stated in one place
 <!-- AC:END -->
+
+## Close-out (2026-08-16)
+
+Fixed on chore/backlog-zero: the index stamps fts_body_cap in meta; on mismatch the incremental build repairs exactly the length-mismatched FTS rows from the embedding cache (targeted, fits the 300s job budget) and deployed vaults heal on their next sessionstart. Embed failures are reported by name; the char cap is the named constant EMBED_DOC_CAP with the token-boundary story in one place.

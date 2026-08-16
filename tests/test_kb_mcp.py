@@ -32,7 +32,7 @@ class KbMcpTest(unittest.TestCase):
             self.skipTest("kb_recall niet beschikbaar (sqlite_vec ontbreekt?)")
         import _embeddings as emb
         self._orig_embed = emb.embed
-        emb.embed = lambda text, timeout=30.0: [0.1, 0.2, 0.3]
+        emb.embed = lambda text, timeout=30.0, kind="": [0.1, 0.2, 0.3]
         self.emb = emb
         self._orig_recall = self.m.kb_recall.recall_hits
         self.m.kb_recall.recall_hits = lambda *a, **k: [
@@ -246,6 +246,33 @@ class KbMcpTemporalToolTest(unittest.TestCase):
 
     def tearDown(self):
         self.m.activity = self.orig
+
+    def test_unavailable_activity_yields_the_warning_dict(self):
+        """TASK-190: het gedeelde dispatch-pad houdt de unavailable-guard."""
+        self.m.activity = None
+        for tool in (self.m.what_did_i_do_tool, self.m.timeline_tool,
+                     self.m.weeklog_tool):
+            out = tool("today")
+            self.assertFalse(out["ok"])
+            self.assertIn("niet beschikbaar", out["warnings"][0])
+
+    def test_a_raising_activity_fn_becomes_a_warning_dict(self):
+        class Boom:
+            @staticmethod
+            def what_did_i_do(*_a, **_k):
+                raise ValueError("kapot")
+        self.m.activity = Boom
+        out = self.m.what_did_i_do_tool("today")
+        self.assertEqual(out, {"ok": False,
+                               "warnings": ["what_did_i_do failed: ValueError"],
+                               "events": []})
+
+    def test_an_unparseable_max_events_is_a_warning_not_a_raise(self):
+        """De int()-coercie hoort BINNEN de try (pinned): alle vier de tools
+        deden dat al, de dispatcher mag dat niet verliezen."""
+        out = self.m.timeline_tool("today", max_events="abc")
+        self.assertFalse(out["ok"])
+        self.assertIn("failed", out["warnings"][0])
 
     def test_temporal_tool_wrappers_preserve_structured_results_by_default(self):
         """MCP migration step 3: the four tools return dict[str, Any] directly

@@ -1,7 +1,7 @@
 ---
 id: TASK-192
 title: Language policy regressions in the v0.28-v0.31 series
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-15 23:30'
 updated_date: '2026-08-15 23:30'
@@ -32,3 +32,7 @@ TASK-181 — not duplicated here.
 - [ ] #1 The named comments and documents are English; content unchanged
 - [ ] #2 A lint check (or the existing task-157 tooling) covers new Dutch in scripts/ and .github/ so the debt stops regrowing
 <!-- AC:END -->
+
+## Close-out (2026-08-16)
+
+Fixed on chore/backlog-zero: kb-lint.py fully English (~110 lines; identifiers, vault data-format literals and every measurement verbatim), ci.yml's five comment blocks translated, and a RATCHET guard (all of .github/ + translated scripts) so the debt cannot regrow there. Blanket scripts/ coverage remains deliberately out: TASK-157 was dropped by the owner; backlog records stay as written.

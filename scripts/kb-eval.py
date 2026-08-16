@@ -74,9 +74,15 @@ def load_set(path: Path) -> list:
     return entries
 
 
-def rank_of_first_expected(hit_stems: list, expect: list) -> int:
-    """1-based rang van de eerste verwachte stem in de hits; 0 = niet gevonden."""
-    want = set(expect)
+def rank_of_first_expected(hit_stems: list, expect) -> int:
+    """1-based rang van de eerste verwachte stem in de hits; 0 = niet gevonden.
+
+    `expect` mag een lijst of één losse stem/None zijn (de experiment-sets
+    gebruiken beide vormen; TASK-190 unificeerde vier kopieën van deze
+    helper op dit ene exemplaar). De best-gerankte verwachte stem telt."""
+    if expect is None:
+        return 0
+    want = set(expect if isinstance(expect, (list, tuple, set)) else [expect])
     for i, stem in enumerate(hit_stems, start=1):
         if stem in want:
             return i
@@ -187,13 +193,16 @@ def _live_hits_fn(layers=("wiki",), expand=None):
         return None, "embedding-backend onbereikbaar (Ollama draait niet?)"
 
     def hits_fn(q: str, k: int) -> list:
-        qv = emb.embed(q, kind="query")
+        qv = emb.embed_query(q)
         if qv is None:
             return []
         if tuple(layers) == ("memory",):
-            # productie: _memory_block -> memory_hits met de EIGEN memory-drempel
+            # productie: _memory_block -> memory_hits; drempel en scene-prior
+            # via exact dezelfde resolver als de hook (retrieve_params,
+            # TASK-188 parity).
             rows = kb_recall.recall_hits(qv, query_text=q, k=k, layers=("memory",),
-                                         min_cos=kb_recall.MEMORY_MIN_COS)
+                                         min_cos=params["memory_min_cos"],
+                                         scene_prior=kb_retrieve.scene_prior_params(params))
         else:
             # productie: _wiki_block -> wiki_hits met drempel + buur-expansie
             rows = kb_recall.recall_hits(qv, query_text=q, k=k, layers=tuple(layers),

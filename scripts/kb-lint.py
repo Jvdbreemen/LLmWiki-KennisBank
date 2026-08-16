@@ -1,35 +1,35 @@
 #!/usr/bin/env python3
 """
-kb-lint.py — Provenance-lint voor KennisBank wiki-artikelen.
+kb-lint.py — provenance lint for KennisBank wiki articles.
 
-Valideert dat elk wiki-artikel in 02-wiki/ herleidbare sessie-herkomst heeft.
-Een gecompileerd artikel zonder werkende link naar zijn raw-sessie(s) is niet
-auditeerbaar: een hallucinatie tijdens destillatie wordt dan een duurzaam
-"feit" dat nooit meer tegen de bron te checken is.
+Validates that every wiki article in 02-wiki/ carries traceable session
+provenance. A compiled article without a working link to its raw session(s)
+is not auditable: a hallucination during distillation then becomes a durable
+"fact" that can never be checked against its source again.
 
-Checks per artikel:
+Checks per article:
 
-1. **missing** — geen enkele verwijzing naar een raw-sessie
-   (geen ``[[raw-sessie-...]]``-wikilink en geen pad-tekst).
-2. **dangling** — een ``[[raw-sessie-...]]``-wikilink waarvan het bestand niet
-   bestaat in ``01-raw/sessies/`` of ``08-archive/``.
-3. **path-only** — de enige herkomst is een pad-tekst zoals
-   ``01-raw/sessies/raw-sessie-....md`` (backticks of proza). Pad-tekst is
-   onzichtbaar voor Obsidian-backlinks en de kennisgraaf; maak er een
-   wikilink van.
+1. **missing** — no reference to a raw session at all
+   (no ``[[raw-sessie-...]]`` wikilink and no path text).
+2. **dangling** — a ``[[raw-sessie-...]]`` wikilink whose file does not exist
+   in ``01-raw/sessies/`` or ``08-archive/``.
+3. **path-only** — the only provenance is path text such as
+   ``01-raw/sessies/raw-sessie-....md`` (backticks or prose). Path text is
+   invisible to Obsidian backlinks and the knowledge graph; turn it into a
+   wikilink.
 
-Herkomst telt in twee vormen: een ``[[raw-sessie-...]]``-wikilink (sessie-
-herkomst) of een expliciete ``[[05-bronnen/...]]``-wikilink (bron-herkomst,
-voor artikelen die uit een import komen in plaats van uit een sessie).
-Verwijzingen naar memories of andere artikelen zijn verbanden, geen bron.
-``index.md`` en ``log.md`` zijn structuurbestanden en worden overgeslagen.
+Provenance counts in two forms: a ``[[raw-sessie-...]]`` wikilink (session
+provenance) or an explicit ``[[05-bronnen/...]]`` wikilink (source
+provenance, for articles that come from an import rather than a session).
+References to memories or other articles are relations, not sources.
+``index.md`` and ``log.md`` are structure files and are skipped.
 
-Gebruik: python3 kb-lint.py [--json]
+Usage: python3 kb-lint.py [--json]
 
-Exit codes (zelfde conventie als een evaluator):
-  0 = alle artikelen schoon
-  1 = fout (vault of wiki-directory niet gevonden)
-  2 = waarschuwingen gevonden
+Exit codes (same convention as an evaluator):
+  0 = all articles clean
+  1 = error (vault or wiki directory not found)
+  2 = warnings found
 """
 
 from __future__ import annotations
@@ -47,39 +47,40 @@ from _vaultpath import vault_root  # noqa: E402
 SKIP_FILES = {"index.md", "log.md"}
 SESSION_PREFIX = "raw-sessie-"
 
-# Findings die de auditeerbaarheid ECHT breken (geen herleidbare herkomst,
-# of herkomst die uit het systeem zelf komt). In --strict-modus zijn dit
-# fail-closed; path-only blijft advisory (de link bestaat wel, maar als
-# pad-tekst i.p.v. wikilink).
+# Findings that REALLY break auditability (no traceable provenance, or
+# provenance that comes from the system itself). In --strict mode these are
+# fail-closed; path-only stays advisory (the link exists, just as path text
+# instead of a wikilink).
 #
-# self-source (TASK-90 E6, epistemische as): een artikel dat een ANDER
-# wiki-artikel, een memory of een systeembestand als HERKOMST opvoert citeert
-# een conclusie als bewijs — de zelfbevestigingslus waarin het systeem zijn
-# eigen gevolgtrekkingen als bron gaat aanhalen (llm_wiki #538 was hiervan de
-# bug-vorm: de wiki citeerde het eigen logbestand). Geen judge of stale-check
-# vangt dit; het ziet eruit als goede kennis. Daarom een harde lintregel.
+# self-source (TASK-90 E6, the epistemic axis): an article that cites ANOTHER
+# wiki article, a memory or a system file as its PROVENANCE is quoting a
+# conclusion as evidence — the self-confirmation loop in which the system
+# starts citing its own inferences as sources (llm_wiki #538 was the bug form
+# of this: the wiki cited its own log file). No judge or stale check catches
+# it; it looks like good knowledge. Hence a hard lint rule.
 HARD_TYPES = ("missing", "dangling", "self-source")
 
-#: Padprefixen die nooit herkomst mogen zijn: gesynthetiseerde kennis (wiki),
-#: gedestilleerde fragmenten (memory) en tooling/systeembestanden.
+#: Path prefixes that may never be provenance: synthesized knowledge (wiki),
+#: distilled fragments (memory) and tooling/system files.
 SELF_SOURCE_PREFIXES = ("02-wiki/", "09-memory/", ".claude/", "06-claude/")
 
-#: De Sessie-herkomst-sectie: van de kop tot de volgende kop of het einde.
+#: The Sessie-herkomst section: from its heading to the next heading or EOF.
+#: (The heading text is the Dutch vault's data format — do not translate.)
 HERKOMST_SECTION_RE = re.compile(
     r"^##\s+Sessie-herkomst\s*$(.*?)(?=^##\s|\Z)", re.MULTILINE | re.DOTALL)
 
-# [[target]], [[target|alias]], [[pad/naar/target#kop]]
+# [[target]], [[target|alias]], [[path/to/target#heading]]
 WIKILINK_RE = re.compile(r"\[\[([^\[\]]+?)\]\]")
-# Pad-tekst naar een sessielog buiten een wikilink om (backticks of proza).
+# Path text pointing at a session log outside a wikilink (backticks or prose).
 PATH_REF_RE = re.compile(r"01-raw[/\\]sessies[/\\](raw-sessie-[\w.-]+)")
 
 
 def normalize_target(target: str) -> str:
-    """Herleid een wikilink-target tot de kale bestandsstam.
+    """Reduce a wikilink target to its bare file stem.
 
-    Strips alias (``|``), kop-anker (``#``), pad-prefix en ``.md``-extensie,
-    zodat ``[[01-raw/sessies/raw-sessie-x.md|bron]]`` en ``[[raw-sessie-x]]``
-    dezelfde stam opleveren.
+    Strips alias (``|``), heading anchor (``#``), path prefix and the ``.md``
+    extension, so ``[[01-raw/sessies/raw-sessie-x.md|bron]]`` and
+    ``[[raw-sessie-x]]`` yield the same stem.
     """
     target = target.split("|", 1)[0].split("#", 1)[0].strip()
     target = target.replace("\\", "/").rsplit("/", 1)[-1]
@@ -88,27 +89,27 @@ def normalize_target(target: str) -> str:
     return target
 
 
-#: Directories die nooit sessielogs bevatten: tooling/index-output, plus
-#: 05-bronnen (geïmporteerde bron-documenten, een aparte herkomst-categorie
-#: -- zie resolving_bron_links() -- waar een raw-sessie-*.md-bestand qua
-#: vault-conventie nooit hoort). Gemeten op de echte vault (2026-08-03,
-#: TASK-130): 05-bronnen bevatte 0 sessiestammen op 58k+ bestanden, en die
-#: volle recursieve walk was 12s van kb-lint's 15.6s totale kosten.
+#: Directories that never contain session logs: tooling/index output, plus
+#: 05-bronnen (imported source documents, a separate provenance category
+#: -- see resolving_bron_links() -- where a raw-sessie-*.md file never
+#: belongs by vault convention). Measured on the real vault (2026-08-03,
+#: TASK-130): 05-bronnen held 0 session stems across 58k+ files, and that
+#: full recursive walk was 12s of kb-lint's 15.6s total cost.
 SKIP_DIRS = {".claude", ".git", ".obsidian", "graphify-out", "05-bronnen"}
 
 
 def collect_session_stems(root: Path) -> set[str]:
-    """Verzamel de bestandsstammen van alle bekende raw-sessies.
+    """Collect the file stems of every known raw session.
 
-    Vault-breed (zoals Obsidian wikilinks op bestandsnaam resolvet): actieve
-    sessies staan in ``01-raw/sessies/``, maar verplaatste of gearchiveerde
-    sessies (``01-raw/debug/``, ``08-archive/``, ...) blijven geldige
-    herkomst zolang het bestand ergens in de vault bestaat -- behalve onder
-    SKIP_DIRS, waar per conventie nooit een sessielog hoort.
+    Vault-wide (the way Obsidian resolves wikilinks by file name): active
+    sessions live in ``01-raw/sessies/``, but moved or archived sessions
+    (``01-raw/debug/``, ``08-archive/``, ...) remain valid provenance as
+    long as the file exists somewhere in the vault -- except under
+    SKIP_DIRS, where by convention a session log never belongs.
 
-    os.walk met directory-pruning, geen rglob: rglob daalt altijd volledig af
-    en filtert pas op het resultaat, dus zou de uitgesloten mappen nog steeds
-    volledig doorzoeken (TASK-130 -- 05-bronnen alleen al kostte 12s zo).
+    os.walk with directory pruning, not rglob: rglob always descends fully
+    and filters only on the result, so it would still traverse the excluded
+    directories completely (TASK-130 -- 05-bronnen alone cost 12s that way).
     """
     stems: set[str] = set()
     suffix = ".md"
@@ -121,16 +122,16 @@ def collect_session_stems(root: Path) -> set[str]:
 
 
 def _clean_target(target: str) -> str:
-    """Strip alias en kop-anker van een wikilink-target, behoud het pad."""
+    """Strip alias and heading anchor from a wikilink target, keep the path."""
     return target.split("|", 1)[0].split("#", 1)[0].strip().replace("\\", "/")
 
 
 def resolving_bron_links(text: str, root: Path) -> tuple[list, list]:
-    """(resolvend, dangling) voor expliciete [[05-bronnen/...]]-wikilinks.
+    """(resolving, dangling) for explicit [[05-bronnen/...]] wikilinks.
 
-    Bron-herkomst voor artikelen die uit een import (bv. Evernote) komen in
-    plaats van uit een sessie. Alleen path-stijl links die met ``05-bronnen/``
-    beginnen tellen; kale artikel-links blijven verbanden.
+    Source provenance for articles that come from an import (e.g. Evernote)
+    rather than a session. Only path-style links starting with
+    ``05-bronnen/`` count; bare article links remain relations.
     """
     ok, dead = [], []
     for t in WIKILINK_RE.findall(text):
@@ -147,9 +148,9 @@ def resolving_bron_links(text: str, root: Path) -> tuple[list, list]:
 
 
 def lint_article(path: Path, stems: set[str], root: Path) -> list[dict]:
-    """Lint één artikel. Geeft een lijst findings terug (leeg = schoon).
+    """Lint one article. Returns a list of findings (empty = clean).
 
-    Elke finding is ``{"file": str, "type": str, "detail": str}`` met type
+    Every finding is ``{"file": str, "type": str, "detail": str}`` with type
     ``missing`` | ``dangling`` | ``path-only``.
     """
     try:
@@ -166,15 +167,15 @@ def lint_article(path: Path, stems: set[str], root: Path) -> list[dict]:
     resolving = [t for t in session_links if t in stems] + bron_ok
     dangling = [t for t in session_links if t not in stems] + bron_dead
 
-    # Pad-verwijzingen buiten wikilinks om: eerst alle wikilinks wegknippen,
-    # dan pas naar losse pad-tekst zoeken.
+    # Path references outside wikilinks: cut every wikilink out first, only
+    # then look for loose path text.
     text_without_links = WIKILINK_RE.sub("", text)
     path_refs = PATH_REF_RE.findall(text_without_links)
 
     findings: list[dict] = []
-    # E6: conclusies zijn geen bewijs. Alleen links BINNEN de
-    # Sessie-herkomst-sectie tellen; een [[ander-artikel]] in ## Verbanden is
-    # een verband en blijft gewoon toegestaan.
+    # E6: conclusions are not evidence. Only links INSIDE the
+    # Sessie-herkomst section count; an [[other-article]] under ## Verbanden
+    # is a relation and stays allowed.
     m = HERKOMST_SECTION_RE.search(text)
     if m:
         for t2 in WIKILINK_RE.findall(m.group(1)):
@@ -183,41 +184,41 @@ def lint_article(path: Path, stems: set[str], root: Path) -> list[dict]:
                 findings.append({
                     "file": path.name,
                     "type": "self-source",
-                    "detail": (f"herkomst [[{cleaned}]] is gesynthetiseerde kennis of een "
-                               "systeembestand — een conclusie mag nooit als bron/bewijs "
-                               "terugvloeien (epistemische as, TASK-90)"),
+                    "detail": (f"provenance [[{cleaned}]] is synthesized knowledge or a "
+                               "system file — a conclusion must never flow back in as "
+                               "source/evidence (epistemic axis, TASK-90)"),
                 })
     for target in dangling:
         findings.append({
             "file": path.name,
             "type": "dangling",
-            "detail": f"dode herkomst-link [[{target}]]: bestand niet gevonden in de vault",
+            "detail": f"dead provenance link [[{target}]]: file not found in the vault",
         })
     if not resolving:
         if path_refs:
             findings.append({
                 "file": path.name,
                 "type": "path-only",
-                "detail": "herkomst alleen als pad-tekst (onzichtbaar voor backlinks en de kennisgraaf); maak er een [[raw-sessie-...]]-wikilink van",
+                "detail": "provenance only as path text (invisible to backlinks and the knowledge graph); turn it into a [[raw-sessie-...]] wikilink",
             })
         elif not dangling:
             findings.append({
                 "file": path.name,
                 "type": "missing",
-                "detail": "geen herkomst: geen [[raw-sessie-...]]- of [[05-bronnen/...]]-verwijzing",
+                "detail": "no provenance: no [[raw-sessie-...]] or [[05-bronnen/...]] reference",
             })
     return findings
 
 
 def lint_index_drift(root: Path) -> list:
-    """Ghost-docs in kb-index.db: geindexeerde paden die niet meer bestaan.
+    """Ghost docs in kb-index.db: indexed paths that no longer exist.
 
-    Index-drift is de best-bevestigde faalwijze van het LLM-wiki-veld (drie
-    onafhankelijke waarnemingen: llm_wiki #580, Pratiyush ``index_sync``,
-    Arkon's dashboard-vs-linter-telverschil): de catalogus loopt stil uiteen
-    met de werkelijkheid en niemand merkt het. Hier is de index een
-    wegwerp-cache, dus drift is advisory (een rebuild lost het op) — maar hij
-    hoort ZICHTBAAR te zijn. Fail-soft: geen db of sqlite-fout -> [].
+    Index drift is the best-confirmed failure mode of the LLM-wiki field
+    (three independent observations: llm_wiki #580, Pratiyush
+    ``index_sync``, Arkon's dashboard-vs-linter count mismatch): the
+    catalogue silently diverges from reality and nobody notices. Here the
+    index is a throwaway cache, so drift is advisory (a rebuild fixes it) —
+    but it must be VISIBLE. Fail-soft: no db or a sqlite error -> [].
     """
     import sqlite3
     db = root / ".claude" / "kb-index.db"
@@ -232,20 +233,20 @@ def lint_index_drift(root: Path) -> list:
     ghosts = [p for p in paths if not Path(p).exists()]
     if not ghosts:
         return []
-    voorbeeld = Path(ghosts[0]).name
+    example = Path(ghosts[0]).name
     return [{
         "file": "kb-index.db",
         "type": "index-drift",
-        "detail": (f"{len(ghosts)} geindexeerde doc(s) bestaan niet meer op schijf "
-                   f"(o.a. {voorbeeld}); draai build-kb-index.py voor een prune"),
+        "detail": (f"{len(ghosts)} indexed doc(s) no longer exist on disk "
+                   f"(e.g. {example}); run build-kb-index.py to prune"),
     }]
 
 
 def lint_vault(root: Path) -> dict:
-    """Lint alle wiki-artikelen onder ``root``. Geeft het rapport-dict terug."""
+    """Lint every wiki article under ``root``. Returns the report dict."""
     wiki_dir = root / "02-wiki"
     if not wiki_dir.is_dir():
-        raise FileNotFoundError(f"wiki-directory niet gevonden: {wiki_dir}")
+        raise FileNotFoundError(f"wiki directory not found: {wiki_dir}")
 
     stems = collect_session_stems(root)
     warnings: list[dict] = []
@@ -257,31 +258,31 @@ def lint_vault(root: Path) -> dict:
         warnings.extend(lint_article(f, stems, root))
     warnings.extend(lint_index_drift(root))
 
-    # index-drift is geen artikel-finding; hij telt niet mee in warned/clean
-    # (anders zou "clean" negatief kunnen worden bij een lege wiki).
+    # index-drift is not an article finding; it does not count toward
+    # warned/clean (otherwise "clean" could go negative on an empty wiki).
     warned_files = {w["file"] for w in warnings if w["type"] != "index-drift"}
     hard = sum(1 for w in warnings if w["type"] in HARD_TYPES)
     return {
         "articles": articles,
         "clean": articles - len(warned_files),
         "warned": len(warned_files),
-        "hard": hard,          # aantal missing/dangling findings (fail-closed in --strict)
+        "hard": hard,          # count of missing/dangling findings (fail-closed in --strict)
         "warnings": warnings,
     }
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Provenance-lint voor KennisBank wiki-artikelen."
+        description="Provenance lint for KennisBank wiki articles."
     )
     parser.add_argument(
         "--json", action="store_true",
-        help="machine-leesbare JSON-uitvoer (voor doctor.sh)",
+        help="machine-readable JSON output (for doctor.sh)",
     )
     parser.add_argument(
         "--strict", action="store_true",
-        help="fail-closed op missing/dangling (exit 2); path-only blijft advisory (exit 0). "
-             "Voor gate-gebruik: /wiki hard-stop en doctor FAIL-tier.",
+        help="fail closed on missing/dangling (exit 2); path-only stays advisory (exit 0). "
+             "For gate use: the /wiki hard stop and the doctor FAIL tier.",
     )
     args = parser.parse_args()
 
@@ -289,9 +290,9 @@ def main() -> int:
     try:
         report = lint_vault(root)
     except FileNotFoundError as exc:
-        # Fail-open bij een operationele fout (geen vault): exit 1, geen valse
-        # block. Een gate die kb-lint aanroept moet exit 1 als "kon niet
-        # controleren" behandelen, niet als "provenance kapot".
+        # Fail-open on an operational error (no vault): exit 1, no false
+        # block. A gate calling kb-lint must treat exit 1 as "could not
+        # check", not as "provenance broken".
         print(str(exc), file=sys.stderr)
         return 1
 
@@ -302,15 +303,15 @@ def main() -> int:
             hard = " [HARD]" if w["type"] in HARD_TYPES else ""
             print(f"[WARN]{hard} 02-wiki/{w['file']}: {w['detail']}")
         print(
-            f"Samenvatting: {report['articles']} artikelen, "
-            f"{report['warned']} met waarschuwingen ({report['hard']} hard), "
-            f"{report['clean']} schoon"
+            f"Summary: {report['articles']} articles, "
+            f"{report['warned']} with warnings ({report['hard']} hard), "
+            f"{report['clean']} clean"
         )
 
-    # Exit-contract:
-    #   1 = operationele fout (geen vault) — hierboven al afgehandeld
-    #   --strict: 2 alleen bij hard (missing/dangling); path-only = 0 (advisory)
-    #   default:  2 bij welke waarschuwing dan ook; 0 = schoon
+    # Exit contract:
+    #   1 = operational error (no vault) — handled above
+    #   --strict: 2 only on hard (missing/dangling); path-only = 0 (advisory)
+    #   default:  2 on any warning at all; 0 = clean
     if args.strict:
         return 2 if report["hard"] else 0
     return 2 if report["warnings"] else 0

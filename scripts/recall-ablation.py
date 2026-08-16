@@ -52,12 +52,9 @@ def _load_by_path(filename: str):
     return mod
 
 
-def _rank_of(stems, expect) -> int:
-    want = set(expect)
-    for i, s in enumerate(stems, start=1):
-        if s in want:
-            return i
-    return 0
+# Eén rang-definitie voor alle harnassen (TASK-190): de canonieke helper
+# leeft in kb-eval; drie kopieën dreven onafhankelijk.
+_rank_of = _load_by_path("kb-eval.py").rank_of_first_expected
 
 
 def _metrics(ranks: list) -> dict:
@@ -150,7 +147,7 @@ def main() -> int:
     vecs = {}
     for e in entries:
         if e["q"] not in vecs:
-            vecs[e["q"]] = emb.embed(e["q"], kind="query")
+            vecs[e["q"]] = emb.embed_query(e["q"])
     print(f"  {len(vecs)} query vectors computed", flush=True)
 
     def run(keep):

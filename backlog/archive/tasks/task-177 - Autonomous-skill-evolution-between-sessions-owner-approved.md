@@ -106,3 +106,11 @@ allowed) is part of that design work, as already noted in TASK-175.
 
 <!-- SECTION:NOTES:BEGIN -->
 <!-- SECTION:NOTES:END -->
+
+## Close-out (2026-08-16) — parked
+
+Nothing started: no design doc in docs/superpowers/specs, no evolution pass, no EverOS format study on record. Parked with its direction fully preserved in this task's description (owner decision 2026-08-15, commit 5da8c3b) and the EverOS section of docs/research/agent-memory-field-review-and-strategy.md. One thing changed since filing that lowers the design risk: kb-autoreview.py (TASK-195, PR #132) shipped the exact 'client model writes, local verifier gates, behind an explicit cloud-consent toggle' pattern ACs #8-#10 call for — the design doc should reuse that channel rather than invent one. Design-first, behavior-changing, multi-day: not a do-now.
+
+**Evidence:** No design doc: docs/superpowers/specs/ listing contains nothing on skill evolution (latest spec is 2026-08-16-autonomous-memory-review-design.md). No code: grep 'EverOS|skill evolution' hits only task files and the research doc. TASK-175 (new-skill promotion, the paired half) still status: To Do. Precedent now shipped: scripts/kb-autoreview.py (TASK-195, PR #132, commit 10993ac) implements the client-LLM-writes/local-gates channel behind auto_review_llm.
+
+**Remaining work (when reopened):** Design doc in docs/superpowers/specs (incl. EverOS skill-record study), then the evolution pass: off-hot-path toggle, grounded strengthen-only asymmetry, git-commit + closed-log + provenance frontmatter, kb-state-audit hard gate, client-model rewrite channel (reuse the kb-autoreview pattern), acceptance-rate measurement before default-on.

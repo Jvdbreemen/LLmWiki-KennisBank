@@ -103,6 +103,12 @@ def meta_get(conn: sqlite3.Connection, key: str) -> "str | None":
     return row[0] if row else None
 
 
+def meta_set(conn: sqlite3.Connection, key: str, value: str) -> None:
+    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)",
+                 (key, str(value)))
+    conn.commit()
+
+
 def is_valid_for(conn: sqlite3.Connection, embed_id: str) -> bool:
     return meta_get(conn, "embed_id") == embed_id
 

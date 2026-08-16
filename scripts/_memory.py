@@ -141,6 +141,17 @@ def looks_like_config(text: str) -> bool:
     return bool(_CFG_ASSIGN.search(t) or _CFG_PHRASE.search(t))
 
 
+_CFG_KEY_RE = re.compile(rf"(?:{_CFG_KEY})\Z")
+
+
+def looks_like_config_key(key) -> bool:
+    """True als deze LOSSE sleutel setting-vormig is: exact dezelfde
+    _CFG_KEY-grens die looks_like_config in lopende tekst gebruikt
+    (TASK-190). kb-state-audit parafraseerde deze grens met isupper() en
+    week al af aan de randen (TOP-K, .env, 2FA)."""
+    return bool(_CFG_KEY_RE.match(str(key or "")))
+
+
 def coerce_volatility(value, body: str = "") -> str:
     """Bepaal de update-as van een memory. Volgorde is de hele truc:
 
@@ -496,6 +507,45 @@ CLOSED_STATUSES = ("superseded", "retracted", "expired")
 CLOSED_LOG = "memory-closed-log.jsonl"
 
 
+def _append_jsonl(log_path: Path, rec: dict, max_lines=None) -> None:
+    """Append one record, fail-soft; with max_lines, trim oldest-first once
+    25% over. The ONE append dance (TASK-190): it existed five times, and
+    only the discard copy trimmed — the others grew unbounded."""
+    try:
+        import json
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with log_path.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        if max_lines is not None:
+            lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+            if len(lines) > max_lines * 1.25:
+                log_path.write_text("\n".join(lines[-max_lines:]) + "\n",
+                                    encoding="utf-8")
+    except Exception:
+        pass  # een logboek mag de actie zelf nooit blokkeren
+
+
+def _read_jsonl(log_path: Path, limit: int) -> list:
+    """Newest-first tail of a JSONL log; blank/corrupt lines skipped,
+    fail-soft to []."""
+    try:
+        import json
+        if not log_path.exists():
+            return []
+        rows = []
+        for line in log_path.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rows.append(json.loads(line))
+            except Exception:
+                continue
+        return rows[-limit:][::-1]
+    except Exception:
+        return []
+
+
 def _log_closure(path: Path, status: str, superseded_by, valid_until, reason: str) -> None:
     """Leg vast dat een memory is gesloten. Append-only, fail-soft.
 
@@ -509,7 +559,6 @@ def _log_closure(path: Path, status: str, superseded_by, valid_until, reason: st
     zo'n spoor is "het is terug te draaien" een belofte die niemand kan innen.
     """
     try:
-        import json
         from datetime import datetime, timezone
         rec = {
             "ts": datetime.now(timezone.utc).isoformat(),
@@ -519,10 +568,7 @@ def _log_closure(path: Path, status: str, superseded_by, valid_until, reason: st
             "valid_until": valid_until or "",
             "reason": (reason or "")[:300],
         }
-        log = vault_root() / ".claude" / CLOSED_LOG
-        log.parent.mkdir(parents=True, exist_ok=True)
-        with log.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        _append_jsonl(vault_root() / ".claude" / CLOSED_LOG, rec)
     except Exception:
         pass  # een logboek mag de sluiting zelf nooit blokkeren
 
@@ -561,15 +607,11 @@ def promote(path, reason: str = "", route: str = "",
     except OSError:
         return False
     try:
-        import json
         from datetime import datetime, timezone
-        log = vault_root() / ".claude" / PROMOTE_LOG
-        log.parent.mkdir(parents=True, exist_ok=True)
         rec = {"stem": p.stem, "reason": reason[:300], "route": route,
                "prompt_version": prompt_version,
                "at": datetime.now(timezone.utc).isoformat()}
-        with log.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        _append_jsonl(vault_root() / ".claude" / PROMOTE_LOG, rec)
     except Exception:
         pass  # het logboek mag de promotie zelf nooit blokkeren
     return True
@@ -578,20 +620,7 @@ def promote(path, reason: str = "", route: str = "",
 def recent_promotions(limit: int = 20) -> list:
     """The latest promotions, newest first. Empty when there is no log."""
     try:
-        import json
-        log = vault_root() / ".claude" / PROMOTE_LOG
-        if not log.exists():
-            return []
-        rows = []
-        for line in log.read_text(encoding="utf-8", errors="replace").splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                rows.append(json.loads(line))
-            except Exception:
-                continue
-        return rows[-limit:][::-1]
+        return _read_jsonl(vault_root() / ".claude" / PROMOTE_LOG, limit)
     except Exception:
         return []
 
@@ -626,15 +655,11 @@ def demote(path, reason: str = "") -> bool:
     except OSError:
         return False
     try:
-        import json
         from datetime import datetime, timezone
-        log = vault_root() / ".claude" / PROMOTE_LOG
-        log.parent.mkdir(parents=True, exist_ok=True)
         rec = {"stem": p.stem, "reason": reason[:300], "route": "undo",
                "action": "demote",
                "at": datetime.now(timezone.utc).isoformat()}
-        with log.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        _append_jsonl(vault_root() / ".claude" / PROMOTE_LOG, rec)
     except Exception:
         pass  # het logboek mag de demotie zelf nooit blokkeren
     return True
@@ -673,20 +698,7 @@ def reopen(path, status: str = "current") -> bool:
 def recent_closures(limit: int = 20) -> list:
     """De laatste sluitingen, nieuwste eerst. Leeg als er geen logboek is."""
     try:
-        import json
-        log = vault_root() / ".claude" / CLOSED_LOG
-        if not log.exists():
-            return []
-        rows = []
-        for line in log.read_text(encoding="utf-8", errors="replace").splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                rows.append(json.loads(line))
-            except Exception:
-                continue
-        return rows[-limit:][::-1]
+        return _read_jsonl(vault_root() / ".claude" / CLOSED_LOG, limit)
     except Exception:
         return []
 
@@ -718,7 +730,6 @@ def log_discard(title: str, body: str, covered_by: str = "",
     on bookkeeping.
     """
     try:
-        import json
         from datetime import datetime, timezone
         rec = {
             "ts": datetime.now(timezone.utc).isoformat(),
@@ -728,48 +739,16 @@ def log_discard(title: str, body: str, covered_by: str = "",
             "reason": str(reason or "")[:300],
             "prompt_version": prompt_version,
         }
-        log = vault_root() / ".claude" / DISCARD_LOG
-        log.parent.mkdir(parents=True, exist_ok=True)
-        with log.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
-        _trim_discard_log(log)
+        _append_jsonl(vault_root() / ".claude" / DISCARD_LOG, rec,
+                      max_lines=DISCARD_LOG_MAX_LINES)
     except Exception:
         pass  # a record must never block the sweep
-
-
-def _trim_discard_log(log: Path) -> None:
-    """Keep the discard log bounded, oldest first.
-
-    Trimming only when the file is meaningfully over the limit, so a long
-    rebuild does not rewrite the whole file on every single line.
-    """
-    try:
-        lines = log.read_text(encoding="utf-8", errors="replace").splitlines()
-        if len(lines) <= DISCARD_LOG_MAX_LINES * 1.25:
-            return
-        keep = lines[-DISCARD_LOG_MAX_LINES:]
-        log.write_text("\n".join(keep) + "\n", encoding="utf-8")
-    except Exception:
-        pass
 
 
 def recent_discards(limit: int = 20) -> list:
     """The most recently discarded candidates, newest first."""
     try:
-        import json
-        log = vault_root() / ".claude" / DISCARD_LOG
-        if not log.exists():
-            return []
-        rows = []
-        for line in log.read_text(encoding="utf-8", errors="replace").splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                rows.append(json.loads(line))
-            except Exception:
-                continue
-        return rows[-limit:][::-1]
+        return _read_jsonl(vault_root() / ".claude" / DISCARD_LOG, limit)
     except Exception:
         return []
 # --- Menselijke review van unverified memories (TASK-89) ---------------------
@@ -843,12 +822,8 @@ def pending_reviews(limit=None) -> list:
 def _append_review_log(entry: dict) -> None:
     """Audit-append, fail-soft: telemetrie mag een genomen besluit nooit
     terugdraaien of blokkeren. De statuswijziging is dan al duurzaam."""
-    import json
     try:
-        p = review_log_path()
-        p.parent.mkdir(parents=True, exist_ok=True)
-        with p.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        _append_jsonl(review_log_path(), entry)
     except Exception:
         pass
 

@@ -42,6 +42,18 @@ WIKI_SKIP = {"index.md", "log.md"}
 FTS_BODY_CAP = 200_000
 
 
+def _fts_len_mismatch(conn, sp, f) -> bool:
+    """Stored FTS row length vs what doc_text would store under the CURRENT
+    cap. Self-truing: it recomputes the expectation, so it also repairs a
+    legacy row whose cap was never stamped, in either direction of a cap
+    change (TASK-186)."""
+    row = conn.execute(
+        "SELECT length(body) FROM fts_docs WHERE rowid="
+        "(SELECT doc_id FROM docs WHERE path=?)", (sp,)).fetchone()
+    stored = row[0] if row and row[0] is not None else -1
+    return stored != len(emb.doc_text(f, cap=FTS_BODY_CAP))
+
+
 def _doc_meta(path, layer):
     """(title, created, sources) uit één read; fail-soft naar leeg.
 
@@ -129,7 +141,12 @@ def main(rebuild: bool = False) -> None:
             has_meta = probe_conn.execute(
                 "SELECT name FROM sqlite_master WHERE name='meta'").fetchone()
             fresh_enough = (_kbindex.is_valid_for(probe_conn, eid)
-                            and _kbindex.meta_get(probe_conn, "unit_norm") == "1")
+                            and _kbindex.meta_get(probe_conn, "unit_norm") == "1"
+                            # A cap change alters what indexed FTS rows should
+                            # contain; without this stamp the fast path kept
+                            # every truncated row forever (TASK-186).
+                            and _kbindex.meta_get(probe_conn, "fts_body_cap")
+                            == str(FTS_BODY_CAP))
             if has_meta and fresh_enough:
                 items = _collect()
                 seen = {str(f) for f, _, _ in items}
@@ -187,6 +204,11 @@ def main(rebuild: bool = False) -> None:
     cache = emb.load_cache()
     seen = set()
     indexed = skipped = failed = 0
+    failed_docs = []
+    # Cap changed since this index was stamped? Then hash-matched rows may
+    # hold truncated FTS bodies; repair exactly those (targeted, from the
+    # embedding cache - no re-embedding) instead of a 10-minute full rebuild.
+    fts_refresh = _kbindex.meta_get(conn, "fts_body_cap") != str(FTS_BODY_CAP)
     # _collect() is een generator; hier eerst uitputten zodat het totaal
     # bekend is. Een percentage zonder noemer is geen percentage, en de lijst
     # met paden weegt niets naast de embeddings die erachteraan komen.
@@ -198,11 +220,13 @@ def main(rebuild: bool = False) -> None:
             seen.add(sp)
             fh = emb.file_hash(f)
             if not rebuild and _kbindex.indexed_hash(conn, sp) == fh:
-                skipped += 1
-                continue
+                if not (fts_refresh and _fts_len_mismatch(conn, sp, f)):
+                    skipped += 1
+                    continue
             vec = emb.get_cached(f, cache)
             if not vec:
                 failed += 1
+                failed_docs.append(sp)
                 continue
             title, created, sources = _doc_meta(f, layer)
             _kbindex.upsert(conn, path=sp, layer=layer, status=status,
@@ -210,6 +234,21 @@ def main(rebuild: bool = False) -> None:
                             vector=vec, file_hash=fh,
                             title=title, created=created, sources=sources)
             indexed += 1
+    if failed_docs:
+        # By name: an aggregate count hid WHICH documents silently dropped
+        # out of both index arms (TASK-186). Wording hedges on the cause -
+        # only the ollama backend hard-fails past num_ctx; cloud backends
+        # truncate server-side.
+        rels = [os.path.relpath(p, VAULT) for p in failed_docs]
+        print(f"kb-index: geen embedding voor {len(rels)} document(en): "
+              f"{', '.join(rels)} (model-fout, of het document tokeniseert "
+              f"voorbij num_ctx={emb.OLLAMA_NUM_CTX}; zie _embeddings.EMBED_DOC_CAP)",
+              file=sys.stderr)
+    # Stamp AFTER the corrective pass: written only when the pass completed,
+    # so a killed run rescans next time. Deliberately not gated on failed==0 -
+    # one permanently failing doc must not force the length scan forever; the
+    # by-name report above keeps that residue visible.
+    _kbindex.meta_set(conn, "fts_body_cap", str(FTS_BODY_CAP))
     total_before = conn.execute("SELECT count(*) FROM docs").fetchone()[0]
     removed = _kbindex.prune(conn, keep_paths=seen, layers=_active_layers())
     notice = prune_notice(removed, total_before, _active_layers())

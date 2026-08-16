@@ -51,7 +51,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _common import env_int  # noqa: E402
+from _common import env_int, outside_window, pid_alive  # noqa: E402
 from _frontmatter import split_frontmatter  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402
 
@@ -94,6 +94,15 @@ def cache_file() -> Path:
 #: and silently invalidate the index.
 OLLAMA_NUM_CTX = env_int("KB_EMBED_NUM_CTX", 2048)
 
+#: Character cap for document embed input, coupled to OLLAMA_NUM_CTX above:
+#: past num_ctx TOKENS the Ollama embed call FAILS (returns None), it does not
+#: truncate — measured 2026-08-15/16, docs/research/wiki-embed-cap-2026-08-15.md.
+#: 4000 chars of prose stays under 2048 tokens; token-dense text (CJK, code,
+#: hex paths) can cross it even under this cap, and build-kb-index then
+#: reports the document by name (TASK-186). The doc prefix is prepended AFTER
+#: the cap, tightening the margin slightly.
+EMBED_DOC_CAP = 4000
+
 #: Never unload on a timer. A cold load takes 30-60 s while the retrieval hook
 #: has a 2 s budget, so an idle gap turns retrieval off without saying so.
 #: This does not protect against eviction by another model -- only fitting in
@@ -101,14 +110,36 @@ OLLAMA_NUM_CTX = env_int("KB_EMBED_NUM_CTX", 2048)
 OLLAMA_KEEP_ALIVE = os.environ.get("KB_EMBED_KEEP_ALIVE", "").strip() or -1
 
 
+#: Memo for _config(), keyed on (resolved path, mtime_ns, size). The path is
+#: resolved at CALL time (TASK-196: never freeze vault-derived state at
+#: import), so repointing KENNISBANK_VAULT invalidates the memo, and the stat
+#: fields make an edited config visible without a read+parse per call.
+_CONFIG_MEMO: dict = {"key": None, "cfg": {}}
+
+
 def _config() -> dict:
+    """Parsed kennisbank-embed.json, memoized on (path, mtime_ns, size).
+
+    Callers treat the result as read-only. An index build calls embed_id()
+    per file (two config reads each, ~5000 reads and ~1.4s per build measured
+    on this machine, TASK-191); this turns those into one stat per call."""
     cfg_file = vault_root() / ".claude" / "kennisbank-embed.json"
-    if cfg_file.exists():
+    try:
+        st = cfg_file.stat()
+        key = (str(cfg_file), st.st_mtime_ns, st.st_size)
+    except OSError:
+        key = (str(cfg_file), None, None)
+    if _CONFIG_MEMO["key"] == key:
+        return _CONFIG_MEMO["cfg"]
+    cfg: dict = {}
+    if key[1] is not None:
         try:
-            return json.loads(cfg_file.read_text(encoding="utf-8")) or {}
+            cfg = json.loads(cfg_file.read_text(encoding="utf-8")) or {}
         except Exception:
-            return {}
-    return {}
+            cfg = {}
+    _CONFIG_MEMO["key"] = key
+    _CONFIG_MEMO["cfg"] = cfg
+    return cfg
 
 
 def _setting(name: str, env: str, file_cfg: dict, default: str = "") -> str:
@@ -321,6 +352,25 @@ def embed(text: str, timeout: float = 30.0, kind: str = ""):
     return None
 
 
+def embed_query(text: str, timeout: float = 30.0):
+    """Embed *text* as a retrieval query — the ONE entry point for every
+    query-side embed, production and eval alike (TASK-184). Routing every
+    query through this seam means a call site cannot forget the kind, so
+    kb-eval can never measure a prefix the live hook does not send."""
+    return embed(text, timeout=timeout, kind="query")
+
+
+def query_embed_id() -> str:
+    """Identity for QUERY-vector caches: embed_id() plus the query prefix.
+
+    embed_id() deliberately folds in only the DOC prefix (the shared document
+    cache must survive query-side A/B runs; tests pin that), so caches that
+    hold query vectors key on THIS instead: the same question under a
+    different query prefix is a different vector (TASK-184)."""
+    qp = _prefix("query")
+    return embed_id() + (f"+q:{qp}" if qp else "")
+
+
 # --- model warm-up (kills cold-load latency on the hot path) -----------------
 #
 # The interactive retrieval hook must never block on a cold model load. A big
@@ -334,26 +384,10 @@ def _warm_marker() -> Path:
     return cache_file().parent / ".embed-warm.marker"
 
 
-def _pid_alive(pid: int) -> bool:
-    """Check a process without sending it a signal (including on Windows)."""
-    if not isinstance(pid, int) or pid <= 0:
-        return False
-    if os.name == "nt":
-        try:
-            import ctypes
-            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-            handle = kernel32.OpenProcess(0x1000, False, pid)  # QUERY_LIMITED_INFORMATION
-            if not handle:
-                return False
-            kernel32.CloseHandle(handle)
-            return True
-        except Exception:
-            return False
-    try:
-        os.kill(pid, 0)
-    except OSError:
-        return False
-    return True
+# One implementation in _common (TASK-183). This copy diverged: it read
+# PermissionError as DEAD, so an EPERM-protected live warm child looked
+# finished and duplicate warms spawned. Alias keeps the monkeypatch surface.
+_pid_alive = pid_alive
 
 
 def warm_in_progress(max_age: float = 60.0) -> bool:
@@ -374,7 +408,9 @@ def warm_in_progress(max_age: float = 60.0) -> bool:
         import time as _time
         marker = _warm_marker()
         age = _time.time() - marker.stat().st_mtime
-        if abs(age) >= max_age:
+        # Boundary note: outside_window is |age| > max_age where this was
+        # >= — a flip only at exact float equality, measure-zero.
+        if outside_window(age, max_age):
             return False
         data = json.loads(marker.read_text(encoding="utf-8"))
         pid = data.get("pid") if isinstance(data, dict) else None
@@ -453,7 +489,8 @@ def warm_async(min_interval: float = 60.0) -> None:
             # one-sided `age < min_interval` also swallows a marker stamped
             # HOURS ahead (a clock set back, a restored file) and would then
             # suppress every prewarm until wall-clock time caught up.
-            if marker.exists() and abs(_time.time() - marker.stat().st_mtime) < min_interval:
+            if marker.exists() and not outside_window(
+                    _time.time() - marker.stat().st_mtime, min_interval):
                 return
         except Exception:
             pass
@@ -512,11 +549,17 @@ def save_cache(cache: dict) -> None:
             tmp.unlink(missing_ok=True)
 
 
+def bytes_hash(data: bytes) -> str:
+    """The 8-char md5 identity used by the index and the cache — one spelling,
+    so callers that already hold the bytes need not re-read the file."""
+    return hashlib.md5(data).hexdigest()[:8]
+
+
 def file_hash(path) -> str:
-    return hashlib.md5(Path(path).read_bytes()).hexdigest()[:8]
+    return bytes_hash(Path(path).read_bytes())
 
 
-def doc_text(path, cap: int = 4000) -> str:
+def doc_text(path, cap: int = EMBED_DOC_CAP) -> str:
     """Body text of a markdown note (frontmatter stripped), capped for embedding."""
     try:
         _, body = split_frontmatter(Path(path).read_text(encoding="utf-8"))

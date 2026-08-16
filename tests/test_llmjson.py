@@ -11,6 +11,7 @@ The fix is narrower, not wider: take the FIRST complete object or array.
 """
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -220,6 +221,32 @@ class BrokenDelimiterTest(unittest.TestCase):
 
     def test_repairs_apply_to_arrays_too(self):
         self.assertEqual(_llmjson.first_array("[{\"t\": 'a'}]"), [{"t": "a"}])
+
+
+class WideSpanGuardTest(unittest.TestCase):
+    """No script may reintroduce the wide-span find/rfind JSON parse — the
+    silent-{} failure _llmjson replaced (TASK-189 found two stragglers).
+    scene-report.py's ``text[text.find("{"):]`` is deliberately out of scope:
+    it parses the harness's own report FILE and raises loudly on failure.
+    Full-text scan, not line-anchored (the PR #54 guard lesson); the 120-char
+    window catches the find/rfind pair split across lines."""
+
+    PATTERN = re.compile(r"""\.find\(\s*['"][\[{]['"]\s*\)[\s\S]{0,120}?\.rfind\(""")
+
+    def test_no_wide_span_json_parse_in_scripts(self):
+        offenders = []
+        for script in sorted(SCRIPTS.glob("*.py")):
+            if script.name == "_llmjson.py":
+                # owns the final-fallback span and quotes the anti-pattern
+                continue
+            text = script.read_text(encoding="utf-8", errors="replace")
+            for m in self.PATTERN.finditer(text):
+                line = text.count("\n", 0, m.start()) + 1
+                offenders.append(f"{script.name}:{line}")
+        self.assertEqual(
+            offenders, [],
+            f"wide-span JSON parse in: {offenders}; "
+            "use _llmjson.first_object/first_array")
 
 
 if __name__ == "__main__":

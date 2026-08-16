@@ -77,3 +77,11 @@ injected stems. All three inherit whatever this sensor gets wrong.
 
 <!-- SECTION:NOTES:BEGIN -->
 <!-- SECTION:NOTES:END -->
+
+## Close-out (2026-08-16) — parked
+
+Untouched and now the most load-bearing open item in this cluster: kb-usage-scan still detects only tool-call reads, so the in-context case (b) is still guaranteed to score as ignored. TASK-195 shipping made this MORE urgent, not less — the autonomous noise-marking that TASK-178's close-out defers lives behind this sensor, and TASK-175 (promotion gate) and TASK-173 (outcome loop) read the same data. The analysis and candidate fixes are fully recorded in this task's description; the weak-signal-vs-broken-sensor question it must answer is documented in docs/research/rank-factors-2026-08-14.md. Per-client labelled sessions across three CLIs is a measurement campaign, not an hour.
+
+**Evidence:** Blind spot intact: scripts/kb-usage-scan.py:29-52 (tool_use_input_text) still counts only tool-call inputs; grep 'kb-used|in-context' over scripts/ returns nothing; no per-client synthetic-session harness or confusion matrix exists in docs/research/. The motivating measurement stands at docs/research/rank-factors-2026-08-14.md (usage_factor 10/13, p=0.68). git log origin/main shows no usage-scan commits since the task was filed (1b2f855).
+
+**Remaining work (when reopened):** Build labelled synthetic sessions per client (Claude Code, Codex, Copilot), report the confusion matrix, verify each SessionEnd path feeds the scan, measure missing-transcript frequency, evaluate the three candidate detectors against the labelled set, and give TASK-175/TASK-178-residual an explicit statement of what the sensor still cannot see.

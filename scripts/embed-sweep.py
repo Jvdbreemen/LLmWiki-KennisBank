@@ -29,7 +29,7 @@ Usage:
     python embed-sweep.py --vault <scratch-vault> --models qwen3-embedding:8b,...
     python embed-sweep.py --vault <scratch-vault> --report      # table only
 
-Stdlib only.
+Stdlib + sibling _embeddings (endpoint resolution).
 """
 from __future__ import annotations
 
@@ -44,6 +44,8 @@ import urllib.request
 from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPTS))
+import _embeddings  # noqa: E402
 
 #: Queries for the latency probe. Deliberately real Dutch questions from the
 #: eval set: query token length is part of what determines embed time, so a
@@ -67,7 +69,12 @@ def _pct(vals: list, q: float) -> float:
 def ollama_embed(model: str, text: str, timeout: float = 300.0):
     payload = json.dumps({"model": model, "prompt": text,
                           "keep_alive": "30m"}).encode("utf-8")
-    req = urllib.request.Request("http://localhost:11434/api/embeddings",
+    # Resolve through the one config chain (TASK-190): a hardcoded localhost
+    # here let the probe measure a DIFFERENT backend than the build/eval
+    # subprocesses whenever KB_EMBED_ENDPOINT or the vault config points
+    # elsewhere - breaking the harness's own comparability claim.
+    endpoint = _embeddings._resolve()[2]
+    req = urllib.request.Request(f"{endpoint}/api/embeddings",
                                  data=payload,
                                  headers={"Content-Type": "application/json"})
     t0 = time.perf_counter()
@@ -162,6 +169,9 @@ def _env(vault: Path, model: str, prefixes: dict) -> dict:
     e["KB_RETRIEVE_THRESHOLD"] = "0.0"
     e["KB_MEMORY_THRESHOLD"] = "0.0"
     e["KB_USAGE_DISABLE"] = "1"
+    # Pin the endpoint so probe and subprocesses measure the same host by
+    # construction, also when it came from a config file only one side sees.
+    e["KB_EMBED_ENDPOINT"] = _embeddings._resolve()[2]
     e["KB_EMBED_QUERY_PREFIX"] = prefixes.get("query", "")
     e["KB_EMBED_DOC_PREFIX"] = prefixes.get("doc", "")
     return e

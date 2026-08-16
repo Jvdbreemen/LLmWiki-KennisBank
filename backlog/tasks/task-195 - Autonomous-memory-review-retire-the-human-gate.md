@@ -1,7 +1,7 @@
 ---
 id: TASK-195
 title: 'Autonomous memory review: retire the human gate'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-16 08:01'
 labels: []
@@ -57,6 +57,9 @@ audit view — no step waits for a human.
 - [x] #4 Traps 2 and 3 sit behind auto_review_llm, default OFF in the shipped repo
 - [x] #5 A retraction requires two independent methods plus a failed refutation, is capped per run, logs both verdicts, and reverses with one reopen()
 - [x] #6 /kennisbank:review becomes an audit view with per-line undo; no step in the pipeline waits for a human
-- [ ] #7 python -m pytest tests -q is green
+- [x] #7 python -m pytest tests -q is green
 <!-- AC:END -->
 
+## Close-out (2026-08-16)
+
+All seven ACs delivered: G0 measured before code (PR #129/#130), trap 1 grounded promotion (PR #130), the 993-item drain + gate G3 (PR #131), traps 2/3 behind auto_review_llm with the double-agreement retraction rule (PR #132, first real run: 90 promoted / 2 retracted / 42 left), and /kennisbank:review as an audit view with demote/reopen per line (PR #133). Suite green at 1518 passed after the follow-up silent-failure cluster (PR #135).

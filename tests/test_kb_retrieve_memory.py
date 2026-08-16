@@ -75,6 +75,45 @@ class KbRetrieveMemoryTest(unittest.TestCase):
     def test_trivial_prompt_no_output(self):
         self.assertEqual(self._run("ok").strip(), "")
 
+    def test_hook_sends_the_configured_query_prefix_to_the_backend(self):
+        """TASK-184: the LIVE hook path must send the same query prefix the
+        eval harness measures — parity is the whole point of the seam."""
+        saved = {k: os.environ.get(k) for k in
+                 ("KENNISBANK_VAULT", "KB_EMBED_PROVIDER", "KB_EMBED_MODEL",
+                  "KB_EMBED_QUERY_PREFIX")}
+        os.environ["KENNISBANK_VAULT"] = str(self.vault)
+        os.environ["KB_EMBED_PROVIDER"] = "ollama"
+        os.environ["KB_EMBED_MODEL"] = "testmodel"
+        os.environ["KB_EMBED_QUERY_PREFIX"] = "Query: "
+        sys.path.insert(0, str(SCRIPTS_DIR))
+        import _embeddings as emb
+        captured = []
+        orig_http = emb._http_json
+        emb._http_json = (lambda url, payload, headers, timeout:
+                          captured.append(payload) or {"embedding": [0.1, 0.2, 0.3]})
+        orig_stdin = sys.stdin
+        try:
+            mod = _load_kb_retrieve()
+            sys.stdin = io.StringIO(json.dumps(
+                {"prompt": "Een wat langere vraag over hooks en retrieval"}))
+            with contextlib.redirect_stdout(io.StringIO()):
+                try:
+                    mod.main()
+                except SystemExit:
+                    pass
+        finally:
+            emb._http_json = orig_http
+            sys.stdin = orig_stdin
+            for k, v in saved.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+        embeds = [p for p in captured if "prompt" in p]
+        self.assertTrue(embeds, "the hook never reached the embed backend")
+        self.assertTrue(embeds[0]["prompt"].startswith("Query: "),
+                        f"hook embedded without the prefix: {embeds[0]['prompt']!r}")
+
     def test_memory_recall_off_no_memory_block(self):
         # geen index, geen cache -> hoogstens niets; cruciaal: nooit een memory-blok
         out = self._run("Een wat langere vraag over hooks en retrieval in dit project",
@@ -131,6 +170,45 @@ class KbRetrieveMemoryBlockTest(unittest.TestCase):
             [0.1, 0.2], "test prompt", {}, hits_fn=hits_fn)
         self.assertEqual(result, "")
         hits_fn.assert_called()
+
+    # --- TASK-188: knobs resolven per call via retrieve_params -------------
+
+    def test_memory_block_passes_config_floor_per_call(self):
+        hits_fn = Mock(side_effect=lambda *a, **k: [])
+        self.mod._memory_block([0.1], "test prompt",
+                               {"memory_threshold": 0.61}, hits_fn=hits_fn)
+        self.assertEqual(hits_fn.call_args.kwargs["min_cos"], 0.61)
+
+    def test_memory_block_env_floor_beats_config(self):
+        hits_fn = Mock(side_effect=lambda *a, **k: [])
+        saved = os.environ.get("KB_MEMORY_THRESHOLD")
+        os.environ["KB_MEMORY_THRESHOLD"] = "0.3"
+        try:
+            self.mod._memory_block([0.1], "test prompt",
+                                   {"memory_threshold": 0.61}, hits_fn=hits_fn)
+        finally:
+            if saved is None:
+                os.environ.pop("KB_MEMORY_THRESHOLD", None)
+            else:
+                os.environ["KB_MEMORY_THRESHOLD"] = saved
+        self.assertEqual(hits_fn.call_args.kwargs["min_cos"], 0.3)
+
+    def test_scene_prior_none_by_default(self):
+        hits_fn = Mock(side_effect=lambda *a, **k: [])
+        self.mod._memory_block([0.1], "test prompt", {}, hits_fn=hits_fn)
+        self.assertIsNone(hits_fn.call_args.kwargs["scene_prior"])
+
+    def test_scene_prior_built_when_toggle_on(self):
+        """De gedocumenteerde toggle bereikt nu echt het productiepad —
+        vóór TASK-188 las geen enkele productiecode hem."""
+        (self.vault / "kennisbank-settings.json").write_text(
+            json.dumps({"scene_retrieval": True}), encoding="utf-8")
+        hits_fn = Mock(side_effect=lambda *a, **k: [])
+        self.mod._memory_block([0.1], "test prompt",
+                               {"scene_floor": 0.30, "scene_boost": 0.05},
+                               hits_fn=hits_fn)
+        self.assertEqual(hits_fn.call_args.kwargs["scene_prior"],
+                         {"floor": 0.30, "boost": 0.05})
 
 
 @unittest.skipUnless(

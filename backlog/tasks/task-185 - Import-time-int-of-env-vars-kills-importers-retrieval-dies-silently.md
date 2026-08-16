@@ -1,7 +1,7 @@
 ---
 id: TASK-185
 title: Import-time int() of env vars kills importers — retrieval dies silently
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-15 23:30'
 updated_date: '2026-08-15 23:30'
@@ -33,3 +33,7 @@ pattern; it just is not shared.
 - [ ] #2 A test sets a malformed value for each var and asserts import succeeds with the default
 - [ ] #3 No import-time int() of environment values remains in scripts/ (grep-guarded)
 <!-- AC:END -->
+
+## Close-out (2026-08-16)
+
+Shipped in PR #135: _common.env_int/env_float fail-soft readers replace six import-time int(os.environ) sites (two found in verification beyond the task's four); three private lookalikes consolidated; full-text grep-guard bans the class.

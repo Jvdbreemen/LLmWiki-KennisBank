@@ -235,6 +235,28 @@ class LlmClustererTest(unittest.TestCase):
                                   llm_fn=lambda p: "not json at all", max_scenes=15)
         self.assertEqual(out, {})
 
+    def test_survives_trailing_commentary_with_a_brace(self):
+        """TASK-189: rfind('}') landed inside the commentary's brace, the
+        slice failed to parse, and {} meant baseline recall, silently."""
+        reply = ('{"scenes": [{"label": "s", "members": ["a.md"]}]}\n'
+                 'Ik koos dit omdat {context} paste.')
+        out = _scenes.cluster_llm({"a.md": {"title": "x"}},
+                                  llm_fn=lambda p: reply, max_scenes=15)
+        self.assertEqual(out, {"s": ["a.md"]})
+
+    def test_a_brace_in_leading_prose_does_not_win(self):
+        reply = ('Even {denken}. '
+                 '{"scenes": [{"label": "s", "members": ["a.md"]}]}')
+        out = _scenes.cluster_llm({"a.md": {"title": "x"}},
+                                  llm_fn=lambda p: reply, max_scenes=15)
+        self.assertEqual(out, {"s": ["a.md"]})
+
+    def test_a_non_list_scenes_value_fails_open(self):
+        out = _scenes.cluster_llm({"a.md": {"title": "x"}},
+                                  llm_fn=lambda p: '{"scenes": "oops"}',
+                                  max_scenes=15)
+        self.assertEqual(out, {})
+
     def test_fails_open_when_the_model_raises(self):
         def boom(prompt):
             raise RuntimeError("model unreachable")

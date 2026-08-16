@@ -3,7 +3,7 @@ id: TASK-91
 title: >-
   Atlas: prebuilt view artifacts, overview lens 2.0, Cmd+K, JSON twin, facets,
   CI (Spoor F)
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-28 08:00'
 updated_date: '2026-08-03 22:40'
@@ -75,3 +75,9 @@ created: 2026-08-03 22:40
   runs 30405050117 / 30405054555.
 - AC#1/#8 rest: eerste-render-meting van de Overzicht-lens op de echte vault
   (<500 ms-doel) bij de eerstvolgende Atlas-start.
+
+## Close-out (2026-08-16) — delivered
+
+All functional deliverables shipped in v0.24.0 (commit c6ccc53) and are verifiable in code: 365-day activity heatmap (atlas/sidecar/sources.py:923), /titles + Cmd/Ctrl+K palette (atlas/frontend/src/palette.ts, vitest-pinned), waterfall copy-as-JSON, facet chips, and a dedicated atlas CI job (.github/workflows/ci.yml:66, green on run 30854851637). AC#5 is satisfied via its own escape clause — explicitly deferred in the 2026-07-29 notes. AC#8's failing number (about 14 s cold /overview) was root-caused and fixed: a 30 s TTL cache as stopgap (commit eba06c0) and the real fix in TASK-130 (commit a913f61, kb-lint provenance pass from ~12.2 s to ~250 ms). The only residual is re-timing the deployed copy plus a browser palette-latency number — a ten-minute check at the next /kennisbank-upgrade, not backlog work; if the deployed cold /overview still misses the 500 ms target, open a fresh, specific task.
+
+**Evidence:** Commit c6ccc53 shipped in v0.24.0 (CHANGELOG.md:981-988); atlas/sidecar/sources.py:923 (_activity_heatmap), :947/:978 (TTL cache, commit eba06c0); atlas/frontend/src/palette.ts + palette.test.ts; .github/workflows/ci.yml:66 atlas job, green on run 30854851637; AC#5 deferral recorded in the 2026-07-29 notes per the AC's own clause; TASK-130 Done (commit a913f61) fixed the 12.2 s kb-lint root cause of the cold /overview miss.

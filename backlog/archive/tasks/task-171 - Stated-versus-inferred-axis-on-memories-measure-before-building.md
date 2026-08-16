@@ -79,3 +79,11 @@ never demoted to inferred on a single verdict.
 
 <!-- SECTION:NOTES:BEGIN -->
 <!-- SECTION:NOTES:END -->
+
+## Close-out (2026-08-16) — parked
+
+Parked, nothing started: the gate measurement (what fraction of wrong-recall cases on the memory eval set are inferences presented as fact) has not been run and no schema field exists. The instrument it prescribes is now real — the grounded verifier (scripts/_groundcheck.py, scripts/kb-verify.py, TASK-163 Done) plus kb-memory-eval-set.example.json — so the task is executable, just not started. The direction and its evidence live in docs/research/honcho-memory-architecture.md (queued item, CHANGELOG Unreleased), plus the Hindsight (arXiv 2512.12818) prior recorded in this task's description; archiving the task loses nothing beyond the description itself, so keep the Hindsight and verifier-asymmetry paragraphs with wherever it lands. Not do-now: it needs an eval run, isolation of wrong-recall cases, and per-case labeling — multi-hour.
+
+**Evidence:** No stated/inferred field in scripts/ (grep: only false positives in rerank-ceiling.py docstrings); no measurement doc in docs/research/; CHANGELOG.md:44-49 (Unreleased) records it as queued behind a measurement. Instrument now shipped: scripts/_groundcheck.py + scripts/kb-verify.py (TASK-163 Done), eval set kb-memory-eval-set.example.json present.
+
+**Remaining work (when reopened):** Run the memory eval against the deployed vault, collect the wrong-recall cases, label each as inference-presented-as-fact vs other (reusing kb-verify.py grounded verdicts; promote-to-stated on supported only, per the measured verdict asymmetry), write the measurement to docs/research/, then either close as measured-and-rejected or add a judge-assigned field to the quality gate.
