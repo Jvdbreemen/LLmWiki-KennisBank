@@ -188,10 +188,10 @@ override the config file; both override the built-in defaults.
 - **Where set**: `scripts/semantic-tiling.py` line 36 (`return content[:4000]`).
 - **Effect**: input text is truncated before embedding. Larger articles compare on their first 4000 characters only.
 
-### CACHE_FILE
+### cache_file()
 
 - **Default**: `$HOME/KennisBank/.claude/embeddings-cache.json`
-- **Where set**: `scripts/_embeddings.py` (`CACHE_FILE`), shared by tiling, retrieval, and the index builder.
+- **Where set**: `scripts/_embeddings.py` (`cache_file()`, resolved per call so `KENNISBANK_VAULT` is honored whenever it is set), shared by tiling, retrieval, and the index builder.
 - **Effect**: stores embeddings keyed by file path, content hash, `embed_id()` (provider:model), and vector dimension. Switching model/provider transparently invalidates cached vectors (no manual wipe), since entries with a different `embed_id` no longer match. Stale entries (files no longer in `02-wiki/`) are pruned on every run.
 
 ### WIKI_DIR

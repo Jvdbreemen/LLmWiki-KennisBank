@@ -400,12 +400,14 @@ Config precedence per setting: env var → `<vault>/.claude/kennisbank-embed.jso
 `ollama` → `http://localhost:11434` / `qwen3-embedding:8b`,
 `openai` → `https://api.openai.com/v1` / `text-embedding-3-small`,
 `voyage` → `https://api.voyageai.com/v1` / `voyage-3`; and
-`CACHE_FILE = vault_root() / ".claude" / "embeddings-cache.json"` (`:63`).
+`cache_file()` → `vault_root() / ".claude" / "embeddings-cache.json"`.
 
-> `CACHE_FILE` is evaluated **at import time**, so `KENNISBANK_VAULT` must be
-> set before this module is imported. That is why every hot-path script does the
-> `os.environ.setdefault` before importing it, and why `warm_async` passes
-> `env=os.environ.copy()` to the detached child.
+> `cache_file()` is resolved **per call**, deliberately not a module constant
+> (TASK-196): frozen at import, the path captured whatever `KENNISBANK_VAULT`
+> held when the module was first imported in the process — under pytest that
+> is collection time, before any setUp re-points the env. `warm_async` still
+> passes `env=os.environ.copy()` to the detached child so the child resolves
+> the same vault.
 
 - **`_config() -> dict`** — `_embeddings.py:66` — reads `kennisbank-embed.json`, `{}` on any error.
 - **`_setting(name: str, env: str, file_cfg: dict, default: str = "") -> str`** — `_embeddings.py:76` — env → file → default, whitespace-stripped.
@@ -440,7 +442,7 @@ Config precedence per setting: env var → `<vault>/.claude/kennisbank-embed.jso
   elsewhere. Sentinel-guarded by `_warm_marker()` mtime so a down Ollama cannot
   cause a child pile-up (one process per minute at worst). Silent and fail-open
   throughout — a warm that cannot start must not break the prompt.
-- **`load_cache() -> dict`** — `_embeddings.py:231` — parses `CACHE_FILE`; `{}` on any error.
+- **`load_cache() -> dict`** — `_embeddings.py:231` — parses `cache_file()`; `{}` on any error.
 - **`save_cache(cache: dict) -> None`** — `_embeddings.py:238`
   Atomic write via a **process-unique** temp file
   (`<name>.<pid>.tmp` + `os.replace`). A shared temp path let two SessionStart
