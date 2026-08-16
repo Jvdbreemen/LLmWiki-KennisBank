@@ -1,6 +1,6 @@
 # Honcho as a mirror for KennisBank
 
-Status: research, with one idea adopted (TASK-169) and two queued (TASK-170, TASK-171)
+Status: research, with one idea adopted (TASK-193) and two queued (TASK-194, TASK-171)
 Date: 2026-08-15
 Subject: [plastic-labs/honcho](https://github.com/plastic-labs/honcho) — memory
 infrastructure for stateful agents, AGPL-3.0
@@ -92,7 +92,7 @@ insight their per-session ordering and supersession machinery encodes.
 Independent convergence on four points is reasonable evidence the shared parts
 are right, and it is the most useful thing this review produced.
 
-## Adopted: a real ceiling on assembled context (TASK-169)
+## Adopted: a real ceiling on assembled context (TASK-193)
 
 Honcho's `/context` endpoint takes a token bound as a request parameter and
 packs to fit. KennisBank had the layering but not the bound.
@@ -128,7 +128,7 @@ cheap, which would be a self-defeating trade. The consequence — treat the ceil
 as approximate and leave headroom — is documented at the flag, in
 `CONFIGURATION.md`, and in the module docstring.
 
-## Queued: observer provenance (TASK-170)
+## Queued: observer provenance (TASK-194)
 
 Honcho keys observations by (observer, observed). KennisBank records
 `evidence_basis`, which answers what *kind* of origin a fragment has — `agent` is
@@ -223,7 +223,7 @@ Reasons"; tagline "Better context. Fewer tokens."; the closing line "Use the
 10K tokens you need, not the 100K you don't", with a claimed 60–90% token
 saving. They sell memory as *cost reduction on the context window*. That is a
 direct market validation of the token-ceiling work adopted in this review
-(TASK-169): the bound on assembled context is not a hygiene feature, it is the
+(TASK-193): the bound on assembled context is not a hygiene feature, it is the
 thing the market prices. KennisBank's version of "fewer tokens" is fewer
 injected tokens per prompt — same lever, no invoice.
 
@@ -269,7 +269,7 @@ magnitude, no server, no per-query bill.
 detail what the repo README implied: a message updates the writer's global
 self-representation and each observer's local representation of the writer —
 and a peer learns nothing from conversations it was not in. Elegant, genuinely
-multi-party, and still the half of the model TASK-170 deliberately does not
+multi-party, and still the half of the model TASK-194 deliberately does not
 adopt while the vault has one observed subject.
 
 **What nobody is selling, still.** Their cadence-driven summaries (short every

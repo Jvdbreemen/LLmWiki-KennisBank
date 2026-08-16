@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and what was dropped, because silence would read as "everything was included".
   Sizing is ~4 characters per token, deliberately dependency-free so a cheap path
   stays cheap — leave headroom against an exact count. Without a ceiling the
-  output is byte-identical to before. (TASK-169)
+  output is byte-identical to before. (TASK-193)
 
 ### Documentation
 
@@ -44,9 +44,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Honcho architecture review** (`docs/research/honcho-memory-architecture.md`):
   plastic-labs/honcho compared against KennisBank — four points of independent
   convergence, the one idea adopted above, two queued (observer provenance,
-  TASK-170; a stated-versus-inferred axis gated behind a measurement, TASK-171),
+  TASK-194; a stated-versus-inferred axis gated behind a measurement, TASK-171),
   and the infrastructure rejected with reasons. Records the AGPL-3.0 versus MIT
   boundary: ideas and API shapes transfer, code does not.
+
+## [0.32.0] - 2026-08-16
+
+The memory layer stops treating "newer statement about the same subject" as
+"complete replacement". Hand-labelling every supersession this vault ever made
+showed that assumption was wrong more than twice as often as it was right, in
+the direction that loses knowledge.
+
+### Upgrading
+
+Nothing is required. The 64 wrongly closed memories were healed as a data
+operation and are already live in the vault; this release ships the prompts
+that stop the loss from recurring. Until it is deployed, sweeps keep closing
+memories under the old rule.
+
+### Changed
+
+- **Closing a memory now requires covering it.** Both closing judges — the
+  write-time reconcile and the maintenance supersede pass — no longer close on
+  "a different value" alone. Closing requires that the successor carries
+  everything of lasting value; partial coverage keeps both memories open. Both
+  prompts move to version 3, stamped into the closed-log, so every closure
+  stays traceable to the prompt that caused it.
+
+  Grounds: all 237 historic supersessions were hand-labelled with adversarial
+  verification (TASK-161). 61% were duplicate cleanups, only 11% genuinely
+  replaced substance, and **27% NARROWED** — the successor dropped facts whose
+  only carrier was the memory it closed, and the `status=current` recall filter
+  made those facts unreachable rather than lower-ranked. Replayed on all 209
+  adjudicated pairs, the v3 prompts cut knowledge-losing closures from 57.8% to
+  37.5% while the duplicate defence (which rests on the non-LLM dedup paths) is
+  unchanged. An improvement, not a solution, and the research says so.
+
+### Fixed
+
+- **64 wrongly closed memories are reachable again.** Every closure the
+  labelling adjudicated as NARROWED was reopened via the TASK-150 machinery —
+  reopened, not merged forward, because merge-forward would use the operation
+  class being repaired as the repair. The pre-registered gate opened: questions
+  answerable only by those memories went from recall@5 0.000 to 0.333
+  (production) / 0.600 (cosine re-sort). The full 1224-question memory eval is
+  unchanged (+0.000/+0.002/+0.001): healing added answers without disturbing
+  existing ones.
+
+### Research
+
+- `docs/research/freshness-eval-2026-08-16.md` — the eval set that can see what
+  recency is for: 89 questions from labelled pairs, dev/holdout split, holdout
+  deliberately never run. On recency's home ground (newest-wins) the recency
+  weighting does not beat raw cosine; and with old answers finally back in the
+  pool (oldest-wins) it actively buries them — the third independent
+  measurement pointing the same way as TASK-138 and TASK-160.
+- `docs/research/narrowed-supersede-2026-08-16.md` — the coverage fix and its
+  three validation arms.
 
 ## [0.31.1] - 2026-08-15
 
@@ -1865,7 +1919,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.31.1...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.32.0...HEAD
+[0.32.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.31.1...v0.32.0
 [0.31.1]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.31.0...v0.31.1
 [0.31.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.30.0...v0.31.0
 [0.30.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.29.0...v0.30.0

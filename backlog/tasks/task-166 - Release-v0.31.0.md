@@ -30,11 +30,11 @@ Follow the `kennisbank-release` skill. Two steps that have burned this repo befo
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Version proposed from the commit delta with a stated reason, and confirmed
-- [ ] #2 CHANGELOG has a dated section saying what changes for the user, including that kb-index.db needs a rebuild
-- [ ] #3 README.md and README.nl.md both updated in the same edit
-- [ ] #4 Full suite green before the docs edit; documentation subset green after
-- [ ] #5 Copilot review processed — comments endpoint AND review body — before merge
-- [ ] #6 Tag placed only on a SHA verified present on origin/main
-- [ ] #7 Release published with a non-empty body
+- [x] #1 Version proposed from the commit delta with a stated reason, and confirmed
+- [x] #2 CHANGELOG has a dated section saying what changes for the user, including that kb-index.db needs a rebuild
+- [x] #3 README.md and README.nl.md both updated in the same edit
+- [x] #4 Full suite green before the docs edit; documentation subset green after
+- [x] #5 Copilot review processed — comments endpoint AND review body — before merge
+- [x] #6 Tag placed only on a SHA verified present on origin/main
+- [x] #7 Release published with a non-empty body
 <!-- AC:END -->

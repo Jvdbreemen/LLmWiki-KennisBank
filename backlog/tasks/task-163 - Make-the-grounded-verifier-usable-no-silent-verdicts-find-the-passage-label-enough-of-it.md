@@ -88,10 +88,10 @@ prefilter cannot bridge that).
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 No verdict is silently absent: unparseable responses are retried, counted, and reported separately from a real verdict
-- [ ] #2 Passage selection is measured before and after, on the same sample, and the not_found rate is reported for both
-- [ ] #3 Chunk embeddings are cached per transcript so cost scales with sessions rather than memories
-- [ ] #4 The sweep records which chunk produced a candidate, so future memories need no retrieval to verify
-- [ ] #5 A labelled set large enough to state a rate, labelled from the full passage
-- [ ] #6 python -m pytest tests -q is green
+- [x] #1 No verdict is silently absent: unparseable responses are retried, counted, and reported separately from a real verdict
+- [x] #2 Passage selection is measured before and after, on the same sample, and the not_found rate is reported for both
+- [x] #3 Chunk embeddings are cached per transcript so cost scales with sessions rather than memories
+- [x] #4 The sweep records which chunk produced a candidate, so future memories need no retrieval to verify
+- [x] #5 A labelled set large enough to state a rate, labelled from the full passage
+- [x] #6 python -m pytest tests -q is green
 <!-- AC:END -->

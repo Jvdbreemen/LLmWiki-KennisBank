@@ -73,7 +73,31 @@ Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: 
 
 The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
 
-## Feature highlights (v0.31.1)
+## Feature highlights (v0.32.0)
+
+### New in v0.32.0
+
+The memory layer stops treating "newer statement about the same subject" as
+"complete replacement".
+
+**Every supersession this vault ever made was hand-labelled** (237 pairs,
+twelve parallel readers, adversarial verification): 61% duplicate cleanups, 11%
+genuine replacements — and **27% narrowed**, meaning the successor dropped
+facts whose only carrier was the memory it closed. The recall path filters on
+`status=current`, so those facts were not ranked lower; they were gone.
+
+**Closing now requires covering.** Both closing judges demand that a successor
+carries everything of lasting value before the old memory closes; partial
+coverage keeps both. Replayed on all adjudicated pairs: knowledge-losing
+closures drop from 57.8% to 37.5%, duplicate handling unchanged.
+
+**The 64 wrongly closed memories are back.** Questions only they could answer
+went from recall@5 0.000 to 0.333–0.600; the full 1224-question eval moved by
+at most +0.002.
+
+Also new: a freshness-aware eval set (89 questions, holdout kept unrun) that
+delivered the third independent measurement against the recency weighting —
+it does not beat raw cosine even on its own home ground.
 
 ### New in v0.31.1
 

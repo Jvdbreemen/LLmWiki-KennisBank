@@ -40,3 +40,14 @@ Grounded in the field rather than invented: an ablation over seven cognitively g
 
 Blocked on TASK-161 for everything except the contradiction penalty and the noise queue.
 <!-- SECTION:DESCRIPTION:END -->
+
+## Acceptance Criteria
+<!-- AC:BEGIN -->
+- [ ] #1 The contradiction penalty reads kb-state-audit's output, is bounded, and is exactly 1.0 when the audit finds nothing
+- [ ] #2 Corroboration counts distinct sessions, not repeated chunks of one transcript, and is capped
+- [ ] #3 The corroboration threshold is justified against labelled pairs rather than chosen
+- [ ] #4 trust_factor's behaviour when the first non-agent memory appears is decided explicitly, not discovered
+- [ ] #5 The noise queue proposes candidates and never marks autonomously
+- [ ] #6 Every change is measured on TASK-161's set as well as the existing one, and both are reported
+- [ ] #7 python -m pytest tests -q is green
+<!-- AC:END -->

@@ -199,7 +199,7 @@ which is the probable reason usage measured as noise in the factor
 decomposition. Autonomy built on that sensor would down-weight the best
 memories first; the sensor precedes the autonomy.
 
-### 4. Observer provenance (TASK-170) — now with an empirical argument
+### 4. Observer provenance (TASK-194) — now with an empirical argument
 
 All 1732 current memories carry `evidence_basis: agent`; the field is
 single-valued and its trust factor is a constant. `observer` (which client
@@ -249,7 +249,7 @@ is what will eventually let that decision be made on full evidence.
 3. **TASK-172, dead-end audit** — cheap, capture-side, independent.
 4. **TASK-162 step 1** (theirs): the contradiction penalty, whose input set is
    already known correct.
-5. **TASK-174 distillation proposals; TASK-170 observer field** alongside
+5. **TASK-174 distillation proposals; TASK-194 observer field** alongside
    TASK-162 step 2, since corroboration and observer attribution touch the same
    sweep path.
 6. **TASK-175 procedure promotion**, gated on telemetry.
