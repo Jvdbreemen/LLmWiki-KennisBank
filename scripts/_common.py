@@ -1,12 +1,12 @@
-"""Shared helpers for the KennisBank importer scripts.
+"""Shared helpers for the KennisBank scripts.
 
-Single source of truth for the small utilities that were duplicated verbatim
-across ``import-folder.py``, ``import-claudeai-export.py`` and
-``import-cc-history.py``:
+Single source of truth for small utilities that were duplicated verbatim
+across scripts:
 
 - :func:`slugify` — filename-safe slug from arbitrary text.
 - :func:`_utcnow_iso` / :func:`_today_iso` — UTC timestamp helpers.
 - :func:`print_summary` — render the import summary (JSON or one-line text).
+- :func:`env_int` / :func:`env_float` — fail-soft numeric env-var readers.
 
 Stdlib only. No hyphen in the filename so the scripts can ``import`` it after
 ``sys.path.insert`` (the same trick used for ``_frontmatter.py`` /
@@ -16,8 +16,31 @@ Stdlib only. No hyphen in the filename so the scripts can ``import`` it after
 from __future__ import annotations
 
 import json
+import os
 import re
 from datetime import datetime, timezone
+
+
+def env_int(name: str, default: int) -> int:
+    """Read an int env var; empty, whitespace or malformed values fall back
+    to *default*. Never raises: an import-time ``int()`` over an env var once
+    turned one typo (``KB_EMBED_NUM_CTX=4k``) into a silent retrieval outage —
+    the fail-open hook swallowed the ValueError from ``import _embeddings``
+    and injected nothing (TASK-185)."""
+    try:
+        s = os.environ.get(name, "").strip()
+        return int(s) if s else default
+    except (ValueError, TypeError):
+        return default
+
+
+def env_float(name: str, default: float) -> float:
+    """Float twin of :func:`env_int`, same fallback contract."""
+    try:
+        s = os.environ.get(name, "").strip()
+        return float(s) if s else default
+    except (ValueError, TypeError):
+        return default
 
 
 def slugify(text: str, max_len: int = 50) -> str:

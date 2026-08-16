@@ -1,7 +1,7 @@
 ---
 id: TASK-167
 title: '48 scripts set KENNISBANK_VAULT from an unguarded parents[2] guess'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-08-15 16:00'
 labels:

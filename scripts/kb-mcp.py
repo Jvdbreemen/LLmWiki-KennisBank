@@ -41,7 +41,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-os.environ.setdefault("KENNISBANK_VAULT", str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Optionele MCP-SDK. Twee uitkomsten die NIET hetzelfde zijn en dus apart

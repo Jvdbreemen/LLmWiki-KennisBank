@@ -33,6 +33,7 @@ except ModuleNotFoundError:  # Python 3.10 support.
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _copilot  # noqa: E402  (Copilot config layer, ADR-0003)
+import _embeddings  # noqa: E402  (embed-model default, TASK-182)
 import _hooks_manifest  # noqa: E402
 
 
@@ -42,6 +43,10 @@ AGENTS = ("claude", "codex", "opencode", "copilot")
 # here so the four writers below cannot drift apart. See _llm.OLLAMA_DEFAULT_MODEL
 # for why the size matters: it shares a GPU with the embedding model.
 KB_LLM_MODEL_DEFAULT = _copilot.KB_LLM_MODEL_DEFAULT
+# Same single-source rule for the embed model (TASK-182): the default lives in
+# _embeddings; the writers below and the config fallback alias it so a future
+# default flip cannot leave them drifting apart.
+KB_EMBED_MODEL_DEFAULT = _embeddings.OLLAMA_DEFAULT_EMBED_MODEL
 KB_START = "<!-- BEGIN LLmWiki-KennisBank -->"
 KB_END = "<!-- END LLmWiki-KennisBank -->"
 
@@ -177,7 +182,7 @@ Operational rules:
 - Always set or preserve `KENNISBANK_VAULT={vault_s}` for KennisBank scripts, hooks, MCP servers, skills, and commands.
 - Do not use `C:\\Users\\rvdbr\\KennisBank` or `~/KennisBank` as the active vault on this machine unless the user explicitly changes the vault.
 - Prefer the local KennisBank MCP server before external search when the task may depend on prior local knowledge.
-- The local LLM backend is Ollama with `{KB_LLM_MODEL_DEFAULT}`; embeddings use `qwen3-embedding:4b` unless the vault config says otherwise.
+- The local LLM backend is Ollama with `{KB_LLM_MODEL_DEFAULT}`; embeddings use `{KB_EMBED_MODEL_DEFAULT}` unless the vault config says otherwise.
 - KennisBank hooks must fail open: missing Ollama, missing embeddings, or a script error may skip context injection, but must not block the agent.
 
 Client: {client}
@@ -965,7 +970,7 @@ def _resolve_embed_config(vault: Path) -> dict:
     cfg = _json_file(vault / ".claude" / "kennisbank-embed.json")
     return {
         "provider": os.environ.get("KB_EMBED_PROVIDER") or cfg.get("provider") or "ollama",
-        "model": os.environ.get("KB_EMBED_MODEL") or cfg.get("model") or "qwen3-embedding:4b",
+        "model": os.environ.get("KB_EMBED_MODEL") or cfg.get("model") or KB_EMBED_MODEL_DEFAULT,
         "endpoint": os.environ.get("KB_EMBED_ENDPOINT") or cfg.get("endpoint") or "http://localhost:11434",
     }
 
@@ -1019,7 +1024,8 @@ def validate_models(vault: Path, timeout: int = 45) -> list[str]:
     if emb["provider"] == "ollama":
         rc, _out, err = run(emb)
         if rc != 0:
-            errors.append(f"ollama model missing/unavailable for embedding: {emb['model']} ({err.strip()})")
+            errors.append(f"ollama model missing/unavailable for embedding: {emb['model']} "
+                          f"({err.strip()}); run: ollama pull {emb['model']}")
         try:
             body = ollama_json("/api/embeddings", {"model": emb["model"], "prompt": "kennisbank"})
             if not body.get("embedding"):

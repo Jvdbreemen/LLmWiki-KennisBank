@@ -534,16 +534,46 @@ print(len(m.MONTHS), len(m.WEEKDAYS))' "$SCRIPTS_DIR" 2>/dev/null | tr -d '\r')"
 fi
 
 # 12. Ollama and the embedding model (optional).
-# Default is qwen3-embedding:8b (multilingual); nomic-embed-text is the
-# lighter English-only fallback. Respect OLLAMA_EMBED_MODEL if the user set it.
+# Resolve the ACTIVE model through the one config chain (env >
+# kennisbank-embed.json > code default) instead of a literal: a stale :8b
+# here reported the OLD model as "installed" on exactly the vaults whose
+# recall had gone dark after the default flip (TASK-182).
 if ! command -v ollama >/dev/null 2>&1; then
   report_info "ollama" "not installed (optional, needed for semantic tiling)"
 else
-  EMBED_MODEL="${OLLAMA_EMBED_MODEL:-qwen3-embedding:8b}"
-  if ollama list 2>/dev/null | grep -qF "$EMBED_MODEL"; then
+  EMBED_MODEL="$(KENNISBANK_VAULT="$VAULT" python3 "$SCRIPTS_DIR/_embeddings.py" --print-model 2>/dev/null)"
+  if [ -z "$EMBED_MODEL" ]; then
+    report_warn "ollama embed-model" "kon het actieve embedmodel niet bepalen (python3/_embeddings.py)"
+  elif ollama list 2>/dev/null | grep -qF "$EMBED_MODEL"; then
     report_info "ollama $EMBED_MODEL" "installed"
   else
-    report_info "ollama $EMBED_MODEL" "model not pulled (run: ollama pull $EMBED_MODEL)"
+    report_warn "ollama $EMBED_MODEL" "model not pulled (run: ollama pull $EMBED_MODEL)"
+  fi
+  # Index-vs-code mismatch: the exact condition under which recall returns []
+  # silently. Warn with the remedy; only FAIL flips doctor's exit code, so
+  # setup on a not-yet-pulled model does not hard-fail twice.
+  if [ -f "$VAULT/.claude/kb-index.db" ]; then
+    MISMATCH="$(KENNISBANK_VAULT="$VAULT" python3 - "$VAULT" <<'PYEOF' 2>/dev/null
+import sys, os
+sys.path.insert(0, os.path.join(sys.argv[1], ".claude", "scripts"))
+try:
+    import _embeddings as emb
+    import _kbindex
+    conn = _kbindex.connect()
+    m = _kbindex.embed_mismatch(conn, emb.embed_id())
+    conn.close()
+    if m:
+        print(f"{m[0]}|{m[1]}")
+except Exception:
+    pass
+PYEOF
+)"
+    if [ -n "$MISMATCH" ]; then
+      STORED="${MISMATCH%|*}"; LIVE="${MISMATCH#*|}"
+      # embed_id is "provider:model[+prefix]" -> strip both for the pull cmd.
+      LIVE_MODEL="${LIVE#*:}"; LIVE_MODEL="${LIVE_MODEL%%+*}"
+      report_warn "kb-index embed-model" "index=$STORED code=$LIVE; recall staat uit tot: ollama pull $LIVE_MODEL && python3 \"\$VAULT/.claude/scripts/build-kb-index.py\" --rebuild"
+    fi
   fi
 fi
 

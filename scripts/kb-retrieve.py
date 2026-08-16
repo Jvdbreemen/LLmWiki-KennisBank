@@ -335,7 +335,6 @@ def main() -> None:
     if len(prompt) < 15 or prompt.startswith("/") or low in _TRIVIAL:
         return
 
-    os.environ.setdefault("KENNISBANK_VAULT", str(Path(__file__).resolve().parents[2]))
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     try:
         import _embeddings as emb

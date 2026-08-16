@@ -1,7 +1,7 @@
 ---
 id: TASK-181
 title: vault_root resolves to $HOME in a repo checkout and exports it
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-08-15 23:30'
 updated_date: '2026-08-15 23:30'

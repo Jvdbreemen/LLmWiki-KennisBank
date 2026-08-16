@@ -40,7 +40,6 @@ import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-os.environ.setdefault("KENNISBANK_VAULT", str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _frontmatter import parse_frontmatter  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402

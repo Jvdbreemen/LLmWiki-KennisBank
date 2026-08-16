@@ -36,6 +36,7 @@ from pathlib import Path
 # Topniveau import-patroon: scripts/ zelf op sys.path zodat onderlinge imports werken
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from _common import env_int  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402
 
 
@@ -353,14 +354,6 @@ def assemble_state(level: int, vault: Path, query: str | None, top_n: int) -> di
 # CLI
 # ---------------------------------------------------------------------------
 
-def _env_int(name: str, default: int) -> int:
-    """Lees een integer omgevingsvariabele; val terug op *default* bij ongeldige waarde."""
-    try:
-        return int(os.environ.get(name, str(default)).strip())
-    except (ValueError, AttributeError):
-        return default
-
-
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description="Progressieve context-budgetten voor KennisBank-sessies.",
@@ -377,7 +370,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "  identity wordt nooit getrimd.\n"
         ),
     )
-    default_level = _env_int("KB_CONTEXT_LEVEL", 1)
+    default_level = env_int("KB_CONTEXT_LEVEL", 1)
     p.add_argument(
         "--level",
         type=int,
@@ -392,10 +385,10 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--top",
         type=int,
-        default=_env_int("KB_RETRIEVE_TOP_N", 3),
+        default=env_int("KB_RETRIEVE_TOP_N", 3),
         help="Aantal zoekresultaten voor L2/L3 (default: 3)",
     )
-    default_max_tokens = _env_int("KB_CONTEXT_MAX_TOKENS", 0)
+    default_max_tokens = env_int("KB_CONTEXT_MAX_TOKENS", 0)
     p.add_argument(
         "--max-tokens",
         type=int,

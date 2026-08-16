@@ -170,14 +170,14 @@ override the config file; both override the built-in defaults.
 
 ### TILING_THRESHOLD_ERROR (duplicate threshold)
 
-- **Default**: `0.85` (tuned for the default `qwen3-embedding:8b`)
+- **Default**: `0.85` (tuned on `qwen3-embedding:8b`, the pre-v0.28.0 default)
 - **Where set**: `scripts/semantic-tiling.py` (`THRESHOLD_ERROR = float(os.environ.get("TILING_THRESHOLD_ERROR", "0.85"))`).
 - **Effect**: cosine similarity at or above this is reported as `ERROR -- mogelijke duplicaten`.
-- **To change**: set the `TILING_THRESHOLD_ERROR` environment variable. Thresholds are model-specific: the default `qwen3-embedding:8b` spreads lower (0.85 fits), while `nomic-embed-text` spreads high and wants `0.90`. Recalibrate per embedding model if you switch.
+- **To change**: set the `TILING_THRESHOLD_ERROR` environment variable. Thresholds are model-specific: `qwen3-embedding:8b` (the pre-v0.28.0 default) spreads lower (0.85 fits), while `nomic-embed-text` spreads high and wants `0.90`. Recalibrate per embedding model if you switch.
 
 ### TILING_THRESHOLD_REVIEW (related threshold)
 
-- **Default**: `0.62` (tuned for the default `qwen3-embedding:8b`)
+- **Default**: `0.62` (tuned on `qwen3-embedding:8b`, the pre-v0.28.0 default)
 - **Where set**: `scripts/semantic-tiling.py` (`THRESHOLD_REVIEW = float(os.environ.get("TILING_THRESHOLD_REVIEW", "0.62"))`).
 - **Effect**: cosine similarity in `[THRESHOLD_REVIEW, THRESHOLD_ERROR)` is reported as `REVIEW -- verwante artikelen`.
 - **To change**: set the `TILING_THRESHOLD_REVIEW` environment variable. Same model-specific caveat as above (for `nomic-embed-text` use `0.80`).

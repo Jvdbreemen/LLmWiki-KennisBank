@@ -3,7 +3,7 @@ id: TASK-196
 title: >-
   CACHE_FILE freezes at import, and the machine-global KENNISBANK_VAULT makes
   test speed order-dependent
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-16 10:44'
 labels: []

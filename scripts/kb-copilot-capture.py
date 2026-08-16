@@ -29,8 +29,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-os.environ.setdefault("KENNISBANK_VAULT", str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _vaultpath import vault_root  # noqa: E402
 
 SCHEMA = "kb-copilot-event/1"
 AGENT = "github-copilot-cli"
@@ -53,8 +53,7 @@ REDACTED = "***"
 
 
 def _vault() -> Path:
-    raw = os.environ.get("KENNISBANK_VAULT") or str(Path(__file__).resolve().parents[2])
-    return Path(raw)
+    return vault_root()
 
 
 def _now_iso() -> str:

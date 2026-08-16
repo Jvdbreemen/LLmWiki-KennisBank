@@ -18,7 +18,6 @@ from pathlib import Path
 
 # Self-locate the vault so the hook works even if KENNISBANK_VAULT is not present
 # in the hook subprocess env: this script lives at <vault>/.claude/scripts/.
-os.environ.setdefault("KENNISBANK_VAULT", str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _embeddings as emb  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402

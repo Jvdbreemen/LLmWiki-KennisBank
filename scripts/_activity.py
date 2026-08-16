@@ -21,7 +21,6 @@ from pathlib import Path
 from typing import Iterable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-os.environ.setdefault("KENNISBANK_VAULT", str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from _frontmatter import parse_frontmatter  # noqa: E402

@@ -43,6 +43,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _embeddings as emb  # noqa: E402
 import _llmjson  # noqa: E402
 import _memory  # noqa: E402
+from _common import env_int  # noqa: E402
 from _frontmatter import parse_frontmatter  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402
 
@@ -87,7 +88,7 @@ SHORTLIST = 8
 #: Per-run cap for the sweep pass. Roughly 6-8s of local LLM per memory, so 40
 #: is a few minutes riding after a sweep -- and the backlog is drained by the
 #: CLI (kb-verify.py), not by making every sweep pay for history.
-VERIFY_PASS_CAP = int(os.environ.get("KB_VERIFY_CAP", "").strip() or 40)
+VERIFY_PASS_CAP = env_int("KB_VERIFY_CAP", 40)
 
 _WORD = re.compile(r"[a-z0-9_]{4,}")
 
