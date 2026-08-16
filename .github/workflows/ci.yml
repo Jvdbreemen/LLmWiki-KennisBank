@@ -7,18 +7,18 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    # Hang-vangnet, geen prestatiedoel. Gemeten op een Windows-ontwikkelmachine:
-    # 781 tests in ~20 min (unittest 763 in ~20 min). De eerdere waarde van 15
-    # met een comment die "~5-8 min" beweerde was achterhaald en zou de job op
-    # de klok laten sneuvelen. Linux-runners zijn doorgaans sneller voor deze
-    # subprocess-zware suite; de marge is bewust ruim. Een test die op een echte
-    # netwerk-call blijft hangen (zie tests/__init__.py) faalt hierdoor nog
-    # steeds sneller dan de runner-limiet.
+    # Hang safety net, not a performance target. Measured on a Windows dev
+    # machine: 781 tests in ~20 min (unittest 763 in ~20 min). The earlier
+    # value of 15 with a comment claiming "~5-8 min" was stale and would have
+    # killed the job on the clock. Linux runners are usually faster for this
+    # subprocess-heavy suite; the margin is deliberately wide. A test hanging
+    # on a real network call (see tests/__init__.py) still fails faster than
+    # the runner limit.
     #
-    # 781 is de meting die de 30 minuten heeft bepaald, geen actuele telling --
-    # bewust niet overschreven, want "1131 tests in ~20 min" zou een claim zijn
-    # die nooit is gemeten. Voor de actuele stand en de groeianalyse (TASK-123):
-    # C4-Documentation/c4-code-github-workflows.md §4.
+    # 781 is the measurement that set the 30 minutes, not a current count --
+    # deliberately not overwritten, because "1131 tests in ~20 min" would be
+    # a claim that was never measured. For the current state and the growth
+    # analysis (TASK-123): C4-Documentation/c4-code-github-workflows.md §4.
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -38,10 +38,10 @@ jobs:
       - name: Shell syntax check
         run: bash -n setup.sh scripts/doctor.sh
 
-      # pytest, niet `unittest discover`: dat laatste verzamelt losse
-      # test_*-functies op moduleniveau niet, waardoor 21 tests in zes bestanden
-      # nooit hebben gedraaid -- inclusief de doc-guard in
-      # tests/test_integration_documentation.py. Zie TASK-53.
+      # pytest, not `unittest discover`: the latter does not collect bare
+      # module-level test_* functions, so 21 tests across six files never ran
+      # -- including the doc guard in
+      # tests/test_integration_documentation.py. See TASK-53.
       - name: Run test suite under coverage
         run: python3 -m coverage run -m pytest tests -q
 
@@ -49,8 +49,8 @@ jobs:
         if: always()
         run: |
           python3 -m coverage report
-          # --fail-under net onder de lokaal gemeten baseline (totaal 77%),
-          # zodat een echte dekkingsregressie de job breekt maar ruis dat niet doet.
+          # --fail-under just below the locally measured baseline (77% total),
+          # so a real coverage regression breaks the job but noise does not.
           python3 -m coverage report --fail-under=75
           {
             echo '### Coverage'
@@ -60,9 +60,9 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # Atlas draaide tot TASK-91 volledig buiten CI: pytest-sidecar noch
-  # vitest-frontend werd afgedwongen, dus elke Atlas-wijziging shipte
-  # onbewaakt. Aparte job: eigen dependencies, eigen faaldomein.
+  # Atlas ran entirely outside CI until TASK-91: neither the pytest sidecar
+  # nor the vitest frontend was enforced, so every Atlas change shipped
+  # unguarded. Separate job: own dependencies, own failure domain.
   atlas:
     runs-on: ubuntu-latest
     timeout-minutes: 15
