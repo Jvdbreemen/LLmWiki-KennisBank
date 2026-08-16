@@ -1,7 +1,7 @@
 ---
 id: TASK-170
 title: Release v0.32.0
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-16 06:54'
 labels: []
