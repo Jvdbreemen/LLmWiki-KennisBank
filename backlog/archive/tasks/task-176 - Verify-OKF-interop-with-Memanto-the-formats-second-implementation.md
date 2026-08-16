@@ -55,3 +55,11 @@ upstream issue worth filing on knowledge-catalog.
 
 <!-- SECTION:NOTES:BEGIN -->
 <!-- SECTION:NOTES:END -->
+
+## Close-out (2026-08-16) — parked
+
+Parked, not dead: the TASK-92 dependency shipped in v0.24.0 (kb-okf-export.py + test_okf_export.py), so this is executable now, but none of the five ACs has been started — no Memanto instance was ever run, no mapping table or divergence report exists. The work needs a local Docker+Ollama Memanto and a round-trip verification session, well over an hour. The full direction survives archiving: the task description here, the Memanto evaluation in docs/research/agent-memory-field-review-and-strategy.md ('Memanto (added 2026-08-15)' section, 'The steal: OKF has a second implementation'), and the shipped exporter with its trust-tier mapping documented in the v0.24.0 CHANGELOG entry.
+
+**Evidence:** Gate lifted: TASK-92 is Done (backlog/tasks/task-92, status: Done); scripts/kb-okf-export.py and tests/test_okf_export.py shipped in v0.24.0 (CHANGELOG.md:967 under '## [0.24.0] - 2026-07-29'). The interop work itself: zero Memanto artifacts in the repo (grep 'memanto' hits only docs/research/agent-memory-field-review-and-strategy.md:317-335 and this task file).
+
+**Remaining work (when reopened):** Stand up local Memanto (Docker+Ollama), export a test-vault OKF bundle via kb-okf-export.py, verify ingest + trust-tier survival, write the 13-categories-vs-4-types mapping table, record spec-reading divergences and file upstream issues on knowledge-catalog where ambiguous. No importer.

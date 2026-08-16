@@ -140,3 +140,11 @@ Robert te bereiken is. Vervolgstappen die een mens moet kiezen, niet ik:
 Ik stop hier met verder pogen — de laatste drie controles leverden dezelfde uitkomst op
 (proces leeft, nul voortgang), en dat is geen signaal dat met nog een controle verandert.
 <!-- SECTION:NOTES:END -->
+
+## Close-out (2026-08-16) — parked
+
+Genuinely attempted and honestly stalled: the Implementation Notes are the complete lab record — gemma4:12b is unusable on transactional notes (prose instead of JSON, hangs even at chunk_size=5), qwen2.5:7b-instruct managed 8.25 s/file with only 25% JSON success on n=8, extrapolating to roughly 34 hours for all 14,837 notes, and session background tasks are hard-capped at about 10 minutes. AC#6 landed (the false 05-bronnen auto-skip claim was corrected in the wiki article), and the shipped defaults now deliberately keep Evernote out of the graph (graphifyignore.example line 39; kb-lint SKIP_DIRS via TASK-130). Blocked exactly where the notes end: an owner decision to either pick a stronger local completion model and rerun the 500-note sample at concurrency 1 outside session tooling, or drop the task as not worth the measured cost. All evidence needed to resume lives in this file.
+
+**Evidence:** Task Implementation Notes carry the full measurement record (n=8: 66 s, 8.25 s/file, 25% JSON success; gemma4:12b failure pattern; ~34 h full-archive extrapolation; 10-minute background-cap finding); dependency TASK-67 is Done; graphifyignore.example:11,39 and scripts/kb-lint.py:92-97 (SKIP_DIRS, TASK-130) show the shipped default deliberately keeps 05-bronnen/Evernote out; AC#6 checked in the task.
+
+**Remaining work (when reopened):** Owner picks a local completion model (or drops the task). If continuing: rerun the 500-note sample with max_concurrency=1 as a detached process with a patient time budget (ACs #1-#2), judge community sanity (AC#3), tune --exclude-hubs/--resolution (AC#5), and only then decide on the full run (AC#7).

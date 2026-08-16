@@ -43,3 +43,9 @@ created: 2026-08-03 22:13
 The real, non-phantom blocker is unchanged: TASK-108's ACs #1-6 (modern-era SDK proof) are gated on TASK-110 (pin bump to mcp>=2), and TASK-110 stays explicitly blocked pending a named client + stated necessity (none supplied as of this sweep). TASK-109's own AC#1 asks to 'state the mcp>=2.0.0,<3 requirement' -- writing that into README/CHANGELOG before TASK-110 actually fires would document a requirement that is not yet true. This task cannot be started, let alone closed, before TASK-110 resolves. Left as To Do; the step-3 work its dependency chain implicitly wanted is done separately as TASK-132.
 ---
 <!-- COMMENTS:END -->
+
+## Close-out (2026-08-16) — superseded
+
+The documentation/changelog/release this task described already happened for everything that actually shipped: v0.26.0 (2026-07-30) corrected the stale README tool count, documented annotations/instructions, and stated the pin-bump gate in its own changelog section. The rest of the scope rests on premises that no longer hold: TASK-106's new tools never existed (phantom dependency), TASK-107's provenance params were refused by plan decision D7, and stating an mcp>=2.0.0 requirement today would document a falsehood (requirements.txt pins 1.28.1). When TASK-110's gate fires, that pin bump carries its own changelog and release by the repo's standing release process — no separate task needed.
+
+**Evidence:** CHANGELOG.md [0.26.0] 2026-07-30 (full MCP release section incl. the gate documented under 'Not in this release, on purpose'); README.md:750 corrected to 'nine primitives: eight tools' (README.nl.md present alongside); requirements.txt:2 still mcp==1.28.1; deps TASK-106 and (via TASK-107) TASK-103 are phantoms absent from backlog/tasks and backlog/archive/tasks; TASK-104/105/132 all Done.

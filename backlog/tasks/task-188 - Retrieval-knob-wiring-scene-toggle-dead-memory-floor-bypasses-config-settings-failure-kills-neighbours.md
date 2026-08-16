@@ -1,7 +1,7 @@
 ---
 id: TASK-188
 title: Retrieval knob wiring: scene toggle dead, memory floor bypasses config, settings failure kills neighbours
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-08-15 23:30'
 updated_date: '2026-08-15 23:30'

@@ -58,3 +58,11 @@ every existing fragment, which readers must tolerate.
 
 <!-- SECTION:NOTES:BEGIN -->
 <!-- SECTION:NOTES:END -->
+
+## Close-out (2026-08-16) — parked
+
+Real, well-specified, unstarted. The field itself is one optional frontmatter line, but AC#2 is the actual work: memory-sweep has no way to know which client wrote a transcript — it consumes one pooled 01-raw/transcripts/*.jsonl directory with no client tagging, so a client-identification channel (filename convention, adapter stamp at archive time, or format sniffing) must be designed first. That prerequisite overlaps directly with TASK-179's per-client SessionEnd verification; doing them together avoids inventing the client-identity signal twice. Rationale and the Honcho comparison survive in docs/research/honcho-memory-architecture.md and the TASK-160 finding that evidence_basis is single-valued across all 1732 current memories.
+
+**Evidence:** Not implemented: grep 'observer' over scripts/ returns nothing; _memory.py write() signature (scripts/_memory.py:301-346) has no observer field and the contract docstring (lines 15-25) does not list it; memory-sweep.py:458 hardcodes evidence_basis="agent"; the sweep reads a pooled 01-raw/transcripts/*.jsonl (memory-sweep.py:343-344) with no client identification anywhere. CHANGELOG mentions the field only as 'queued (observer provenance, TASK-194)'.
+
+**Remaining work (when reopened):** Decide how the sweep learns the writing client (pairs naturally with TASK-179's per-client adapter check), add the optional observer param to _memory.write + contract docstring, stamp it in memory-sweep, expose it via _memory list/index for per-client measurement, tests for present/absent/unknown-client.

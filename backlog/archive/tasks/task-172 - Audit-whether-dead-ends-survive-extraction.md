@@ -51,3 +51,11 @@ afterwards; bump it if the prompt changes.
 
 <!-- SECTION:NOTES:BEGIN -->
 <!-- SECTION:NOTES:END -->
+
+## Close-out (2026-08-16) — parked
+
+Parked, hypothesis still unmeasured: the extractor prompt at scripts/_extract.py:25 still instructs the model to IGNORE intermediate steps — the exact instruction this task suspects filters out dead ends — and EXTRACT_PROMPT_VERSION is still 2, HALF_LIFE_DAYS still lists only the four original types. No sample of the memory layer has been classified and no ratio recorded anywhere. The rationale lives in docs/research/agent-memory-field-review-and-strategy.md (queued in CHANGELOG Unreleased as the dead-end capture audit) and PRINCIPLES/CLAUDE.md north-star #5; the fix design (valkuil type + half-life + prompt bump) lives only in this task's description, so preserve it on archive. Not do-now: a defensible audit needs a recorded sampling method over the deployed vault's real memory layer, and the conditional fix spans prompt, type coercion, ranking, and tests.
+
+**Evidence:** scripts/_extract.py:25 still reads 'NEGEER smalltalk, tussenstappen en vluchtige status'; scripts/_extract.py:46 EXTRACT_PROMPT_VERSION = 2 (unchanged); scripts/_rank.py:32 HALF_LIFE_DAYS has only feit/voorkeur/procedure/beslissing — no valkuil; 'valkuil|anti-pattern|dead end' matches nothing in scripts/; no audit doc in docs/research/.
+
+**Remaining work (when reopened):** Sample the deployed vault's memory layer, classify fragments encoding what-did-NOT-work vs what-works with the method recorded, write the ratio down; if low, extend the extract prompt to capture failed approaches (bump EXTRACT_PROMPT_VERSION to 3) and add a valkuil/anti-pattern memory_type with its own HALF_LIFE_DAYS entry, coerce_memory_type support, retrieval surfacing, and tests.

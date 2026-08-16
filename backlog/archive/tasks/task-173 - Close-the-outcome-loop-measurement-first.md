@@ -93,3 +93,11 @@ should not claim otherwise.
 
 <!-- SECTION:NOTES:BEGIN -->
 <!-- SECTION:NOTES:END -->
+
+## Close-out (2026-08-16) — parked
+
+Parked, and the largest open direction in the memory strategy: nothing records whether an injected memory helped, so a memory that derailed a session still scores like one that saved an hour. Verified nothing shipped — kb-session-end.py has no outcome derivation, _usage.py's pending table links stems to a session_id only transiently and is cleared at session end, and docs/research/ has no correlation report. The binding evidence lives in docs/research/recall-after-growth-2026-08-14.md (corpus-growth decisions made on half the evidence), docs/research/agent-memory-field-review-and-strategy.md, and CHANGELOG Unreleased which names this task as the queued answer; the PROJECTMEM prior-art pointer (arXiv 2606.12329) lives only in this description, so keep it with the archive. Emphatically not do-now: signal definition, stem-to-outcome linking, latency proof, and a correlation report are a multi-day measurement project, and TASK-145's frozen caps stay frozen until it exists.
+
+**Evidence:** scripts/kb-session-end.py has no outcome signal (its only 'outcome' is job-runner logging at lines 222-225); scripts/_usage.py links stems to sessions only via the transient pending table (cleared per session), records injected/used/noise but never outcome; no correlation report in docs/research/; CHANGELOG.md:36-38 names TASK-173 as 'the queued answer' to the one gap that survived all three strategy derivations.
+
+**Remaining work (when reopened):** Read PROJECTMEM for its outcome definition and attribution step; define a weak per-session outcome signal from sources that already exist locally (commit landed, suite green, injected memory contradicted/superseded shortly after); persist the injected-stems-to-session link past session end and join it to the signal; produce the first correlation report; show recall latency unchanged; state what would price the benefit side of corpus growth so TASK-145 can reopen on full evidence. Ranking on the signal stays a separate task per AC#5.

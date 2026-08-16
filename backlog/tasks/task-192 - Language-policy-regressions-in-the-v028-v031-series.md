@@ -1,7 +1,7 @@
 ---
 id: TASK-192
 title: Language policy regressions in the v0.28-v0.31 series
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-08-15 23:30'
 updated_date: '2026-08-15 23:30'

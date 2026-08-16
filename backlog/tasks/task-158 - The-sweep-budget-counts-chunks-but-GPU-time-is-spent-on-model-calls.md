@@ -1,7 +1,7 @@
 ---
 id: TASK-158
 title: 'The sweep budget counts chunks, but GPU time is spent on model calls'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-13 21:52'
 labels:
@@ -40,3 +40,7 @@ The stop must keep the property TASK-145 established: the budget decides whether
 - [ ] #5 A run that hits the bound is distinguishable in the heartbeat from a run that simply finished
 - [ ] #6 python -m pytest tests -q is green
 <!-- AC:END -->
+
+## Close-out (2026-08-16)
+
+Shipped on chore/backlog-zero: KB_SWEEP_TIME_BUDGET (default 900s from the measured ~430s/transcript run) is the primary brake at the existing between-transcripts stop; CHUNK_BUDGET demoted to secondary guard; budget_reached names the brake and pending_left counts what stays pending. Tests pin the stop point, both brake names and the no-hit case.

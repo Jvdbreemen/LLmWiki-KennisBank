@@ -83,3 +83,9 @@ Record in CHANGELOG when shipped: this deliberately diverges from the
 
 <!-- SECTION:NOTES:BEGIN -->
 <!-- SECTION:NOTES:END -->
+
+## Close-out (2026-08-16) — superseded
+
+Superseded by TASK-195, which shipped the owner decision this task encodes: capture-to-current with zero human actions (grounded promotion Trap 1 + client adjudication Trap 2), retraction only on double agreement plus failed refutation (stricter than this task's AC#2 asked), every transition logged and reversible (demote/reopen), gates G0-G3 measured before default-on, and /kennisbank:review re-scoped to an audit view — TASK-89's re-scope included. The 993-item quarantine is drained to 42. Two deltas did not ship and are deliberately not lost: autonomous noise-marking input remains MENS-GATED (_usage.py) and is gated on TASK-179, whose task text carries that dependency; deterministic N-sweep quarantine expiry (AC#3) was replaced in practice by the drain plus per-sweep traps — if the residual 42-item tail ever matters, that is a small new task, not this one. Corroboration promotion lives on separately in TASK-162.
+
+**Evidence:** TASK-195 (Done, close-out in backlog/tasks/task-195): design doc docs/superpowers/specs/2026-08-16-autonomous-memory-review-design.md; PRs #129-#133 (commits 9c018e0, 10993ac, 05074ba, merges 5aabeb0/35fe640/b3a9650); scripts/kb-autoreview.py behind auto_review_llm; _memory.py promote/demote/reopen with audit lines; 993 quarantined drained (859 promoted, then 90 promoted/2 retracted/42 left); /kennisbank:review rewritten as audit view (PR #133). Residual: scripts/_usage.py:25-28 noise still MENS-GATED; no N-sweep quarantine expiry in _memory.py (expiry is valid_until-based only); TASK-162 corroboration still To Do.

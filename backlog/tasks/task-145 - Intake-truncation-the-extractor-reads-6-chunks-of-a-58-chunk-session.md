@@ -1,7 +1,7 @@
 ---
 id: TASK-145
 title: 'Intake truncation: the extractor reads 6 chunks of a 58-chunk session'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-12 20:31'
 updated_date: '2026-08-13 22:26'
@@ -183,3 +183,9 @@ direction that lets capture and recall both improve. TASK-158 was opened
 separately: the chunk budget bounds chunks while GPU time is spent on model
 calls, so it does not bound what it was built to bound.
 <!-- SECTION:FINAL_SUMMARY:END -->
+
+## Close-out (2026-08-16) — delivered
+
+The intake fix shipped in v0.29.0: transcript-format recovery (a729ff9, 39 of 299 unreadable down to 7), caps raised on a 120-chunk measurement to 40 chunks / 60 memories with a 150-chunk per-run budget (c622c47), heartbeat coverage counters included — ACs 1-3, 5, 6 all ticked with evidence. AC#7 was run and FAILED its pre-registered floor (memory recall@5 0.778 -> 0.768, docs/research/recall-after-growth-2026-08-14.md, CHANGELOG v0.30.0); that recorded failure is the answer, not a gap — the rule was fixed before the numbers moved precisely so it could fail honestly, and its consequence moved to the ranking line (TASK-138/160 Done; the cosine-ordering attempt then failed gate C, docs/research/memory-rank-cosine-2026-08-16.md, so ranking recovery continues there, not here). AC#4 is a live-vault predicate no repo change can satisfy: a qwen3-embedding:4b memory appears once the background sweep drains down to the two carrier transcripts, and kb-state-audit (v0.30.0) meanwhile flags the four stale 8b memories as CONTRADICTED. No engineering work remains in this task.
+
+**Evidence:** Commits a729ff9 (three transcript formats, 39->7 unreadable), c622c47 (40 chunks / 60 memories / 150-chunk budget), 8d582ad (recall-after-growth report); CHANGELOG.md v0.29.0 'Capture reads 40 chunks of a session instead of 6' and v0.30.0 'Measured, and not what was expected'; docs/research/recall-baseline-2026-08-13.md and recall-after-growth-2026-08-14.md; scripts/memory-sweep.py:280-289 (caps live in code)

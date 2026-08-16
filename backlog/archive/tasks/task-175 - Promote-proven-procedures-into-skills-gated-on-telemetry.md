@@ -1,7 +1,7 @@
 ---
 id: TASK-175
 title: Promote proven procedures into skills — gated on telemetry
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-08-15 11:00'
 updated_date: '2026-08-15 11:00'
@@ -71,3 +71,24 @@ flatten later.
 
 <!-- SECTION:NOTES:BEGIN -->
 <!-- SECTION:NOTES:END -->
+
+## Gate measurement (2026-08-16) — GO, build parked as an owner decision
+
+Run on the live vault (usage_telemetry ON, kb-usage.db: 967 rows, window
+2026-07-02 .. 2026-08-16), joining current procedure-typed memories (n=1015)
+against usage.injected:
+
+- 302 of 1015 procedures were ever injected; median injected = 0.
+- The distribution has a CLEAR HEAD: the top five stems carry 460 of 1766
+  total injections (26%) — adr-generatie 116, backlog-cli-commit-rules 111,
+  anthropic-sdk-voorkeur 99, next-task-validatie 72, contextual-refactoring 62.
+- `used` is reported with the TASK-179 caveat: the scan counts only
+  tool-call reads, so in-context use is invisible; injected (written by the
+  recall hook itself) is the reliable rank signal.
+
+Per this task's own rule that is a GO: a promotion path would have real
+candidates. The build (proposal-only skill drafts, traceable to the source
+memory, human-approved; read the EverOS skill-record format first) is
+deliberately left as a fresh owner decision — creation stays proposing by
+design (TASK-177 split). Parked with the numbers recorded; reopening starts
+at the build, not at the measurement.
