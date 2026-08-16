@@ -1,7 +1,7 @@
 ---
 id: TASK-184
 title: Query prefix: eval uses it, production never does
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-15 23:30'
 updated_date: '2026-08-15 23:30'
@@ -40,3 +40,7 @@ rerank-ceiling) survive a query-prefix change and mix vector spaces.
 - [ ] #3 Query prefix participates in the identity used by query-vector caches, or those caches key on both prefixes
 - [ ] #4 rank-factors.py and rerank-ceiling.py embed queries the same way as the rest of the eval family
 <!-- AC:END -->
+
+## Close-out (2026-08-16)
+
+Fixed on chore/backlog-zero: _embeddings.embed_query() is the one query-side entry point for production AND eval; query_embed_id() keys query-vector caches (embed_id stays doc-only by pinned design). Static guard bans bare embed() in every query-bearing file; a behavioral test drives the real hook and asserts the configured prefix reaches the backend.

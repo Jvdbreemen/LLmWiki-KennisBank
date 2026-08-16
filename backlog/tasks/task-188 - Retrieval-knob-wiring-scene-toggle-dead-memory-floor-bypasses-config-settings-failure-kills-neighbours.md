@@ -1,7 +1,7 @@
 ---
 id: TASK-188
 title: Retrieval knob wiring: scene toggle dead, memory floor bypasses config, settings failure kills neighbours
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-15 23:30'
 updated_date: '2026-08-15 23:30'
@@ -46,3 +46,7 @@ The except branch should match the shipped default (True).
 - [ ] #3 Settings-load failure preserves the documented graph_retrieval default instead of inverting it
 - [ ] #4 Eval harness and hook resolve all three identically (TASK-86 parity holds)
 <!-- AC:END -->
+
+## Close-out (2026-08-16)
+
+Fixed on chore/backlog-zero: scene_retrieval is wired through scene_prior_params() (one resolver for hook and eval, default OFF), the memory floor resolves per call via retrieve_params with the new memory_threshold config key, and a failed _settings LOAD no longer silently disables the default-ON graph neighbor. Guards: floor must agree across three surfaces; every retrieval toggle must have a production reader.

@@ -1,7 +1,7 @@
 ---
 id: TASK-190
 title: Reuse debt from the August experiment scripts
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-08-15 23:30'
 updated_date: '2026-08-15 23:30'

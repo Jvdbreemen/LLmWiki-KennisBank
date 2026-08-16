@@ -1,7 +1,7 @@
 ---
 id: TASK-191
 title: Maintenance efficiency: the sweep recomputes what it just computed
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-08-15 23:30'
 updated_date: '2026-08-15 23:30'
