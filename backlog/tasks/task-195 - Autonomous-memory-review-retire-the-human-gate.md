@@ -54,9 +54,9 @@ audit view — no step waits for a human.
 - [x] #1 G0 runs before any product code: a stratified 60-case quarantine sample, exhaustively adjudicated, with the base rates written down
 - [x] #2 Gates G1-G3 are committed with their thresholds before the gated code produces its first measurement
 - [x] #3 Trap 1 (grounded promotion) is local-only, runs as a sweep pass, and promotes nothing below the registered precision bar
-- [ ] #4 Traps 2 and 3 sit behind auto_review_llm, default OFF in the shipped repo
-- [ ] #5 A retraction requires two independent methods plus a failed refutation, is capped per run, logs both verdicts, and reverses with one reopen()
-- [ ] #6 /kennisbank:review becomes an audit view with per-line undo; no step in the pipeline waits for a human
+- [x] #4 Traps 2 and 3 sit behind auto_review_llm, default OFF in the shipped repo
+- [x] #5 A retraction requires two independent methods plus a failed refutation, is capped per run, logs both verdicts, and reverses with one reopen()
+- [x] #6 /kennisbank:review becomes an audit view with per-line undo; no step in the pipeline waits for a human
 - [ ] #7 python -m pytest tests -q is green
 <!-- AC:END -->
 
