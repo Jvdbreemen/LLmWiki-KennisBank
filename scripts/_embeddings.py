@@ -110,14 +110,36 @@ EMBED_DOC_CAP = 4000
 OLLAMA_KEEP_ALIVE = os.environ.get("KB_EMBED_KEEP_ALIVE", "").strip() or -1
 
 
+#: Memo for _config(), keyed on (resolved path, mtime_ns, size). The path is
+#: resolved at CALL time (TASK-196: never freeze vault-derived state at
+#: import), so repointing KENNISBANK_VAULT invalidates the memo, and the stat
+#: fields make an edited config visible without a read+parse per call.
+_CONFIG_MEMO: dict = {"key": None, "cfg": {}}
+
+
 def _config() -> dict:
+    """Parsed kennisbank-embed.json, memoized on (path, mtime_ns, size).
+
+    Callers treat the result as read-only. An index build calls embed_id()
+    per file (two config reads each, ~5000 reads and ~1.4s per build measured
+    on this machine, TASK-191); this turns those into one stat per call."""
     cfg_file = vault_root() / ".claude" / "kennisbank-embed.json"
-    if cfg_file.exists():
+    try:
+        st = cfg_file.stat()
+        key = (str(cfg_file), st.st_mtime_ns, st.st_size)
+    except OSError:
+        key = (str(cfg_file), None, None)
+    if _CONFIG_MEMO["key"] == key:
+        return _CONFIG_MEMO["cfg"]
+    cfg: dict = {}
+    if key[1] is not None:
         try:
-            return json.loads(cfg_file.read_text(encoding="utf-8")) or {}
+            cfg = json.loads(cfg_file.read_text(encoding="utf-8")) or {}
         except Exception:
-            return {}
-    return {}
+            cfg = {}
+    _CONFIG_MEMO["key"] = key
+    _CONFIG_MEMO["cfg"] = cfg
+    return cfg
 
 
 def _setting(name: str, env: str, file_cfg: dict, default: str = "") -> str:
