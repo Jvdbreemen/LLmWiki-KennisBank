@@ -76,7 +76,32 @@ Geheugensystemen van leveranciers (Mem0, Zep, Letta, Cognee) zijn krachtig maar 
 
 De ontwerpvoorkeur is overal dezelfde: **deterministisch waar mogelijk, LLM alleen waar het oordeelsvermogen toevoegt, fail-open overal**. Een dood model blokkeert nooit een sessie, verliest nooit een transcript, en verwijdert nooit geverifieerde kennis.
 
-## Functie-highlights (v0.31.1)
+## Functie-highlights (v0.32.0)
+
+### Nieuw in v0.32.0
+
+De geheugenlaag behandelt "nieuwere uitspraak over hetzelfde onderwerp" niet
+langer als "volledige vervanging".
+
+**Elke supersessie die deze vault ooit maakte is handgelabeld** (237 paren,
+twaalf parallelle lezers, adversariële verificatie): 61% duplicaat-opruiming,
+11% echte vervanging — en **27% versmalling**: de opvolger liet feiten vallen
+waarvan het gesloten memory de enige drager was. Het recall-pad filtert op
+`status=current`, dus die feiten stonden niet lager — ze waren weg.
+
+**Sluiten vereist voortaan dekking.** Beide sluitende judges eisen dat een
+opvolger alles van blijvende waarde meeneemt voordat het oude memory sluit;
+gedeeltelijke dekking houdt beide open. Nagespeeld op alle geadjudiceerde
+paren: kennisverliezende sluitingen dalen van 57,8% naar 37,5%, de
+duplicaat-afhandeling blijft gelijk.
+
+**De 64 ten onrechte gesloten memories zijn terug.** Vragen die alleen zij
+konden beantwoorden gingen van recall@5 0,000 naar 0,333–0,600; de volledige
+eval van 1224 vragen bewoog hooguit +0,002.
+
+Ook nieuw: een versheids-bewuste eval-set (89 vragen, holdout bewust
+ongebruikt) die de derde onafhankelijke meting tegen de recency-weging
+opleverde — die verslaat ruwe cosine zelfs op eigen terrein niet.
 
 ### Nieuw in v0.31.1
 
