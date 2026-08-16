@@ -528,6 +528,75 @@ def _log_closure(path: Path, status: str, superseded_by, valid_until, reason: st
         pass  # een logboek mag de sluiting zelf nooit blokkeren
 
 
+#: Audit trail for autonomous promotions (TASK-195 trap 1). One JSON line per
+#: promotion: stem, the judge's evidence quote, the route (stamp/windows) and
+#: the prompt version. This log IS the review surface now that no human sits
+#: in the loop -- /kennisbank:review renders it, and reopen() undoes a line.
+PROMOTE_LOG = "memory-promote-log.jsonl"
+
+
+def promote(path, reason: str = "", route: str = "",
+            prompt_version=None) -> bool:
+    """unverified -> current, with an audit line. Anything else is refused.
+
+    Refusing every other starting status is the safety property, not a
+    convenience: a promotion pass that could touch `retracted` or
+    `superseded` would silently undo closures the maintenance machinery made
+    for cause. Promotion has exactly one legal edge in the status graph.
+    """
+    import re
+    p = Path(path)
+    try:
+        raw = p.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    fm, body = split_frontmatter(raw)
+    if not fm:
+        return False
+    m = re.search(r"^status:\s*(\S+)\s*$", fm, re.MULTILINE)
+    if not m or m.group(1) != "unverified":
+        return False
+    new_fm = re.sub(r"^status:.*$", "status: current", fm, count=1, flags=re.MULTILINE)
+    try:
+        p.write_text("---\n" + new_fm.strip("\n") + "\n---\n" + body, encoding="utf-8")
+    except OSError:
+        return False
+    try:
+        import json
+        from datetime import datetime, timezone
+        log = vault_root() / ".claude" / PROMOTE_LOG
+        log.parent.mkdir(parents=True, exist_ok=True)
+        rec = {"stem": p.stem, "reason": reason[:300], "route": route,
+               "prompt_version": prompt_version,
+               "at": datetime.now(timezone.utc).isoformat()}
+        with log.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    except Exception:
+        pass  # het logboek mag de promotie zelf nooit blokkeren
+    return True
+
+
+def recent_promotions(limit: int = 20) -> list:
+    """The latest promotions, newest first. Empty when there is no log."""
+    try:
+        import json
+        log = vault_root() / ".claude" / PROMOTE_LOG
+        if not log.exists():
+            return []
+        rows = []
+        for line in log.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rows.append(json.loads(line))
+            except Exception:
+                continue
+        return rows[-limit:][::-1]
+    except Exception:
+        return []
+
+
 def reopen(path, status: str = "current") -> bool:
     """Draai een sluiting terug: status naar current, sluitingsvelden eruit.
 
