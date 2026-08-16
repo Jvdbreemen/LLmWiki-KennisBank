@@ -71,4 +71,39 @@ precedent and the promise.
 
 ## Results
 
-*(empty at commit time on purpose)*
+**Gate C failed. The change does not ship.**
+
+| gate | requirement | measured | verdict |
+| --- | --- | --- | --- |
+| A — 1224-question set | @1 ≥ +0.15; @5 ≥ 0.758 | @1 **+0.313** (0.234 → 0.547); @5 0.758 → 0.758 | PASS |
+| B — freshness dev | oldest r@5 ≥ 0.500; newest r@5 ≥ 0.571 | oldest **0.600**; newest **0.571** (exactly the boundary) | PASS |
+| C — holdout, one shot | new r@5 ≥ old on BOTH slices | oldest 0.500 → 0.618 (**+0.118**); newest 0.364 → **0.273** (−0.091) | **FAIL** |
+
+On the holdout's eleven newest-wins questions the cosine ordering loses one
+question at rank 5 that the old production ordering kept. Four questions are
+gained on oldest-wins; the net over 45 questions is +3. The rule did not ask
+about the net — it required no loss on either slice, precisely so that a gain
+on one side could not buy a loss on the other. It was set with the sample
+sizes known. It fails, so the code is reverted, and this section records that
+instead of adjusting the rule to fit.
+
+### What the failed run still bought
+
+- The holdout also measured the *old* ordering for the first time on questions
+  it never tuned on: newest-wins r@5 0.364, oldest-wins 0.500. The production
+  ranking is weak on its own favourite slice out of sample.
+- The one-question loss sits in an 11-question slice. That is not an argument
+  against the rule — it is the reason the next attempt needs a larger
+  newest-wins pool before it can register a distinguishable gate. REPLACED
+  pairs accrue naturally as v3-era supersessions accumulate.
+- **This holdout is spent.** It has been seen; it can never again serve as an
+  untouched gate. A future attempt must build a fresh one.
+
+### Reconstruction note
+
+The "old" arm was reconstructed offline from the same retrieved pool: the
+memory layer has no lexical arm, so its RRF base order is the cosine order,
+and the old ordering is base × recency × importance × trust from live
+frontmatter. The usage boost and coupling bonus were not reconstructed;
+TASK-160 measured the usage factor's contribution as near zero and the others
+as inert. Rows in `holdout_results.json` beside the scratch harness.
