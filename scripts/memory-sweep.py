@@ -554,9 +554,24 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
         # judge-aanroep per duplicaatpaar, en belangrijker: een identieke body
         # hoort niet aan een oordeel onderworpen te worden dat fout kan gaan.
         _run_pass(s, "exact_duplicates_closed", _mnt.exact_duplicate_pass)
-        _run_pass(s, "superseded", _mnt.supersede_pass)
-        _run_pass(s, "rechecked_retracted", _mnt.recheck_pass)
-        _run_pass(s, "promote_marked", _mnt.cluster_promote_pass)
+        # Eén corpus-snapshot en één buurberekening voor de drie passes
+        # (TASK-191): elk laadde voorheen alle ~1600 files en de hele
+        # vectortabel opnieuw, en de buurprobe liep dubbel. De snapshot valt
+        # NA exact_duplicate_pass (die sluit byte-duplicaten die er niet meer
+        # in horen); elke pass pruned wat hij sloot. snapshot=None degradeert
+        # elke pass naar zijn eigen load — de oude faal-isolatie blijft.
+        try:
+            snapshot = _mnt.current_items()
+            nmap = _mnt.neighbour_map(
+                snapshot, min(_mnt.SUPERSEDE_THRESHOLD, _mnt.CLUSTER_THRESHOLD))
+        except Exception:
+            snapshot, nmap = None, None
+        _run_pass(s, "superseded",
+                  lambda: _mnt.supersede_pass(items=snapshot, neighbours=nmap))
+        _run_pass(s, "rechecked_retracted",
+                  lambda: _mnt.recheck_pass(items=snapshot))
+        _run_pass(s, "promote_marked",
+                  lambda: _mnt.cluster_promote_pass(items=snapshot, neighbours=nmap))
         # Trap 1 of the autonomous review (TASK-195): unverified memories that
         # their own source supports get promoted. Only 'supported' promotes;
         # nothing is ever closed here. Capped per run so the sweep's tail stays

@@ -527,8 +527,14 @@ def save_cache(cache: dict) -> None:
             tmp.unlink(missing_ok=True)
 
 
+def bytes_hash(data: bytes) -> str:
+    """The 8-char md5 identity used by the index and the cache — one spelling,
+    so callers that already hold the bytes need not re-read the file."""
+    return hashlib.md5(data).hexdigest()[:8]
+
+
 def file_hash(path) -> str:
-    return hashlib.md5(Path(path).read_bytes()).hexdigest()[:8]
+    return bytes_hash(Path(path).read_bytes())
 
 
 def doc_text(path, cap: int = EMBED_DOC_CAP) -> str:
