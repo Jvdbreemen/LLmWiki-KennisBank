@@ -255,76 +255,56 @@ def _activity_unavailable() -> dict[str, Any]:
     }
 
 
-def what_did_i_do_tool(date_or_period: str, topic: str = "", project: str = "",
-                       max_events: int = 25) -> "dict[str, Any] | str":
-    """Temporal activity recall voor een datum/periode."""
+def _activity_call(fn_name: str, *args, **kwargs) -> "dict[str, Any] | str":
+    """Shared dispatcher for the four activity tools (TASK-190): the
+    unavailable-guard, exception-to-warnings translation and compact
+    rendering existed four times and were already free to drift. Reads
+    module-global `activity` at call time so tests can keep patching it.
+    The int() coercion stays INSIDE the try: an unparseable max_events must
+    yield the warnings dict, never a raised ValueError."""
     if activity is None:
         result = _activity_unavailable()
     else:
         try:
-            result = activity.what_did_i_do(
-                date_or_period or "today",
-                topic=topic or "",
-                project=project or "",
-                max_events=int(max_events),
-            )
+            kwargs["max_events"] = int(kwargs["max_events"])
+            result = getattr(activity, fn_name)(*args, **kwargs)
         except Exception as e:
-            result = {"ok": False, "warnings": [f"what_did_i_do failed: {type(e).__name__}"], "events": []}
+            result = {"ok": False,
+                      "warnings": [f"{fn_name} failed: {type(e).__name__}"],
+                      "events": []}
     return _compact_activity_result(result) if _compact_output_enabled() else result
+
+
+def what_did_i_do_tool(date_or_period: str, topic: str = "", project: str = "",
+                       max_events: int = 25) -> "dict[str, Any] | str":
+    """Temporal activity recall voor een datum/periode."""
+    return _activity_call("what_did_i_do", date_or_period or "today",
+                          topic=topic or "", project=project or "",
+                          max_events=max_events)
 
 
 def timeline_tool(period: str, topic: str = "", project: str = "",
                   max_events: int = 50) -> "dict[str, Any] | str":
     """Chronologische temporal activity timeline."""
-    if activity is None:
-        result = _activity_unavailable()
-    else:
-        try:
-            result = activity.timeline(
-                period or "today",
-                topic=topic or "",
-                project=project or "",
-                max_events=int(max_events),
-            )
-        except Exception as e:
-            result = {"ok": False, "warnings": [f"timeline failed: {type(e).__name__}"], "events": []}
-    return _compact_activity_result(result) if _compact_output_enabled() else result
+    return _activity_call("timeline", period or "today",
+                          topic=topic or "", project=project or "",
+                          max_events=max_events)
 
 
 def weeklog_tool(period: str = "vorige week", topic: str = "", project: str = "",
                  max_events: int = 100) -> "dict[str, Any] | str":
     """Weekoverzicht met rollup en source_refs."""
-    if activity is None:
-        result = _activity_unavailable()
-    else:
-        try:
-            result = activity.weeklog(
-                period or "vorige week",
-                topic=topic or "",
-                project=project or "",
-                max_events=int(max_events),
-            )
-        except Exception as e:
-            result = {"ok": False, "warnings": [f"weeklog failed: {type(e).__name__}"], "events": []}
-    return _compact_activity_result(result) if _compact_output_enabled() else result
+    return _activity_call("weeklog", period or "vorige week",
+                          topic=topic or "", project=project or "",
+                          max_events=max_events)
 
 
 def topic_timeline_tool(topic: str, period: str = "afgelopen 90 dagen",
                         project: str = "", max_events: int = 80) -> "dict[str, Any] | str":
     """Volg een onderwerp of entity door de tijd."""
-    if activity is None:
-        result = _activity_unavailable()
-    else:
-        try:
-            result = activity.topic_timeline(
-                topic or "",
-                period_text=period or "afgelopen 90 dagen",
-                project=project or "",
-                max_events=int(max_events),
-            )
-        except Exception as e:
-            result = {"ok": False, "warnings": [f"topic_timeline failed: {type(e).__name__}"], "events": []}
-    return _compact_activity_result(result) if _compact_output_enabled() else result
+    return _activity_call("topic_timeline", topic or "",
+                          period_text=period or "afgelopen 90 dagen",
+                          project=project or "", max_events=max_events)
 
 
 # Pull-nudge voor MCP-clients zonder push-hook (zie module-docstring). Drie

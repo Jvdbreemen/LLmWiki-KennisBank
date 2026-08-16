@@ -187,13 +187,14 @@ _VALUE_NEAR = r"[^\n]{0,40}?(-?\d+(?:\.\d+)?|true|false|waar|onwaar)\b"
 def _looks_like_key(key: str) -> bool:
     """Only keys that cannot also be an ordinary word.
 
-    The same boundary _memory.looks_like_config uses: an underscore, a dot, or
-    ALL_CAPS. `retrieve_top_n` and `RECONCILE_THRESHOLD` survive; `endpoint`
-    and `model` do not, which is the whole point -- those words appear in
-    dozens of memories about something else entirely.
+    Delegates to _memory.looks_like_config_key — literally the _CFG_KEY
+    boundary, replacing the isupper() paraphrase that diverged at the
+    margins (TOP-K, .env, 2FA; TASK-190). `retrieve_top_n` and
+    `RECONCILE_THRESHOLD` survive; `endpoint` and `model` do not, which is
+    the whole point -- those words appear in dozens of memories about
+    something else entirely.
     """
-    k = str(key)
-    return ("_" in k) or ("." in k) or (k.isupper() and len(k) > 2)
+    return _memory.looks_like_config_key(key)
 
 
 def value_claims(text: str, keys) -> list:

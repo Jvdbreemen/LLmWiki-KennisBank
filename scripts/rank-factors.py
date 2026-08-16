@@ -48,6 +48,7 @@ from pathlib import Path
 # at collection time (TASK-167/181).
 SCRIPTS = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPTS)
+from _querycache import QueryCache  # noqa: E402
 
 import _embeddings as emb  # noqa: E402
 import _rank  # noqa: E402
@@ -151,14 +152,13 @@ def main(argv=None) -> int:
     ap.add_argument("--arms", default="")
     args = ap.parse_args(argv)
 
-    scene_exp = _load("scene-experiment.py")
     kb_recall = _load("kb-recall.py")
 
     questions = json.loads(Path(args.set_path).read_text(encoding="utf-8"))
     if isinstance(questions, dict):
         questions = questions.get("questions", [])
     chosen = CEIL.split_questions(questions, args.split)
-    cache = scene_exp.QueryCache(Path(args.cache), emb.query_embed_id())
+    cache = QueryCache(Path(args.cache), emb.query_embed_id())
 
     wanted = args.arms.split(",") if args.arms else list(ARMS)
     results, report = {}, {"split": args.split, "questions": len(chosen),

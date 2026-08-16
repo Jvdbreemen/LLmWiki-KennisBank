@@ -158,6 +158,14 @@ class TestRank(unittest.TestCase):
     def test_any_of_expected_counts(self):
         self.assertEqual(self.ev.rank_of_first_expected(["x", "b"], ["a", "b"]), 2)
 
+    def test_a_bare_stem_and_none_are_tolerated(self):
+        """TASK-190: de experiment-sets geven soms één losse stem of None;
+        de geünificeerde helper draagt gold_ranks oude tolerantie. Een kale
+        string mag NOOIT tot losse tekens ontleden."""
+        self.assertEqual(self.ev.rank_of_first_expected(["a", "b"], "b"), 2)
+        self.assertEqual(self.ev.rank_of_first_expected(["a"], None), 0)
+        self.assertEqual(self.ev.rank_of_first_expected(["a", "b"], "ab"), 0)
+
 
 class TestEvaluate(unittest.TestCase):
     def setUp(self):

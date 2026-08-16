@@ -61,12 +61,9 @@ def _pct(vals, q: float) -> float:
     return s[max(0, min(len(s) - 1, int(round(q * (len(s) - 1)))))]
 
 
-def _rank_of(stems, expect) -> int:
-    want = set(expect)
-    for i, s in enumerate(stems, start=1):
-        if s in want:
-            return i
-    return 0
+# Eén rang-definitie voor alle harnassen (TASK-190): de canonieke helper
+# leeft in kb-eval; drie kopieën dreven onafhankelijk.
+_rank_of = _load_by_path("kb-eval.py").rank_of_first_expected
 
 
 def _report(ranks: list, types: list, ks=KS) -> dict:

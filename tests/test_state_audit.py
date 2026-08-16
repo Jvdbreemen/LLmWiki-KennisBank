@@ -129,6 +129,17 @@ class StateAuditTest(unittest.TestCase):
         self.assertTrue(self.m._looks_like_key("retrieve_top_n"))
         self.assertTrue(self.m._looks_like_key("RECONCILE_THRESHOLD"))
 
+    def test_the_key_boundary_is_memorys_boundary(self):
+        """TASK-190: de isupper()-parafrase week af aan de randen (TOP-K,
+        .env, 2FA). Sindsdien delegeert _looks_like_key; deze pariteitslus
+        houdt de twee definities voorgoed gelijk."""
+        import _memory
+        for k in ("retrieve_top_n", "RECONCILE_THRESHOLD", "endpoint",
+                  "model", "TOP-K", ".env", "_x", "2FA",
+                  "policy.network_allowed", "TOP_K"):
+            self.assertEqual(self.m._looks_like_key(k),
+                             _memory.looks_like_config_key(k), k)
+
     def test_a_command_or_a_source_reference_is_not_a_model(self):
         """`family:tag` matches far more than models.
 
