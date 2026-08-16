@@ -36,6 +36,7 @@ import _memory  # noqa: E402
 import _settings  # noqa: E402
 import _sweepstate as ss  # noqa: E402
 import _sweeputil as su  # noqa: E402
+from _common import env_int  # noqa: E402
 from _frontmatter import parse_frontmatter  # noqa: E402
 from _progress import Progress  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402
@@ -277,9 +278,8 @@ def _write_heartbeat(summary: dict) -> None:
 #:
 #: max_memories_per_transcript was in de praktijk de BINDENDE rem, niet max_chunks:
 #: bij ~4 kandidaten per chunk was 20 memories al na vijf chunks op.
-MAX_CHUNKS = int(os.environ.get("KB_SWEEP_MAX_CHUNKS", "").strip() or 40)
-MAX_MEMORIES_PER_TRANSCRIPT = int(
-    os.environ.get("KB_SWEEP_MAX_MEMORIES", "").strip() or 60)
+MAX_CHUNKS = env_int("KB_SWEEP_MAX_CHUNKS", 40)
+MAX_MEMORIES_PER_TRANSCRIPT = env_int("KB_SWEEP_MAX_MEMORIES", 60)
 
 #: Bovengrens op één sweep-run, in chunks. De sweep is losgekoppeld maar deelt de
 #: GPU met het embedding-model dat de retrieval-hot-path bedient; tien transcripts
@@ -287,7 +287,7 @@ MAX_MEMORIES_PER_TRANSCRIPT = int(
 #: is 150 chunks ongeveer een kwartier. Wat niet past blijft pending en komt de
 #: volgende run aan de beurt -- de watermark wordt alleen gezet voor transcripts
 #: die HELEMAAL verwerkt zijn.
-CHUNK_BUDGET = int(os.environ.get("KB_SWEEP_CHUNK_BUDGET", "").strip() or 150)
+CHUNK_BUDGET = env_int("KB_SWEEP_CHUNK_BUDGET", 150)
 
 
 def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,

@@ -13,12 +13,8 @@ import re
 import sys
 from pathlib import Path
 
-
-def _env_int(name, default):
-    try:
-        return int(os.environ.get(name, str(default)).strip())
-    except (ValueError, AttributeError):
-        return default
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _common import env_int  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -308,8 +304,8 @@ def main(argv=None):
             sys.exit(0)
 
     # ---- Read env thresholds ----
-    max_lines = _env_int("KB_EDIT_MAX_LINES", 20)
-    max_drop = _env_int("KB_EDIT_MAX_DROP", 3)
+    max_lines = env_int("KB_EDIT_MAX_LINES", 20)
+    max_drop = env_int("KB_EDIT_MAX_DROP", 3)
 
     # ---- Classify ----
     if not target_exists:

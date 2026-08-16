@@ -24,6 +24,7 @@ from pathlib import Path
 
 os.environ.setdefault("KENNISBANK_VAULT", str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _common import env_int  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402
 
 LOCAL_PROVIDERS = {"ollama"}
@@ -55,7 +56,7 @@ _DEFAULTS = {
 #: Too low would be worse than wasteful: the prompt is truncated silently and the
 #: judge answers about a transcript it only half saw. Raise this before raising
 #: the chunk size in _sweeputil.chunk().
-OLLAMA_NUM_CTX = int(os.environ.get("KB_LLM_NUM_CTX", "").strip() or 4096)
+OLLAMA_NUM_CTX = env_int("KB_LLM_NUM_CTX", 4096)
 
 #: Reasoning models answer AFTER thinking, and the thinking spends the same
 #: num_ctx budget as the answer. Measured on qwen3.5:4b with the reconcile

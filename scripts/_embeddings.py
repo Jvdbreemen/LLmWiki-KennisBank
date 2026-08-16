@@ -51,6 +51,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _common import env_int  # noqa: E402
 from _frontmatter import split_frontmatter  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402
 
@@ -83,7 +84,7 @@ def cache_file() -> Path:
 #: embedding model instead of evicting it.
 #: Raise this if documents ever grow past it: truncation WOULD change vectors
 #: and silently invalidate the index.
-OLLAMA_NUM_CTX = int(os.environ.get("KB_EMBED_NUM_CTX", "").strip() or 2048)
+OLLAMA_NUM_CTX = env_int("KB_EMBED_NUM_CTX", 2048)
 
 #: Never unload on a timer. A cold load takes 30-60 s while the retrieval hook
 #: has a 2 s budget, so an idle gap turns retrieval off without saying so.

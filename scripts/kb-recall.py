@@ -26,6 +26,7 @@ import _embeddings as emb  # noqa: E402
 import _kbindex  # noqa: E402
 import _memory as _mem  # noqa: E402  # live-status hervalidatie (IMPORTANT 1)
 import _rank  # noqa: E402  # relevance x recency x importance + graafbuur
+from _common import env_float  # noqa: E402
 from _frontmatter import parse_frontmatter as _parse_fm  # noqa: E402
 from _vaultpath import vault_root as _vault_root  # noqa: E402
 
@@ -390,14 +391,7 @@ def recall_hits(query_vector, query_text: str = "", k: int = 3,
 # of 0.51 (measured on the 8b) out. Recalibrate after a model switch: a single
 # pass that records the cosine of the expected hit per question yields the whole
 # curve.
-def _memory_min_cos_default() -> float:
-    try:
-        return float(os.environ.get("KB_MEMORY_THRESHOLD", "").strip() or 0.45)
-    except ValueError:
-        return 0.45
-
-
-MEMORY_MIN_COS = _memory_min_cos_default()
+MEMORY_MIN_COS = env_float("KB_MEMORY_THRESHOLD", 0.45)
 
 
 def memory_hits(query_vector, query_text: str = "", k: int = 3,
