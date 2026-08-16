@@ -199,7 +199,28 @@ def retrieve_params(cfg: dict) -> dict:
                             or str(cfg.get("scene_clusterer", "community"))),
         "scene_floor": _num("KB_SCENE_FLOOR", cfg, "scene_floor", 0.35),
         "scene_boost": _num("KB_SCENE_BOOST", cfg, "scene_boost", 0.0),
+        # Memory-layer knobs resolve HERE too (TASK-188): _memory_block and
+        # kb-eval read these, so the hook and the eval harness cannot drift.
+        "memory_top_n": int(_num("KB_RECALL_TOP_N", cfg, "memory_top_n", 3)),
+        "memory_min_cos": _num("KB_MEMORY_THRESHOLD", cfg, "memory_threshold", 0.45),
     }
+
+
+def scene_prior_params(params: dict):
+    """scene_prior dict for recall_hits, or None when scene_retrieval is off.
+
+    Single resolution point for hook AND eval (TASK-86 parity; TASK-188 found
+    the toggle documented in three places and read by zero production paths).
+    Settings failure -> None: the documented default is OFF, so failure means
+    baseline (mirror of the graph_retrieval rule, whose default is ON).
+    """
+    try:
+        import _settings
+        if not _settings.get("scene_retrieval", False):
+            return None
+    except Exception:
+        return None
+    return {"floor": params["scene_floor"], "boost": params["scene_boost"]}
 
 
 def load_embed_cfg(vault_root) -> dict:
@@ -293,8 +314,8 @@ def _memory_block(qvec, prompt, cfg, hits_fn=None):
     """Additief memory-blok via kb-recall. Leeg bij geen hits / fail-soft.
 
     hits_fn: optionele injectable callable met dezelfde signatuur als
-    kb_recall.memory_hits (qvec, query_text, k) -> list. Standaard wordt
-    kb-recall.py via importlib geladen (gedrag ongewijzigd). Testbaar zonder
+    kb_recall.memory_hits (qvec, query_text, k, min_cos, scene_prior) -> list.
+    Standaard wordt kb-recall.py via importlib geladen. Testbaar zonder
     Ollama door hits_fn=<stub> mee te geven (MINOR 2).
     """
     try:
@@ -305,8 +326,10 @@ def _memory_block(qvec, prompt, cfg, hits_fn=None):
             kb = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(kb)
             hits_fn = kb.memory_hits
-        top_n = _num("KB_RECALL_TOP_N", cfg, "memory_top_n", 3)
-        hits = hits_fn(qvec, query_text=prompt, k=int(top_n))
+        params = retrieve_params(cfg)
+        hits = hits_fn(qvec, query_text=prompt, k=int(params["memory_top_n"]),
+                       min_cos=params["memory_min_cos"],
+                       scene_prior=scene_prior_params(params))
     except Exception:
         return ""
     if not hits:

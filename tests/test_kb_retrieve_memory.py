@@ -171,6 +171,45 @@ class KbRetrieveMemoryBlockTest(unittest.TestCase):
         self.assertEqual(result, "")
         hits_fn.assert_called()
 
+    # --- TASK-188: knobs resolven per call via retrieve_params -------------
+
+    def test_memory_block_passes_config_floor_per_call(self):
+        hits_fn = Mock(side_effect=lambda *a, **k: [])
+        self.mod._memory_block([0.1], "test prompt",
+                               {"memory_threshold": 0.61}, hits_fn=hits_fn)
+        self.assertEqual(hits_fn.call_args.kwargs["min_cos"], 0.61)
+
+    def test_memory_block_env_floor_beats_config(self):
+        hits_fn = Mock(side_effect=lambda *a, **k: [])
+        saved = os.environ.get("KB_MEMORY_THRESHOLD")
+        os.environ["KB_MEMORY_THRESHOLD"] = "0.3"
+        try:
+            self.mod._memory_block([0.1], "test prompt",
+                                   {"memory_threshold": 0.61}, hits_fn=hits_fn)
+        finally:
+            if saved is None:
+                os.environ.pop("KB_MEMORY_THRESHOLD", None)
+            else:
+                os.environ["KB_MEMORY_THRESHOLD"] = saved
+        self.assertEqual(hits_fn.call_args.kwargs["min_cos"], 0.3)
+
+    def test_scene_prior_none_by_default(self):
+        hits_fn = Mock(side_effect=lambda *a, **k: [])
+        self.mod._memory_block([0.1], "test prompt", {}, hits_fn=hits_fn)
+        self.assertIsNone(hits_fn.call_args.kwargs["scene_prior"])
+
+    def test_scene_prior_built_when_toggle_on(self):
+        """De gedocumenteerde toggle bereikt nu echt het productiepad —
+        vóór TASK-188 las geen enkele productiecode hem."""
+        (self.vault / "kennisbank-settings.json").write_text(
+            json.dumps({"scene_retrieval": True}), encoding="utf-8")
+        hits_fn = Mock(side_effect=lambda *a, **k: [])
+        self.mod._memory_block([0.1], "test prompt",
+                               {"scene_floor": 0.30, "scene_boost": 0.05},
+                               hits_fn=hits_fn)
+        self.assertEqual(hits_fn.call_args.kwargs["scene_prior"],
+                         {"floor": 0.30, "boost": 0.05})
+
 
 @unittest.skipUnless(
     os.environ.get("KB_INTEGRATION") == "1",

@@ -121,6 +121,44 @@ class EmptyAgentHomeFallsBackTest(unittest.TestCase):
         self._assert_absolute_and_not_cwd(_copilot.copilot_home(), "COPILOT_HOME")
 
 
+class MemoryFloorIsOneNumberEverywhereTest(unittest.TestCase):
+    """TASK-188: the memory floor lives in three surfaces; they may not drift."""
+
+    def _defaults(self):
+        recall = (SCRIPTS / "kb-recall.py").read_text(encoding="utf-8")
+        retrieve = (SCRIPTS / "kb-retrieve.py").read_text(encoding="utf-8")
+        m1 = re.search(r'env_float\("KB_MEMORY_THRESHOLD",\s*([0-9.]+)\)', recall)
+        m2 = re.search(r'"memory_threshold",\s*([0-9.]+)\)', retrieve)
+        self.assertIsNotNone(m1, "kb-recall.py names no memory-floor default")
+        self.assertIsNotNone(m2, "kb-retrieve.py retrieve_params names no memory_threshold default")
+        return m1.group(1), m2.group(1)
+
+    def test_code_defaults_agree(self):
+        a, b = self._defaults()
+        self.assertEqual(a, b)
+
+    def test_example_config_ships_the_same_floor(self):
+        a, _ = self._defaults()
+        cfg = json.loads((REPO_ROOT / "kennisbank-embed.example.json").read_text(encoding="utf-8"))
+        self.assertEqual(str(cfg["memory_threshold"]), a)
+
+
+class RetrievalTogglesHaveAProductionReaderTest(unittest.TestCase):
+    """A toggle in DEFAULTS that no production path reads is a documented
+    no-op — exactly what scene_retrieval was before TASK-188."""
+
+    READERS = {
+        "scene_retrieval": "kb-retrieve.py",
+        "graph_retrieval": "kb-recall.py",
+    }
+
+    def test_every_retrieval_toggle_is_read_in_production(self):
+        for key, fname in self.READERS.items():
+            src = (SCRIPTS / fname).read_text(encoding="utf-8")
+            self.assertIn(f'_settings.get("{key}"', src,
+                          f"{fname} never reads the {key} toggle")
+
+
 if __name__ == "__main__":
     unittest.main()
 class CouplingKnobsMatchTheirDocsTest(unittest.TestCase):

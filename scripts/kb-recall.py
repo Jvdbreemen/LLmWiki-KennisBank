@@ -174,12 +174,16 @@ def _neighbor_entry(out) -> "dict | None":
     fout -> None.
     """
     try:
-        use_graph = False
         try:
             import _settings
             use_graph = bool(_settings.get("graph_retrieval", True))
         except Exception:
-            use_graph = False
+            # _settings unreadable is not "feature off". get() is already
+            # fail-open (missing file/key -> default), so this branch only
+            # fires when the module itself cannot load; keep the shipped
+            # default (ON) instead of silently disabling a default-ON
+            # feature (TASK-188).
+            use_graph = True
         if not use_graph:
             return None
         nb = graph_neighbor(out)

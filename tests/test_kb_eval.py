@@ -76,9 +76,10 @@ class TestProductionParity(unittest.TestCase):
 
     def _fake_modules(self, calls, memory_min_cos=0.60):
         def recall_hits(qv, query_text="", k=3, layers=("wiki", "memory"),
-                        expand=False, min_cos=0.0):
+                        expand=False, min_cos=0.0, scene_prior=None):
             calls.append({"layers": tuple(layers), "expand": expand,
-                          "min_cos": min_cos, "k": k})
+                          "min_cos": min_cos, "k": k,
+                          "scene_prior": scene_prior})
             return []
         fake_recall = types.SimpleNamespace(recall_hits=recall_hits,
                                             MEMORY_MIN_COS=memory_min_cos)
@@ -115,15 +116,21 @@ class TestProductionParity(unittest.TestCase):
         self.assertEqual(calls[0]["min_cos"], 0.72)
         self.assertFalse(calls[0]["expand"])
 
-    def test_memory_uses_module_memory_min_cos(self):
+    def test_memory_floor_resolves_through_retrieve_params(self):
+        """TASK-188 parity: eval resolves the memory floor via exactly the
+        resolver de hook gebruikt (retrieve_params), niet via een module-
+        attribuut dat de hook niet leest."""
+        vault = Path(os.environ["KENNISBANK_VAULT"])
+        (vault / ".claude" / "kennisbank-embed.json").write_text(
+            json.dumps({"memory_threshold": 0.61}), encoding="utf-8")
         calls = []
         with patch.object(self.ev, "_load_by_path",
-                          side_effect=self._fake_modules(calls, memory_min_cos=0.61)):
+                          side_effect=self._fake_modules(calls)):
             hits_fn, _ = self.ev._live_hits_fn(layers=("memory",))
             hits_fn("een vraag", 5)
         self.assertEqual(calls[0]["layers"], ("memory",))
-        # de drempel komt uit kb_recall.MEMORY_MIN_COS, niet uit een hardcode
         self.assertEqual(calls[0]["min_cos"], 0.61)
+        self.assertIsNone(calls[0]["scene_prior"])  # toggle default OFF
         # productie expandeert het memory-blok niet
         self.assertFalse(calls[0]["expand"])
 

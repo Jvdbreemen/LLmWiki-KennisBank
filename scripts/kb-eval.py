@@ -191,9 +191,12 @@ def _live_hits_fn(layers=("wiki",), expand=None):
         if qv is None:
             return []
         if tuple(layers) == ("memory",):
-            # productie: _memory_block -> memory_hits met de EIGEN memory-drempel
+            # productie: _memory_block -> memory_hits; drempel en scene-prior
+            # via exact dezelfde resolver als de hook (retrieve_params,
+            # TASK-188 parity).
             rows = kb_recall.recall_hits(qv, query_text=q, k=k, layers=("memory",),
-                                         min_cos=kb_recall.MEMORY_MIN_COS)
+                                         min_cos=params["memory_min_cos"],
+                                         scene_prior=kb_retrieve.scene_prior_params(params))
         else:
             # productie: _wiki_block -> wiki_hits met drempel + buur-expansie
             rows = kb_recall.recall_hits(qv, query_text=q, k=k, layers=tuple(layers),
