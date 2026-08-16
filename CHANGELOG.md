@@ -7,8 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.33.0] - 2026-08-17
+
+The human leaves the memory loop. Quarantined memories now promote, escalate
+and retract autonomously — safety comes from evidence and reversibility, not
+from a person approving things — and `/kennisbank:review` becomes an audit
+view with per-line undo. Around that: a wave of verified fixes for defects
+that failed silently, and the open backlog worked down to zero with every
+task carrying its evidence.
+
+### Upgrading
+
+- The sweep gains a grounded-verification pass: unverified memories whose own
+  source transcript supports them are promoted to `current` automatically
+  (local model only, evidence quote in the promote log). Drain an existing
+  backlog once with `kb-verify.py`.
+- Traps 2/3 (whole-transcript adjudication by the client LLM) ship **OFF**:
+  they sit behind the new `auto_review_llm` toggle, because bundles exist to
+  be read by a client LLM and that is cloud. "Lokaal, altijd" holds unless
+  you flip it deliberately.
+- The FTS index heals itself on the first session start after this upgrade:
+  rows truncated under the old body cap (72 of 206 wiki articles) are
+  repaired from the embedding cache, no manual `--rebuild` needed.
+- `setup.sh` now pulls the resolved embedding model when it is missing
+  (skipped with `--skip-model-check`); `doctor.sh` warns when the index was
+  built with a different embed backend than the code resolves, with the
+  remedy.
+- New config key `memory_threshold` in `kennisbank-embed.json` (default
+  0.45): the memory-layer floor is now tunable per vault, resolved per call.
+
 ### Added
 
+- **Autonomous memory review** (TASK-195, design in
+  `docs/superpowers/specs/2026-08-16-autonomous-memory-review-design.md`).
+  Three traps, each gated by pre-registered measurements (G0–G3): grounded
+  promotion by the local model against the memory's own source chunk
+  (`supported` never fabricated in 210 checks); client-LLM whole-transcript
+  adjudication for what trap 1 cannot support (`kb-autoreview.py` bundle/
+  apply — an agent proposes, code disposes); retraction only on double
+  agreement plus a failed refutation, capped per run, reversible with one
+  `reopen()`. First real run on this vault: 993 quarantined memories judged,
+  949 promoted with evidence across both traps, 2 retracted, 42 left for a
+  later cycle. Recall on the 1224-question set improved (+0.035 recall@1,
+  +0.026 MRR) with freshness slices stable.
+- **`/kennisbank:review` is an audit view now**, not a work queue: it renders
+  the promote log (route, prompt version, evidence quote) and the closed log,
+  with one undo per direction — `memory-doctor.py demote <stem>` (promotion
+  was premature, back to quarantine; exactly one legal edge, mirroring
+  `promote()`) and `reopen <stem>`. No step in the pipeline waits for a
+  human.
+- **The sweep's primary budget is wall-clock time** (`KB_SWEEP_TIME_BUDGET`,
+  default 900s sized on a measured ~430s/transcript run). The old chunk
+  budget assumed 5-6s per chunk but only counted the extract call; per chunk
+  the sweep also pays dedup embeds, reconcile and judge, so 150 chunks
+  bounded nearly two hours of GPU. Budget stops name their brake and report
+  how many transcripts stay pending.
 - **`context-budget.py` now enforces a budget.** The script was named for one it
   never had: L0-L3 nest content but bounded nothing, so an L3 answer over three
   long articles was an order of magnitude larger than one over a short article,
@@ -47,6 +100,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   TASK-194; a stated-versus-inferred axis gated behind a measurement, TASK-171),
   and the infrastructure rejected with reasons. Records the AGPL-3.0 versus MIT
   boundary: ideas and API shapes transfer, code does not.
+
+- **The open backlog went to zero.** All 40 open tasks were triaged against
+  the repository by parallel verification agents: delivered work closed with
+  its commits cited, superseded and parked work archived with a close-out
+  note saying where the direction lives and what reopening takes, verified
+  defects fixed (below). Two bug claims were narrowed and two extra defect
+  sites found during verification.
+
+### Fixed
+
+Every fix below was adversarially re-verified against the source before
+implementation; most failed *silently*, which is why they lived so long.
+
+- **A repo checkout next to a `~/.claude` directory resolved the vault to
+  `$HOME`** and exported that root to every child process. `_script_vault()`
+  now matches the installed layout (grandparent *named* `.claude`); the bare
+  `parents[2]` header is deleted from 47 scripts and vault resolution flows
+  through `vault_root()` only, guarded by tests. Also the real cause of three
+  chronic CI test failures. (TASK-181/167)
+- **One malformed env var turned retrieval off for every session**: six
+  module-level `int(os.environ...)` sites raised at import and the fail-open
+  hook swallowed it. One fail-soft reader (`_common.env_int/env_float`) with
+  a full-text guard against the class. (TASK-185)
+- **The sweep's partial-deploy fallback wrote zero memories**: its lambda
+  drifted out of sync with `reconcile()`'s signature and raised TypeError on
+  every candidate. Star-args now; it cannot drift again. (TASK-180)
+- **The embed default-model flip (v0.28.0, 8b→4b) had no migration story**:
+  doctor.sh checked a stale `:8b` literal and reported the OLD model as
+  installed on exactly the vaults whose recall had gone dark. Single-source
+  constant, `--print-model` for shell callers, an index-vs-code mismatch
+  warning with the remedy, and a pull in setup. Config-pinned vaults are
+  untouched. (TASK-182)
+- **The embeddings cache path froze at import** (2s → 835s test runs on
+  import order; the deeper cause behind several lazy-import workarounds):
+  `cache_file()` resolves per call. (TASK-196)
+- **A second session could steal the maintenance lock mid-handoff** and run
+  two index builders at once (reproduced deterministically). Dead-pid grace
+  window, every lock mutation under an OS-level mutex with a re-judge inside
+  it, and one `pid_alive` (the `_embeddings` copy read access-denied as
+  dead and spawned duplicate warm children). (TASK-183)
+- **The FTS body-cap fix never reached already-indexed rows** — 16.6% of
+  wiki text stayed unsearchable while the changelog said fixed. The index
+  stamps its cap and heals mismatched rows on the next incremental build;
+  embed failures are reported by document name. (TASK-186)
+- **An edited memory was judged with the embedding of its previous
+  content**: index vectors were served by path without a hash check, feeding
+  the very passes that close memories. Vectors now carry the stored file
+  hash and mismatches fall back to re-embedding. (TASK-191)
+- **kb-eval could measure a different retrieval system than the live hook
+  runs**: eval embedded queries with the query prefix, production embedded
+  bare. One seam (`embed_query`) for both, a static guard on every
+  query-bearing file, and a behavioral test that drives the real hook.
+  (TASK-184)
+- **The documented `scene_retrieval` toggle was read by zero production
+  paths** — flipping it was a silent no-op. Wired (default OFF, so nothing
+  changes without opt-in); the memory floor resolves per call; a failed
+  settings *load* no longer silently disables the default-ON graph
+  neighbour. New guard: every retrieval toggle must have a production
+  reader. (TASK-188)
+- **Two wide-span JSON parses survived the `_llmjson` migration**: scene
+  clustering silently degraded to baseline recall on a commentary brace, and
+  the judge-model sweep scored candidates against a stricter parser than
+  production runs (old sweep reports are not comparable to new ones). Both
+  routed through `_llmjson`, with a repo-wide guard. (TASK-189)
+- **The Atlas overview cache served one date's payload for another** within
+  its TTL; keyed on (vault, date) now. (TASK-187)
+
+### Changed
+
+- One corpus snapshot and one neighbour computation per sweep instead of
+  three full reloads and two KNN probes (the brute fallback was twice
+  15m26s); passes prune what they closed, equivalence pinned by tests. The
+  embed config is memoized on (path, mtime, size), removing ~5000 redundant
+  reads per index build. Duplicated helpers folded into single owners
+  (JSONL log writers, QueryCache, the kb-mcp activity dispatcher, the
+  config-key boundary, the canonical recall-rank helper). (TASK-190/191)
+- `kb-lint.py` and the CI workflow are fully English per repo policy, with
+  a ratchet guard over `.github/` plus every translated script. Backlog
+  task files are historical records and stay as written. (TASK-192)
 
 ## [0.32.0] - 2026-08-16
 
@@ -1919,7 +2051,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.32.0...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.33.0...HEAD
+[0.33.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.32.0...v0.33.0
 [0.32.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.31.1...v0.32.0
 [0.31.1]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.31.0...v0.31.1
 [0.31.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.30.0...v0.31.0

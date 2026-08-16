@@ -73,7 +73,32 @@ Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: 
 
 The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
 
-## Feature highlights (v0.32.0)
+## Feature highlights (v0.33.0)
+
+### New in v0.33.0
+
+The human leaves the memory loop.
+
+**Quarantined memories now review themselves.** Three traps, each gated by
+pre-registered measurements: the local model promotes what a memory's own
+source transcript supports (never fabricated in 210 checks); the client LLM
+adjudicates whole transcripts for the rest — behind an explicit
+`auto_review_llm` toggle, OFF by default, because that is cloud; retraction
+needs double agreement plus a failed refutation, capped and reversible.
+First real run: 993 quarantined memories drained to 42, recall@1 +0.035.
+
+**`/kennisbank:review` is an audit view now**, not a work queue: what the
+system decided, on what evidence, with per-line undo (`demote` / `reopen`).
+No step waits for a human.
+
+**A wave of silently-failing defects is gone**, each adversarially verified
+before fixing: a checkout that resolved the vault to `$HOME`, one env-var
+typo that turned retrieval off for every session, a sweep fallback that
+wrote zero memories, a default-model flip whose doctor check gave false
+assurance, a lock race that ran two index builders at once, FTS rows that a
+cap fix never reached, and memories judged with the embedding of their
+previous content. The open backlog went to zero, every task carrying its
+evidence or its parking reason.
 
 ### New in v0.32.0
 
