@@ -1,7 +1,7 @@
 ---
 id: TASK-185
 title: Import-time int() of env vars kills importers — retrieval dies silently
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-08-15 23:30'
 updated_date: '2026-08-15 23:30'

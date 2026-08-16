@@ -1,7 +1,7 @@
 ---
 id: TASK-182
 title: Embed model default flip (8b to 4b) has no migration — recall dies after upgrade
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-08-15 23:30'
 updated_date: '2026-08-15 23:30'
