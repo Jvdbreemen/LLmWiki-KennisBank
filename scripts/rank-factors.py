@@ -107,7 +107,7 @@ def run_arm(name, questions, pool_size, cache, kb_recall) -> list:
             for item in questions:
                 p.step()
                 q = item.get("q", "")
-                qv = cache.get_or_embed(q, emb.embed)
+                qv = cache.get_or_embed(q, emb.embed_query)
                 if qv is None:
                     rows.append({"q": q, "rank": 0, "rank_cos": 0, "pool": 0})
                     continue
@@ -158,11 +158,11 @@ def main(argv=None) -> int:
     if isinstance(questions, dict):
         questions = questions.get("questions", [])
     chosen = CEIL.split_questions(questions, args.split)
-    cache = scene_exp.QueryCache(Path(args.cache), emb.embed_id())
+    cache = scene_exp.QueryCache(Path(args.cache), emb.query_embed_id())
 
     wanted = args.arms.split(",") if args.arms else list(ARMS)
     results, report = {}, {"split": args.split, "questions": len(chosen),
-                           "embed_id": emb.embed_id(), "arms": {}}
+                           "embed_id": emb.query_embed_id(), "arms": {}}
 
     for name in wanted:
         started = time.monotonic()

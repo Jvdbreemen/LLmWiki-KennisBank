@@ -140,7 +140,7 @@ def select_passage(claim: str, chunks: list) -> str:
     if len(chunks) == 1:
         return chunks[0][:PASSAGE_BUDGET]
     keep = set(_idf_shortlist(claim, chunks))
-    qv = emb.embed(claim, kind="query")
+    qv = emb.embed_query(claim)
     if qv is None:
         return "\n---\n".join(chunks[:2])[:PASSAGE_BUDGET]
     scored = []

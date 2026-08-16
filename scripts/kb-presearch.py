@@ -112,7 +112,7 @@ def main(stdin_text: str | None = None) -> int:
 
     try:
         import _embeddings as emb
-        qvec = emb.embed(query)
+        qvec = emb.embed_query(query)
         if not qvec:
             return 0
 

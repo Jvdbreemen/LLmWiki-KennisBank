@@ -81,7 +81,7 @@ class QueryCache:
             self.hits += 1
             return vec
         self.misses += 1
-        vec = embed_fn(text, kind="query")
+        vec = embed_fn(text)
         if vec is not None:
             self.data[k] = list(vec)
         return vec
@@ -197,11 +197,11 @@ def main(argv=None) -> int:
 
     cache_path = Path(args.cache) if args.cache else \
         Path(args.out).with_name("query-vectors.json")
-    cache = QueryCache(cache_path, emb.embed_id())
+    cache = QueryCache(cache_path, emb.query_embed_id())
 
     prior = (None if args.no_prior else
          {"floor": args.floor, "boost": args.boost, "seeds": args.seeds})
-    hits_fn = build_hits_fn(kb_recall, cache, emb.embed, prior)
+    hits_fn = build_hits_fn(kb_recall, cache, emb.embed_query, prior)
 
     t0 = time.perf_counter()
     report = kb_eval.evaluate(entries, hits_fn, measure_latency=True)

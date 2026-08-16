@@ -187,7 +187,7 @@ def _live_hits_fn(layers=("wiki",), expand=None):
         return None, "embedding-backend onbereikbaar (Ollama draait niet?)"
 
     def hits_fn(q: str, k: int) -> list:
-        qv = emb.embed(q, kind="query")
+        qv = emb.embed_query(q)
         if qv is None:
             return []
         if tuple(layers) == ("memory",):

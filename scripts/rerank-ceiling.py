@@ -111,7 +111,7 @@ def measure(questions: list, pool_size: int, cache, kb_recall,
         for item in questions:
             p.step()
             q = item.get("q", "")
-            qv = cache.get_or_embed(q, emb.embed)
+            qv = cache.get_or_embed(q, emb.embed_query)
             if qv is None:
                 rows.append({"q": q, "expect": item.get("expect"), "pool": 0,
                              "rank": 0, "type": item.get("type", ""),
@@ -225,7 +225,7 @@ def main(argv=None) -> int:
     chosen = split_questions(questions, args.split)
 
     cache_path = Path(args.cache) if args.cache else Path("rerank-ceiling-cache.json")
-    cache = scene_exp.QueryCache(cache_path, emb.embed_id())
+    cache = scene_exp.QueryCache(cache_path, emb.query_embed_id())
 
     started = time.monotonic()
     rows = measure(chosen, args.pool, cache, kb_recall, args.min_cos)
@@ -234,7 +234,7 @@ def main(argv=None) -> int:
     report["split"] = args.split
     report["set"] = Path(args.set_path).name
     report["total_questions_in_set"] = len(questions)
-    report["embed_id"] = emb.embed_id()
+    report["embed_id"] = emb.query_embed_id()
     report["min_cos"] = (kb_recall.MEMORY_MIN_COS if args.min_cos is None
                          else args.min_cos)
     report["min_cos_is_production"] = args.min_cos is None

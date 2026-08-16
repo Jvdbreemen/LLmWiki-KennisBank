@@ -75,6 +75,45 @@ class KbRetrieveMemoryTest(unittest.TestCase):
     def test_trivial_prompt_no_output(self):
         self.assertEqual(self._run("ok").strip(), "")
 
+    def test_hook_sends_the_configured_query_prefix_to_the_backend(self):
+        """TASK-184: the LIVE hook path must send the same query prefix the
+        eval harness measures — parity is the whole point of the seam."""
+        saved = {k: os.environ.get(k) for k in
+                 ("KENNISBANK_VAULT", "KB_EMBED_PROVIDER", "KB_EMBED_MODEL",
+                  "KB_EMBED_QUERY_PREFIX")}
+        os.environ["KENNISBANK_VAULT"] = str(self.vault)
+        os.environ["KB_EMBED_PROVIDER"] = "ollama"
+        os.environ["KB_EMBED_MODEL"] = "testmodel"
+        os.environ["KB_EMBED_QUERY_PREFIX"] = "Query: "
+        sys.path.insert(0, str(SCRIPTS_DIR))
+        import _embeddings as emb
+        captured = []
+        orig_http = emb._http_json
+        emb._http_json = (lambda url, payload, headers, timeout:
+                          captured.append(payload) or {"embedding": [0.1, 0.2, 0.3]})
+        orig_stdin = sys.stdin
+        try:
+            mod = _load_kb_retrieve()
+            sys.stdin = io.StringIO(json.dumps(
+                {"prompt": "Een wat langere vraag over hooks en retrieval"}))
+            with contextlib.redirect_stdout(io.StringIO()):
+                try:
+                    mod.main()
+                except SystemExit:
+                    pass
+        finally:
+            emb._http_json = orig_http
+            sys.stdin = orig_stdin
+            for k, v in saved.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+        embeds = [p for p in captured if "prompt" in p]
+        self.assertTrue(embeds, "the hook never reached the embed backend")
+        self.assertTrue(embeds[0]["prompt"].startswith("Query: "),
+                        f"hook embedded without the prefix: {embeds[0]['prompt']!r}")
+
     def test_memory_recall_off_no_memory_block(self):
         # geen index, geen cache -> hoogstens niets; cruciaal: nooit een memory-blok
         out = self._run("Een wat langere vraag over hooks en retrieval in dit project",

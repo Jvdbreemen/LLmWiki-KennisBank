@@ -35,7 +35,7 @@ from pathlib import Path
 # Allow direct execution and import via _loader alike.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from _embeddings import cosine, doc_text, embed, embed_id, load_cache  # noqa: E402
+from _embeddings import cosine, doc_text, embed_id, embed_query, load_cache  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402
 
 
@@ -152,7 +152,7 @@ def main() -> None:
 
     # Embed the query live (one-off is fine here).
     try:
-        qvec = embed(query)
+        qvec = embed_query(query)
     except Exception:
         qvec = None
 

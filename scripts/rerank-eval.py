@@ -135,7 +135,7 @@ def run_layer(entries: list, layer: str, depth: int, ce, doc_cap: int,
     for i, e in enumerate(entries, start=1):
         q = e["q"]
         t0 = time.perf_counter()
-        qv = emb.embed(q, kind="query")
+        qv = emb.embed_query(q)
         t1 = time.perf_counter()
         if qv is None:
             continue

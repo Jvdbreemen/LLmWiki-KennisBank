@@ -349,7 +349,7 @@ def main() -> None:
     # niets deze prompt (fail-soft: een miss, geen breuk) en vuren een detached
     # warm zodat de VOLGENDE prompt hot is. Nooit blokkeren, nooit 2x embedden.
     timeout = _prompt_embed_timeout(cfg)
-    qvec = emb.embed(prompt, timeout=timeout)
+    qvec = emb.embed_query(prompt, timeout=timeout)
     if qvec is None:
         # Stil terugkeren was hier de fout: de gebruiker denkt dan dat de
         # kennisbank meekeek terwijl er niets is opgehaald. Melden dus, en

@@ -103,6 +103,25 @@ class TestEmbedPrefix(unittest.TestCase):
         os.environ["KB_EMBED_QUERY_PREFIX"] = "Query: "
         self.assertEqual(plain, emb.embed_id())
 
+    def test_embed_query_seam_applies_the_configured_prefix(self):
+        """TASK-184: the one query-side entry point carries the kind, so a
+        call site cannot forget it."""
+        emb.embed_query("a question")
+        self.assertEqual(self.sent[0]["prompt"], "a question")
+        os.environ["KB_EMBED_QUERY_PREFIX"] = "Query: "
+        emb.embed_query("a question")
+        self.assertEqual(self.sent[1]["prompt"], "Query: a question")
+
+    def test_query_embed_id_moves_with_the_query_prefix(self):
+        """Query-vector caches key on query_embed_id(): the same question
+        under a different query prefix is a different vector. embed_id()
+        (the document cache) must NOT move — pinned above."""
+        plain = emb.query_embed_id()
+        doc_id = emb.embed_id()
+        os.environ["KB_EMBED_QUERY_PREFIX"] = "Query: "
+        self.assertNotEqual(plain, emb.query_embed_id())
+        self.assertEqual(doc_id, emb.embed_id())
+
 
 if __name__ == "__main__":
     unittest.main()

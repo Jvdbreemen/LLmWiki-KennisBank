@@ -36,7 +36,7 @@ from pathlib import Path
 # Allow direct execution and import via _loader alike.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from _embeddings import cosine, doc_text, embed, get_cached, load_cache  # noqa: E402
+from _embeddings import cosine, doc_text, embed_query, get_cached, load_cache  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -135,7 +135,7 @@ def main(argv=None):
         target_vec = get_cached(p, cache, recompute=True)
     else:
         # Treat as literal query text — must embed live to get the query vector.
-        target_vec = embed(query_arg)
+        target_vec = embed_query(query_arg)
 
     if target_vec is None:
         result = {"path": None, "score": 0.0, "above_threshold": False}

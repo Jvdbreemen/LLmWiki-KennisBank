@@ -154,7 +154,7 @@ def recall_tool(query: str, k: int = 5, *, compact: bool = False) -> str:
         return ""
     try:
         import _embeddings as emb
-        qvec = emb.embed(q)
+        qvec = emb.embed_query(q)
         if not qvec or kb_recall is None:
             return "Geen treffers (model onbereikbaar of index ontbreekt)."
         hits = kb_recall.recall_hits(qvec, query_text=q, k=int(k),

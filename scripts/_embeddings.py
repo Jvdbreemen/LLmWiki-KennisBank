@@ -330,6 +330,25 @@ def embed(text: str, timeout: float = 30.0, kind: str = ""):
     return None
 
 
+def embed_query(text: str, timeout: float = 30.0):
+    """Embed *text* as a retrieval query — the ONE entry point for every
+    query-side embed, production and eval alike (TASK-184). Routing every
+    query through this seam means a call site cannot forget the kind, so
+    kb-eval can never measure a prefix the live hook does not send."""
+    return embed(text, timeout=timeout, kind="query")
+
+
+def query_embed_id() -> str:
+    """Identity for QUERY-vector caches: embed_id() plus the query prefix.
+
+    embed_id() deliberately folds in only the DOC prefix (the shared document
+    cache must survive query-side A/B runs; tests pin that), so caches that
+    hold query vectors key on THIS instead: the same question under a
+    different query prefix is a different vector (TASK-184)."""
+    qp = _prefix("query")
+    return embed_id() + (f"+q:{qp}" if qp else "")
+
+
 # --- model warm-up (kills cold-load latency on the hot path) -----------------
 #
 # The interactive retrieval hook must never block on a cold model load. A big

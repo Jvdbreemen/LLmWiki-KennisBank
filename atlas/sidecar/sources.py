@@ -565,7 +565,7 @@ def live_recall(vault: Path, query: str, k: int = 3) -> dict:
     try:
         emb = _load_vault_module(vault, "_embeddings", "_embeddings.py")
         kbrecall = _load_vault_module(vault, "kb_recall", "kb-recall.py")
-        vector = emb.embed(query)
+        vector = getattr(emb, "embed_query", emb.embed)(query)
         if not vector:
             return {**empty, "status": "degraded"}
         hits = kbrecall.recall_hits(vector, query_text=query, k=k)
@@ -694,7 +694,7 @@ def recall_waterfall(vault: Path, query: str, k: int = 8) -> dict:
         except Exception:
             last_used_of = None
 
-        vector = emb.embed(query)
+        vector = getattr(emb, "embed_query", emb.embed)(query)
         if not vector:
             return {**empty, "status": "degraded"}
 

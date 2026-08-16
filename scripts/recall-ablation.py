@@ -150,7 +150,7 @@ def main() -> int:
     vecs = {}
     for e in entries:
         if e["q"] not in vecs:
-            vecs[e["q"]] = emb.embed(e["q"], kind="query")
+            vecs[e["q"]] = emb.embed_query(e["q"])
     print(f"  {len(vecs)} query vectors computed", flush=True)
 
     def run(keep):
