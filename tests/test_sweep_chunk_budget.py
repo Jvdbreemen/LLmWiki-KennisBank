@@ -124,6 +124,47 @@ class ChunkBudgetTest(unittest.TestCase):
         self.assertEqual(s["chunks_read"], 3)
         self.assertEqual(s["chunks_skipped"], 7)
 
+    # -- TASK-158: de primaire rem is wandkloktijd, niet chunks --------------
+
+    def test_the_wall_clock_budget_stops_between_transcripts(self):
+        """De GPU betaalt in tijd; chunks waren een proxy die per chunk ~5-6
+        modelcalls miste. De klok-rem valt op hetzelfde veilige punt: tussen
+        transcripts, nooit erbinnen."""
+        import types
+        for i in range(3):
+            self._transcript(f"2026-08-12-t{i}.jsonl", 2)
+        self.m._extract.extract_candidates = lambda text, max_n=8: []
+        self.m._model_reachable = lambda: True
+        # Klok in de module-namespace vervangen: eerste aflezing (start) 0,
+        # daarna ver voorbij het budget -- de eerste tussen-transcript-check
+        # slaat dan al aan.
+        ticks = iter([0.0] + [10_000.0] * 50)
+        self.m.time = types.SimpleNamespace(monotonic=lambda: next(ticks),
+                                            sleep=lambda *_: None)
+        s = self.m.run_sweep(time_budget=900)
+        self.assertEqual(s["budget_reached"], "time")
+        self.assertEqual(s["processed"], 0)
+        self.assertEqual(s["pending_left"], 3)
+        import _sweepstate as ss
+        self.assertEqual(len(ss.pending()), 3, "alles moet pending blijven")
+
+    def test_the_chunk_budget_names_itself(self):
+        for i in range(2):
+            self._transcript(f"2026-08-12-t{i}.jsonl", 6)
+        self.m._extract.extract_candidates = lambda text, max_n=8: []
+        self.m._model_reachable = lambda: True
+        s = self.m.run_sweep(max_chunks=6, chunk_budget=5, time_budget=0)
+        self.assertEqual(s["budget_reached"], "chunks")
+        self.assertEqual(s["pending_left"], 1)
+
+    def test_no_budget_hit_reports_false_and_zero_pending(self):
+        self._transcript("2026-08-12-t0.jsonl", 2)
+        self.m._extract.extract_candidates = lambda text, max_n=8: []
+        self.m._model_reachable = lambda: True
+        s = self.m.run_sweep()
+        self.assertFalse(s["budget_reached"])
+        self.assertEqual(s["pending_left"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()
