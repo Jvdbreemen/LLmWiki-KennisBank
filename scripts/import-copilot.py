@@ -30,8 +30,8 @@ import sys
 import time
 from pathlib import Path
 
-os.environ.setdefault("KENNISBANK_VAULT", str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _vaultpath import vault_root  # noqa: E402
 
 AGENT = "github-copilot-cli"
 _INLINE_SECRET_RE = re.compile(
@@ -42,8 +42,9 @@ _INLINE_SECRET_RE = re.compile(
 
 
 def _vault(arg: str | None) -> Path:
-    raw = arg or os.environ.get("KENNISBANK_VAULT") or str(Path(__file__).resolve().parents[2])
-    return Path(raw)
+    if arg:
+        return Path(arg)
+    return vault_root()
 
 
 def _copilot_home() -> Path:

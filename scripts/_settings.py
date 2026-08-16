@@ -23,9 +23,6 @@ import sys
 import tempfile
 from pathlib import Path
 
-# Self-locate de vault als KENNISBANK_VAULT ontbreekt (idem aan de hookscripts).
-# Dit script woont in <vault>/.claude/scripts/, dus parents[2] == <vault>.
-os.environ.setdefault("KENNISBANK_VAULT", str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _vaultpath import vault_root  # noqa: E402
 

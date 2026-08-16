@@ -155,6 +155,50 @@ class TestVaultRootResolver(unittest.TestCase):
             offenders, [], f"hardcoded vault default in: {offenders}; use vault_root()"
         )
 
+    def test_no_script_guesses_the_vault_from_parents(self):
+        """TASK-167: the bare header
+        ``setdefault("KENNISBANK_VAULT", str(Path(__file__)...parents[2]))``
+        executed at import time, before vault_root() could apply its layout
+        guard — in a checkout it stamped the repo's PARENT into the env for
+        every later caller. 47 scripts carried it; none may grow it back.
+        (kb-session-start's ``setdefault(..., str(vault))`` after a real
+        vault_root() call is a different, deliberate pattern and stays.)"""
+        import re
+
+        pattern = re.compile(
+            r"""setdefault\(\s*['"]KENNISBANK_VAULT['"]\s*,\s*str\(\s*Path\(__file__\)""")
+        offenders = []
+        for script in SCRIPTS_DIR.glob("*.py"):
+            text = script.read_text(encoding="utf-8")
+            for m in pattern.finditer(text):
+                line = text.count("\n", 0, m.start()) + 1
+                offenders.append(f"{script.name}:{line}")
+        self.assertEqual(
+            offenders, [],
+            f"unguarded parents[2] vault guess in: {offenders}; "
+            "resolve through vault_root()")
+
+    def test_detached_child_inherits_the_deployed_vault(self):
+        """The env export in vault_root() is what detached warm-up children
+        live on; a child spawned with a copied env must see the vault."""
+        import subprocess
+
+        os.environ.pop(_vaultpath.ENV_VAR, None)
+        try:
+            with tempfile.TemporaryDirectory() as td:
+                vault = Path(td).resolve() / "vault"
+                scripts = vault / ".claude" / "scripts"
+                scripts.mkdir(parents=True)
+                mod = self._load_vaultpath_copy(scripts)
+                mod.vault_root()  # stamps the env
+                r = subprocess.run(
+                    [sys.executable, "-c",
+                     "import os; print(os.environ['KENNISBANK_VAULT'])"],
+                    capture_output=True, text=True, env=os.environ.copy())
+                self.assertEqual(r.stdout.strip(), str(vault))
+        finally:
+            os.environ.pop(_vaultpath.ENV_VAR, None)
+
 
 if __name__ == "__main__":
     unittest.main()

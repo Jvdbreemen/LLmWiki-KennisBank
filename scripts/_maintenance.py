@@ -14,7 +14,6 @@ import os
 import sys
 from pathlib import Path
 
-os.environ.setdefault("KENNISBANK_VAULT", str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _embeddings as emb  # noqa: E402
 import _llmjson  # noqa: E402

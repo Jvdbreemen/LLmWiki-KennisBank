@@ -42,11 +42,12 @@ import time
 from pathlib import Path
 
 # NOTE: deliberately no os.environ.setdefault("KENNISBANK_VAULT", ...) here.
-# `_vaultpath._script_vault()` makes the same parents[2] guess but only
-# accepts it when a `.claude/` directory is actually there. The bare
-# setdefault has no such guard, so in a repo checkout it points the vault
-# at the directory ABOVE the repo and every later caller inherits that --
-# including tests, which import this module at collection time.
+# Vault resolution flows through `_vaultpath.vault_root()`, whose
+# `_script_vault()` only matches the installed layout (grandparent NAMED
+# `.claude`). A bare parents[2] setdefault had no such guard, so in a repo
+# checkout it pointed the vault at the directory ABOVE the repo and every
+# later caller inherited that -- including tests, which import this module
+# at collection time (TASK-167/181).
 SCRIPTS = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPTS)
 
