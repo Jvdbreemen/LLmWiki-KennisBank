@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import re
 import sys
 import unittest
@@ -111,6 +112,53 @@ class TestImportersUseCommon(unittest.TestCase):
             self.assertIn(
                 "from _common import", src, f"{name} does not import from _common"
             )
+
+
+class PidAliveTest(unittest.TestCase):
+    """The one liveness probe (TASK-183 ended two divergent copies)."""
+
+    def test_own_process_is_alive(self):
+        import _common
+        self.assertTrue(_common.pid_alive(os.getpid()))
+
+    def test_junk_pids_are_dead(self):
+        import _common
+        for junk in (None, 0, -1, True, "17"):
+            self.assertFalse(_common.pid_alive(junk), repr(junk))
+        # 2147483647: ESRCH on POSIX, error 87 on Windows — dead on both.
+        self.assertFalse(_common.pid_alive(2147483647))
+
+    @unittest.skipIf(os.name == "nt", "POSIX signal semantics")
+    def test_permission_error_means_alive(self):
+        """The rule the old _embeddings copy broke: a PID we may not inspect
+        EXISTS, and alive is the safe direction for single-flight locks."""
+        import _common
+        orig = os.kill
+        def _deny(pid, sig):
+            raise PermissionError
+        os.kill = _deny
+        try:
+            self.assertTrue(_common.pid_alive(12345))
+        finally:
+            os.kill = orig
+
+    def test_the_helper_is_shared(self):
+        """AC: both former copies alias the one implementation."""
+        import _common
+        import _embeddings
+        from tests._loader import load_script
+        launch = load_script("index-launch.py")
+        self.assertIs(launch._pid_alive, _common.pid_alive)
+        self.assertIs(_embeddings._pid_alive, _common.pid_alive)
+
+
+class OutsideWindowTest(unittest.TestCase):
+    def test_symmetric(self):
+        import _common
+        self.assertFalse(_common.outside_window(-0.01, 5))
+        self.assertFalse(_common.outside_window(0.01, 5))
+        self.assertTrue(_common.outside_window(7200, 3600))
+        self.assertTrue(_common.outside_window(-7200, 3600))
 
 
 if __name__ == "__main__":

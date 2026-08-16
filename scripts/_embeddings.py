@@ -51,7 +51,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _common import env_int  # noqa: E402
+from _common import env_int, outside_window, pid_alive  # noqa: E402
 from _frontmatter import split_frontmatter  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402
 
@@ -334,26 +334,10 @@ def _warm_marker() -> Path:
     return cache_file().parent / ".embed-warm.marker"
 
 
-def _pid_alive(pid: int) -> bool:
-    """Check a process without sending it a signal (including on Windows)."""
-    if not isinstance(pid, int) or pid <= 0:
-        return False
-    if os.name == "nt":
-        try:
-            import ctypes
-            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-            handle = kernel32.OpenProcess(0x1000, False, pid)  # QUERY_LIMITED_INFORMATION
-            if not handle:
-                return False
-            kernel32.CloseHandle(handle)
-            return True
-        except Exception:
-            return False
-    try:
-        os.kill(pid, 0)
-    except OSError:
-        return False
-    return True
+# One implementation in _common (TASK-183). This copy diverged: it read
+# PermissionError as DEAD, so an EPERM-protected live warm child looked
+# finished and duplicate warms spawned. Alias keeps the monkeypatch surface.
+_pid_alive = pid_alive
 
 
 def warm_in_progress(max_age: float = 60.0) -> bool:
@@ -374,7 +358,9 @@ def warm_in_progress(max_age: float = 60.0) -> bool:
         import time as _time
         marker = _warm_marker()
         age = _time.time() - marker.stat().st_mtime
-        if abs(age) >= max_age:
+        # Boundary note: outside_window is |age| > max_age where this was
+        # >= — a flip only at exact float equality, measure-zero.
+        if outside_window(age, max_age):
             return False
         data = json.loads(marker.read_text(encoding="utf-8"))
         pid = data.get("pid") if isinstance(data, dict) else None
@@ -453,7 +439,8 @@ def warm_async(min_interval: float = 60.0) -> None:
             # one-sided `age < min_interval` also swallows a marker stamped
             # HOURS ahead (a clock set back, a restored file) and would then
             # suppress every prewarm until wall-clock time caught up.
-            if marker.exists() and abs(_time.time() - marker.stat().st_mtime) < min_interval:
+            if marker.exists() and not outside_window(
+                    _time.time() - marker.stat().st_mtime, min_interval):
                 return
         except Exception:
             pass
