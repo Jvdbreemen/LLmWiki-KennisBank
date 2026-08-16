@@ -1,7 +1,7 @@
 ---
 id: TASK-167
 title: '48 scripts set KENNISBANK_VAULT from an unguarded parents[2] guess'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-15 16:00'
 labels:
@@ -44,3 +44,7 @@ The work is mechanical but wants care in one place: `vault_root()` sets the vari
 - [ ] #3 Running any script directly from a repo checkout does not create or write to a path outside the repo
 - [ ] #4 python -m pytest tests -q is green
 <!-- AC:END -->
+
+## Close-out (2026-08-16)
+
+Shipped in PR #135 (commit series on fix/silent-failure-cluster): the bare setdefault header is deleted from 47 scripts, resolution flows through vault_root() only, the pattern is banned by test_no_script_guesses_the_vault_from_parents, and a subprocess test pins the detached-child export.

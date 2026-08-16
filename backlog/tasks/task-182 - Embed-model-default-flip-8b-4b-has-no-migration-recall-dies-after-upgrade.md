@@ -1,7 +1,7 @@
 ---
 id: TASK-182
 title: Embed model default flip (8b to 4b) has no migration — recall dies after upgrade
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-15 23:30'
 updated_date: '2026-08-15 23:30'
@@ -37,3 +37,7 @@ about.
 - [ ] #3 A named default-model constant, aliased by the installer, added to the stale-literal guard test
 - [ ] #4 A vault pinning its model in config is untouched by all of the above
 <!-- AC:END -->
+
+## Close-out (2026-08-16)
+
+Shipped in PR #135: OLLAMA_DEFAULT_EMBED_MODEL single-source constant + installer alias, _embeddings.py --print-model for shell callers, doctor.sh resolves the active model and warns on _kbindex.embed_mismatch() with the remedy, setup.sh pulls the resolved model, build-kb-index and validate errors name model and remedy. Config-pinned vaults untouched (tested).

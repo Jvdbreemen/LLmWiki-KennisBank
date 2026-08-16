@@ -1,7 +1,7 @@
 ---
 id: TASK-181
 title: vault_root resolves to $HOME in a repo checkout and exports it
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-15 23:30'
 updated_date: '2026-08-15 23:30'
@@ -39,3 +39,7 @@ per-script setdefault headers); both stem from the same parents[2] guess.
 - [ ] #3 The three test_vaultpath failures pass in a checkout under $HOME with ~/.claude present
 - [ ] #4 Reconciled with TASK-167 so the fix lands once, not per script
 <!-- AC:END -->
+
+## Close-out (2026-08-16)
+
+Shipped in PR #135: _script_vault() matches the installed layout (grandparent NAMED .claude) instead of testing existence; checkout and deployed layouts are both pinned by tests. Also the real cause of the three chronic test_vaultpath CI failures.
