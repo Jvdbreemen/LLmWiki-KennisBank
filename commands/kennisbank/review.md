@@ -1,4 +1,4 @@
-Loop de wachtrij van unverified memories door en laat de gebruiker per item beslissen: approve, reject of skip. Optioneel filter op onderwerp: $ARGUMENTS
+Toon wat het autonome memory-review de laatste tijd heeft besloten en bied per regel een terugweg. Optioneel filter op onderwerp: $ARGUMENTS
 
 ## Vault-root bepalen (VERPLICHT — lees dit eerst)
 
@@ -9,40 +9,54 @@ Gebruik `$VAULT` voor ELK pad hieronder. Gebruik NOOIT een letterlijk `~/KennisB
 
 ## Doel
 
-De memory-sweep en agent-captures laten fragmenten als `status: unverified` landen; de mens is de update-autoriteit die ze promoot of intrekt. Buiten Atlas bestond daar geen ingang voor (TASK-23: 31 gestuwde unverified memories). Dit command is die ingang: het systeem toont, de gebruiker beslist, het command voert uit.
+Sinds TASK-195 zit er geen mens meer in de beslislus: promoties doet de
+grounded verifier (lokaal) of de client-adjudicatie, intrekkingen vereisen
+dubbele overeenstemming plus een mislukte weerlegging. Dit command is daarom
+GEEN werkwachtrij meer — het is de audit-view: het laat zien wat het systeem
+besloot, op welk bewijs, en draait op verzoek een regel terug. Geen enkele
+stap in de pijplijn wacht op dit command.
 
 ## Stappen
 
-1. Haal de wachtrij op:
+1. Haal beide logboeken op:
+   ```
+   python3 $VAULT/.claude/scripts/memory-doctor.py promotions --json --limit 30
+   python3 $VAULT/.claude/scripts/memory-doctor.py closed --json --limit 30
+   ```
+   Als $ARGUMENTS is opgegeven: filter regels waarvan `stem` of `reason` het
+   onderwerp bevat.
+
+2. Presenteer compact, nieuwste eerst, in twee blokken:
+   - **Promoties** — stem, route (`stamp`/`windows` = lokaal bewijs,
+     `client` = hele-transcript-lezing, `undo` = eerdere terugdraaiing) en
+     het bewijscitaat.
+   - **Sluitingen** — stem, status (retracted/superseded/expired) en de
+     reden. Een autoreview-intrekking vermeldt beide oordelen in de reden.
+
+3. Meld de queue-stand in één regel:
    ```
    python3 $VAULT/.claude/scripts/memory-doctor.py pending --json
    ```
-   - Als $ARGUMENTS is opgegeven: filter items waarvan `stem`, `title` of `snippet` het onderwerp bevat.
-   - Lege lijst: rapporteer "Review-queue leeg: geen unverified memories." en stop.
+   Tel de entries; dat aantal unverified is wat de volgende
+   sweep/autoreview-cyclus oppakt.
 
-2. Presenteer elk item aan de gebruiker, één voor één, oudste eerst:
-   - Toon: titel, memory_type, importance, leeftijd (`age_days`), `evidence_basis` en het snippet.
-   - Lees bij twijfel het volledige fragment (`$VAULT/09-memory/<stem>.md`) en toon de kern.
-   - Vraag de beslissing:
-     - **approve** — het fragment klopt en is blijvend nuttig → status `current`
-     - **reject** — fout, ruis of niet meer waar → status `retracted`
-     - **skip** — nu geen oordeel; blijft unverified in de queue
-   - Hint bij twijfel: `evidence_basis: getypt` is door de gebruiker zelf aangeleverd en doorgaans betrouwbaar; `agent` verdient een kritischer blik. Maar de **gebruiker beslist** — dit command beslist NOOIT zelf, ook niet bij "evident juiste" fragmenten.
-
-3. Voer elke beslissing direct door (niet opsparen tot het einde):
-   ```
-   python3 $VAULT/.claude/scripts/memory-doctor.py decide <stem> <approve|reject|skip> --via command
-   ```
-   - Exit 0: meld kort het resultaat (`<stem> -> current`, `-> retracted`, of `blijft unverified`).
-   - Exit ≠ 0: toon de foutmelding LETTERLIJK aan de gebruiker en ga door met het volgende item. Het item blijft dan gewoon in de queue — meld het nooit als afgehandeld (crash-veilige belofte: een fout mag nooit als beslissing verschijnen).
-
-4. Rapporteer na afloop:
-   - Hoeveel items bekeken, hoeveel approved / rejected / skipped, hoeveel fouten.
-   - Als er items overblijven (skips of fouten): noem het aantal dat in de queue blijft.
+4. Terugdraaien — alleen als de gebruiker dat per regel vraagt:
+   - verkeerde **promotie**: `python3 $VAULT/.claude/scripts/memory-doctor.py demote <stem>`
+     → terug naar `unverified` (de volgende cyclus kijkt opnieuw). Demotie
+     zegt "de promotie was voorbarig", niet "de inhoud is fout" — voor dat
+     laatste is een sluiting het juiste gereedschap.
+   - verkeerde **sluiting**: `python3 $VAULT/.claude/scripts/memory-doctor.py reopen <stem>`
+     → terug naar `current`.
+   - Draai daarna `python3 $VAULT/.claude/scripts/build-kb-index.py` zodat
+     recall de wijziging ziet.
 
 ## Regels
 
-- De gebruiker beslist altijd, per item. Geen bulk-goedkeuring ("keur alles maar goed") zonder dat de gebruiker die opdracht zelf expliciet en letterlijk gaf — en bevestig ook dan eerst de aantallen.
-- Alleen `unverified` is beslisbaar; andere statussen weigert de tooling met een 409-melding. Dat is correct gedrag, geen bug.
-- Wijzig memory-bestanden uitsluitend via `memory-doctor.py decide` — nooit met een eigen edit; de tooling bewaakt de crash-veilige volgorde en het audit-log (`$VAULT/.claude/memory-review-log.jsonl`).
+- Dit command beslist zelf NIETS en keurt niets goed; het toont en draait
+  terug op expliciet verzoek. De pijplijn wacht nergens op een mens.
+- Terugdraaien uitsluitend via `memory-doctor.py demote|reopen` — nooit met
+  een eigen frontmatter-edit; de tooling schrijft de audit-regel.
+- Beide logboeken zijn append-only (`$VAULT/.claude/memory-promote-log.jsonl`
+  en `memory-closed-log.jsonl`); elke actie, ook een terugdraaiing, laat een
+  regel achter.
 - Taal: volg de gebruiker.

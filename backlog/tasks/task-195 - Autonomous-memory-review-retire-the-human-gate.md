@@ -36,6 +36,18 @@ Remaining: Trap 2/3 behind `auto_review_llm` (default OFF) and the
 /kennisbank:review audit view — build steps 4-6. Note for the next session:
 Trap 1's sweep pass reaches the vault only with the next release+upgrade; the
 backlog itself is already drained from the checkout.
+
+## Progress (2026-08-16, later)
+
+Build steps 4-5 shipped on PR #132 (`kb-autoreview.py` + command + 8 tests,
+three hand-checked mutants): bundle/apply behind `auto_review_llm`, promote
+on `supported`, retract only on absent + failed refutation, capped,
+reversible. First real run on this vault (toggle explicitly ON): 134
+escalated cases -> 90 promoted with evidence, 2 retracted after double
+agreement, 42 left unverified. Build step 6 on branch
+`feat/review-audit-view`: `_memory.demote()` (single-edge undo for promote),
+`memory-doctor.py promotions|demote`, and /kennisbank:review rewritten as an
+audit view — no step waits for a human.
 <!-- SECTION:DESCRIPTION:END -->
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
