@@ -53,6 +53,7 @@ from _vaultpath import vault_root  # noqa: E402
 import _extract  # noqa: E402
 import _judge  # noqa: E402
 import _llm  # noqa: E402
+import _llmjson  # noqa: E402
 import _reconcile  # noqa: E402
 import _sweepstate as ss  # noqa: E402
 import _sweeputil as su  # noqa: E402
@@ -185,13 +186,15 @@ def _call(prompt: str, system: str, timeout: float) -> tuple:
 
 
 def parse_reconcile(raw):
-    """Mirror _reconcile.judge_reconcile's parse, but report the FALLBACK."""
+    """Same parse production runs (_reconcile via _llmjson), but report the
+    FALLBACK instead of silently taking it. The old wide find/rfind span was
+    STRICTER than production, so the sweep scored models against a parser
+    production does not run and deflated parse_ok_pct (TASK-189). Reports
+    from before that fix are not comparable to reports after it."""
     if not raw:
         return None, "empty"
-    try:
-        s, e = raw.find("{"), raw.rfind("}")
-        obj = json.loads(raw[s:e + 1]) if s >= 0 and e > s else {}
-    except Exception:
+    obj = _llmjson.first_object(raw)
+    if obj is None:
         return None, "unparseable"
     action = obj.get("action")
     if action in _reconcile.ACTIONS:
@@ -202,12 +205,10 @@ def parse_reconcile(raw):
 def parse_judge(raw):
     if not raw:
         return None, "empty"
-    try:
-        s, e = raw.find("{"), raw.rfind("}")
-        obj = json.loads(raw[s:e + 1]) if s >= 0 and e > s else {}
-    except Exception:
+    obj = _llmjson.first_object(raw)
+    if obj is None:
         return None, "unparseable"
-    if not isinstance(obj, dict) or "verdict" not in obj:
+    if "verdict" not in obj:
         return None, "no_verdict_field"
     return {"verdict": obj.get("verdict"), "importance": obj.get("importance")}, "ok"
 
@@ -215,13 +216,9 @@ def parse_judge(raw):
 def parse_extract(raw):
     if not raw:
         return None, "empty"
-    try:
-        s, e = raw.find("["), raw.rfind("]")
-        arr = json.loads(raw[s:e + 1]) if s >= 0 and e > s else None
-    except Exception:
+    arr = _llmjson.first_array(raw)
+    if arr is None:
         return None, "unparseable"
-    if not isinstance(arr, list):
-        return None, "not_a_list"
     items = [i for i in arr if isinstance(i, dict) and str(i.get("title", "")).strip()
              and str(i.get("body", "")).strip()]
     return items, "ok"
