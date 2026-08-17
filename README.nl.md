@@ -76,7 +76,40 @@ Geheugensystemen van leveranciers (Mem0, Zep, Letta, Cognee) zijn krachtig maar 
 
 De ontwerpvoorkeur is overal dezelfde: **deterministisch waar mogelijk, LLM alleen waar het oordeelsvermogen toevoegt, fail-open overal**. Een dood model blokkeert nooit een sessie, verliest nooit een transcript, en verwijdert nooit geverifieerde kennis.
 
-## Functie-highlights (v0.33.0)
+## Functie-highlights (v0.34.0)
+
+### Nieuw in v0.34.0
+
+De autonome review onthoudt wat hij al gevraagd heeft.
+
+**Een oordeel dat nooit verandert bezet niet langer de begroting.** v0.33.0
+liet gequarantineerde memories zichzelf reviewen, maar niets onthield de
+antwoorden, dus stelde de grounded check elke sweep dezelfde vraag over
+dezelfde passage en kreeg hetzelfde antwoord. Op de vault die dit blootlegde
+gingen 40 van de 40 plaatsen naar memories die een hele-transcript-lezing al
+`partial` had genoemd, terwijl 49 nieuwere memories nooit beoordeeld werden.
+Vangnet 1 legt zijn eigen uitkomsten nu vast en kiest kandidaten in twee
+lagen — eerst nooit beoordeeld, dan wat zijn venster voorbij is, zodat
+herbeoordelingen roteren. Het ordent, het sluit nooit uit: vangnet 1 leest
+een geselecteerde passage waar de client het hele transcript leest, dus het
+promoveert nog steeds memories die de client `partial` noemde, en juist die
+promoties trekken de wachtrij leeg.
+
+**De sessiestart-melding zegt iets waar je wat mee kunt.** Hij rapporteerde
+één getal en wees naar de instellingen of Ollama; op een vault waar beide in
+orde waren en elke memory al beoordeeld was, waren dat drie foute antwoorden
+in één zin. Hij rapporteert nu twee tellingen — wachtend op een oordeel
+versus beoordeeld en onbeslisbaar — en noemt per geval het pad dat
+daadwerkelijk iets verplaatst, inclusief `memory-doctor.py decide` voor de
+helft die alleen een mens kan afhandelen.
+
+**Boekhouding die veilig faalt.** Een inconclusieve uitkomst verloopt in uren
+in plaats van genegeerd te worden, want `no_transcript` is deterministisch en
+zou een kapotte bron anders eeuwig aan de kop van de wachtrij parkeren. Een
+geweigerde schrijfactie koopt geen cooldown meer. Een onleesbaar
+statusbestand wordt opzijgezet in plaats van overschreven. Geen migratie: de
+eerste sweep na de upgrade beoordeelt de oudste memories nog één keer, en de
+sweep daarna besteedt zijn begroting al aan nieuwe kennis.
 
 ### Nieuw in v0.33.0
 
