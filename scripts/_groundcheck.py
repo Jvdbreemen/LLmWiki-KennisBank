@@ -52,6 +52,13 @@ from _vaultpath import vault_root  # noqa: E402
 #: Bump on ANY change to VERIFY_SYSTEM; stamped into the promote log so every
 #: promotion stays traceable to the prompt that caused it (same contract as
 #: RECONCILE_PROMPT_VERSION / SUPERSEDE_PROMPT_VERSION).
+#:
+#: Since TASK-198 a bump also REOPENS the whole attempts map: `_judged_here`
+#: gates on this number, so every settled memory becomes a candidate again at
+#: once. That is the intent -- a new prompt is the one reason to expect a
+#: different answer -- and the cost is bounded by VERIFY_PASS_CAP, so it lands
+#: as a few sweeps of local LLM rather than one long run. Know that you are
+#: buying it before you bump.
 VERIFY_PROMPT_VERSION = 1
 
 #: Byte-identical to the prompt the validation measured (TASK-163). The quote
