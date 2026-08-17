@@ -120,7 +120,7 @@ case is exactly the one an autonomous system should not force.
 >
 > The rot count is now reported split — waiting versus undecided — because the
 > two need different advice. The undecided half needs a person, through
-> `memory-doctor.py pending` and `decide <stem> approve|reject`. Not
+> `memory-doctor.py pending` and `decide <stem> approve|reject|skip`. Not
 > `/kennisbank:review`: that command is the audit-view over the promotion and
 > closure logs and offers only `demote` and `reopen`, and an unverified memory
 > appears in neither log. Naming it would have replaced one wrong pointer with

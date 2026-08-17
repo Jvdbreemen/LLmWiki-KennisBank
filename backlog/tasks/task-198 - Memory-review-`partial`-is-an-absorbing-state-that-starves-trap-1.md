@@ -4,7 +4,7 @@ title: 'Memory review: `partial` is an absorbing state that starves trap 1'
 status: In Progress
 assignee: []
 created_date: '2026-08-17 05:29'
-updated_date: '2026-08-17 20:08'
+updated_date: '2026-08-17 20:41'
 labels:
   - memory
   - autonomous-review
@@ -112,7 +112,7 @@ created: 2026-08-17 20:08
 ---
 Own /code-review (high) on the branch diff produced 7 findings, all verified against the code before acting on any of them. All 7 fixed.
 
-1. HIGH -- the new message named `/kennisbank:review`, which cannot do what the message says. Confirmed by reading `commands/kennisbank/review.md`: it calls itself "GEEN werkwachtrij meer - het is de audit-view" and offers only `demote` and `reopen` over the promotion and closure logs. An unverified memory appears in neither log. This replaced one wrong pointer with another, the exact defect class this task exists to remove. Now names `memory-doctor.py pending` and `decide <stem> approve|reject`, the only path where a person moves an unverified memory (`_memory.decide` refuses any status but unverified). Same claim corrected in the `rot_breakdown` docstring and the spec.
+1. HIGH -- the new message named `/kennisbank:review`, which cannot do what the message says. Confirmed by reading `commands/kennisbank/review.md`: it calls itself "GEEN werkwachtrij meer - het is de audit-view" and offers only `demote` and `reopen` over the promotion and closure logs. An unverified memory appears in neither log. This replaced one wrong pointer with another, the exact defect class this task exists to remove. Now names `memory-doctor.py pending` and `decide <stem> approve|reject|skip`, the only path where a person moves an unverified memory (`_memory.decide` refuses any status but unverified). Same claim corrected in the `rot_breakdown` docstring and the spec.
 
 2. MEDIUM-HIGH -- the `undecided` bucket treated any record as final while `candidates()` requeued on a prompt-version mismatch or an elapsed cooldown, so the message claimed 'decide by hand' about work the next sweep was about to redo. Both now share one predicate, `_groundcheck.is_settled`.
 
@@ -127,5 +127,16 @@ Own /code-review (high) on the branch diff produced 7 findings, all verified aga
 7. MEDIUM -- not introduced here but not closed either: `no_transcript` is deterministic, not transient. An empty or truncated source yields an empty passage on every run, so those memories stayed in the never-judged tier forever and the `created` sort parks them at the head of the queue -- the same starvation from the other side. Inconclusive outcomes are now recorded under a short window (`KB_VERIFY_RETRY_HOURS`, default 6) so a dead model costs hours while a permanently broken source cannot own the cap.
 
 Re-verified read-only against the live vault after the changes: run 1 judges the 40 known partials once, run 2 selects 40 memories dated 2026-08-16/17, overlap 0.
+---
+
+created: 2026-08-17 20:41
+---
+Copilot review on PR #5 (fork): check-run `completed / success`, 5 inline comments, all verified against the code and all accepted.
+
+- Four of them are the same defect in four places: I wrote `decide <stem> approve|reject` while `memory-doctor.py` documents `approve|reject|skip` (usage at lines 360 and 390). Corrected in `memory-notify.py`, the `rot_breakdown` docstring, the spec and this task file. Worth noting that this is the third variant of the same failure in one branch -- naming a path without checking what it actually accepts.
+- A Dutch typo in the `rot_breakdown` docstring: `dat command` -> `dat commando`.
+- `tests/test_kb_verify.py` was written in Dutch while AGENTS.md sets English as the default for code comments. Translated. The Dutch additions to `tests/test_memory_doctor.py` and `tests/test_memory_notify.py` are deliberately left as they are: those files are Dutch throughout and predate this branch, so matching them keeps each file internally coherent. Converting them is separate work, not this task's.
+
+Process note for next time: Copilot does not appear under `requested_reviewers`, it appears as a `copilot-pull-request-reviewer` check-run. Checking the wrong field led me to report the review as absent when it was in progress. Poll the check-run, not the reviewer list.
 ---
 <!-- COMMENTS:END -->

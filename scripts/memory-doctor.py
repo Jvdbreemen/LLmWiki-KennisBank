@@ -94,9 +94,9 @@ def rot_breakdown(hours: int = 48) -> dict:
     promoot alleen `supported` en trap 2 past alleen `supported`/`absent`
     toe, dus `partial` en `unclear` blijven eeuwig liggen (TASK-198). Alleen
     een mens verplaatst die nog, via `memory-doctor.py pending` gevolgd door
-    `decide <stem> approve|reject`. NIET via /kennisbank:review: dat command
-    is de audit-view en kan alleen `demote` en `reopen`, en een unverified
-    memory staat in geen van beide logboeken die het leest.
+    `decide <stem> approve|reject|skip`. NIET via /kennisbank:review: dat
+    commando is de audit-view en kan alleen `demote` en `reopen`, en een
+    unverified memory staat in geen van beide logboeken die het leest.
 
     Eén telling gaf één advies, en op de vault die dit blootlegde was dat
     advies fout: alle 24 rottende memories waren al beoordeeld, terwijl de

@@ -99,7 +99,7 @@ def _rot_msgs(hb: dict) -> list:
         msgs.append(f"geheugen: {onbeslist} beoordeelde memories bleven onbeslisbaar; "
                     f"geen automatisch pad verplaatst die nog - bekijk ze met "
                     f"'memory-doctor.py pending' en beslis per stuk met "
-                    f"'memory-doctor.py decide <stem> approve|reject'.")
+                    f"'memory-doctor.py decide <stem> approve|reject|skip'.")
     return msgs
 
 

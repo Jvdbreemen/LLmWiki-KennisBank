@@ -1,11 +1,10 @@
-"""Tests voor scripts/kb-verify.py - de bewuste drain van de unverified backlog.
+"""Tests for scripts/kb-verify.py - the deliberate drain of the unverified backlog.
 
-De CLI en de sweep MOETEN dezelfde kandidaatselectie gebruiken. Tot TASK-198
-stond die als gekopieerd blok in allebei; twee kopieën van een selectieregel
-zijn één wijziging verwijderd van een CLI en een sweep die verschillende
-verzamelingen beoordelen. De tests hier pinnen het gedeelde gedrag plus de twee
-dingen die de CLI wél apart mag: droogdraaien zonder boekhouding, en de
-cooldown negeren omdat de mens er expliciet om vroeg.
+The CLI and the sweep MUST use the same candidate selection. Until TASK-198 it
+lived as a copied block in both, and two copies of a selection rule are one
+edit away from a CLI and a sweep judging different sets. These tests pin the
+shared behaviour plus the two things the CLI may do differently: run dry
+without bookkeeping, and ignore the cooldown because a person asked for it.
 """
 from __future__ import annotations
 
@@ -79,10 +78,10 @@ class KbVerifyTest(unittest.TestCase):
             {"verdict": verdict, "reason": "citaat"})
 
     def test_a_dry_run_records_no_attempt(self):
-        """Droogdraaien schrijft niets -- ook geen cooldown.
+        """A dry run writes nothing -- not even a cooldown.
 
-        Een --dry-run die wel boekhoudt zou de echte run die erop volgt een
-        week lang van zijn eigen kandidaten beroven.
+        A --dry-run that kept books would rob the real run after it of its own
+        candidates for as long as the window lasts.
         """
         self._mem("m")
         self._says("partial")
@@ -107,7 +106,7 @@ class KbVerifyTest(unittest.TestCase):
         self.assertEqual(fm["status"], "unverified")
 
     def test_retry_settled_drains_it_anyway(self):
-        """De CLI is de bewuste drain; wie erom vraagt krijgt de hele backlog."""
+        """The CLI is the deliberate drain: ask for it and you get the backlog."""
         self._mem("m")
         self._gc.record_attempt(self._key("m"), "partial")
         self._says("supported")
@@ -118,7 +117,7 @@ class KbVerifyTest(unittest.TestCase):
         self.assertEqual(fm["status"], "current")
 
     def test_an_unreachable_model_exits_one(self):
-        """TASK-148: 'niets te doen' en 'kon niet draaien' zijn niet hetzelfde."""
+        """TASK-148: 'nothing to do' and 'could not run' are not the same thing."""
         self._mem("m")
         self._llm.generate = lambda *a, **k: ""
         self.assertEqual(self.m.main([]), 1)
