@@ -7,6 +7,91 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.34.0] - 2026-08-17
+
+The autonomous review learns what it already asked. v0.33.0 let quarantined
+memories review themselves, but nothing remembered the answers, so a verdict
+that never changes became a permanent claim on the budget — and the message
+that reported it named two causes that were fine and omitted the one action
+that helps.
+
+### Upgrading
+
+- No migration. Trap 1 has no record yet, so the first sweep after upgrading
+  judges the oldest memories once more and writes their outcomes; from the
+  run after that the budget goes to memories nothing has read yet. Measured
+  on a real vault: run 1 covered the 40 known-undecided memories, run 2
+  covered 40 freshly captured ones with zero overlap.
+- New state file `.claude/memory-verify-attempts.json` holds trap 1's own
+  outcomes, keyed by vault-relative path. Deleting it is safe and costs one
+  round of verdicts.
+- The session-start memory message changed. It now reports two counts instead
+  of one and points at `memory-doctor.py pending` / `decide` for the half a
+  person has to decide. Anything parsing the old sentence needs updating.
+- `VERIFY_PROMPT_VERSION` is now load-bearing: bumping it reopens every
+  recorded outcome at once, which is intended (a new prompt is the one reason
+  to expect a different answer) and bounded by `VERIFY_PASS_CAP`.
+
+### Added
+
+- `kb-verify.py --retry-settled` re-judges memories still inside their
+  cooldown, for a deliberate full drain of the backlog.
+- `KB_VERIFY_RETRY_DAYS` (default 7) and `KB_VERIFY_RETRY_HOURS` (default 6):
+  how long a real verdict and an inconclusive outcome stand before a memory
+  is offered to trap 1 again.
+- `_groundcheck.candidates()` — one candidate-selection rule shared by the
+  sweep and the CLI, which carried a copied block until now — and
+  `is_settled()`, the single predicate for "trap 1 will leave this alone",
+  shared by the pass and the report so the two cannot disagree.
+- Heartbeat keys `rot_waiting` and `rot_undecided` next to the existing
+  `rot`, and `memory-doctor.rot_breakdown()` behind them.
+
+### Changed
+
+- The session-start message splits the rot count: memories still waiting for
+  a verdict point at the sweep and the model; memories that were judged and
+  came back undecidable point at `memory-doctor.py pending` and
+  `decide <stem> approve|reject|skip`, the only path where a person moves an
+  unverified memory. The old sentence named `/kennisbank:settings` and Ollama
+  for a state neither had anything to do with.
+- Trap 1 records outcomes and picks candidates in two tiers: never judged at
+  this prompt version first (oldest capture first), then anything past its
+  window (oldest attempt first, so retries rotate). It orders, it never
+  excludes — trap 1 reads a selected passage where the client reads the whole
+  transcript, so it still promotes memories the client graded `partial`, and
+  those promotions are what drains the queue.
+- Outcomes are collected during a pass and written once instead of once per
+  verdict, so a full drain no longer rewrites a growing file per memory.
+
+### Fixed
+
+- **Settled verdicts starved the grounded check.** Trap 1 sorted unverified
+  memories oldest-first with no record of what it had already judged, and a
+  verdict is a property of claim-against-passage rather than a coin flip, so
+  `partial` came back `partial` every run. On the vault that surfaced this,
+  all 24 memories past the rot cutoff had been graded `partial` by a whole-
+  transcript client read; together with 16 younger ones they held 40 of 40
+  slots of `VERIFY_PASS_CAP`, so 49 newer memories were never judged at all
+  and the same 40 were re-judged every sweep at 6-8 s of local model each.
+- An inconclusive outcome is recorded too, under a short window.
+  `no_transcript` is deterministic rather than transient — an empty or
+  truncated source yields an empty passage on every run — so leaving it
+  unrecorded parked those memories at the head of the queue permanently, the
+  same starvation from the other side.
+- A refused promotion no longer buys a cooldown. `_memory.promote` returns
+  false on a locked or read-only file, which is ordinary on Windows with a
+  sync client holding it; the verdict was recorded anyway, parking a memory
+  trap 1 wanted to promote with nothing in the promote log to show for it.
+- Verify outcomes are keyed on the vault-relative path rather than the bare
+  stem. The memory scan is recursive and `09-memory/archive/` exists, so two
+  files could share a key and one could inherit the other's cooldown.
+- An unreadable attempts file is moved aside to `.corrupt` instead of being
+  silently replaced by a single record.
+- `rot_breakdown` and `candidates()` now answer the same question. The report
+  called every recorded memory final while the pass requeued the ones on an
+  older prompt version or past their window, so the message claimed "decide
+  by hand" about work the next sweep was about to redo.
+
 ## [0.33.0] - 2026-08-17
 
 The human leaves the memory loop. Quarantined memories now promote, escalate
@@ -2051,7 +2136,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.33.0...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.34.0...HEAD
+[0.34.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.33.0...v0.34.0
 [0.33.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.32.0...v0.33.0
 [0.32.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.31.1...v0.32.0
 [0.31.1]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.31.0...v0.31.1

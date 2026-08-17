@@ -73,7 +73,38 @@ Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: 
 
 The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
 
-## Feature highlights (v0.33.0)
+## Feature highlights (v0.34.0)
+
+### New in v0.34.0
+
+The autonomous review learns what it already asked.
+
+**A verdict that never changes no longer owns the budget.** v0.33.0 let
+quarantined memories review themselves, but nothing remembered the answers,
+so the grounded check re-asked the same question of the same passage every
+sweep and got the same answer. On the vault that surfaced it, 40 of 40 slots
+went to memories already graded `partial` by a whole-transcript reading,
+while 49 newer memories were never judged at all. Trap 1 now records its own
+outcomes and picks candidates in two tiers — never judged first, then
+anything past its window, so retries rotate. It orders, it never excludes:
+trap 1 reads a selected passage where the client reads the whole transcript,
+so it still promotes memories the client called `partial`, and those
+promotions are what drains the queue.
+
+**The session-start message says something you can act on.** It used to
+report one number and blame the settings or Ollama; on a vault where both
+were fine and every memory had already been judged, that was three wrong
+answers in one sentence. It now reports two counts — waiting for a verdict
+versus judged and undecidable — and names the path that actually moves each,
+including `memory-doctor.py decide` for the half only a person can settle.
+
+**Bookkeeping that fails safely.** An inconclusive outcome expires in hours
+rather than being ignored, because `no_transcript` is deterministic and would
+otherwise park a broken source at the head of the queue forever. A refused
+write no longer buys a cooldown. An unreadable state file is moved aside
+instead of overwritten. No migration: the first sweep after upgrading
+re-judges the oldest memories once, and the one after that is already
+spending its budget on new knowledge.
 
 ### New in v0.33.0
 
