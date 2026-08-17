@@ -184,8 +184,12 @@ def _expire_pass() -> int:
 ROT_HOURS = 48
 
 
-def _rot_count() -> "int | None":
+def _rot_count() -> "dict | None":
     """Tel de unverified memories die blijven liggen. None als het niet lukt.
+
+    Levert sinds TASK-198 de SPLITSING (total/waiting/undecided), niet één
+    getal: 'nooit beoordeeld' en 'beoordeeld en onbeslisbaar' vragen om een
+    ander advies, en memory-notify kan alleen splitsen wat hier geteld wordt.
 
     Deze telling stond tot TASK-76 in memory-notify, op de SESSIESTART-weg, waar
     hij elk .md-bestand in 09-memory las: gemeten 509 ms van de 543 ms die die
@@ -204,7 +208,8 @@ def _rot_count() -> "int | None":
         md = importlib.util.module_from_spec(spec)
         sys.modules["memory_doctor"] = md
         spec.loader.exec_module(md)
-        return int(md.rot_count(ROT_HOURS))
+        br = md.rot_breakdown(ROT_HOURS)
+        return {k: int(br[k]) for k in ("total", "waiting", "undecided")}
     except Exception:
         return None
 
@@ -250,8 +255,10 @@ def _write_heartbeat(summary: dict) -> None:
     # verdwijnen juist wanneer er iets aan de hand is.
     rot = _rot_count()
     if rot is not None:
-        out["rot"] = rot
+        out["rot"] = rot["total"]
         out["rot_hours"] = ROT_HOURS
+        out["rot_waiting"] = rot["waiting"]
+        out["rot_undecided"] = rot["undecided"]
     try:
         hb.parent.mkdir(parents=True, exist_ok=True)
         hb.write_text(json.dumps(out, indent=2, ensure_ascii=False), encoding="utf-8")

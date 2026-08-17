@@ -91,6 +91,38 @@ class MemoryNotifyTest(unittest.TestCase):
         self._hb({"errors": 0, "model_unreachable": False, "rot": 2})
         self.assertIn("48u", self.m.notice())
 
+    def test_rot_splitst_wachtend_van_onbeslisbaar(self):
+        """TASK-198: één telling gaf één advies, en dat advies was fout.
+
+        Op de vault die dit blootlegde waren alle 24 rottende memories al
+        beoordeeld -- door trap 1 én door een client-lezing van het hele
+        transcript -- en allemaal `partial`. De melding stuurde de eigenaar
+        naar Ollama en de instellingen, die allebei in orde waren, en noemde
+        de enige weg die wel werkt niet.
+        """
+        self._hb({"errors": 0, "model_unreachable": False, "rot": 24,
+                  "rot_hours": 48, "rot_waiting": 4, "rot_undecided": 20})
+        melding = self.m.notice()
+        self.assertIn("4", melding)
+        self.assertIn("20", melding)
+        self.assertIn("/kennisbank:review", melding)
+
+    def test_alleen_onbeslisbaar_wijst_niet_meer_naar_ollama(self):
+        self._hb({"errors": 0, "model_unreachable": False, "rot": 20,
+                  "rot_hours": 48, "rot_waiting": 0, "rot_undecided": 20})
+        melding = self.m.notice()
+        self.assertIn("/kennisbank:review", melding)
+        self.assertNotIn("ollama", melding.lower(),
+                         "niets wees op het model; noem het dan ook niet")
+
+    def test_alleen_wachtend_houdt_het_sweep_advies(self):
+        self._hb({"errors": 0, "model_unreachable": False, "rot": 4,
+                  "rot_hours": 48, "rot_waiting": 4, "rot_undecided": 0})
+        melding = self.m.notice()
+        self.assertIn("4", melding)
+        self.assertNotIn("/kennisbank:review", melding,
+                         "niets is beoordeeld, dus er valt niets te beslissen")
+
     def _pending_transcript(self, name="t1.jsonl"):
         """Create a pending transcript file in the vault."""
         tdir = self.vault / "01-raw" / "transcripts"

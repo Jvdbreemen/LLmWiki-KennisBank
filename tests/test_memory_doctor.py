@@ -70,6 +70,35 @@ class MemoryDoctorTest(unittest.TestCase):
         self._mem("c.md", "current", old)      # current, geen rot
         self.assertEqual(self.m.rot_count(hours=48), 1)
 
+    def test_rot_breakdown_separates_waiting_from_undecided(self):
+        """Two rotting memories are not the same problem (TASK-198).
+
+        One has never been judged -- that points at the sweep or the model.
+        The other was judged and came back undecidable, which no automatic
+        path can resolve and only a person can. A single count told the owner
+        to check Ollama for a state Ollama had nothing to do with.
+        """
+        old = (date.today() - timedelta(days=3)).isoformat()
+        self._mem("waiting.md", "unverified", old)
+        self._mem("judged.md", "unverified", old)
+        self._mem("fresh.md", "unverified", date.today().isoformat())
+        import _groundcheck
+        _groundcheck.record_attempt("judged", "partial")
+
+        br = self.m.rot_breakdown(hours=48)
+        self.assertEqual(br["total"], 2, "fresh.md is below the cutoff")
+        self.assertEqual(br["waiting"], 1)
+        self.assertEqual(br["undecided"], 1)
+
+    def test_rot_breakdown_total_still_equals_rot_count(self):
+        old = (date.today() - timedelta(days=3)).isoformat()
+        self._mem("a.md", "unverified", old)
+        self._mem("b.md", "unverified", old)
+        import _groundcheck
+        _groundcheck.record_attempt("a", "not_found")
+        self.assertEqual(self.m.rot_breakdown(hours=48)["total"],
+                         self.m.rot_count(hours=48))
+
     def _status(self, name):
         import re
         txt = (self.vault / "09-memory" / name).read_text(encoding="utf-8")

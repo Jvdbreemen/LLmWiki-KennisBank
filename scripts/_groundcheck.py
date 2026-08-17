@@ -37,6 +37,8 @@ import math
 import os
 import re
 import sys
+import tempfile
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -89,6 +91,23 @@ SHORTLIST = 8
 #: is a few minutes riding after a sweep -- and the backlog is drained by the
 #: CLI (kb-verify.py), not by making every sweep pay for history.
 VERIFY_PASS_CAP = env_int("KB_VERIFY_CAP", 40)
+
+#: How long a decisive verdict stands before the memory is offered again.
+#: A verdict is a property of claim-against-passage, not a coin flip, so
+#: re-asking within days buys nothing; a week is short enough that a changed
+#: model still gets a second reading without anyone bumping a version.
+VERIFY_RETRY_DAYS = env_int("KB_VERIFY_RETRY_DAYS", 7)
+
+#: Where the decisive verdicts are remembered. A compact map, not a JSONL log
+#: like the promote log: those are pruned by line count, and the line pruned
+#: would be exactly the record that stops a re-judge. Not the memory's own
+#: frontmatter either -- writing 40 memory files per sweep changes their
+#: semantic_hash and forces the knowledge graph to re-extract them.
+ATTEMPTS_FILE = "memory-verify-attempts.json"
+
+#: Entries kept in that map, newest attempt first. Eviction is self-healing:
+#: an evicted memory simply looks unjudged again, which costs one verdict.
+ATTEMPTS_MAX = 5000
 
 _WORD = re.compile(r"[a-z0-9_]{4,}")
 
@@ -188,21 +207,79 @@ def verify_grounded(body: str, chunks: list, stamp: str = "") -> dict:
             "reason": str(obj.get("reason", ""))[:300], "route": route}
 
 
-def verify_pass(max_n: int = VERIFY_PASS_CAP) -> int:
-    """Promote unverified memories whose source supports them. Returns count.
+def attempts_path() -> Path:
+    return vault_root() / ".claude" / ATTEMPTS_FILE
 
-    Oldest first, so the backlog drains in capture order and no memory can
-    starve behind a stream of newer ones. Touches ONLY status=unverified;
-    promotes ONLY on `supported`; everything else is left for a later cycle
-    or the client-LLM escalation. Never demotes -- that verdict class was
-    measured wrong every time it was checked (0/20).
+
+def load_attempts() -> dict:
+    """The decisive verdicts seen so far, keyed by memory stem.
+
+    Fail-open: a missing or corrupt file reads as "nothing judged yet", which
+    costs a round of verdicts and never freezes the queue.
+    """
+    try:
+        data = json.loads(attempts_path().read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def record_attempt(stem: str, verdict: str, ts: str = "",
+                   prompt_version: int = VERIFY_PROMPT_VERSION) -> None:
+    """Remember a DECISIVE verdict so the next pass can spend its cap elsewhere.
+
+    Only the four real verdicts count. `unparseable`, `no_transcript` and
+    raised exceptions say something about the RUN, not about the memory: a
+    model that was briefly down would otherwise cost a whole batch its
+    cooldown. Fail-soft on write -- bookkeeping may never block a sweep.
+    """
+    if verdict not in VERDICTS or not stem:
+        return
+    try:
+        data = load_attempts()
+        data[stem] = {"ts": ts or datetime.now(timezone.utc).isoformat(),
+                      "verdict": verdict, "prompt_version": prompt_version}
+        if len(data) > ATTEMPTS_MAX:
+            keep = sorted(data.items(), key=lambda kv: str(kv[1].get("ts", "")),
+                          reverse=True)[:ATTEMPTS_MAX]
+            data = dict(keep)
+        p = attempts_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=str(p.parent), prefix=".kbva-", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                json.dump(data, fh, indent=1, ensure_ascii=False)
+            os.replace(tmp, p)
+        except OSError:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+    except Exception:
+        pass
+
+
+def _retry_due(ts: str) -> bool:
+    """Has a recorded attempt aged past the cooldown? Unreadable stamp -> yes."""
+    try:
+        dt = datetime.fromisoformat(str(ts))
+    except (TypeError, ValueError):
+        return True
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) - dt >= timedelta(days=VERIFY_RETRY_DAYS)
+
+
+def _unverified_rows() -> list:
+    """Every unverified memory whose source transcript is still on disk.
+
+    One definition, shared by the sweep pass and kb-verify.py. It lived in
+    both as a copied block until TASK-198; two copies of a selection rule is
+    one drift away from the CLI and the sweep judging different sets.
     """
     v = vault_root()
     tdir = v / "01-raw" / "transcripts"
-    import _sweepstate as ss
-    import _sweeputil as su
-
-    todo = []
+    rows = []
     for f in (v / "09-memory").glob("**/*.md"):
         try:
             fm, body = parse_frontmatter(f.read_text(encoding="utf-8", errors="replace"))
@@ -213,19 +290,75 @@ def verify_pass(max_n: int = VERIFY_PASS_CAP) -> int:
         src = str(fm.get("source_session", "")).strip()
         if not src or not (tdir / src).exists():
             continue
-        todo.append((str(fm.get("created", "")), f, " ".join(body.split()),
+        rows.append((str(fm.get("created", "")), f, " ".join(body.split()),
                      src, str(fm.get("source_chunk", "")).strip()))
-    todo.sort(key=lambda t: t[0])
+    return rows
+
+
+def candidates(max_n: int = VERIFY_PASS_CAP, retry_settled: bool = False) -> list:
+    """The memories trap 1 should judge next, in the order that spends the cap best.
+
+    Two tiers, because a verdict is stable: asking the same question of the
+    same passage returns the same answer, so a memory already judged at this
+    prompt version has no claim on the budget while anything unjudged waits.
+
+      A. no decisive verdict at VERIFY_PROMPT_VERSION -- oldest `created`
+         first, so capture order still drains first and nothing starves
+         behind a stream of newer memories;
+      B. judged longer than VERIFY_RETRY_DAYS ago -- oldest attempt first, so
+         retries rotate rather than re-running the same head every time.
+
+    This ORDERS, it never excludes. Trap 1 reads a selected passage where the
+    client read (trap 2) reads the whole transcript, so the two disagree by
+    construction, and trap 1 does promote memories the client graded
+    `partial` -- on the vault that produced TASK-198 those were the only
+    promotions still happening. Disqualifying them would have cured the
+    symptom by stopping the cure.
+
+    retry_settled ignores the cooldown, for the deliberate backlog drain;
+    max_n=None means no cap at all, which is what that drain asks for.
+    """
+    att = load_attempts()
+    rows = _unverified_rows()
+    if max_n is None:
+        max_n = len(rows)
+    fresh, settled = [], []
+    for row in rows:
+        rec = att.get(row[1].stem)
+        if not isinstance(rec, dict) or rec.get("prompt_version") != VERIFY_PROMPT_VERSION:
+            fresh.append(row)
+        else:
+            settled.append((str(rec.get("ts", "")), row))
+    fresh.sort(key=lambda t: t[0])
+    if len(fresh) >= max_n:
+        return fresh[:max_n]
+    settled.sort(key=lambda t: t[0])
+    due = [row for ts, row in settled if retry_settled or _retry_due(ts)]
+    return fresh + due[:max_n - len(fresh)]
+
+
+def verify_pass(max_n: int = VERIFY_PASS_CAP) -> int:
+    """Promote unverified memories whose source supports them. Returns count.
+
+    Touches ONLY status=unverified; promotes ONLY on `supported`; everything
+    else is recorded and left for a later cycle or the client-LLM escalation.
+    Never demotes -- that verdict class was measured wrong every time it was
+    checked (0/20).
+    """
+    tdir = vault_root() / "01-raw" / "transcripts"
+    import _sweepstate as ss
+    import _sweeputil as su
 
     promoted = 0
     chunk_cache: dict = {}
-    for _created, f, body, src, stamp in todo[:max_n]:
+    for _created, f, body, src, stamp in candidates(max_n):
         try:
             if src not in chunk_cache:
                 chunk_cache[src] = su.chunk(ss.transcript_text(tdir / src))
             r = verify_grounded(body, chunk_cache[src], stamp)
         except Exception:
             continue
+        record_attempt(f.stem, r["verdict"])
         if r["verdict"] != "supported":
             continue
         if _memory.promote(f, reason=r["reason"], route=r["route"],

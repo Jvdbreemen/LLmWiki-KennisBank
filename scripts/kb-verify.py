@@ -12,9 +12,13 @@ measurements behind that asymmetry. Every promotion lands in the promote log
 audit surface: a promotion you distrust is undone by setting the file's
 status back to unverified, or dampened with `kb-noise.py <stem>`.
 
-Usage: python3 kb-verify.py [--max N] [--dry-run]
-  --max N     verify at most N memories this run (default: everything pending)
-  --dry-run   judge and report, write nothing
+Usage: python3 kb-verify.py [--max N] [--dry-run] [--retry-settled]
+  --max N          verify at most N memories this run (default: everything pending)
+  --dry-run        judge and report, write nothing (no verdict recorded either)
+  --retry-settled  also re-judge memories whose verdict is still within the
+                   cooldown. The sweep skips those so its cap goes to memories
+                   nothing has read yet; this CLI is the deliberate drain, so
+                   it will do the whole backlog when asked.
 
 Exit 0 always on a clean run; a missing model prints and exits 1 so a caller
 can tell "nothing to do" from "could not run" (the TASK-148 rule).
@@ -32,7 +36,6 @@ import _settings  # noqa: E402
 import _sweepstate as ss  # noqa: E402
 import _sweeputil as su  # noqa: E402
 import _embeddings as emb  # noqa: E402
-from _frontmatter import parse_frontmatter  # noqa: E402
 from _progress import Progress  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402
 
@@ -43,6 +46,7 @@ def main(argv=None) -> int:
         print(__doc__.strip())
         return 0
     dry = "--dry-run" in argv
+    retry_settled = "--retry-settled" in argv
     max_n = None
     if "--max" in argv:
         try:
@@ -57,24 +61,11 @@ def main(argv=None) -> int:
         print("kb-verify: model or embedding backend unreachable", file=sys.stderr)
         return 1
 
-    v = vault_root()
-    tdir = v / "01-raw" / "transcripts"
-    todo = []
-    for f in (v / "09-memory").glob("**/*.md"):
-        try:
-            fm, body = parse_frontmatter(f.read_text(encoding="utf-8", errors="replace"))
-        except Exception:
-            continue
-        if fm.get("status") != "unverified":
-            continue
-        src = str(fm.get("source_session", "")).strip()
-        if not src or not (tdir / src).exists():
-            continue
-        todo.append((str(fm.get("created", "")), f, " ".join(body.split()),
-                     src, str(fm.get("source_chunk", "")).strip()))
-    todo.sort(key=lambda t: t[0])
-    if max_n is not None:
-        todo = todo[:max_n]
+    tdir = vault_root() / "01-raw" / "transcripts"
+    # Same selection as the sweep, from one definition. It lived here as a
+    # copied block until TASK-198, which is how the CLI and the sweep could
+    # have drifted into judging different sets without anything saying so.
+    todo = _groundcheck.candidates(max_n, retry_settled=retry_settled)
 
     import collections
     tally = collections.Counter()
@@ -90,7 +81,12 @@ def main(argv=None) -> int:
                 tally["error"] += 1
                 continue
             tally[r["verdict"]] += 1
-            if r["verdict"] == "supported" and not dry:
+            if dry:
+                continue
+            # A dry run may not record either: the cooldown it wrote would rob
+            # the real run that follows of its own candidates for a week.
+            _groundcheck.record_attempt(f.stem, r["verdict"])
+            if r["verdict"] == "supported":
                 if _memory.promote(f, reason=r["reason"], route=r["route"],
                                    prompt_version=_groundcheck.VERIFY_PROMPT_VERSION):
                     tally["promoted"] += 1

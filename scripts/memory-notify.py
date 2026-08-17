@@ -57,11 +57,45 @@ def _rot(hb: dict) -> "tuple[int, int] | None":
     de kosten terugbrengen op precies het pad waar ze weg moesten. Zelfherstellend,
     want de worker draait bij elke sessiestart.
     """
-    rot = hb.get("rot")
-    if not isinstance(rot, int) or isinstance(rot, bool):
+    rot = _telling(hb.get("rot"))
+    if rot is None:
         return None
     uren = hb.get("rot_hours")
     return rot, uren if isinstance(uren, int) else 48
+
+
+def _telling(v) -> "int | None":
+    """Een echte telling uit de heartbeat, of None. Bool is hier geen int."""
+    return v if isinstance(v, int) and not isinstance(v, bool) else None
+
+
+def _rot_msgs(hb: dict) -> list:
+    """De rot-melding, gesplitst naar wat de lezer eraan kan doen.
+
+    Eén telling gaf één advies, en dat advies was fout zodra de memories al
+    beoordeeld waren (TASK-198): de oude regel stuurde naar /kennisbank:settings
+    en Ollama terwijl die allebei in orde waren, en noemde de enige weg die wel
+    werkt niet. `waiting` is een vraag over de sweep; `undecided` is beoordeeld
+    en blijft liggen tot een mens beslist.
+    """
+    gelezen = _rot(hb)
+    if gelezen is None or gelezen[0] <= 0:
+        return []
+    rot, uren = gelezen
+    wacht, onbeslist = _telling(hb.get("rot_waiting")), _telling(hb.get("rot_undecided"))
+    if wacht is None or onbeslist is None:
+        # Heartbeat van voor TASK-198. De splitsing is onbekend, dus noem geen
+        # oorzaak: een verkeerde aanwijzing kost meer dan geen aanwijzing.
+        return [f"geheugen: {rot} unverified memories ouder dan {uren}u."]
+    msgs = []
+    if wacht > 0:
+        msgs.append(f"geheugen: {wacht} unverified memories ouder dan {uren}u "
+                    f"wachten nog op een beoordeling (check sweep-launch/Ollama).")
+    if onbeslist > 0:
+        msgs.append(f"geheugen: {onbeslist} beoordeelde memories bleven onbeslisbaar; "
+                    f"geen automatisch pad verplaatst die nog - beslis met "
+                    f"/kennisbank:review.")
+    return msgs
 
 
 def notice() -> str:
@@ -83,11 +117,7 @@ def notice() -> str:
                     "(transcripts blijven wachten).")
     if isinstance(hb.get("errors"), int) and hb["errors"] > 0:
         msgs.append(f"geheugen-sweep: {hb['errors']} fout(en) in de laatste run.")
-    gelezen = _rot(hb)
-    if gelezen is not None and gelezen[0] > 0:
-        rot, uren = gelezen
-        msgs.append(f"geheugen: {rot} unverified memories ouder dan {uren}u "
-                    f"(sweep/judge promoot ze niet - draai /kennisbank:settings of check Ollama).")
+    msgs.extend(_rot_msgs(hb))
 
     # Signaleer een gestalde/afwezige sweep: pending transcripts + absent/stale heartbeat.
     # Fail-soft: onparseerbare last_run → behandeld als stale (alleen als er pending zijn).

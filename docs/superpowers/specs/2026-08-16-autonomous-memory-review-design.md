@@ -94,6 +94,28 @@ No terminal limbo: a memory that survives two full cycles undecided stays
 `unverified` deliberately — it is invisible either way, and an undecidable
 case is exactly the one an autonomous system should not force.
 
+> **Correction (2026-08-17, TASK-198).** "No terminal limbo" was wrong as
+> written, and the sentence above is kept only so the correction has something
+> to point at. Leaving an undecided memory alone is right; assuming a later
+> cycle would resolve it was not. A verdict is a property of claim-against-
+> passage, not a coin flip, so `partial` came back `partial` every time. On the
+> first vault to reach that state all 24 memories past the rot cutoff had been
+> graded `partial` by a client read of the whole transcript, and because trap 1
+> selected oldest-first with no record of past attempts, those 24 plus 16
+> younger partials filled all 40 slots of `VERIFY_PASS_CAP` — so the 49 newer
+> memories were never judged at all, and the session-start message blamed
+> settings and Ollama, which were both fine.
+>
+> What changed: trap 1 records decisive verdicts in
+> `.claude/memory-verify-attempts.json` and orders candidates in two tiers —
+> never-judged-at-this-prompt-version first, then anything judged longer than
+> `KB_VERIFY_RETRY_DAYS` ago. It orders, it never excludes: trap 1 reads a
+> selected passage where trap 2 reads the whole transcript, so trap 1 does
+> promote memories the client graded `partial`, and those promotions are what
+> drains the queue. The rot count is now reported split — waiting versus
+> undecided — because the two need different advice, and the undecided half
+> needs a person (`/kennisbank:review`).
+
 ## Privacy gate
 
 Trap 2/3 sends memory bodies and transcript excerpts to the client LLM — that
