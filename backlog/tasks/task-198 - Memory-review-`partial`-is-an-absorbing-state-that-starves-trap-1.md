@@ -1,10 +1,10 @@
 ---
 id: TASK-198
 title: 'Memory review: `partial` is an absorbing state that starves trap 1'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-17 05:29'
-updated_date: '2026-08-17 20:41'
+updated_date: '2026-08-17 21:49'
 labels:
   - memory
   - autonomous-review
@@ -140,3 +140,19 @@ Copilot review on PR #5 (fork): check-run `completed / success`, 5 inline commen
 Process note for next time: Copilot does not appear under `requested_reviewers`, it appears as a `copilot-pull-request-reviewer` check-run. Checking the wrong field led me to report the review as absent when it was in progress. Poll the check-run, not the reviewer list.
 ---
 <!-- COMMENTS:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Shipped in v0.34.0 (`110d57e`).
+
+Trap 1 had no memory of what it had already judged, and a verdict is a property of claim-against-passage rather than a coin flip, so `partial` came back `partial` every sweep. Measured: all 24 memories past the rot cutoff had been graded `partial` by a whole-transcript client read; together with 16 younger ones they held 40 of 40 slots of `VERIFY_PASS_CAP`, so 49 newer memories were never judged at all and the same 40 were re-judged every run at 6-8 s of local model each. The session-start message reporting this named `/kennisbank:settings` and Ollama, both demonstrably fine.
+
+Trap 1 now records its outcomes in `.claude/memory-verify-attempts.json` and orders candidates in two tiers. It orders, it never excludes: trap 1 reads a selected passage where the client reads the whole transcript, so it still promotes memories the client graded `partial`, and those were the only promotions still draining the queue.
+
+Verified read-only against the live vault: run 1 covers the 40 known-undecided memories, run 2 covers 40 dated 2026-08-16/17 with zero overlap. No migration.
+
+Reviewed twice before landing. Own `/code-review` found 7 issues, Copilot 5; all 12 were checked against the code and fixed. Three of them were the same mistake in different clothes -- naming a path without checking what sits at the other end -- which is the defect this task is about, committed while fixing it.
+
+Not yet deployed to the vault at close time: `/kennisbank-upgrade` from the new tag does that.
+<!-- SECTION:FINAL_SUMMARY:END -->
