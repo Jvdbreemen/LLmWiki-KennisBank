@@ -70,6 +70,9 @@ def main(argv=None) -> int:
     import collections
     tally = collections.Counter()
     chunk_cache: dict = {}
+    # Collected during the run and flushed once. A read-modify-write per
+    # verdict would rewrite a growing file thousands of times on a full drain.
+    learned: dict = {}
     with Progress(len(todo), "grounded verify") as p:
         for _created, f, body, src, stamp in todo:
             p.step(note=f.stem[:40])
@@ -84,12 +87,15 @@ def main(argv=None) -> int:
             if dry:
                 continue
             # A dry run may not record either: the cooldown it wrote would rob
-            # the real run that follows of its own candidates for a week.
-            _groundcheck.record_attempt(_groundcheck.attempt_key(f), r["verdict"])
-            if r["verdict"] == "supported":
-                if _memory.promote(f, reason=r["reason"], route=r["route"],
-                                   prompt_version=_groundcheck.VERIFY_PROMPT_VERSION):
-                    tally["promoted"] += 1
+            # the real run that follows of its own candidates.
+            if r["verdict"] != "supported":
+                learned[_groundcheck.attempt_key(f)] = _groundcheck.outcome(
+                    r["verdict"])
+            elif _memory.promote(f, reason=r["reason"], route=r["route"],
+                                 prompt_version=_groundcheck.VERIFY_PROMPT_VERSION):
+                tally["promoted"] += 1
+
+    _groundcheck.record_attempts(learned)
 
     mode = " (dry-run, nothing written)" if dry else ""
     print(f"kb-verify{mode}: {len(todo)} judged -> " +

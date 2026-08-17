@@ -4,7 +4,7 @@ title: 'Memory review: `partial` is an absorbing state that starves trap 1'
 status: In Progress
 assignee: []
 created_date: '2026-08-17 05:29'
-updated_date: '2026-08-17 19:50'
+updated_date: '2026-08-17 20:08'
 labels:
   - memory
   - autonomous-review
@@ -77,24 +77,27 @@ Reconciliation of the three n's: heartbeat `unverified: 34` is a per-run write c
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-Trap 1 now keeps its own record of decisive verdicts and uses it to ORDER candidates, never to exclude them.
+Trap 1 now keeps its own record of outcomes and uses it to ORDER candidates, never to exclude them.
 
-- `scripts/_groundcheck.py`: `load_attempts()` / `record_attempt()` over `.claude/memory-verify-attempts.json` (compact map, atomic write, capped at 5000 newest). `candidates(max_n, retry_settled)` is now the single selection rule: tier A = no decisive verdict at the current `VERIFY_PROMPT_VERSION`, oldest `created` first; tier B = judged longer than `KB_VERIFY_RETRY_DAYS` (default 7) ago, oldest attempt first so retries rotate. `verify_pass` records every decisive verdict.
+- `scripts/_groundcheck.py`: `load_attempts()` / `record_attempt()` / `record_attempts()` over `.claude/memory-verify-attempts.json`, keyed by vault-relative path (not bare stem: the scan is recursive and `09-memory/archive/` exists). `candidates(max_n, retry_settled)` is the single selection rule: tier A = no outcome from the current `VERIFY_PROMPT_VERSION`, oldest `created` first; tier B = recorded but past its window, oldest attempt first so retries rotate; everything else is skipped this run. `is_settled()` is the one predicate for "trap 1 will leave this alone", shared with the doctor so the pass and the report cannot disagree.
+- Two windows. A real verdict holds for `KB_VERIFY_RETRY_DAYS` (7). An inconclusive outcome holds for `KB_VERIFY_RETRY_HOURS` (6), because `unparseable` is about the run while `no_transcript` is deterministic -- an empty source yields an empty passage every time -- and neither may own the cap.
+- Nothing is recorded on the promoting branch: a promoted memory leaves the unverified pool, and a refused promote (locked file) is not a settled memory.
+- Outcomes are collected during a pass and flushed once, in a `finally`, so bookkeeping is not quadratic and an interrupted run keeps what it learned.
 - `scripts/kb-verify.py`: dropped its copied selection block in favour of `candidates()`, added `--retry-settled` for the deliberate drain, records nothing on `--dry-run`.
-- `scripts/memory-doctor.py`: `rot_breakdown()` splits the rot count into `waiting` / `undecided`; `rot_count()` delegates to it.
-- `scripts/memory-sweep.py`: heartbeat carries `rot_waiting` and `rot_undecided` next to the existing `rot`.
-- `scripts/memory-notify.py`: one clause per bucket. A heartbeat without the split keys falls back to a message that states the count and names no cause -- a wrong pointer costs more than none.
+- `scripts/memory-doctor.py`: `rot_breakdown()` splits the rot count into `waiting` / `undecided`; `rot_count()` delegates. `undecided` requires both that trap 1 will not return to it and that what it returned was a judgement about the claim -- a broken source belongs in `waiting`, where the advice is right.
+- `scripts/memory-sweep.py`: heartbeat carries `rot_waiting` and `rot_undecided` next to the existing `rot`. `_rot_count` renamed `_rot_breakdown`.
+- `scripts/memory-notify.py`: one clause per bucket, each naming an action that applies. The undecided clause points at `memory-doctor.py pending` / `decide`, NOT `/kennisbank:review` -- that command is the audit-view and cannot move an unverified memory. A heartbeat without the split keys falls back to a message that states the count and names no cause.
 
 Deliberate non-choices:
-- The attempts map holds trap 1's own verdicts only. Seeding it from the existing trap-2 batch would have suppressed exactly the promotions that still drain the queue.
-- Indecisive answers (`unparseable`, `no_transcript`, exceptions) are not recorded, so a briefly dead model cannot cost a batch its cooldown. Unreadable timestamps read as due, so a corrupt record cannot freeze a memory.
+- The attempts map holds trap 1's own outcomes only. Seeding it from the existing trap-2 batch would have suppressed exactly the promotions that still drain the queue.
 - Not stored in memory frontmatter: writing 40 memory files per sweep changes their `semantic_hash` and forces a knowledge-graph re-extraction.
+- No lock between the sweep worker and the CLI. Merging on read bounds a concurrent run to losing the other's records, which costs re-judging and never wrong data.
 
 `docs/superpowers/specs/2026-08-16-autonomous-memory-review-design.md` carries a correction under "No terminal limbo", which was wrong as written.
 
-Verification: `python -m pytest tests -q` -> 1591 passed, 3 skipped. Read-only simulation against the live vault: run 1 judges the 40 known partials once with trap 1's own reading, run 2 selects 40 memories dated 2026-08-16/17 with zero overlap. The vault self-corrects after one sweep -- no migration needed.
+Verification: read-only simulation against the live vault -- run 1 judges the 40 known partials once with trap 1's own reading, run 2 selects 40 memories dated 2026-08-16/17 with zero overlap. The vault self-corrects after one sweep; no migration needed.
 
-Not deployed: `$VAULT/.claude/scripts` still runs the pre-fix copy, so the live vault keeps reporting the old message until the tooling is redeployed.
+Not deployed: `$VAULT/.claude/scripts` still runs the pre-fix copy, so the live vault keeps reporting the old message until the tooling is redeployed. That is the `/kennisbank-upgrade` path and the owner's call.
 <!-- SECTION:NOTES:END -->
 
 ## Comments
@@ -103,5 +106,26 @@ Not deployed: `$VAULT/.claude/scripts` still runs the pre-fix copy, so the live 
 created: 2026-08-17 05:30
 ---
 Scope note: AC#1 states the defect, not a remedy. An earlier draft prescribed 'exclude trap-2 partials from trap 1', which the evidence contradicts -- `verified_promoted: 2` on the 2026-08-17T04:51Z run means trap 1 said `supported` for memories the client read had graded `partial`. Excluding them would suppress the only promotions currently happening. Mechanism is left to implementation.
+---
+
+created: 2026-08-17 20:08
+---
+Own /code-review (high) on the branch diff produced 7 findings, all verified against the code before acting on any of them. All 7 fixed.
+
+1. HIGH -- the new message named `/kennisbank:review`, which cannot do what the message says. Confirmed by reading `commands/kennisbank/review.md`: it calls itself "GEEN werkwachtrij meer - het is de audit-view" and offers only `demote` and `reopen` over the promotion and closure logs. An unverified memory appears in neither log. This replaced one wrong pointer with another, the exact defect class this task exists to remove. Now names `memory-doctor.py pending` and `decide <stem> approve|reject`, the only path where a person moves an unverified memory (`_memory.decide` refuses any status but unverified). Same claim corrected in the `rot_breakdown` docstring and the spec.
+
+2. MEDIUM-HIGH -- the `undecided` bucket treated any record as final while `candidates()` requeued on a prompt-version mismatch or an elapsed cooldown, so the message claimed 'decide by hand' about work the next sweep was about to redo. Both now share one predicate, `_groundcheck.is_settled`.
+
+3. MEDIUM -- the verdict was recorded before `_memory.promote` and regardless of its result, so a refused write (locked file, ordinary on Windows with a sync client) parked a memory trap 1 wanted to promote for a week with nothing in the promote log. Nothing is recorded on the promoting branch at all now: a promoted memory leaves the unverified pool, and a refused promote is not a settled memory.
+
+4. MEDIUM -- `record_attempt` did a full read-modify-write per verdict, quadratic on a full drain. Outcomes are collected during the pass and flushed once through `record_attempts`, in a `finally` so an interrupted run still keeps what it learned.
+
+5. LOW-MEDIUM -- fail-open on a corrupt attempts file returned {} and the next write erased the history. The unreadable file is moved to `.corrupt` first.
+
+6. LOW -- lost updates between the sweep worker and the CLI. Merging on read bounds it: the run finishing second keeps its own records and loses at most the other's, which costs re-judging and never wrong data. Documented in `record_attempts` rather than adding a lock.
+
+7. MEDIUM -- not introduced here but not closed either: `no_transcript` is deterministic, not transient. An empty or truncated source yields an empty passage on every run, so those memories stayed in the never-judged tier forever and the `created` sort parks them at the head of the queue -- the same starvation from the other side. Inconclusive outcomes are now recorded under a short window (`KB_VERIFY_RETRY_HOURS`, default 6) so a dead model costs hours while a permanently broken source cannot own the cap.
+
+Re-verified read-only against the live vault after the changes: run 1 judges the 40 known partials once, run 2 selects 40 memories dated 2026-08-16/17, overlap 0.
 ---
 <!-- COMMENTS:END -->

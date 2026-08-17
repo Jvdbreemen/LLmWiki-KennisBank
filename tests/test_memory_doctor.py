@@ -92,6 +92,43 @@ class MemoryDoctorTest(unittest.TestCase):
         self.assertEqual(br["waiting"], 1)
         self.assertEqual(br["undecided"], 1)
 
+    def test_undecided_means_what_the_pass_actually_does(self):
+        """De bucket moet dezelfde vraag beantwoorden als de kandidaatkeuze.
+
+        `undecided` belooft de lezer dat geen automatisch pad de memory nog
+        verplaatst. Een verdict van een OUDERE promptversie wordt door
+        `candidates()` juist wel weer opgepakt, dus dat is geen undecided --
+        anders zegt de melding 'beslis met de hand' over werk dat de volgende
+        sweep zelf oppakt.
+        """
+        old = (date.today() - timedelta(days=3)).isoformat()
+        self._mem("stale_version.md", "unverified", old)
+        import _groundcheck
+        _groundcheck.record_attempt(
+            _groundcheck.attempt_key(self.vault / "09-memory" / "stale_version.md"),
+            "partial",
+            prompt_version=_groundcheck.VERIFY_PROMPT_VERSION - 1)
+        br = self.m.rot_breakdown(hours=48)
+        self.assertEqual(br["waiting"], 1)
+        self.assertEqual(br["undecided"], 0)
+
+    def test_a_broken_transcript_is_not_a_human_decision(self):
+        """Een inconclusief resultaat is geen oordeel over de memory.
+
+        `no_transcript` zegt dat de bron stuk is, niet dat de claim
+        onbeslisbaar is. Dat in de undecided-bak gooien stuurt de eigenaar
+        naar een beslissing die hij niet kan nemen.
+        """
+        old = (date.today() - timedelta(days=3)).isoformat()
+        self._mem("broken.md", "unverified", old)
+        import _groundcheck
+        _groundcheck.record_attempt(
+            _groundcheck.attempt_key(self.vault / "09-memory" / "broken.md"),
+            "no_transcript")
+        br = self.m.rot_breakdown(hours=48)
+        self.assertEqual(br["waiting"], 1)
+        self.assertEqual(br["undecided"], 0)
+
     def test_rot_breakdown_total_still_equals_rot_count(self):
         old = (date.today() - timedelta(days=3)).isoformat()
         self._mem("a.md", "unverified", old)

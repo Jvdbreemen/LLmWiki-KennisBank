@@ -92,9 +92,14 @@ def _rot_msgs(hb: dict) -> list:
         msgs.append(f"geheugen: {wacht} unverified memories ouder dan {uren}u "
                     f"wachten nog op een beoordeling (check sweep-launch/Ollama).")
     if onbeslist > 0:
+        # NIET /kennisbank:review: dat is de audit-view over de promotie- en
+        # sluitingslogboeken en kan alleen `demote` en `reopen`. Een unverified
+        # memory staat in geen van beide, dus dat commando verplaatst hem niet.
+        # Eén verkeerde aanwijzing vervangen door een andere is geen fix.
         msgs.append(f"geheugen: {onbeslist} beoordeelde memories bleven onbeslisbaar; "
-                    f"geen automatisch pad verplaatst die nog - beslis met "
-                    f"/kennisbank:review.")
+                    f"geen automatisch pad verplaatst die nog - bekijk ze met "
+                    f"'memory-doctor.py pending' en beslis per stuk met "
+                    f"'memory-doctor.py decide <stem> approve|reject'.")
     return msgs
 
 

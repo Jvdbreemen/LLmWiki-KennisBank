@@ -98,6 +98,13 @@ VERIFY_PASS_CAP = env_int("KB_VERIFY_CAP", 40)
 #: model still gets a second reading without anyone bumping a version.
 VERIFY_RETRY_DAYS = env_int("KB_VERIFY_RETRY_DAYS", 7)
 
+#: How long an INCONCLUSIVE outcome stands. `unparseable` says something about
+#: the run and must expire fast; `no_transcript` is deterministic -- an empty
+#: or truncated source yields an empty passage on every run, forever -- so it
+#: may not be free either, or those memories park at the head of the `created`
+#: sort and own the whole cap. Hours, not days.
+VERIFY_RETRY_HOURS = env_int("KB_VERIFY_RETRY_HOURS", 6)
+
 #: Where the decisive verdicts are remembered. A compact map, not a JSONL log
 #: like the promote log: those are pruned by line count, and the line pruned
 #: would be exactly the record that stops a re-judge. Not the memory's own
@@ -228,62 +235,125 @@ def attempt_key(path) -> str:
 
 
 def load_attempts() -> dict:
-    """The decisive verdicts seen so far, keyed by memory stem.
+    """The outcomes seen so far, keyed by vault-relative memory path.
 
-    Fail-open: a missing or corrupt file reads as "nothing judged yet", which
-    costs a round of verdicts and never freezes the queue.
+    A missing file reads as "nothing judged yet". An UNREADABLE one does not
+    quietly do the same: returning {} and then writing a single entry over the
+    top would replace recoverable history with one record, so the bad file is
+    moved aside for a human to look at first.
     """
+    p = attempts_path()
     try:
-        data = json.loads(attempts_path().read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) else {}
-    except (OSError, ValueError):
+        raw = p.read_text(encoding="utf-8")
+    except OSError:
         return {}
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        data = None
+    if isinstance(data, dict):
+        return data
+    try:
+        p.replace(p.with_suffix(".corrupt"))
+    except OSError:
+        pass
+    return {}
 
 
-def record_attempt(key: str, verdict: str, ts: str = "",
-                   prompt_version: int = VERIFY_PROMPT_VERSION) -> None:
-    """Remember a DECISIVE verdict so the next pass can spend its cap elsewhere.
+def outcome(verdict: str, ts: str = "",
+            prompt_version: int = VERIFY_PROMPT_VERSION) -> dict:
+    """One row of the attempts map."""
+    return {"ts": ts or datetime.now(timezone.utc).isoformat(),
+            "verdict": str(verdict), "prompt_version": prompt_version}
 
-    Only the four real verdicts count. `unparseable`, `no_transcript` and
-    raised exceptions say something about the RUN, not about the memory: a
-    model that was briefly down would otherwise cost a whole batch its
-    cooldown. Fail-soft on write -- bookkeeping may never block a sweep.
+
+def _write_attempts(data: dict) -> None:
+    p = attempts_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=str(p.parent), prefix=".kbva-", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, indent=1, ensure_ascii=False)
+        os.replace(tmp, p)
+    except OSError:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+
+
+def record_attempts(items: dict) -> None:
+    """Merge a batch of outcomes into the map in ONE read-modify-write.
+
+    Writing per verdict made a full backlog drain rewrite a growing file once
+    per memory -- quadratic I/O for bookkeeping, in a repo whose first rule is
+    that the interactive path stays fast. Merging on read also bounds the
+    damage when the sweep worker and the CLI overlap: the run that finishes
+    second keeps its own records and loses at most the other's, which costs
+    re-judging and never wrong data. Fail-soft: bookkeeping may not block a
+    sweep.
     """
-    if verdict not in VERDICTS or not key:
+    items = {k: v for k, v in (items or {}).items() if k}
+    if not items:
         return
     try:
         data = load_attempts()
-        data[key] = {"ts": ts or datetime.now(timezone.utc).isoformat(),
-                     "verdict": verdict, "prompt_version": prompt_version}
+        data.update(items)
         if len(data) > ATTEMPTS_MAX:
-            keep = sorted(data.items(), key=lambda kv: str(kv[1].get("ts", "")),
-                          reverse=True)[:ATTEMPTS_MAX]
-            data = dict(keep)
-        p = attempts_path()
-        p.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(dir=str(p.parent), prefix=".kbva-", suffix=".tmp")
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                json.dump(data, fh, indent=1, ensure_ascii=False)
-            os.replace(tmp, p)
-        except OSError:
-            try:
-                os.unlink(tmp)
-            except OSError:
-                pass
+            data = dict(sorted(data.items(),
+                               key=lambda kv: str(kv[1].get("ts", "")),
+                               reverse=True)[:ATTEMPTS_MAX])
+        _write_attempts(data)
     except Exception:
         pass
 
 
-def _retry_due(ts: str) -> bool:
-    """Has a recorded attempt aged past the cooldown? Unreadable stamp -> yes."""
+def record_attempt(key: str, verdict: str, ts: str = "",
+                   prompt_version: int = VERIFY_PROMPT_VERSION) -> None:
+    """One outcome, written straight through. Batch callers use record_attempts."""
+    if not verdict:
+        return
+    record_attempts({key: outcome(verdict, ts, prompt_version)})
+
+
+def _window(verdict: str) -> timedelta:
+    """How long an outcome stands before the memory is offered again.
+
+    A real verdict is about the memory and holds for days. Anything else is
+    about the run or about a broken source, and expires in hours.
+    """
+    return (timedelta(days=VERIFY_RETRY_DAYS) if verdict in VERDICTS
+            else timedelta(hours=VERIFY_RETRY_HOURS))
+
+
+def _retry_due(rec: dict) -> bool:
+    """Has a recorded outcome aged past its window? Unreadable stamp -> yes."""
     try:
-        dt = datetime.fromisoformat(str(ts))
-    except (TypeError, ValueError):
+        dt = datetime.fromisoformat(str(rec.get("ts", "")))
+    except (TypeError, ValueError, AttributeError):
         return True
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
-    return datetime.now(timezone.utc) - dt >= timedelta(days=VERIFY_RETRY_DAYS)
+    return datetime.now(timezone.utc) - dt >= _window(str(rec.get("verdict", "")))
+
+
+def _judged_here(rec) -> bool:
+    """Was this outcome produced by the prompt trap 1 runs today?"""
+    return (isinstance(rec, dict)
+            and rec.get("prompt_version") == VERIFY_PROMPT_VERSION)
+
+
+def is_settled(rec) -> bool:
+    """Will trap 1 leave this memory alone on its own next run?
+
+    ONE predicate, used by candidates() to pick and by rot_breakdown to
+    report. The two answered this question differently until a review caught
+    it: the report called every recorded memory final while the pass happily
+    requeued the ones on an older prompt version or past their window, so the
+    session-start message told the owner to decide by hand what the next
+    sweep was about to redo anyway.
+    """
+    return _judged_here(rec) and not _retry_due(rec)
 
 
 def _unverified_rows() -> list:
@@ -338,19 +408,18 @@ def candidates(max_n: int = VERIFY_PASS_CAP, retry_settled: bool = False) -> lis
     rows = _unverified_rows()
     if max_n is None:
         max_n = len(rows)
-    fresh, settled = [], []
+    fresh, due = [], []
     for row in rows:
         rec = att.get(attempt_key(row[1]))
-        if not isinstance(rec, dict) or rec.get("prompt_version") != VERIFY_PROMPT_VERSION:
+        if not _judged_here(rec):
             fresh.append(row)
-        else:
-            settled.append((str(rec.get("ts", "")), row))
+        elif retry_settled or not is_settled(rec):
+            due.append((str(rec.get("ts", "")), row))
     fresh.sort(key=lambda t: t[0])
     if len(fresh) >= max_n:
         return fresh[:max_n]
-    settled.sort(key=lambda t: t[0])
-    due = [row for ts, row in settled if retry_settled or _retry_due(ts)]
-    return fresh + due[:max_n - len(fresh)]
+    due.sort(key=lambda t: t[0])
+    return fresh + [row for _ts, row in due][:max_n - len(fresh)]
 
 
 def verify_pass(max_n: int = VERIFY_PASS_CAP) -> int:
@@ -367,17 +436,27 @@ def verify_pass(max_n: int = VERIFY_PASS_CAP) -> int:
 
     promoted = 0
     chunk_cache: dict = {}
-    for _created, f, body, src, stamp in candidates(max_n):
-        try:
-            if src not in chunk_cache:
-                chunk_cache[src] = su.chunk(ss.transcript_text(tdir / src))
-            r = verify_grounded(body, chunk_cache[src], stamp)
-        except Exception:
-            continue
-        record_attempt(attempt_key(f), r["verdict"])
-        if r["verdict"] != "supported":
-            continue
-        if _memory.promote(f, reason=r["reason"], route=r["route"],
-                           prompt_version=VERIFY_PROMPT_VERSION):
-            promoted += 1
+    learned: dict = {}
+    try:
+        for _created, f, body, src, stamp in candidates(max_n):
+            try:
+                if src not in chunk_cache:
+                    chunk_cache[src] = su.chunk(ss.transcript_text(tdir / src))
+                r = verify_grounded(body, chunk_cache[src], stamp)
+            except Exception:
+                continue
+            if r["verdict"] != "supported":
+                learned[attempt_key(f)] = outcome(r["verdict"])
+                continue
+            # Nothing is recorded on the promoting branch. A promoted memory
+            # leaves the unverified pool and can never be a candidate again,
+            # and a REFUSED promote (locked or read-only file) is not a
+            # settled memory: the write failed, the verdict did not. Recording
+            # it would park a memory trap 1 wanted to promote, with nothing in
+            # the promote log to show for it.
+            if _memory.promote(f, reason=r["reason"], route=r["route"],
+                               prompt_version=VERIFY_PROMPT_VERSION):
+                promoted += 1
+    finally:
+        record_attempts(learned)
     return promoted

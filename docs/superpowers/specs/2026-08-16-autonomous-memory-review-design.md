@@ -112,9 +112,19 @@ case is exactly the one an autonomous system should not force.
 > `KB_VERIFY_RETRY_DAYS` ago. It orders, it never excludes: trap 1 reads a
 > selected passage where trap 2 reads the whole transcript, so trap 1 does
 > promote memories the client graded `partial`, and those promotions are what
-> drains the queue. The rot count is now reported split — waiting versus
-> undecided — because the two need different advice, and the undecided half
-> needs a person (`/kennisbank:review`).
+> drains the queue. An inconclusive outcome (`unparseable`, `no_transcript`)
+> is recorded too but expires in `KB_VERIFY_RETRY_HOURS`, because
+> `no_transcript` is deterministic — an empty source yields an empty passage
+> on every run — and would otherwise own the head of the queue permanently,
+> the same starvation from the other side.
+>
+> The rot count is now reported split — waiting versus undecided — because the
+> two need different advice. The undecided half needs a person, through
+> `memory-doctor.py pending` and `decide <stem> approve|reject`. Not
+> `/kennisbank:review`: that command is the audit-view over the promotion and
+> closure logs and offers only `demote` and `reopen`, and an unverified memory
+> appears in neither log. Naming it would have replaced one wrong pointer with
+> another.
 
 ## Privacy gate
 

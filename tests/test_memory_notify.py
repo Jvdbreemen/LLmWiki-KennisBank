@@ -105,13 +105,29 @@ class MemoryNotifyTest(unittest.TestCase):
         melding = self.m.notice()
         self.assertIn("4", melding)
         self.assertIn("20", melding)
-        self.assertIn("/kennisbank:review", melding)
+        self.assertIn("decide", melding)
+
+    def test_de_genoemde_weg_kan_ook_echt_beslissen(self):
+        """Een verkeerde aanwijzing vervangen door een andere is geen fix.
+
+        /kennisbank:review noemt zichzelf de audit-view en kan alleen `demote`
+        en `reopen`: een unverified memory staat in geen van beide logboeken,
+        dus dat commando verplaatst hem niet. De weg die dat wel doet is
+        memory-doctor.py pending -> decide (de enige plek waar een mens een
+        unverified memory goedkeurt of afwijst).
+        """
+        self._hb({"errors": 0, "model_unreachable": False, "rot": 20,
+                  "rot_hours": 48, "rot_waiting": 0, "rot_undecided": 20})
+        melding = self.m.notice()
+        self.assertIn("memory-doctor.py", melding)
+        self.assertIn("decide", melding)
+        self.assertNotIn("/kennisbank:review", melding)
 
     def test_alleen_onbeslisbaar_wijst_niet_meer_naar_ollama(self):
         self._hb({"errors": 0, "model_unreachable": False, "rot": 20,
                   "rot_hours": 48, "rot_waiting": 0, "rot_undecided": 20})
         melding = self.m.notice()
-        self.assertIn("/kennisbank:review", melding)
+        self.assertIn("decide", melding)
         self.assertNotIn("ollama", melding.lower(),
                          "niets wees op het model; noem het dan ook niet")
 
@@ -120,7 +136,7 @@ class MemoryNotifyTest(unittest.TestCase):
                   "rot_hours": 48, "rot_waiting": 4, "rot_undecided": 0})
         melding = self.m.notice()
         self.assertIn("4", melding)
-        self.assertNotIn("/kennisbank:review", melding,
+        self.assertNotIn("decide", melding,
                          "niets is beoordeeld, dus er valt niets te beslissen")
 
     def _pending_transcript(self, name="t1.jsonl"):

@@ -93,7 +93,10 @@ def rot_breakdown(hours: int = 48) -> dict:
     unverified, en daar komt geen automatisch pad meer aan te pas: trap 1
     promoot alleen `supported` en trap 2 past alleen `supported`/`absent`
     toe, dus `partial` en `unclear` blijven eeuwig liggen (TASK-198). Alleen
-    een mens verplaatst die nog, via /kennisbank:review.
+    een mens verplaatst die nog, via `memory-doctor.py pending` gevolgd door
+    `decide <stem> approve|reject`. NIET via /kennisbank:review: dat command
+    is de audit-view en kan alleen `demote` en `reopen`, en een unverified
+    memory staat in geen van beide logboeken die het leest.
 
     Eén telling gaf één advies, en op de vault die dit blootlegde was dat
     advies fout: alle 24 rottende memories waren al beoordeeld, terwijl de
@@ -106,8 +109,10 @@ def rot_breakdown(hours: int = 48) -> dict:
     try:
         import _groundcheck
         judged, key_of = _groundcheck.load_attempts(), _groundcheck.attempt_key
+        settled, verdicts = _groundcheck.is_settled, _groundcheck.VERDICTS
     except Exception:
         judged, key_of = {}, (lambda p: "")
+        settled, verdicts = (lambda rec: False), ()
     # `created` in de frontmatter is een DATUM, niet een tijdstip. Een drempel in
     # uren kan hier dus nooit fijner werken dan een hele dag. Dat was verstopt:
     # `date.today() - timedelta(hours=36)` gooit de restfractie stilzwijgend weg
@@ -130,8 +135,14 @@ def rot_breakdown(hours: int = 48) -> dict:
             continue
         if d < cutoff:
             out["total"] += 1
-            bucket = "undecided" if isinstance(judged.get(key_of(f)), dict) else "waiting"
-            out[bucket] += 1
+            rec = judged.get(key_of(f))
+            # Undecided means BOTH: trap 1 will not return to it on its own,
+            # AND what it returned was a judgement about the claim. An
+            # inconclusive outcome (`no_transcript`, `unparseable`) says the
+            # source is broken or the run was, which is not something a person
+            # can decide -- that belongs in waiting, where the advice is right.
+            decided = settled(rec) and str(rec.get("verdict", "")) in verdicts
+            out["undecided" if decided else "waiting"] += 1
     return out
 
 
