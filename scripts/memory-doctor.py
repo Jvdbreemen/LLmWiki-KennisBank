@@ -105,9 +105,9 @@ def rot_breakdown(hours: int = 48) -> dict:
         return out
     try:
         import _groundcheck
-        judged = _groundcheck.load_attempts()
+        judged, key_of = _groundcheck.load_attempts(), _groundcheck.attempt_key
     except Exception:
-        judged = {}
+        judged, key_of = {}, (lambda p: "")
     # `created` in de frontmatter is een DATUM, niet een tijdstip. Een drempel in
     # uren kan hier dus nooit fijner werken dan een hele dag. Dat was verstopt:
     # `date.today() - timedelta(hours=36)` gooit de restfractie stilzwijgend weg
@@ -130,8 +130,8 @@ def rot_breakdown(hours: int = 48) -> dict:
             continue
         if d < cutoff:
             out["total"] += 1
-            key = "undecided" if isinstance(judged.get(f.stem), dict) else "waiting"
-            out[key] += 1
+            bucket = "undecided" if isinstance(judged.get(key_of(f)), dict) else "waiting"
+            out[bucket] += 1
     return out
 
 

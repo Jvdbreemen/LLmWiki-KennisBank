@@ -85,7 +85,7 @@ def main(argv=None) -> int:
                 continue
             # A dry run may not record either: the cooldown it wrote would rob
             # the real run that follows of its own candidates for a week.
-            _groundcheck.record_attempt(f.stem, r["verdict"])
+            _groundcheck.record_attempt(_groundcheck.attempt_key(f), r["verdict"])
             if r["verdict"] == "supported":
                 if _memory.promote(f, reason=r["reason"], route=r["route"],
                                    prompt_version=_groundcheck.VERIFY_PROMPT_VERSION):

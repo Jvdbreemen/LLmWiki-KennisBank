@@ -4,7 +4,7 @@ title: 'Memory review: `partial` is an absorbing state that starves trap 1'
 status: In Progress
 assignee: []
 created_date: '2026-08-17 05:29'
-updated_date: '2026-08-17 09:17'
+updated_date: '2026-08-17 19:50'
 labels:
   - memory
   - autonomous-review
@@ -15,6 +15,18 @@ references:
   - scripts/kb-autoreview.py
   - scripts/memory-notify.py
   - scripts/memory-sweep.py
+  - docs/superpowers/specs/2026-08-16-autonomous-memory-review-design.md
+modified_files:
+  - scripts/_groundcheck.py
+  - scripts/kb-verify.py
+  - scripts/memory-doctor.py
+  - scripts/memory-notify.py
+  - scripts/memory-sweep.py
+  - tests/test_groundcheck.py
+  - tests/test_kb_verify.py
+  - tests/test_memory_doctor.py
+  - tests/test_memory_notify.py
+  - tests/test_memory_sweep.py
   - docs/superpowers/specs/2026-08-16-autonomous-memory-review-design.md
 priority: high
 type: bug
@@ -55,12 +67,35 @@ Reconciliation of the three n's: heartbeat `unverified: 34` is a per-run write c
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Trap 1's candidate ordering does not starve newly captured memories: given more unverified-with-source memories than `VERIFY_PASS_CAP`, the candidate window is not composed entirely of previously-judged ones
-- [ ] #2 Memories that trap 1 can still promote keep being judged. Specifically, a trap-2 `partial` does not by itself disqualify a memory from trap 1 -- the two read different inputs (selected 6000-char passage vs whole transcript), and trap 1 currently promotes some memories the client read graded `partial`. That is the only thing draining the queue today and must not be suppressed
-- [ ] #3 The session-start message distinguishes 'not yet judged' from 'judged and undecidable', and names an action that actually applies to each
-- [ ] #4 A regression test covers the starvation case: more previously-judged memories than the cap, plus newer unverified ones, asserting the newer ones enter the candidate window
-- [ ] #5 `python -m pytest tests -q` is green
+- [x] #1 Trap 1's candidate ordering does not starve newly captured memories: given more unverified-with-source memories than `VERIFY_PASS_CAP`, the candidate window is not composed entirely of previously-judged ones
+- [x] #2 Memories that trap 1 can still promote keep being judged. Specifically, a trap-2 `partial` does not by itself disqualify a memory from trap 1 -- the two read different inputs (selected 6000-char passage vs whole transcript), and trap 1 currently promotes some memories the client read graded `partial`. That is the only thing draining the queue today and must not be suppressed
+- [x] #3 The session-start message distinguishes 'not yet judged' from 'judged and undecidable', and names an action that actually applies to each
+- [x] #4 A regression test covers the starvation case: more previously-judged memories than the cap, plus newer unverified ones, asserting the newer ones enter the candidate window
+- [x] #5 `python -m pytest tests -q` is green
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Trap 1 now keeps its own record of decisive verdicts and uses it to ORDER candidates, never to exclude them.
+
+- `scripts/_groundcheck.py`: `load_attempts()` / `record_attempt()` over `.claude/memory-verify-attempts.json` (compact map, atomic write, capped at 5000 newest). `candidates(max_n, retry_settled)` is now the single selection rule: tier A = no decisive verdict at the current `VERIFY_PROMPT_VERSION`, oldest `created` first; tier B = judged longer than `KB_VERIFY_RETRY_DAYS` (default 7) ago, oldest attempt first so retries rotate. `verify_pass` records every decisive verdict.
+- `scripts/kb-verify.py`: dropped its copied selection block in favour of `candidates()`, added `--retry-settled` for the deliberate drain, records nothing on `--dry-run`.
+- `scripts/memory-doctor.py`: `rot_breakdown()` splits the rot count into `waiting` / `undecided`; `rot_count()` delegates to it.
+- `scripts/memory-sweep.py`: heartbeat carries `rot_waiting` and `rot_undecided` next to the existing `rot`.
+- `scripts/memory-notify.py`: one clause per bucket. A heartbeat without the split keys falls back to a message that states the count and names no cause -- a wrong pointer costs more than none.
+
+Deliberate non-choices:
+- The attempts map holds trap 1's own verdicts only. Seeding it from the existing trap-2 batch would have suppressed exactly the promotions that still drain the queue.
+- Indecisive answers (`unparseable`, `no_transcript`, exceptions) are not recorded, so a briefly dead model cannot cost a batch its cooldown. Unreadable timestamps read as due, so a corrupt record cannot freeze a memory.
+- Not stored in memory frontmatter: writing 40 memory files per sweep changes their `semantic_hash` and forces a knowledge-graph re-extraction.
+
+`docs/superpowers/specs/2026-08-16-autonomous-memory-review-design.md` carries a correction under "No terminal limbo", which was wrong as written.
+
+Verification: `python -m pytest tests -q` -> 1591 passed, 3 skipped. Read-only simulation against the live vault: run 1 judges the 40 known partials once with trap 1's own reading, run 2 selects 40 memories dated 2026-08-16/17 with zero overlap. The vault self-corrects after one sweep -- no migration needed.
+
+Not deployed: `$VAULT/.claude/scripts` still runs the pre-fix copy, so the live vault keeps reporting the old message until the tooling is redeployed.
+<!-- SECTION:NOTES:END -->
 
 ## Comments
 

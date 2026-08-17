@@ -71,6 +71,9 @@ class KbVerifyTest(unittest.TestCase):
             encoding="utf-8")
         return p
 
+    def _key(self, stem):
+        return self._gc.attempt_key(self.vault / "09-memory" / f"{stem}.md")
+
     def _says(self, verdict):
         self._llm.generate = lambda *a, **k: json.dumps(
             {"verdict": verdict, "reason": "citaat"})
@@ -90,11 +93,12 @@ class KbVerifyTest(unittest.TestCase):
         self._mem("m")
         self._says("partial")
         self.assertEqual(self.m.main([]), 0)
-        self.assertEqual(self._gc.load_attempts()["m"]["verdict"], "partial")
+        self.assertEqual(
+            self._gc.load_attempts()[self._key("m")]["verdict"], "partial")
 
     def test_a_settled_memory_is_skipped_by_default(self):
         self._mem("m")
-        self._gc.record_attempt("m", "partial")
+        self._gc.record_attempt(self._key("m"), "partial")
         self._says("supported")
         self.assertEqual(self.m.main([]), 0)
         from _frontmatter import parse_frontmatter
@@ -105,7 +109,7 @@ class KbVerifyTest(unittest.TestCase):
     def test_retry_settled_drains_it_anyway(self):
         """De CLI is de bewuste drain; wie erom vraagt krijgt de hele backlog."""
         self._mem("m")
-        self._gc.record_attempt("m", "partial")
+        self._gc.record_attempt(self._key("m"), "partial")
         self._says("supported")
         self.assertEqual(self.m.main(["--retry-settled"]), 0)
         from _frontmatter import parse_frontmatter

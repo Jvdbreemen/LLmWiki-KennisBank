@@ -83,7 +83,9 @@ class MemoryDoctorTest(unittest.TestCase):
         self._mem("judged.md", "unverified", old)
         self._mem("fresh.md", "unverified", date.today().isoformat())
         import _groundcheck
-        _groundcheck.record_attempt("judged", "partial")
+        _groundcheck.record_attempt(
+            _groundcheck.attempt_key(self.vault / "09-memory" / "judged.md"),
+            "partial")
 
         br = self.m.rot_breakdown(hours=48)
         self.assertEqual(br["total"], 2, "fresh.md is below the cutoff")
@@ -95,7 +97,9 @@ class MemoryDoctorTest(unittest.TestCase):
         self._mem("a.md", "unverified", old)
         self._mem("b.md", "unverified", old)
         import _groundcheck
-        _groundcheck.record_attempt("a", "not_found")
+        _groundcheck.record_attempt(
+            _groundcheck.attempt_key(self.vault / "09-memory" / "a.md"),
+            "not_found")
         self.assertEqual(self.m.rot_breakdown(hours=48)["total"],
                          self.m.rot_count(hours=48))
 

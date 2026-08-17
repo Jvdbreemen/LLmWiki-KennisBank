@@ -263,9 +263,12 @@ class CandidateOrderTest(unittest.TestCase):
         from datetime import datetime, timedelta, timezone
         ts = (datetime.now(timezone.utc) - timedelta(days=days_ago)).isoformat()
         _groundcheck.record_attempt(
-            stem, verdict, ts=ts,
+            self._key(stem), verdict, ts=ts,
             prompt_version=(_groundcheck.VERIFY_PROMPT_VERSION
                             if version is None else version))
+
+    def _key(self, stem):
+        return _groundcheck.attempt_key(self.vault / "09-memory" / f"{stem}.md")
 
     def _stems(self, rows):
         return [Path(r[1]).stem for r in rows]
@@ -310,13 +313,32 @@ class CandidateOrderTest(unittest.TestCase):
         self.assertEqual(self._stems(_groundcheck.candidates(max_n=5)),
                          ["old-news"])
 
+    def test_two_memories_with_one_stem_do_not_share_a_cooldown(self):
+        """The scan is recursive and `09-memory/archive/` exists in the wild.
+
+        A bare stem is therefore not a key. Two files may carry the same one,
+        and then judging the archived copy would silently buy the live copy a
+        week off -- a starvation of exactly the kind this whole change exists
+        to remove, one memory at a time and invisible.
+        """
+        (self.vault / "09-memory" / "archive").mkdir()
+        live = self._mem("twin", created="2026-07-01")
+        archived = self.vault / "09-memory" / "archive" / "twin.md"
+        archived.write_text(live.read_text(encoding="utf-8"), encoding="utf-8")
+
+        _groundcheck.record_attempt(
+            _groundcheck.attempt_key(archived), "partial")
+        got = [Path(r[1]) for r in _groundcheck.candidates(max_n=5)]
+        self.assertIn(live, got, "the live twin was never judged")
+        self.assertNotIn(archived, got)
+
     def test_the_pass_records_the_verdict_that_did_not_promote(self):
         self._mem("m", created="2026-07-01")
         self._llm.generate = lambda *a, **k: json.dumps(
             {"verdict": "partial", "reason": "half"})
         self.assertEqual(_groundcheck.verify_pass(), 0)
         self.assertEqual(
-            _groundcheck.load_attempts()["m"]["verdict"], "partial")
+            _groundcheck.load_attempts()[self._key("m")]["verdict"], "partial")
 
     def test_an_indecisive_answer_is_not_recorded_as_an_attempt(self):
         """A dead or babbling model may not disqualify a memory for a week."""

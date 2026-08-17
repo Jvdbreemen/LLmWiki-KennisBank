@@ -211,6 +211,22 @@ def attempts_path() -> Path:
     return vault_root() / ".claude" / ATTEMPTS_FILE
 
 
+def attempt_key(path) -> str:
+    """The key a memory is remembered under: its vault-relative posix path.
+
+    Not the bare stem. The memory scan is recursive and `09-memory/archive/`
+    exists in real vaults, so two files can carry the same stem -- and then
+    judging one would silently buy the other a cooldown it never earned.
+    Falls back to the plain name for a path outside the vault, which only
+    happens in a caller's own fixtures.
+    """
+    p = Path(path)
+    try:
+        return p.resolve().relative_to(vault_root().resolve()).as_posix()
+    except (ValueError, OSError):
+        return p.name
+
+
 def load_attempts() -> dict:
     """The decisive verdicts seen so far, keyed by memory stem.
 
@@ -224,7 +240,7 @@ def load_attempts() -> dict:
         return {}
 
 
-def record_attempt(stem: str, verdict: str, ts: str = "",
+def record_attempt(key: str, verdict: str, ts: str = "",
                    prompt_version: int = VERIFY_PROMPT_VERSION) -> None:
     """Remember a DECISIVE verdict so the next pass can spend its cap elsewhere.
 
@@ -233,12 +249,12 @@ def record_attempt(stem: str, verdict: str, ts: str = "",
     model that was briefly down would otherwise cost a whole batch its
     cooldown. Fail-soft on write -- bookkeeping may never block a sweep.
     """
-    if verdict not in VERDICTS or not stem:
+    if verdict not in VERDICTS or not key:
         return
     try:
         data = load_attempts()
-        data[stem] = {"ts": ts or datetime.now(timezone.utc).isoformat(),
-                      "verdict": verdict, "prompt_version": prompt_version}
+        data[key] = {"ts": ts or datetime.now(timezone.utc).isoformat(),
+                     "verdict": verdict, "prompt_version": prompt_version}
         if len(data) > ATTEMPTS_MAX:
             keep = sorted(data.items(), key=lambda kv: str(kv[1].get("ts", "")),
                           reverse=True)[:ATTEMPTS_MAX]
@@ -324,7 +340,7 @@ def candidates(max_n: int = VERIFY_PASS_CAP, retry_settled: bool = False) -> lis
         max_n = len(rows)
     fresh, settled = [], []
     for row in rows:
-        rec = att.get(row[1].stem)
+        rec = att.get(attempt_key(row[1]))
         if not isinstance(rec, dict) or rec.get("prompt_version") != VERIFY_PROMPT_VERSION:
             fresh.append(row)
         else:
@@ -358,7 +374,7 @@ def verify_pass(max_n: int = VERIFY_PASS_CAP) -> int:
             r = verify_grounded(body, chunk_cache[src], stamp)
         except Exception:
             continue
-        record_attempt(f.stem, r["verdict"])
+        record_attempt(attempt_key(f), r["verdict"])
         if r["verdict"] != "supported":
             continue
         if _memory.promote(f, reason=r["reason"], route=r["route"],

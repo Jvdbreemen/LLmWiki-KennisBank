@@ -235,7 +235,7 @@ class MemorySweepTest(unittest.TestCase):
         old = (date.today() - timedelta(days=5)).isoformat()
         p = _memory.write("Al beoordeeld", "iets", status="unverified", created=old)
         _memory.write("Nooit beoordeeld", "anders", status="unverified", created=old)
-        _groundcheck.record_attempt(Path(p).stem, "partial")
+        _groundcheck.record_attempt(_groundcheck.attempt_key(p), "partial")
 
         self.m.run_sweep()
         data = json.loads((self.vault / ".claude" / "memory-sweep-status.json")

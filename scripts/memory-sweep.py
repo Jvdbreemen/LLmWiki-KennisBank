@@ -184,7 +184,7 @@ def _expire_pass() -> int:
 ROT_HOURS = 48
 
 
-def _rot_count() -> "dict | None":
+def _rot_breakdown() -> "dict | None":
     """Tel de unverified memories die blijven liggen. None als het niet lukt.
 
     Levert sinds TASK-198 de SPLITSING (total/waiting/undecided), niet één
@@ -253,7 +253,7 @@ def _write_heartbeat(summary: dict) -> None:
     # terugkeert: de telling is een lokale scan en heeft met Ollama niets te
     # maken. Hem alleen op het geslaagde pad schrijven zou de melding stil laten
     # verdwijnen juist wanneer er iets aan de hand is.
-    rot = _rot_count()
+    rot = _rot_breakdown()
     if rot is not None:
         out["rot"] = rot["total"]
         out["rot_hours"] = ROT_HOURS
