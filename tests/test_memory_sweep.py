@@ -222,6 +222,28 @@ class MemorySweepTest(unittest.TestCase):
         self.assertTrue(data.get("model_unreachable"))
         self.assertIn("rot", data)
 
+    def test_heartbeat_splitst_de_rot_telling(self):
+        """TASK-198: memory-notify kan alleen splitsen wat de sweep meetelt.
+
+        Twee even oude rottende memories, één met een beslissend trap-1-verdict
+        achter de rug. Zonder deze sleutels valt de melding terug op één getal
+        en dus op één advies, en dat advies was fout voor de helft van het veld.
+        """
+        from datetime import date, timedelta
+        import _memory
+        import _groundcheck
+        old = (date.today() - timedelta(days=5)).isoformat()
+        p = _memory.write("Al beoordeeld", "iets", status="unverified", created=old)
+        _memory.write("Nooit beoordeeld", "anders", status="unverified", created=old)
+        _groundcheck.record_attempt(_groundcheck.attempt_key(p), "partial")
+
+        self.m.run_sweep()
+        data = json.loads((self.vault / ".claude" / "memory-sweep-status.json")
+                          .read_text(encoding="utf-8"))
+        self.assertEqual(data["rot_waiting"] + data["rot_undecided"], data["rot"])
+        self.assertGreaterEqual(data["rot_undecided"], 1)
+        self.assertGreaterEqual(data["rot_waiting"], 1)
+
     def test_expire_pass_flips_past_expires(self):
         import _memory
         old = _memory.write("Vluchtig", "iets", status="current",

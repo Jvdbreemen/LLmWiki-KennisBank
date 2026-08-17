@@ -207,6 +207,215 @@ class VerifyPassTest(unittest.TestCase):
         self.assertEqual(rows[0]["route"], "stamp")
 
 
+class CandidateOrderTest(unittest.TestCase):
+    """Trap 1 must remember what it already judged, or it re-judges forever.
+
+    Measured on the real vault (TASK-198): 40 of 40 slots in the cap window
+    were memories a client read had already graded `partial`, so the 49
+    newer ones were never judged at all. Oldest-first with no record of past
+    attempts turns a stable verdict into a permanent occupation of the
+    budget.
+
+    The fix ORDERS, it does not exclude: a settled memory returns to the
+    queue once the cooldown lapses or the prompt version changes. Trap 1
+    reads a selected passage where the client read the whole transcript, so
+    it does promote memories the client called `partial` -- disqualifying
+    those would kill the only promotions still happening.
+    """
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="kb-cand-"))
+        self.vault = self.tmp / "vault"
+        (self.vault / "01-raw" / "transcripts").mkdir(parents=True)
+        (self.vault / "09-memory").mkdir(parents=True)
+        (self.vault / ".claude").mkdir(parents=True)
+        self._saved = os.environ.get("KENNISBANK_VAULT")
+        os.environ["KENNISBANK_VAULT"] = str(self.vault)
+        global _groundcheck, _memory
+        _groundcheck, _memory = _mods()
+        (self.vault / "01-raw" / "transcripts" / "s1.jsonl").write_text(
+            json.dumps({"type": "user", "message": {
+                "role": "user", "content": "De drempel is 0.75 geworden."}}),
+            encoding="utf-8")
+        import _llm
+        self._orig_generate = _llm.generate
+        self._llm = _llm
+
+    def tearDown(self):
+        self._llm.generate = self._orig_generate
+        if self._saved is None:
+            os.environ.pop("KENNISBANK_VAULT", None)
+        else:
+            os.environ["KENNISBANK_VAULT"] = self._saved
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _mem(self, stem, created="2026-08-01"):
+        p = self.vault / "09-memory" / f"{stem}.md"
+        p.write_text("\n".join([
+            "---", f"title: {stem}", "type: memory", "status: unverified",
+            'source_session: "s1.jsonl"', f"created: {created}",
+            'source_chunk: "1/1"', "---", "", f"Claim uit {stem}.", ""]),
+            encoding="utf-8")
+        return p
+
+    def _settle(self, stem, days_ago=0, verdict="partial", version=None):
+        """Record a decisive trap-1 attempt `days_ago` days in the past."""
+        from datetime import datetime, timedelta, timezone
+        ts = (datetime.now(timezone.utc) - timedelta(days=days_ago)).isoformat()
+        _groundcheck.record_attempt(
+            self._key(stem), verdict, ts=ts,
+            prompt_version=(_groundcheck.VERIFY_PROMPT_VERSION
+                            if version is None else version))
+
+    def _key(self, stem):
+        return _groundcheck.attempt_key(self.vault / "09-memory" / f"{stem}.md")
+
+    def _stems(self, rows):
+        return [Path(r[1]).stem for r in rows]
+
+    def test_never_judged_memories_win_the_cap_over_settled_ones(self):
+        """The starvation regression: settled memories may not own the budget.
+
+        Three settled memories are OLDER than two never-judged ones, so plain
+        oldest-first would hand them the whole cap of two. It must not.
+        """
+        for i, day in enumerate(("2026-07-01", "2026-07-02", "2026-07-03")):
+            self._mem(f"settled-{i}", created=day)
+            self._settle(f"settled-{i}", days_ago=0)
+        self._mem("fresh-a", created="2026-08-01")
+        self._mem("fresh-b", created="2026-08-02")
+
+        got = self._stems(_groundcheck.candidates(max_n=2))
+        self.assertEqual(got, ["fresh-a", "fresh-b"])
+
+    def test_a_settled_memory_returns_once_the_cooldown_lapses(self):
+        """Ordering, not exclusion: nothing is disqualified for good."""
+        self._mem("old-news", created="2026-07-01")
+        self._settle("old-news", days_ago=_groundcheck.VERIFY_RETRY_DAYS + 1)
+        self.assertEqual(self._stems(_groundcheck.candidates(max_n=5)),
+                         ["old-news"])
+
+    def test_a_recently_settled_memory_is_left_alone(self):
+        """With nothing else to do the pass does LESS work, not the same work.
+
+        This is the cost half of the defect: 40 memories re-judged every run
+        at 6-8s of local LLM each, for a verdict that never changes.
+        """
+        self._mem("old-news", created="2026-07-01")
+        self._settle("old-news", days_ago=0)
+        self.assertEqual(_groundcheck.candidates(max_n=5), [])
+
+    def test_a_prompt_version_bump_reopens_everything(self):
+        """A new prompt is the one reason to expect a different answer."""
+        self._mem("old-news", created="2026-07-01")
+        self._settle("old-news", days_ago=0,
+                     version=_groundcheck.VERIFY_PROMPT_VERSION - 1)
+        self.assertEqual(self._stems(_groundcheck.candidates(max_n=5)),
+                         ["old-news"])
+
+    def test_two_memories_with_one_stem_do_not_share_a_cooldown(self):
+        """The scan is recursive and `09-memory/archive/` exists in the wild.
+
+        A bare stem is therefore not a key. Two files may carry the same one,
+        and then judging the archived copy would silently buy the live copy a
+        week off -- a starvation of exactly the kind this whole change exists
+        to remove, one memory at a time and invisible.
+        """
+        (self.vault / "09-memory" / "archive").mkdir()
+        live = self._mem("twin", created="2026-07-01")
+        archived = self.vault / "09-memory" / "archive" / "twin.md"
+        archived.write_text(live.read_text(encoding="utf-8"), encoding="utf-8")
+
+        _groundcheck.record_attempt(
+            _groundcheck.attempt_key(archived), "partial")
+        got = [Path(r[1]) for r in _groundcheck.candidates(max_n=5)]
+        self.assertIn(live, got, "the live twin was never judged")
+        self.assertNotIn(archived, got)
+
+    def test_the_pass_records_the_verdict_that_did_not_promote(self):
+        self._mem("m", created="2026-07-01")
+        self._llm.generate = lambda *a, **k: json.dumps(
+            {"verdict": "partial", "reason": "half"})
+        self.assertEqual(_groundcheck.verify_pass(), 0)
+        self.assertEqual(
+            _groundcheck.load_attempts()[self._key("m")]["verdict"], "partial")
+
+    def test_an_indecisive_answer_costs_hours_not_days(self):
+        """A dead model may not disqualify a memory for a week -- but an
+        inconclusive outcome may not be free either.
+
+        `no_transcript` is DETERMINISTIC: an empty or truncated source yields
+        an empty passage on every run, forever. Not recording it at all left
+        such memories in the never-judged tier permanently, where the
+        `created` sort parks them at the head of the queue -- the starvation
+        this change exists to remove, arriving from the other side.
+        """
+        self._mem("m", created="2026-07-01")
+        self._llm.generate = lambda *a, **k: ""
+        self.assertEqual(_groundcheck.verify_pass(), 0)
+        rec = _groundcheck.load_attempts()[self._key("m")]
+        self.assertEqual(rec["verdict"], "unparseable")
+        self.assertEqual(_groundcheck.candidates(max_n=5), [],
+                         "inside its short window it is not a candidate")
+
+        self._settle("m", days_ago=1, verdict="unparseable")
+        self.assertEqual(len(_groundcheck.candidates(max_n=5)), 1,
+                         "a day later it is due again; hours, not days")
+
+    def test_a_refused_promotion_does_not_buy_a_cooldown(self):
+        """`supported` plus a refused write is not a settled memory.
+
+        _memory.promote returns False on a locked or read-only file, which is
+        ordinary on Windows with a sync client holding it. Recording the
+        verdict anyway would park a memory that trap 1 WANTED to promote for
+        a week, with nothing in the promote log to show for it.
+        """
+        self._mem("m", created="2026-07-01")
+        self._llm.generate = lambda *a, **k: json.dumps(
+            {"verdict": "supported", "reason": "citaat"})
+        orig = _memory.promote
+        _memory.promote = lambda *a, **k: False
+        try:
+            self.assertEqual(_groundcheck.verify_pass(), 0)
+        finally:
+            _memory.promote = orig
+        self.assertEqual(_groundcheck.load_attempts(), {})
+
+    def test_the_pass_writes_the_map_once_not_once_per_memory(self):
+        """Bookkeeping may not be O(n^2) on a repo whose first rule is speed.
+
+        A read-modify-write per verdict makes a full backlog drain rewrite a
+        growing file thousands of times.
+        """
+        for i in range(5):
+            self._mem(f"m{i}", created=f"2026-07-0{i + 1}")
+        self._llm.generate = lambda *a, **k: json.dumps(
+            {"verdict": "partial", "reason": "half"})
+        writes = []
+        orig = _groundcheck.os.replace
+        _groundcheck.os.replace = lambda a, b: (writes.append(b), orig(a, b))[1]
+        try:
+            _groundcheck.verify_pass()
+        finally:
+            _groundcheck.os.replace = orig
+        self.assertEqual(len(_groundcheck.load_attempts()), 5)
+        self.assertLessEqual(len(writes), 2, f"{len(writes)} writes for 5 verdicts")
+
+    def test_a_corrupt_attempts_file_is_moved_aside_not_overwritten(self):
+        """Fail-open may cost a round of verdicts; it may not erase history.
+
+        Reading {} from a truncated file and then writing one entry over the
+        top of it replaces recoverable data with a single record.
+        """
+        _groundcheck.record_attempt(self._key("earlier"), "partial")
+        p = _groundcheck.attempts_path()
+        p.write_text("{ this is not json", encoding="utf-8")
+        _groundcheck.record_attempt(self._key("later"), "partial")
+        self.assertEqual(list(_groundcheck.load_attempts()), [self._key("later")])
+        self.assertTrue(p.with_suffix(".corrupt").exists(),
+                        "the unreadable file must survive for a human to look at")
+
+
 class PromptContractTest(unittest.TestCase):
     def setUp(self):
         global _groundcheck, _memory
