@@ -592,6 +592,15 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
         # De import zelf faalde: geen enkele pass heeft gedraaid.
         _note_pass_failure(s, "maintenance", e)
 
+    # Gedeeld current_focus-blok (TASK-201): geschreven waar al het andere
+    # zware werk woont -- off de hot path, lokaal model, wholesale vervangen.
+    # Fail-soft: een dood model laat het vorige blok staan.
+    try:
+        import _focus
+        _run_pass(s, "focus_updated", lambda: int(_focus.update_focus()))
+    except Exception as e:
+        _note_pass_failure(s, "focus_updated", e)
+
     _write_heartbeat(s)
     return s
 

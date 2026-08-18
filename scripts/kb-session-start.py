@@ -70,6 +70,9 @@ NOTIFICATIONS = (
     # cwd-aware + fail-open: stil buiten een repo of als alles up-to-date is.
     # Erft de 300s freshness-gate van de coordinator, dus geen fetch-spam.
     Job("git-upstream-check.py", timeout=15),
+    # Het gedeelde current_focus-blok (TASK-201): dezelfde werkstand voor elke
+    # client. Pure bestandslezing; het schrijven gebeurt door de sweep.
+    Job("focus-notify.py", timeout=15),
 )
 
 
