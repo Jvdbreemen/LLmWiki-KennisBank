@@ -1,0 +1,489 @@
+openapi: 3.1.0
+info:
+  title: KennisBank Atlas Sidecar API
+  version: "0.1.0"
+  description: >
+    Local-only, read-mostly HTTP API served by the Atlas desktop app's Python
+    sidecar (FastAPI, PyInstaller-frozen). Binds 127.0.0.1 exclusively —
+    loopback-only, never 0.0.0.0. Not exposed to the network. Spawned as a
+    child process of the Tauri shell and reached only from the bundled
+    frontend (or a local dev instance) via the CSP-restricted origin set
+    (localhost/127.0.0.1 dev ports, tauri://localhost, http://tauri.localhost).
+
+    Verified directly against source: atlas/sidecar/app.py (route
+    declarations) and atlas/sidecar/sources.py (response builders, DocError
+    status codes) as of this document's generation — 13 routes confirmed,
+    matching docs/C4-Documentation/c4-code-atlas-sidecar.md's claim of 13.
+
+    All GET routes are fail-open: a missing store (kb-index.db absent,
+    Ollama down, graph.json missing) degrades the payload to an empty-but-
+    valid shape (e.g. status: "degraded" or "empty") rather than returning
+    5xx. The one exception is /doc, /asset, and POST /memory/decide, which
+    return 400/404 for invalid input (path traversal, wrong extension,
+    invalid stem/decision, missing file) — these are validation errors, not
+    server failures.
+servers:
+  - url: http://127.0.0.1:{port}
+    description: Ephemeral loopback port, negotiated by the Tauri shell at launch and injected into the frontend as window.__ATLAS_PORT__ (bundled) or passed via ?port= (dev mode, launch.py).
+    variables:
+      port:
+        default: "PORT"
+paths:
+  /health:
+    get:
+      summary: Liveness and source-readiness probe
+      description: Polled by the frontend at boot with unbounded exponential backoff (starts 400ms, x1.5, capped 2s) to tolerate PyInstaller cold-boot latency.
+      operationId: getHealth
+      responses:
+        "200":
+          description: Always 200; overall status reflects source availability, not HTTP success.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, version, vault, sources]
+                properties:
+                  status:
+                    type: string
+                    enum: [ok, degraded, empty]
+                    description: "ok = all sources present; empty = none present; degraded = partial."
+                  version:
+                    type: string
+                    example: "0.1.0"
+                  vault:
+                    type: string
+                    description: Absolute vault root path.
+                  sources:
+                    type: object
+                    required: [kb_index, activity, usage, memory, graph, ollama]
+                    properties:
+                      kb_index: {type: boolean}
+                      activity: {type: boolean}
+                      usage: {type: boolean}
+                      memory: {type: boolean}
+                      graph: {type: boolean}
+                      ollama: {type: boolean, description: "Live GET /api/version probe against local Ollama, 1s timeout."}
+
+  /graph:
+    get:
+      summary: Bi-temporal knowledge graph (file-level, collapsed from graphify's fragment-level output)
+      operationId: getGraph
+      parameters:
+        - name: include_memory
+          in: query
+          schema: {type: boolean, default: false}
+          description: Include memory-fragment nodes alongside wiki nodes.
+      responses:
+        "200":
+          description: Graph payload; fail-open to empty nodes/links if graph.json is missing or unreadable.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: {type: string}
+                  nodes:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: {type: string}
+                        label: {type: string}
+                        kind: {type: string}
+                        layer: {type: string}
+                        node_status: {type: string}
+                        community: {type: integer}
+                        community_name: {type: string}
+                        memory_type: {type: string}
+                        importance: {type: integer}
+                        warmth: {type: number}
+                        created: {type: string}
+                        valid_from: {type: string, nullable: true}
+                        valid_until: {type: string, nullable: true}
+                        degree: {type: integer}
+                  links:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        source: {type: string}
+                        target: {type: string}
+                        rel: {type: string}
+                        weight: {type: number}
+
+  /timeline:
+    get:
+      summary: Bi-temporal activity aggregation over kb-activity.db
+      operationId: getTimeline
+      parameters:
+        - name: bucket
+          in: query
+          schema: {type: string, enum: [day, week], default: day}
+        - name: from
+          in: query
+          schema: {type: string, format: date}
+        - name: to
+          in: query
+          schema: {type: string, format: date}
+        - name: dimension
+          in: query
+          schema: {type: string, enum: [event, capture], default: event}
+      responses:
+        "200":
+          description: Bucketed event/capture counts.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: {type: string}
+                  buckets:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        start: {type: string}
+                        end: {type: string}
+                        event_count: {type: integer}
+                        capture_count: {type: integer}
+                        by_kind: {type: object, additionalProperties: {type: integer}}
+
+  /memory-health:
+    get:
+      summary: Memory lifecycle counts, review queue, supersede chains, heatmap, warmth ranking
+      operationId: getMemoryHealth
+      responses:
+        "200":
+          description: Read-only aggregation over 09-memory/*.md frontmatter.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: {type: string}
+                  counts:
+                    type: object
+                    properties:
+                      active: {type: integer}
+                      quarantined: {type: integer}
+                      superseded: {type: integer}
+                      unverified: {type: integer}
+                  queue:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: {type: string}
+                        importance: {type: integer}
+                        created: {type: string}
+                  supersede_chains:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        head: {type: string}
+                        chain: {type: array, items: {type: string}}
+                        missing: {type: boolean}
+                        valid_until: {type: string, nullable: true}
+                  heatmap:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: {type: string}
+                        importance: {type: integer}
+                        age_days: {type: integer}
+                  warmth:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        path: {type: string}
+                        warmth: {type: number}
+                        last_used: {type: string, nullable: true}
+                        temperature: {type: string}
+                  quarantine:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: {type: string}
+                        reason: {type: string}
+
+  /overview:
+    get:
+      summary: Single-page vault health dashboard
+      description: TTL-cached 30s per (vault, date); invalidated immediately by POST /memory/decide.
+      operationId: getOverview
+      responses:
+        "200":
+          description: Aggregated counts across wiki, memory, raw sessions, inbox, provenance, graph staleness.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: {type: string}
+                  wiki:
+                    type: object
+                    properties:
+                      total: {type: integer}
+                      by_status: {type: object, additionalProperties: {type: integer}}
+                  memory: {type: object}
+                  memory_status: {type: object}
+                  raw:
+                    type: object
+                    properties:
+                      sessies: {type: integer}
+                      transcripts: {type: integer}
+                  inbox_waiting: {type: integer}
+                  provenance:
+                    type: object
+                    properties:
+                      sourced: {type: integer}
+                      total: {type: integer}
+                  graph_stale: {type: boolean}
+                  heatmap: {type: array, items: {type: object}}
+                  freshness: {type: object}
+
+  /titles:
+    get:
+      summary: All indexed document titles (backs the Cmd/Ctrl+K palette)
+      description: Fetched once per session by the frontend.
+      operationId: getTitles
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: {type: string}
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        title: {type: string}
+                        path: {type: string, description: Vault-relative POSIX path.}
+                        layer: {type: string}
+
+  /doc:
+    get:
+      summary: Read one markdown document by vault-relative path
+      operationId: getDoc
+      parameters:
+        - name: path
+          in: query
+          required: true
+          schema: {type: string}
+          description: Vault-relative POSIX path; must end in .md. Path-traversal guarded via resolved-path containment check.
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: {type: string}
+                  path: {type: string}
+                  title: {type: string}
+                  content: {type: string}
+        "400":
+          description: Non-.md path, or path resolves outside the vault root.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ErrorDetail"}
+        "404":
+          description: File does not exist, or is unreadable.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ErrorDetail"}
+
+  /asset:
+    get:
+      summary: Read one image asset by vault-relative path
+      operationId: getAsset
+      parameters:
+        - name: path
+          in: query
+          required: true
+          schema: {type: string}
+          description: Vault-relative POSIX path; extension must be one of .png/.jpg/.jpeg/.gif/.webp/.svg. Path-traversal guarded.
+      responses:
+        "200":
+          description: Raw file bytes with the matching Content-Type.
+          content:
+            image/*:
+              schema: {type: string, format: binary}
+        "400":
+          description: Unsupported extension, or path resolves outside the vault root.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ErrorDetail"}
+        "404":
+          description: File does not exist.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ErrorDetail"}
+
+  /graphify-html:
+    get:
+      summary: Serve graphify's self-contained interactive graph.html
+      description: Embedded by the Graphify lens in an iframe; served over loopback HTTP (not file://) so its scripts execute.
+      operationId: getGraphifyHtml
+      responses:
+        "200":
+          content:
+            text/html:
+              schema: {type: string}
+        "404":
+          description: graphify-out/graph.html not present in the vault.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ErrorDetail"}
+    head:
+      summary: Existence probe for graphify-out/graph.html
+      description: Explicit HEAD support — the Graphify lens probes with HEAD before embedding; FastAPI's @app.get alone would answer HEAD with 405.
+      operationId: headGraphifyHtml
+      responses:
+        "200": {description: File exists.}
+        "404": {description: File does not exist.}
+
+  /recall:
+    get:
+      summary: Live retrieval waterfall (vector-KNN, FTS, RRF fusion, rerank factors)
+      description: Reuses the vault's production kb-recall/_rank pipeline in-process for data parity with the CLI. Fail-open to status "degraded" with empty stages if Ollama or the index is unavailable.
+      operationId: getRecall
+      parameters:
+        - name: q
+          in: query
+          schema: {type: string, default: ""}
+        - name: k
+          in: query
+          schema: {type: integer, default: 3}
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: {type: string, enum: [ok, degraded]}
+                  query: {type: string}
+                  stages:
+                    type: object
+                    properties:
+                      vector: {type: array, items: {type: object}}
+                      fts: {type: array, items: {type: object}}
+                      rrf: {type: array, items: {type: object}}
+                      rerank: {type: array, items: {type: object}}
+                  final:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        path: {type: string}
+                        score: {type: number}
+                        snippet: {type: string}
+                        neighbor: {type: boolean, nullable: true}
+
+  /memory-links:
+    get:
+      summary: Memory-fragment-to-wiki-article backlink map
+      description: In-process cached for the sidecar's process lifetime; background-warmed at startup (~47s) when a real kb-index.db exists. Fail-open to empty maps on any error.
+      operationId: getMemoryLinks
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: {type: string}
+                  links: {type: object, additionalProperties: {type: string}, description: "stem -> wiki_path"}
+                  counts: {type: object, additionalProperties: {type: integer}, description: "wiki_path -> link count"}
+                  types: {type: object, additionalProperties: {type: string}, description: "stem -> memory_type"}
+
+  /provenance:
+    get:
+      summary: Vault-wide provenance coverage
+      description: Prefers the vault's own kb-lint for authoritative results; falls back to a heuristic scan if kb-lint is unavailable.
+      operationId: getProvenance
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: {type: string}
+                  coverage:
+                    type: object
+                    properties:
+                      sourced: {type: integer}
+                      unsourced: {type: integer}
+                      total: {type: integer}
+                  unsourced:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        path: {type: string}
+                        reason: {type: string}
+                        types: {type: array, items: {type: string}}
+
+  /memory/decide:
+    post:
+      summary: Approve or reject one unverified memory fragment
+      description: >
+        The sole write path in the entire Atlas component. Guarded on every
+        axis: stem must contain no /, \, or .. ; the resolved target must
+        land inside 09-memory/; the file must exist; frontmatter must
+        currently read status: unverified; only unverified->current
+        (approve) or unverified->retracted (reject) transitions are
+        permitted. Touches only the status: line of the target file's
+        frontmatter. Prefers the vault's shared _memory.decide() codepath
+        (TASK-89) for centralized guard logic and audit logging, falling
+        back to an inline reimplementation on older vaults lacking that
+        module. Invalidates the 30s /overview TTL cache on success.
+      operationId: postMemoryDecide
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [stem, decision]
+              properties:
+                stem: {type: string, description: "Memory fragment filename stem (no path separators)."}
+                decision: {type: string, enum: [approve, reject]}
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: {type: string}
+                  stem: {type: string}
+                  new_status: {type: string, enum: [current, retracted]}
+        "400":
+          description: Invalid stem (path separators, traversal), unknown decision value, or memory not in unverified status.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ErrorDetail"}
+        "404":
+          description: Memory fragment file does not exist.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ErrorDetail"}
+
+components:
+  schemas:
+    ErrorDetail:
+      type: object
+      properties:
+        detail:
+          type: string
+          description: FastAPI HTTPException detail message (Dutch-language strings in source, e.g. "alleen .md-bestanden", "pad buiten de vault").

@@ -1,0 +1,188 @@
+# KennisBank MCP Tool Contract
+#
+# IMPORTANT: This is NOT an HTTP/REST API and this file is NOT OpenAPI.
+# MCP (Model Context Protocol) is a stdio, JSON-RPC-based protocol between
+# an agent harness and a local server process. There are no paths, no HTTP
+# methods, and no network transport — the harness spawns
+#   <py -3 | python3> <vault>/.claude/scripts/kb-mcp.py
+# as a child process and speaks initialize() / list_tools() / call_tool()
+# over stdin/stdout. This file is a tool-contract listing (name, input
+# schema, output shape, side effects) documenting that surface, not a
+# request/response API spec.
+#
+# Reached today by: Codex CLI, OpenCode, GitHub Copilot CLI — each pointed
+# at the same command via install-agent-envs.py's _mcp_server_argv(vault).
+# Claude Code does NOT register this server; Claude reaches KennisBank
+# exclusively through the hook path (see docs/C4-Documentation/c4-container.md
+# section 2.1). Registration is only accepted as valid after
+# install-agent-envs.py:validate_mcp_runtime performs a real initialize() +
+# list_tools() handshake and confirms every tool name below is present
+# (contract rule C9) — a config file naming the server is not sufficient.
+#
+# Verified directly against source: scripts/kb-mcp.py (8 @mcp.tool()-
+# decorated functions confirmed by grep, matching the 8 operations
+# documented in c4-component-agent-integration.md and
+# c4-component-temporal-recall.md combined). Note: some component-doc prose
+# says "six tools" when referring to the base set before the four temporal
+# tools were counted individually elsewhere in the same document set — this
+# file uses the verified source count of 8 as authoritative.
+
+protocol: MCP (Model Context Protocol) over stdio
+transport: stdio (spawned child process, one per agent session)
+server_command: "<py -3 | python3> <vault>/.claude/scripts/kb-mcp.py"
+server_module: scripts/kb-mcp.py
+sdk: "mcp Python SDK, pinned mcp==1.28.1, + anyio"
+registered_by: [Codex CLI, OpenCode, GitHub Copilot CLI]
+not_registered_by: [Claude Code]
+acceptance_test: >
+  install-agent-envs.py:validate_mcp_runtime — runs a real initialize() +
+  list_tools() handshake and requires all 8 tool names present before an
+  install is accepted as successful (contract rule C9).
+
+tools:
+  - name: recall
+    handler: recall_tool
+    source_ref: "scripts/kb-mcp.py:150"
+    summary: >
+      Search the vault (memory + wiki) and return relevant knowledge as
+      text. Per the Copilot instructions block, this must be called before
+      falling back to external search.
+    side_effects: none (read-only)
+    input_schema:
+      type: object
+      required: [query]
+      properties:
+        query: {type: string, description: "Search query text."}
+        k: {type: integer, default: 5, description: "Max results to return."}
+        compact: {type: boolean, default: false, keyword_only: true, description: "Short human-readable summary instead of full text."}
+    output:
+      type: string
+      description: Formatted text block of relevant vault knowledge, ready for prompt injection.
+
+  - name: capture
+    handler: capture_tool
+    source_ref: "scripts/kb-mcp.py:179"
+    summary: >
+      Write a new memory into the vault's memory layer (pull-write — the
+      agent explicitly decides to capture, as opposed to the automatic
+      extraction pipeline in the background workers container).
+    side_effects: "Writes a new memory fragment file under 09-memory/, status=unverified."
+    input_schema:
+      type: object
+      required: [title, body]
+      properties:
+        title: {type: string}
+        body: {type: string}
+        memory_type: {type: string, default: "feit", enum: [feit, voorkeur, procedure, beslissing]}
+        importance: {type: integer, default: 3, minimum: 1, maximum: 5}
+    output:
+      type: string
+      description: Confirmation text (memory identifier / stem written).
+
+  - name: review_pending
+    handler: review_pending_tool
+    source_ref: "scripts/kb-mcp.py:213"
+    summary: "Read-only: list the unverified-memory review queue (TASK-89)."
+    side_effects: none (read-only)
+    input_schema:
+      type: object
+      properties:
+        k: {type: integer, default: 10, description: "Max queue items to return."}
+    output:
+      type: string
+      description: Formatted list of pending unverified memory items.
+
+  - name: review_decide
+    handler: review_decide_tool
+    source_ref: "scripts/kb-mcp.py:230"
+    summary: >
+      Apply one human review decision to a pending memory item. MUST only
+      be called after the user has explicitly confirmed the decision for
+      that specific item in the conversation — this is a human-review
+      backstop (Trap 3 of the memory lifecycle's three-trap pipeline), not
+      an autonomous action.
+    side_effects: "Mutates one memory fragment's frontmatter status; logs to the append-only discard/audit log."
+    input_schema:
+      type: object
+      required: [stem, decision]
+      properties:
+        stem: {type: string, description: "Memory fragment filename stem."}
+        decision: {type: string, enum: [approve, reject, skip]}
+    output:
+      type: string
+      description: Confirmation text of the applied (or skipped) decision.
+
+  - name: what_did_i_do
+    handler: what_did_i_do_tool
+    source_ref: "scripts/kb-mcp.py:278"
+    summary: "Temporal activity recall for a date or period ('what happened on/in X')."
+    side_effects: none (read-only)
+    input_schema:
+      type: object
+      required: [date_or_period]
+      properties:
+        date_or_period: {type: string, description: "Deterministic-first parsed date/period phrase (e.g. 'gisteren', 'last week', '2026-08-01')."}
+        topic: {type: string, default: ""}
+        project: {type: string, default: ""}
+        max_events: {type: integer, default: 25}
+    output:
+      description: "Structured dict (JSON) by default; a short human-readable string when KENNISBANK_MCP_COMPACT_OUTPUT=1 is set in the client env (Copilot only)."
+      oneOf:
+        - type: object
+        - type: string
+    shared_dispatcher: "_activity_call (scripts/kb-mcp.py:258) — guards against the activity module being unavailable and converts exceptions to warnings rather than raising."
+
+  - name: timeline
+    handler: timeline_tool
+    source_ref: "scripts/kb-mcp.py:286"
+    summary: "Chronological activity timeline for a period."
+    side_effects: none (read-only)
+    input_schema:
+      type: object
+      required: [period]
+      properties:
+        period: {type: string}
+        topic: {type: string, default: ""}
+        project: {type: string, default: ""}
+        max_events: {type: integer, default: 50}
+    output:
+      oneOf: [{type: object}, {type: string}]
+    shared_dispatcher: "_activity_call"
+
+  - name: weeklog
+    handler: weeklog_tool
+    source_ref: "scripts/kb-mcp.py:294"
+    summary: "Weekly rollup of activity with source references."
+    side_effects: none (read-only)
+    input_schema:
+      type: object
+      properties:
+        period: {type: string, default: "vorige week"}
+        topic: {type: string, default: ""}
+        project: {type: string, default: ""}
+        max_events: {type: integer, default: 100}
+    output:
+      oneOf: [{type: object}, {type: string}]
+    shared_dispatcher: "_activity_call"
+
+  - name: topic_timeline
+    handler: topic_timeline_tool
+    source_ref: "scripts/kb-mcp.py:302"
+    summary: "Follow one topic or entity through time."
+    side_effects: none (read-only)
+    input_schema:
+      type: object
+      required: [topic]
+      properties:
+        topic: {type: string}
+        period: {type: string, default: "afgelopen 90 dagen"}
+        project: {type: string, default: ""}
+        max_events: {type: integer, default: 80}
+    output:
+      oneOf: [{type: object}, {type: string}]
+    shared_dispatcher: "_activity_call"
+
+notes:
+  - "All 8 tools live in one process (kb-mcp.py) and share the same Python API used by the CLI hook scripts and Atlas sidecar — no separate reimplementation of retrieval, memory, or activity logic exists behind the MCP surface."
+  - "compact output mode (KENNISBANK_MCP_COMPACT_OUTPUT=1) is set only by _copilot.py (scripts/_copilot.py:46), i.e. it is a Copilot-specific env-driven behavior, not something Codex or OpenCode configure."
+  - "review_decide and capture are the only tools with write side effects; every other tool is read-only against kb-index.db / kb-activity.db / 09-memory frontmatter."
