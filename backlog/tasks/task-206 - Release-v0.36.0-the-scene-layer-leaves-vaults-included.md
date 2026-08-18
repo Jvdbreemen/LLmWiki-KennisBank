@@ -1,7 +1,7 @@
 ---
 id: TASK-206
 title: 'Release v0.36.0 - the scene layer leaves, vaults included'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-18 21:35'
 labels:
@@ -24,11 +24,21 @@ Minor, not patch, despite chore:/fix: commit labels: removes the `scene_retrieva
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 CHANGELOG.md carries a dated [0.36.0] section and both compare links are updated
-- [ ] #2 README.md and README.nl.md highlight sections updated in the same edit
-- [ ] #3 Full suite green before the docs edit; documentation subset green after
-- [ ] #4 PR against origin/main, CI green, review processed (Copilot if it appears; it has been silent upstream since #137)
-- [ ] #5 Merge verified on origin/main before tagging; tag equals that SHA via git rev-list -n1
-- [ ] #6 Release published with a non-empty body
-- [ ] #7 This task and TASK-205 administration closed
+- [x] #1 CHANGELOG.md carries a dated [0.36.0] section and both compare links are updated
+- [x] #2 README.md and README.nl.md highlight sections updated in the same edit
+- [x] #3 Full suite green before the docs edit; documentation subset green after
+- [x] #4 PR against origin/main, CI green, review processed (Copilot if it appears; it has been silent upstream since #137)
+- [x] #5 Merge verified on origin/main before tagging; tag equals that SHA via git rev-list -n1
+- [x] #6 Release published with a non-empty body
+- [x] #7 This task and TASK-205 administration closed
 <!-- AC:END -->
+
+## Final Summary
+
+v0.36.0 released. Tag on c76f124 (merge of PR #146), verified equal to
+origin/main via rev-list before publishing. Release body 3136 chars,
+non-empty verified. Gate: full suite 1587/3 via tree-identity with the
+reviewed #145 head, docs subset 56 passed after the docs edit. Copilot
+absent upstream (silent since #137); the code was second-reader-reviewed
+on #145 with 9 findings fixed. Carries TASK-205 and migration
+0.36.0 scene-laag-opruimen.
