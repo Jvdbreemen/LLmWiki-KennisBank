@@ -216,6 +216,16 @@ def main(argv=None) -> int:
                 hours = int(argv[argv.index("--hours") + 1])
             except Exception:
                 hours = 48
+        # --json geeft de splitsing die rot_breakdown() al kende maar die geen
+        # enkele consument kon bereiken: `rot` printte alleen het totaal, dus
+        # doctor.sh moest wel een oorzaak verzinnen bij een getal dat er twee
+        # bevatte (TASK-200). Het kale `rot` blijft het totaal printen -- dat
+        # is een bestaand contract, en een shell die alleen "is er rot?" vraagt
+        # hoeft niet te leren JSON te lezen.
+        if "--json" in argv:
+            import json as _json
+            print(_json.dumps(rot_breakdown(hours), sort_keys=True))
+            return 0
         print(rot_count(hours))
         return 0
     if argv and argv[0] == "closed":
