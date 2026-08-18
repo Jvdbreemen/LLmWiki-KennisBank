@@ -1,7 +1,7 @@
 ---
 id: TASK-205
 title: Remove the L2 scene retrieval layer after its measured rejection
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-18 17:18'
 labels:
@@ -52,11 +52,36 @@ An ADR records the reversal, so the next person proposing a scene layer meets th
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 No `scene` identifier remains in scripts/ outside `_querycache.py`'s docstring history note
-- [ ] #2 `kb-recall.recall_hits` and `memory_hits` no longer take a `scene_prior` argument, and no caller passes one
-- [ ] #3 The `scene_retrieval`, `scene_clusterer`, `scene_floor` and `scene_boost` knobs are gone from `_settings.py`, `kb-retrieve.py`, the settings command and the upgrade skill
-- [ ] #4 `docs/research/l2-scene-retrieval-2026-08.md`, the spec, the plan and the CHANGELOG history are untouched
-- [ ] #5 `_querycache.py` still exists and rank-factors plus rerank-ceiling still work
-- [ ] #6 An ADR records the reversal, cites the four failed winner-rule conditions and the oracle ceiling, and is linted
-- [ ] #7 `python -m pytest tests -q` is green with the scene tests removed rather than skipped
+- [x] #1 No `scene` identifier remains in scripts/ outside `_querycache.py`'s docstring history note
+- [x] #2 `kb-recall.recall_hits` and `memory_hits` no longer take a `scene_prior` argument, and no caller passes one
+- [x] #3 The `scene_retrieval`, `scene_clusterer`, `scene_floor` and `scene_boost` knobs are gone from `_settings.py`, `kb-retrieve.py`, the settings command and the upgrade skill
+- [x] #4 `docs/research/l2-scene-retrieval-2026-08.md`, the spec, the plan and the CHANGELOG history are untouched
+- [x] #5 `_querycache.py` still exists and rank-factors plus rerank-ceiling still work
+- [x] #6 An ADR records the reversal, cites the four failed winner-rule conditions and the oracle ceiling, and is linted
+- [x] #7 `python -m pytest tests -q` is green with the scene tests removed rather than skipped
 <!-- AC:END -->
+
+## Final Summary
+
+Committed as d203384 on chore/task-205-remove-scene-layer, built in a separate
+worktree because the shared checkout carries another session's uncommitted
+v0.35.0 release work. Net: 32 files, +402/-2009. Suite 1575 passed / 3 skipped
+with the real pytest exit code captured (an earlier run reported exit 0 through
+a tail pipe while 2 tests failed).
+
+Those 2 failures were the repo's own guards catching what the sweep missed:
+kennisbank-settings.example.json still shipped scene_retrieval, and the
+ghost-env-var guard flagged KB_SCENE_* documented in the kept spec/plan. Fixes:
+example cleaned; docs/superpowers/ added to _markdown_files() exclusions in
+test_docs_consistency.py - dated specs/plans are decision records of the same
+class as research and ADRs, which were already excluded. That widening covers
+every consistency check sharing the generator; flagged in the commit body.
+
+ADR-008 iterated to adr-kit grade A 1.0 (initially C: missing Related
+Decisions/References; the ADR-001 reference names the legacy file
+0001-embedding-model-default.md because the linter cannot resolve the old
+numbering). tests/test_no_scene_layer.py (9 guards) pins the removal and tells
+any future re-introduction to delete the file in the same change.
+
+Open: PR to fork/upstream (after the parallel v0.35.0 release lands), and
+kb-scene.db still in the deployed vault (3.5 MB, derived, deletable any time).
