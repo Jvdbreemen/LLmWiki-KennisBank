@@ -145,10 +145,10 @@ class MemoryFloorIsOneNumberEverywhereTest(unittest.TestCase):
 
 class RetrievalTogglesHaveAProductionReaderTest(unittest.TestCase):
     """A toggle in DEFAULTS that no production path reads is a documented
-    no-op — exactly what scene_retrieval was before TASK-188."""
+    no-op. scene_retrieval was exactly that before TASK-188, and the layer it
+    gated was removed altogether in ADR-008."""
 
     READERS = {
-        "scene_retrieval": "kb-retrieve.py",
         "graph_retrieval": "kb-recall.py",
     }
 
@@ -159,8 +159,6 @@ class RetrievalTogglesHaveAProductionReaderTest(unittest.TestCase):
                           f"{fname} never reads the {key} toggle")
 
 
-if __name__ == "__main__":
-    unittest.main()
 class CouplingKnobsMatchTheirDocsTest(unittest.TestCase):
     """De coupling-boosts (TASK-88) zijn geen cosinus-drempels en horen dus
     niet in kb-calibrate.CURRENT_KNOBS; hun documentatie-pinning gebeurt hier:
@@ -208,3 +206,7 @@ class RetrieveThresholdIsOneNumberEverywhereTest(unittest.TestCase):
         self.assertTrue(found, "kb-search.py names no threshold default")
         self.assertEqual(found, {self._hook_default()},
                          f"kb-search.py defaults {found} against hook {self._hook_default()}")
+
+
+if __name__ == "__main__":
+    unittest.main()

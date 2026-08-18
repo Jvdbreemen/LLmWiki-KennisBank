@@ -321,17 +321,11 @@ The entire suite is isolated via conftest.py and __init__.py:
 
 ### 17. Scene Management
 
-**Purpose**: Tests scene capture, retrieval, reporting, and experimental scene features.
 
 | Test Module | Test Classes | Key Methods | Responsibilities |
 |---|---|---|---|
-| `test_scenes.py` | `ScenesTest` | `test_scene_*`, `test_layout_*` | Scene object structure (metadata, blocks, relationships) |
-| `test_scene_experiment.py` | (function-style) | `test_experiment_*` | Experimental scene features (A/B testing, feature flags) |
-| `test_scene_recall.py` | (function-style) | `test_recall_*` | Scene recall from memory/index |
-| `test_scene_report.py` | (function-style) | `test_report_*` | Scene reporting (summarize scene content) |
 
 **Dependencies**:
-- Internal: `scripts/_scenes.py`, `scripts/build-scene-index.py`
 - External: `unittest`, `json`, `pathlib`
 
 ---
@@ -530,7 +524,6 @@ The entire suite is isolated via conftest.py and __init__.py:
 - `scripts/_querycache.py` — Query result caching
 - `scripts/_rank.py` — Ranking factors and scoring
 - `scripts/_reconcile.py` — State reconciliation after crashes
-- `scripts/_scenes.py` — Scene capture and retrieval
 - `scripts/_settings.py` — Settings file loading and defaults
 - `scripts/_sweepstate.py` — Embedding sweep state management
 - `scripts/_sweeputil.py` — Embedding sweep utilities
@@ -540,7 +533,7 @@ The entire suite is isolated via conftest.py and __init__.py:
 
 ### Command Scripts
 - `scripts/kb-*.py` (kb-retrieve, kb-recall, kb-search, kb-ask, kb-lint, kb-verify, kb-mcp, kb-normalize, kb-calibrate, kb-eval, etc.)
-- `scripts/build-*.py` (build-kb-index, build-embed-index, build-graph-index, build-scene-index, etc.)
+- `scripts/build-*.py` (build-kb-index, build-embed-index, build-graph-index, etc.)
 - `scripts/import-*.py` (import-chatgpt-export, import-copilot, etc.)
 - `scripts/*-scan.py` (conflict-scan, wiki-scan, intake-scan, stale-check, git-upstream-check)
 - `scripts/*-sweep.py` (embed-sweep, memory-sweep, judge-model-sweep)

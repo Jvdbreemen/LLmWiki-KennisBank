@@ -53,6 +53,15 @@ def _markdown_files():
             continue
         if "research" in rel.parts or "docs" in rel.parts and "adr" in rel.parts:
             continue
+        # docs/superpowers holds dated decision records (specs, plans) -- the
+        # same class as research and ADRs above: they describe what was true
+        # then, not what is true now. ADR-008 removed a feature whose spec
+        # documents its env vars; the record must survive without tripping
+        # the ghost-var guard. Anchored to the exact tree, not a bare name,
+        # so a future living doc in a directory merely named "superpowers"
+        # does not silently escape every guard sharing this generator.
+        if rel.parts[:2] == ("docs", "superpowers"):
+            continue
         yield path
 
 

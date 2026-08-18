@@ -197,7 +197,7 @@ ADR-0001 is styled distinctly (yellow) because, while its `Status` field still r
 | ADR-006 | Accepted | Active |
 | ADR-007 | Accepted | Active |
 
-No ADR in this inventory carries `Proposed` status as of the source documents read; all decisions documented are either binding (Accepted) or explicitly retired (Superseded). Several research reports (memory-ranking-cosine, recall-after-growth, L2 scene retrieval) describe changes that did **not** pass their pre-registered gate — those remain proposals, not decisions, and are not represented as ADRs.
+No ADR in this inventory carries `Proposed` status as of the source documents read; all decisions documented are either binding (Accepted) or explicitly retired (Superseded). Several research reports (memory-ranking-cosine, recall-after-growth) describe changes that did **not** pass their pre-registered gate — those remain proposals, not decisions, and are not represented as ADRs. The L2 scene retrieval outcome, by contrast, IS a decision: ADR-008 records the layer's removal after its measurement.
 
 ---
 

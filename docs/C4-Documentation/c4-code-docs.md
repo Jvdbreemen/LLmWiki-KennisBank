@@ -110,6 +110,11 @@ KennisBank uses Architecture Decision Records (MADR format for newer decisions) 
 - **Impacts**: `scripts/kb-session-start.py`, `scripts/_hooks_manifest.py`, `scripts/install-agent-envs.py`, `scripts/_copilot.py`
 - **Related**: Refines ADR-0003 D3; ADR-0002 cross-platform rules still apply
 
+#### ADR-008: Remove the L2 Scene Retrieval Layer After Its Measured Rejection
+- **Status**: Accepted (2026-08-18)
+- **Location**: [`docs/adr/ADR-008-remove-the-l2-scene-retrieval-layer.md`](../adr/ADR-008-remove-the-l2-scene-retrieval-layer.md)
+- **Decision**: remove the scene tier entirely after all four winner-rule conditions failed; the oracle ceiling (+0.040 recall@5) is the reopening condition.
+
 #### ADR-007: Coordinate Session Logging and Exit Work Behind One Client Hook
 - **Status**: Accepted
 - **Date**: 2026-07-19
@@ -193,6 +198,7 @@ Research reports document empirical validation, benchmarking, and decision-backi
 - **Honcho as mirror** (`2026-08-15`): Convergence on "reason at write, retrieve at read"; Honcho's per-observer perspective novel; one idea adopted (TASK-193), two queued (TASK-194, TASK-171)
 - **Judge model (4b vs 9b)** (`2026-08-12`): qwen3.5:4b wins on every criterion; 35% supersede agreement vs 25%, lower false-positive rate; 9b latency disqualifying (extraction 5x slower); uncovered bug in qwen3.5 reasoning (`think: false`), affecting all measurements
 - **L2 scene retrieval** (`2026-08-11`): Community-derived scenes (245 total) show oracle ceiling +0.055 r@5 if clustering 5x better; measured arms not cleared +0.02 gate; not adopted; binding constraint is cosine threshold (0.75) not k
+  - **Outcome:** no arm met the winner rule; the layer was removed entirely in ADR-008 (2026-08-18). The report is kept as the record.
 - **LLM grounded verification** (`2026-08-15`): qwen3.5:4b passes all criteria (variance, determinism, agreement); 0 fabricated evidence quotes across 210 cases; model found support humans missed; clears implementation threshold
 - **Memory ranking (cosine)** (`2026-08-16`): Holdout gate failed despite dev gains; production 0.286 vs cosine 0.357 r@1; change blocked by holdout assessment; pre-registered gates enforced
 - **Narrowed supersede closure** (`2026-08-16`): Tightening criteria reduces NARROWED closures from 57.8% to 37.5%; reopening 64 memories restores oldest-wins r@5 from 0.000 to 0.333; knowledge recovery validated
@@ -305,7 +311,7 @@ graph LR
 
 ### Documentation Format Evolution
 
-ADRs 0001–0004 use the lightweight Nygard format. ADRs 005–007 use MADR (Markdown ADR) format with explicit status history, decision drivers, considered options, confirmation criteria, and enforcement patterns. The newer format is preferred for agent-readable structure but both are maintained for backward compatibility.
+ADRs 0001–0004 use the lightweight Nygard format. ADRs 005–008 use MADR (Markdown ADR) format with explicit status history, decision drivers, considered options, confirmation criteria, and enforcement patterns. The newer format is preferred for agent-readable structure but both are maintained for backward compatibility.
 
 ### Status Summary
 
@@ -324,7 +330,7 @@ ADRs 0001–0004 use the lightweight Nygard format. ADRs 005–007 use MADR (Mar
 All named scripts in ADRs exist and are tracked in `scripts/`:
 - Session coordinators: `kb-session-start.py`, `kb-session-end.py`, `kb-session-log.py` ✓
 - Capture and activity: `archive-transcript.py`, `kb-copilot-capture.py`, `import-copilot.py` ✓
-- Index builders: `build-embed-index.py`, `build-kb-index.py`, `build-activity-index.py`, `build-scene-index.py` ✓
+- Index builders: `build-embed-index.py`, `build-kb-index.py`, `build-activity-index.py` ✓
 - Recall and ranking: `kb-recall.py`, `rank-factors.py` ✓
 - Installation: `install-agent-envs.py` ✓
 - Utilities and internals: `_vaultpath.py`, `_hooks_manifest.py`, `_copilot.py`, `kb-mcp.py` ✓

@@ -21,7 +21,7 @@ import os
 import sys
 from pathlib import Path
 
-VERSION = "0.9.0"
+VERSION = "0.36.0"
 STAMP_REL = ".claude/.kennisbank-schema-version"
 
 
@@ -83,11 +83,29 @@ def _m_memory_toggles(vault_root, ctx):
     s.migrate()
 
 
+def _m_prune_scene_layer(vault_root, ctx):
+    # ADR-008: the L2 scene layer was removed from the repo, but setup.sh
+    # deploys additively and never prunes. Without this, an upgraded vault
+    # keeps the deleted scripts forever -- and the stale scene-experiment.py
+    # crashes with a TypeError against the upgraded kb-recall (it passes a
+    # scene_prior kwarg that no longer exists). kb-scene.db is derived, has
+    # no builder left, and goes with them. Idempotent: missing files are fine.
+    claude = Path(vault_root) / ".claude"
+    for rel in ("scripts/_scenes.py", "scripts/build-scene-index.py",
+                "scripts/scene-experiment.py", "scripts/scene-report.py",
+                "kb-scene.db"):
+        try:
+            (claude / rel).unlink()
+        except FileNotFoundError:
+            pass
+
+
 # (versie, naam, apply_fn(vault_root, ctx)). Geordend; idempotent.
 MIGRATIONS = [
     ("0.9.0", "geheugen-dirs", _m_memory_dirs),
     ("0.9.0", "geheugen-hooks", _m_register_hooks),
     ("0.9.0", "geheugen-toggles", _m_memory_toggles),
+    ("0.36.0", "scene-laag-opruimen", _m_prune_scene_layer),
 ]
 
 

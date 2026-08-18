@@ -26,7 +26,6 @@ QUERY_FILES = [
     "scripts/recall-ablation.py",
     "scripts/rank-factors.py",
     "scripts/rerank-ceiling.py",
-    "scripts/scene-experiment.py",
     "scripts/find-similar.py",
     "scripts/_groundcheck.py",
     "atlas/sidecar/sources.py",

@@ -426,14 +426,6 @@ Entry points for user interaction and scheduled work:
   - Retrieve relevant context for fact and ask judge if it's grounded.
   - **Location**: [_groundcheck.py:*](../../scripts/_groundcheck.py)
 
-#### _scenes.py
-**Purpose**: Scene (context cluster) management.
-
-**Functions**:
-- `load_scenes(vault: Path | None = None) → list`
-  - Load registered scenes.
-  - **Location**: [_scenes.py:*](../../scripts/_scenes.py)
-
 #### _progress.py, _transcript.py, _provenance.py
 **Purpose**: Supporting modules for progress tracking, transcript handling, and provenance.
 
@@ -481,9 +473,6 @@ These are invoked by the Claude Code harness on UserPromptSubmit (synchronously,
   - Rebuild activity log from source files.
   - **Location**: [build-activity-index.py](../../scripts/build-activity-index.py)
 
-- **build-scene-index.py** (~6.8KB)
-  - Rebuild scene (context cluster) index.
-  - **Location**: [build-scene-index.py](../../scripts/build-scene-index.py)
 
 - **build-graph-index.py** (~4.6KB)
   - Build knowledge graph (wiki links, cross-references).
@@ -663,7 +652,6 @@ These are invoked by the Claude Code harness on UserPromptSubmit (synchronously,
 - `_maintenance` → maintenance (uses all above)
 - `_copilot` → Copilot integration (uses _vaultpath, _settings)
 - `_groundcheck` → fact-checking (uses _embeddings, _kbindex, _llm)
-- `_scenes` → scene clustering
 - `_provenance` → source tracking
 
 **Tier 4 (CLI)**: Entry points using Tier 1-3
@@ -746,7 +734,6 @@ Tier 3 (Domain Logic)
 ├─ _maintenance.py (passes, uses all Tier 3)
 ├─ _copilot.py (integration, uses Tier 1)
 ├─ _groundcheck.py (fact-checking, uses _embeddings, _kbindex, _llm)
-├─ _scenes.py (context clusters)
 └─ _provenance.py (source tracking)
 
 Tier 4 (CLI/Entry Points)

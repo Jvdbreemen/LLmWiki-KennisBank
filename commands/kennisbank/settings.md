@@ -17,7 +17,7 @@ dagelijkse graphify-gate).
 Lees per toggle de waarde via de helper. Gebruik de canonieke keys en hun default:
 
 ```bash
-for key in auto_archive distill_notify embed_index daily_graphify memory_capture memory_recall usage_telemetry activity_llm_fallback checkpoints orientation graph_retrieval scene_retrieval; do
+for key in auto_archive distill_notify embed_index daily_graphify memory_capture memory_recall usage_telemetry activity_llm_fallback checkpoints orientation graph_retrieval; do
   val=$(python3 "$VAULT/.claude/scripts/_settings.py" get "$key")
   echo "$key=$val"
 done
@@ -41,13 +41,12 @@ doet:
 - **checkpoints** (default UIT) - schrijf bij context-compaction (Claude PreCompact) automatisch een werkstand-stub en meld die bij de volgende sessiestart. Uit = alleen handmatige checkpoints via `/checkpoint`.
 - **orientation** (default UIT) - toon bij sessiestart een compacte vault-orientatie: documentcounts, recent gewijzigde artikelen, veelgebruikte kennis en open backlog-taken. Uit = alleen on-demand via `/sessiestart`.
 - **graph_retrieval** (default AAN sinds de A/B-poort van 2026-07-29, TASK-87) - haal de (buur)-entry in de hook-injectie uit de gewogen graafindex (kb-graph.db) in plaats van de legacy wikilink-scan. Aanzetten alleen na een kb-eval A/B op sets van >=100 vragen (bewijsregel TASK-86).
-- **scene_retrieval** (default UIT, TASK-134) - laat de afgeleide scene-laag (kb-scene.db) als prior meewegen bij memory-recall: leden van de best passende scene komen binnen op een lagere drempel en/of krijgen een score-bonus. Scenes worden zelf nooit als hit teruggegeven. Uit = exact het baseline-gedrag. Aanzetten alleen als de gestageerde meting de winnaarsregel haalt.
 
 Vraag de gewenste staat tekstueel uit (NIET via `AskUserQuestion`: die tool
-staat maximaal 4 opties per vraag toe, en er zijn 12 toggles; een enkele
+staat maximaal 4 opties per vraag toe, en er zijn 11 toggles; een enkele
 multiSelect-vraag met 10 opties faalt met een `InputValidationError`).
 
-Toon de 12 toggles genummerd met hun huidige staat (aan/uit uit stap 1) en vraag
+Toon de 11 toggles genummerd met hun huidige staat (aan/uit uit stap 1) en vraag
 de gebruiker welke moeten wijzigen, bijvoorbeeld: "Noem de toggles die je wilt
 omzetten (bv. `auto_archive uit, memory_recall aan`), of antwoord `niets` om de
 huidige staat te behouden." Neem voor elke niet-genoemde toggle de huidige
@@ -72,7 +71,6 @@ python3 "$VAULT/.claude/scripts/_settings.py" set activity_llm_fallback <true|fa
 python3 "$VAULT/.claude/scripts/_settings.py" set checkpoints <true|false>
 python3 "$VAULT/.claude/scripts/_settings.py" set orientation <true|false>
 python3 "$VAULT/.claude/scripts/_settings.py" set graph_retrieval <true|false>
-python3 "$VAULT/.claude/scripts/_settings.py" set scene_retrieval <true|false>
 ```
 
 ## Bevestiging
