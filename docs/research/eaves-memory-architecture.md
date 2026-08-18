@@ -29,14 +29,14 @@ The three findings, in descending order of value:
    second agent starting within 300 seconds of the first silently receives no
    memory-health notice, no distillation notice, no orientation and no
    upstream warning. This is ours, not Eaves' — asking their question of our
-   code is what surfaced it. **TASK-199.**
+   code is what surfaced it. **TASK-202.**
 2. **Our reranker multiplies metadata onto a relevance term RRF has
    flattened.** Checking Eaves' criticism of RRF against our code turned up
    more than a fusion choice: on a top-8 memory recall the RRF relevance spread
    is 1.12x while the six `_rank.py` multipliers span 5.68x, so recency alone
    outweighs the entire relevance ordering. The cosine that carries the real
    gradient is already computed and already returned on every hit — and
-   `rerank` ignores it. **TASK-200.**
+   `rerank` ignores it. **TASK-203.**
 3. **A working-state tier that is held, not retrieved.** Eaves keeps small,
    always-in-context, agent-edited core-memory blocks alongside the searchable
    archive. KennisBank has the archive and the retrieval, and its only
@@ -172,7 +172,7 @@ structural rather than taste.
 
 ## Adopted
 
-### TASK-199 — the freshness gate needs to be per client
+### TASK-202 — the freshness gate needs to be per client
 
 `kb-session-start.py` reads one state file for the whole vault
 (`state_path = runtime / STATE_NAME`, line 492) and gates on elapsed time alone
@@ -226,7 +226,7 @@ it has become something else and the task is wrong.
 
 ## Adopted, pending measurement
 
-### TASK-200 — the relevance term is flattened, and the fix is already in the row
+### TASK-203 — the relevance term is flattened, and the fix is already in the row
 
 The sharpest outcome of the review, and it is not a thing to copy — it is a
 thing their comment made us go and check.
@@ -373,7 +373,7 @@ freshness gate that has never been asked which client it is talking to.
 
 The retrieval loop measures itself. The multi-client loop does not measure
 itself at all, because nothing has been counting how often a second client
-starts inside a first client's window. TASK-199 fixes the gate; the more
+starts inside a first client's window. TASK-202 fixes the gate; the more
 durable lesson is that "several agents at once" is a mode this vault has been
 running in for two releases without a single measurement pointed at it.
 

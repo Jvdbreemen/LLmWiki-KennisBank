@@ -1,5 +1,5 @@
 ---
-id: TASK-199
+id: TASK-202
 title: >-
   SessionStart freshness gate is vault-global: a second client gets no notices
 status: To Do
