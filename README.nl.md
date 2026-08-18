@@ -76,7 +76,42 @@ Geheugensystemen van leveranciers (Mem0, Zep, Letta, Cognee) zijn krachtig maar 
 
 De ontwerpvoorkeur is overal dezelfde: **deterministisch waar mogelijk, LLM alleen waar het oordeelsvermogen toevoegt, fail-open overal**. Een dood model blokkeert nooit een sessie, verliest nooit een transcript, en verwijdert nooit geverifieerde kennis.
 
-## Functie-highlights (v0.34.0)
+## Functie-highlights (v0.35.0)
+
+### Nieuw in v0.35.0
+
+De quarantainetelling wijst niet langer naar de sweep.
+
+**Eén getal, twee betekenissen, en een advies dat op geen van beide sloeg.**
+`doctor.sh` las één rot-telling en meldde dat de sweep of de judge hing. Op de
+vault die dit blootlegde was de sweep gezond en wachtten 39 van de 40 rottende
+memories op een mens. v0.34.0 corrigeerde precies deze bewoording in het
+session-start-bericht en liet de kopie in `doctor.sh` staan — de slechtste
+helft van een halve fix, want de achtergebleven kopie leest daarna als actueel.
+De check meldt nu `waiting` en `undecided` apart, met per bucket de weg die
+werkt: sweep-launch en Ollama voor de eerste, `memory-doctor.py pending` en
+`decide` voor de tweede.
+
+**Een splitsing die een shell kan lezen.** `rot_breakdown()` kende het verschil
+al sinds v0.34.0, maar geen enkele interface stelde het beschikbaar — daarom
+moest `doctor.sh` wel een oorzaak verzinnen. `memory-doctor.py rot --json`
+geeft nu de splitsing terug; kaal `rot` print nog steeds alleen het totaal,
+zodat een aanroeper die enkel vraagt "is er rot?" geen JSON hoeft te parsen.
+
+**Architectuurdocumentatie die benoemt wat ze aantrof.** Een volledige C4-set
+onder `docs/C4-Documentation/` — vier niveaus, een OpenAPI-specificatie voor de
+13 routes van de Atlas-sidecar, en een toolcontract voor de 8 MCP-tools. De
+containers beschrijven wat er echt draait in plaats van een geïdealiseerde
+topologie, en de drift die de pass vond staat er als drift in: ADR-0001 nog
+Accepted op `qwen3-embedding:8b` terwijl het onderzoek `:4b` aanbeveelt,
+`kb-usage.db` zonder gedocumenteerde eigenaar, en een `.graphifyignore` waar
+specs naar verwijzen maar die niet in de repo staat.
+
+**Een blik op andermans geheugenarchitectuur.** Een review van Eaves naast de
+onze, met drie vervolgpunten die ertoe doen: de SessionStart-freshness-gate is
+vault-breed waar hij per client hoort te zijn, de reranker vermenigvuldigt
+metadata op een relevantieterm waardoor RRF afvlakt tot 1,1x, en drie clients
+voelen zonder gedeeld current-focus-blok nog steeds als drie systemen.
 
 ### Nieuw in v0.34.0
 

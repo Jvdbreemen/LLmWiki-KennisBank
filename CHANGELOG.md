@@ -7,6 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.35.0] - 2026-08-18
+
+The quarantine count stops blaming the sweep. v0.34.0 corrected that message
+in `memory-notify.py`, the design spec and the task file, but left the same
+misdiagnosis standing in `doctor.sh` — and a half-corrected claim is worse
+than an uncorrected one, because the remaining copy now reads as current.
+
+### Upgrading
+
+- No migration. `doctor.sh` reads the new split through `memory-doctor.py`;
+  a deploy where only one of the two has been upgraded falls back to the
+  bare total and names no cause at all.
+- The quarantine check now prints up to two `[WARN]` lines where it printed
+  one. Anything parsing the old sentence — including the string
+  `(sweep/judge hangt?)` — needs updating.
+- Run `/kennisbank-upgrade` to get the fix into a deployed vault; the check
+  lives in the deployed copy, not in the repo.
+
+### Fixed
+
+- `doctor.sh` reported one quarantine number carrying two meanings and
+  attributed all of it to a hanging sweep. On the vault that surfaced it the
+  sweep was healthy — heartbeat clean, `errors: 0`, every memory judged — and
+  39 of 40 rotting memories were waiting on a person, not on a model. The
+  check now reports `waiting` and `undecided` separately, each with advice
+  that applies to it: `waiting` points at sweep-launch and Ollama, `undecided`
+  names `memory-doctor.py pending` and `decide <stem> approve|reject|skip`.
+  Deliberately not `/kennisbank:review`, which is the audit view over the
+  promotion and closure logs, offers only `demote` and `reopen`, and never
+  sees an unverified memory. (TASK-200)
+
+### Added
+
+- `memory-doctor.py rot --json` exposes the waiting/undecided breakdown.
+  `rot_breakdown()` has known that split since v0.34.0, but nothing exposed
+  it to a shell, which is why `doctor.sh` had to invent a cause for a number
+  that contained two. Bare `rot` still prints only the total: a caller that
+  asks "is there rot?" should not have to parse JSON.
+- A C4 architecture documentation set under `docs/C4-Documentation/` — all
+  four levels (14 code documents, 9 components plus an index, 7 containers, a
+  system context with personas and journeys), an OpenAPI 3.1 specification
+  for the Atlas sidecar's 13 routes, and a tool contract for the 8 MCP tools.
+  The containers describe what is actually deployed: hook-invoked CLI
+  processes, the stdio MCP server, background index workers, the Tauri app
+  with its frozen sidecar, the SQLite stores and the markdown vault. It also
+  records the drift it found rather than quietly repairing it — among others
+  that ADR-0001 is Accepted on `qwen3-embedding:8b` while the 2026-08-03
+  sweep recommends `:4b`, that `kb-usage.db` has no documented owner, and
+  that `.graphifyignore` is referenced by specs but is not in the repository.
+- A review of the Eaves multi-agent memory architecture against ours
+  (`docs/research/eaves-memory-architecture.md`), with three follow-up tasks:
+  the SessionStart freshness gate being vault-global rather than per client
+  (TASK-202), the reranker multiplying metadata onto a relevance term so RRF
+  flattens to 1.1x (TASK-203), and a shared current-focus block (TASK-201).
+
 ## [0.34.0] - 2026-08-17
 
 The autonomous review learns what it already asked. v0.33.0 let quarantined
@@ -2136,7 +2191,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.34.0...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.35.0...HEAD
+[0.35.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.34.0...v0.35.0
 [0.34.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.33.0...v0.34.0
 [0.33.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.32.0...v0.33.0
 [0.32.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.31.1...v0.32.0

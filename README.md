@@ -73,7 +73,42 @@ Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: 
 
 The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
 
-## Feature highlights (v0.34.0)
+## Feature highlights (v0.35.0)
+
+### New in v0.35.0
+
+The quarantine count stops blaming the sweep.
+
+**One number, two meanings, and advice that fit neither.** `doctor.sh` read a
+single rot count and told you the sweep or the judge was hanging. On the vault
+that surfaced it, the sweep was healthy and 39 of 40 rotting memories were
+waiting on a person. v0.34.0 corrected exactly this wording in the
+session-start message and left the copy in `doctor.sh` standing — the worse
+half of a half-fix, because the remaining copy then reads as current. The
+check now reports `waiting` and `undecided` separately and names the path that
+moves each: sweep-launch and Ollama for the first, `memory-doctor.py pending`
+and `decide` for the second.
+
+**A split that a shell can read.** `rot_breakdown()` has known the difference
+since v0.34.0, but no interface exposed it, which is why `doctor.sh` had to
+invent a cause. `memory-doctor.py rot --json` now returns the breakdown; bare
+`rot` still prints only the total, so a caller that just asks "is there rot?"
+needs no JSON parser.
+
+**Architecture documentation that admits what it found.** A full C4 set under
+`docs/C4-Documentation/` — four levels, an OpenAPI specification for the Atlas
+sidecar's 13 routes, and a tool contract for the 8 MCP tools. The containers
+describe what is actually deployed rather than an idealised topology, and the
+drift the pass uncovered is written down as drift: ADR-0001 still Accepted on
+`qwen3-embedding:8b` where the research recommends `:4b`, `kb-usage.db`
+without a documented owner, a `.graphifyignore` that specs reference but the
+repository does not contain.
+
+**A look at someone else's memory architecture.** A review of Eaves against
+ours, with three follow-ups worth having: the SessionStart freshness gate is
+vault-global where it should be per client, the reranker multiplies metadata
+onto a relevance term so RRF flattens to 1.1x, and three clients still feel
+like three systems without a shared current-focus block.
 
 ### New in v0.34.0
 
