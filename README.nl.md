@@ -76,7 +76,32 @@ Geheugensystemen van leveranciers (Mem0, Zep, Letta, Cognee) zijn krachtig maar 
 
 De ontwerpvoorkeur is overal dezelfde: **deterministisch waar mogelijk, LLM alleen waar het oordeelsvermogen toevoegt, fail-open overal**. Een dood model blokkeert nooit een sessie, verliest nooit een transcript, en verwijdert nooit geverifieerde kennis.
 
-## Functie-highlights (v0.35.0)
+## Functie-highlights (v0.36.0)
+
+### Nieuw in v0.36.0
+
+De scene-laag verdwijnt, ook uit de vaults.
+
+**Een gemeten afwijzing staat nu in de code, niet alleen in een rapport.** De
+L2 scene-laag is in TASK-134 gemeten tegen een vooraf vastgelegde winnaarsregel
+en faalde op elke voorwaarde: geen recall-winst, licht verlies op recall@1, en
++65 ms op een pad met een budget van +5 ms. De laag is nu volledig verwijderd —
+ruwweg 1800 regels, inclusief het `scene_prior`-loodgieterswerk dat door de
+hot-path-leesbibliotheek liep en elke toekomstige wijziging aan recall
+belastte. ADR-008 legt de beslissing vast, mét de heropeningsvoorwaarde: de
+orakel-arm van dezelfde meting bewees dat +0,040 recall@5 beschikbaar is als
+een clusteraar graaf-communities ooit ruwweg vijfvoudig verslaat. Het idee is
+niet dood; de beschikbare clustering wel.
+
+**Ook deployde vaults worden opgeruimd.** `setup.sh` deployt additief en snoeit
+nooit, dus een version-gated migratie verwijdert de vier verweesde
+scene-scripts en `kb-scene.db` bij de eerstvolgende upgrade — zonder die
+migratie zou het achtergebleven experimentscript crashen tegen de geüpgradede
+recall-bibliotheek.
+
+**Negen guards houden de verwijdering eerlijk**, en het record blijft staan:
+onderzoeksrapport, spec en plan blijven precies waar ze waren, zodat wie ooit
+opnieuw een scene-laag wil bouwen eerst de meting tegenkomt.
 
 ### Nieuw in v0.35.0
 

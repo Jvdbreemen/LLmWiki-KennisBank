@@ -73,7 +73,30 @@ Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: 
 
 The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
 
-## Feature highlights (v0.35.0)
+## Feature highlights (v0.36.0)
+
+### New in v0.36.0
+
+The scene layer leaves, vaults included.
+
+**A measured rejection now lives in the code, not only in a report.** The L2
+scene tier was measured in TASK-134 against a winner rule fixed in advance and
+failed every condition: no recall gain, a slight recall@1 loss, and +65 ms on a
+path budgeted at +5 ms. The layer is now removed entirely — roughly 1800 lines,
+including the `scene_prior` plumbing that threaded through the hot-path read
+library and taxed every future change to recall. ADR-008 records the decision
+and its reopening condition: the same measurement's oracle arm proved +0.040
+recall@5 is available if a clusterer ever beats graph communities roughly
+fivefold. The idea is not dead; the available clustering is.
+
+**Deployed vaults are cleaned too.** `setup.sh` deploys additively and never
+prunes, so a version-gated migration removes the four stale scene scripts and
+`kb-scene.db` on the next upgrade — without it, the leftover experiment script
+would crash against the upgraded recall library.
+
+**Nine guards keep the removal honest**, and the record survives: the research
+report, spec and plan stay exactly where they were, so the next person tempted
+to build a scene layer meets the measurement first.
 
 ### New in v0.35.0
 

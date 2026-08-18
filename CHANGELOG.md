@@ -7,6 +7,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.36.0] - 2026-08-18
+
+The scene layer leaves, vaults included. TASK-134 measured the L2 scene tier
+against a winner rule fixed in advance and every condition failed; the toggle
+had been off since. What remained was roughly 1800 lines of inert plumbing,
+threaded through the hot-path read library where inert code costs the most.
+ADR-008 records the removal — and the reopening condition, because the same
+measurement proved the idea's ceiling is real.
+
+### Upgrading
+
+- A version-gated migration (`0.36.0 scene-laag-opruimen`) removes the four
+  stale scene scripts and `kb-scene.db` from `$VAULT/.claude/` on the next
+  `/kennisbank-upgrade`. Without it the stale `scene-experiment.py` would
+  crash with a `TypeError` against the upgraded `kb-recall.py`, because
+  `setup.sh` deploys additively and never prunes.
+- The `scene_retrieval` toggle is gone from `kennisbank-settings.json`; an
+  existing key is simply ignored. The `scene_clusterer`, `scene_floor` and
+  `scene_boost` knobs and the `KB_SCENE_*` environment variables no longer
+  exist.
+- `kb_recall.recall_hits()` and `memory_hits()` no longer accept a
+  `scene_prior` argument. Nothing in the shipped tree passed one; custom
+  callers must drop it.
+
+### Removed
+
+- **The L2 scene retrieval layer, entirely** (ADR-008). `_scenes.py`,
+  `build-scene-index.py`, `scene-experiment.py`, `scene-report.py`, their four
+  test files, the `scene_prior` plumbing in `kb-recall.py` and `kb-eval.py`,
+  and the four configuration knobs. Measured basis (TASK-134): recall@5
+  +0.000 where >= +0.02 was required, recall@1 -0.006 where no decrease was
+  allowed, p50 +65 ms against a +5 ms ceiling, and a gain in 1 of 4
+  memory_type groups where 2 were needed. Removal is all-or-nothing: the
+  experiment drove the production path, so neither half could stay alone.
+- What is deliberately kept: the research report, the design spec, the plan
+  and this history — plus `_querycache.py`, which was extracted from the
+  experiment (TASK-190) and outlived it. The oracle arm in the report is the
+  reopening condition: +0.040 recall@5 (p < 0.0001) is available if a
+  clusterer ever beats graph communities roughly fivefold.
+
+### Added
+
+- `tests/test_no_scene_layer.py` — nine guards that keep the removal honest;
+  the docstring instructs any future re-introduction to delete the file in
+  the same change.
+- ADR-008 (`docs/adr/`), adr-kit grade A.
+
+### Fixed
+
+- Nine second-reader review findings on the removal PR, the notable ones:
+  the settings command claimed 12 toggles over a list of 11; the governance
+  doc said the scene outcome carried no ADR while ADR-008 records it; the C4
+  docs kept half-updated scene inventory (dangling section bodies, a stale
+  test table, a trailing comma in the settings schema example); and the new
+  `docs/superpowers` exclusion in the docs-consistency guard is anchored to
+  the exact tree so an unrelated directory of the same name cannot escape
+  the guards.
+- Two tests pinned the migration schema version as a literal `"0.9.0"`; they
+  now read `_migrations.VERSION`, so the next bump cannot break them again.
+
 ## [0.35.0] - 2026-08-18
 
 The quarantine count stops blaming the sweep. v0.34.0 corrected that message
@@ -2191,7 +2251,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.35.0...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.36.0...HEAD
+[0.36.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.35.0...v0.36.0
 [0.35.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.34.0...v0.35.0
 [0.34.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.33.0...v0.34.0
 [0.33.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.32.0...v0.33.0
