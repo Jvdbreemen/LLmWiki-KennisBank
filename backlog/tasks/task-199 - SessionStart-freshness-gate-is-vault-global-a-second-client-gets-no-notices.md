@@ -1,5 +1,5 @@
 ---
-id: TASK-195
+id: TASK-199
 title: >-
   SessionStart freshness gate is vault-global: a second client gets no notices
 status: To Do
@@ -9,7 +9,7 @@ updated_date: '2026-08-16 12:00'
 labels:
   - bug
 dependencies: []
-ordinal: 102300
+ordinal: 167700
 ---
 
 ## Description
