@@ -254,12 +254,25 @@ def _read_state(path: Path) -> dict:
         return {}
 
 
-def is_fresh(state_path: Path, now: float | None = None) -> bool:
-    state = _read_state(state_path)
-    completed = state.get("completed_at")
-    if not isinstance(completed, (int, float)):
+def _within_window(stamp, now: float | None = None) -> bool:
+    if not isinstance(stamp, (int, float)):
         return False
-    return (time.time() if now is None else now) - float(completed) < FRESHNESS_SECONDS
+    return (time.time() if now is None else now) - float(stamp) < FRESHNESS_SECONDS
+
+
+def is_fresh(state_path: Path, now: float | None = None) -> bool:
+    """Vault-global: has the MAINTENANCE phase run recently? (TASK-202: this
+    used to gate the notifications too, which is a per-client question.)"""
+    return _within_window(_read_state(state_path).get("completed_at"), now=now)
+
+
+def client_notified(state_path: Path, client: str, now: float | None = None) -> bool:
+    """Per client: has THIS client received the NOTIFICATIONS payload inside
+    the window? An old-format state file has no clients map and reads as not
+    proven notified -- fail-open, the client just gets the (cheap) payload."""
+    clients = _read_state(state_path).get("clients")
+    stamp = clients.get(client) if isinstance(clients, dict) else None
+    return _within_window(stamp, now=now)
 
 
 def acquire_lock(path: Path, now: float | None = None) -> bool:
@@ -291,17 +304,27 @@ def acquire_lock(path: Path, now: float | None = None) -> bool:
     return True
 
 
-def _write_state(path: Path, client: str) -> None:
+def _write_state(path: Path, client: str, *, maintenance: bool = True) -> None:
+    """Merge-write: the clients map survives, other clients' stamps survive.
+
+    maintenance=False is the notification-only pass (TASK-202): it stamps this
+    client as notified but must NOT refresh the global completed_at, or a
+    trickle of client starts would postpone maintenance indefinitely.
+    """
+    now = time.time()
+    state = _read_state(path)
+    clients = state.get("clients")
+    if not isinstance(clients, dict):
+        clients = {}
+    clients[client] = now
+    out = {
+        "completed_at": now if maintenance else state.get("completed_at"),
+        "client": client if maintenance else state.get("client", client),
+        "clients": clients,
+    }
     temp = path.with_suffix(path.suffix + f".{os.getpid()}.tmp")
     try:
-        temp.write_text(
-            json.dumps(
-                {"completed_at": time.time(), "client": client},
-                ensure_ascii=False,
-            )
-            + "\n",
-            encoding="utf-8",
-        )
+        temp.write_text(json.dumps(out, ensure_ascii=False) + "\n", encoding="utf-8")
         os.replace(temp, path)
     except OSError:
         try:
@@ -523,7 +546,17 @@ def coordinate(
         ))
 
     if is_fresh(state_path, now=now):
-        return "\n".join(filter(None, (relevant_report(r) for r in always)))
+        # Maintenance ran recently. The vault-global answer used to end here
+        # for every client, which starved a second client of its notifications
+        # (TASK-202). Notifications are cheap reads, so a not-yet-notified
+        # client gets just that phase, without the lock and without touching
+        # the global stamp.
+        if client_notified(state_path, client, now=now):
+            return "\n".join(filter(None, (relevant_report(r) for r in always)))
+        results = list(always)
+        results.extend(run_parallel(NOTIFICATIONS, scripts, payload, runner))
+        _write_state(state_path, client, maintenance=False)
+        return "\n".join(filter(None, (relevant_report(r) for r in results)))
     if not acquire_lock(lock_path, now=now):
         return "\n".join(filter(None, (relevant_report(r) for r in always)))
 

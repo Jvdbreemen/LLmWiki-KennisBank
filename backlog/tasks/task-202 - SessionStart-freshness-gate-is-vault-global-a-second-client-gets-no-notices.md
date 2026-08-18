@@ -2,7 +2,7 @@
 id: TASK-202
 title: >-
   SessionStart freshness gate is vault-global: a second client gets no notices
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-08-16 12:00'
 updated_date: '2026-08-16 12:00'
@@ -60,11 +60,11 @@ had a number pointed at it.
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A second client starting within FRESHNESS_SECONDS of a first receives the full NOTIFICATIONS payload
-- [ ] #2 The MAINTENANCE phase still runs at most once per freshness window across all clients
-- [ ] #3 The single-flight lock behaviour is unchanged; no client can start a second maintenance worker
-- [ ] #4 A state file written by the old format is read without error (fail-open, treated as not fresh for other clients)
-- [ ] #5 Tests cover: same client twice inside the window, two different clients inside the window, and a stale state file
+- [x] #1 A second client starting within FRESHNESS_SECONDS of a first receives the full NOTIFICATIONS payload
+- [x] #2 The MAINTENANCE phase still runs at most once per freshness window across all clients
+- [x] #3 The single-flight lock behaviour is unchanged; no client can start a second maintenance worker
+- [x] #4 A state file written by the old format is read without error (fail-open, treated as not fresh for other clients)
+- [x] #5 Tests cover: same client twice inside the window, two different clients inside the window, and a stale state file
 <!-- AC:END -->
 
 ## Implementation Notes
