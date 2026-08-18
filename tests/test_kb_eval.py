@@ -76,10 +76,10 @@ class TestProductionParity(unittest.TestCase):
 
     def _fake_modules(self, calls, memory_min_cos=0.60):
         def recall_hits(qv, query_text="", k=3, layers=("wiki", "memory"),
-                        expand=False, min_cos=0.0, scene_prior=None):
+                        expand=False, min_cos=0.0):
             calls.append({"layers": tuple(layers), "expand": expand,
                           "min_cos": min_cos, "k": k,
-                          "scene_prior": scene_prior})
+                          })
             return []
         fake_recall = types.SimpleNamespace(recall_hits=recall_hits,
                                             MEMORY_MIN_COS=memory_min_cos)
@@ -130,7 +130,6 @@ class TestProductionParity(unittest.TestCase):
             hits_fn("een vraag", 5)
         self.assertEqual(calls[0]["layers"], ("memory",))
         self.assertEqual(calls[0]["min_cos"], 0.61)
-        self.assertIsNone(calls[0]["scene_prior"])  # toggle default OFF
         # productie expandeert het memory-blok niet
         self.assertFalse(calls[0]["expand"])
 

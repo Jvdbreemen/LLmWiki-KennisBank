@@ -30,7 +30,6 @@ Architecturally this component sits between the transcript/session layer (upstre
 - **Rechecking**: periodically re-evaluates unverified memories still sitting in the queue and promotes the ones that now pass.
 - **Diagnostics and repair**: `kb-state-audit.py` (read-only anomaly report: duplicates, orphans, config-like bodies stuck as free text) and `memory-doctor.py` (diagnose + repair) give operators visibility without requiring manual grep-through of `09-memory/`.
 - **Discard/audit logging**: every automated promotion or retraction is written to an append-only discard/audit log and is reversible via `_memory.reopen()` — automation never silently deletes a claim.
-- **Scene indexing hook**: `build-scene-index.py` clusters memories into scenes (project/topic context clusters), an optional layer between atomic memory and wiki that the lifecycle feeds.
 
 ## Code Elements
 
@@ -45,12 +44,10 @@ From [c4-code-scripts.md](./c4-code-scripts.md) — the memory slice:
 - `_maintenance.py` — background passes: `current_items`, `neighbour_map`, `exact_duplicate_pass`, `supersede_pass`, `recheck_pass`
 - `_groundcheck.py` — fact-checking via semantic search + LLM judgment (backs `kb-verify.py` and the autoreview trap)
 - `_provenance.py` — source/evidence tracking supporting provenance tags
-- `_scenes.py` — scene (context cluster) loading, consumed by `build-scene-index.py`
 - `memory-sweep.py` (~648 lines) — the orchestrator: extract → judge → reconcile → upsert, run off the hot path
 - `memory-doctor.py` (~401 lines) — diagnostic/repair CLI
 - `kb-state-audit.py` (~336 lines) — read-only anomaly report over `09-memory/`
 - `kb-verify.py` — grounds a fact against the knowledge base (Trap 1 of the three-trap review pipeline)
-- `build-scene-index.py` (~6.8KB) — scene index rebuild
 
 From [c4-code-tests.md](./c4-code-tests.md) — memory, groundcheck, auto-review and maintenance tests:
 
@@ -61,7 +58,6 @@ From [c4-code-tests.md](./c4-code-tests.md) — memory, groundcheck, auto-review
 - `test_kb_verify.py` — index integrity / corruption detection backing verification
 - `test_maintenance_supersede.py`, `test_supersede_coverage.py` — supersede operation and post-supersede coverage
 - `test_reconcile.py` — state reconciliation after crash/manual edit
-- `test_scene_recall.py` — scene recall from memory/index
 - `test_injection_provenance.py` — provenance tagging on injected memory blocks (verifies the trust signal `_rank.py` consumes downstream)
 
 From [c4-code-docs.md](./c4-code-docs.md) — design specs and research backing this component:
@@ -178,7 +174,6 @@ C4Component
         Component(maintenance, "Maintenance Passes", "_maintenance.py", "Dedup, supersede, recheck unverified backlog")
         Component(sweep, "Sweep Orchestrator", "memory-sweep.py", "Off-hot-path pipeline: extract -> judge -> reconcile -> upsert")
         Component(diagnostics, "Diagnostics", "kb-state-audit.py, memory-doctor.py, /kennisbank:review", "Read-only anomaly reports and repair")
-        Component(scenes, "Scene Clustering", "_scenes.py, build-scene-index.py", "Group memories into project/topic clusters")
     }
 
     Container_Ext(llmrouter, "LLM Router", "_llm.py", "Pluggable local-first LLM provider chain")
@@ -208,7 +203,6 @@ C4Component
     Rel(maintenance, llmrouter, "supersede judge")
     Rel(maintenance, memschema, "Supersede / recheck writes")
     Rel(diagnostics, memschema, "Read-only scan")
-    Rel(scenes, kbindex, "Reads current memories")
     Rel(memschema, rankusage, "provenance_tag, status, evidence_basis consumed downstream")
     Rel(retrieval, kbindex, "Reads only (no lifecycle writes)")
     Rel(sweep, retrieval, "Concurrent, read-only to main index")

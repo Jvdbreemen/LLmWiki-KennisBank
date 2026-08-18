@@ -53,6 +53,12 @@ def _markdown_files():
             continue
         if "research" in rel.parts or "docs" in rel.parts and "adr" in rel.parts:
             continue
+        # Specs en plannen zijn gedateerde besluitrecords, zelfde klasse als
+        # research en ADRs: ze beschrijven wat er toen was, niet wat er nu is.
+        # ADR-008 verwijderde een feature waarvan de spec de env-vars noemt;
+        # het record hoort te blijven zonder dat de spookvar-guard erop afgaat.
+        if "superpowers" in rel.parts:
+            continue
         yield path
 
 

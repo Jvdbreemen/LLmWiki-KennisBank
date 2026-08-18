@@ -1,8 +1,9 @@
 """_querycache.py - disk-backed query-embedding cache for the eval harnesses.
 
-Extracted verbatim from scene-experiment.py (TASK-190): rank-factors and
-rerank-ceiling imported the whole scene-experiment driver solely to borrow
-this class. Stdlib only.
+Extracted verbatim from the L2 scene experiment (TASK-190), because
+rank-factors and rerank-ceiling imported that whole driver solely to borrow
+this class. The scene layer itself was removed in ADR-008; this cache
+outlived it and is still used by both harnesses. Stdlib only.
 """
 from __future__ import annotations
 

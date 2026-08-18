@@ -71,7 +71,7 @@ This document synthesizes the nine C4 component documents under `docs/C4-Documen
 **Purpose**: Keep the interactive path fast by doing everything expensive somewhere else — index building ("hours-long, not on critical path"), memory extraction/judging/reconciliation (`memory-sweep.py`, "concurrent with retrieval, read-only to main index"), graph link/prune/index passes, and quality diagnostics.
 
 **Components**:
-- Memory Lifecycle (the core of this container) — [c4-component-memory-lifecycle.md](./c4-component-memory-lifecycle.md): `memory-sweep.py`, `_extract.py`, `_judge.py`, `_reconcile.py`, `_maintenance.py`, `_groundcheck.py`, `kb-verify.py`, `kb-autoreview.py`, `build-scene-index.py`
+- Memory Lifecycle (the core of this container) — [c4-component-memory-lifecycle.md](./c4-component-memory-lifecycle.md): `memory-sweep.py`, `_extract.py`, `_judge.py`, `_reconcile.py`, `_maintenance.py`, `_groundcheck.py`, `kb-verify.py`, `kb-autoreview.py`
 - Retrieval and Ranking (index-build slice) — [c4-component-retrieval.md](./c4-component-retrieval.md): `build-kb-index.py`, `build-embed-index.py`, `embed-sweep.py`
 - Knowledge Graph Layer (the entire deterministic build pipeline) — [c4-component-knowledge-graph.md](./c4-component-knowledge-graph.md): `graph-link-layer.py`, `graph-provenance-ring.py`, `graph-scope-prune.py`, `build-graph-index.py`, plus the external `graphify` extraction step it wraps
 - Activity and Temporal Recall (index build) — [c4-component-temporal-recall.md](./c4-component-temporal-recall.md): `build-activity-index.py`
