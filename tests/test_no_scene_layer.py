@@ -19,7 +19,6 @@ no guard.
 """
 from __future__ import annotations
 
-import importlib.util
 import inspect
 import sys
 import unittest
@@ -29,13 +28,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = REPO_ROOT / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
-
-
-def _load(name: str, filename: str):
-    spec = importlib.util.spec_from_file_location(name, str(SCRIPTS / filename))
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _loader import load_script  # noqa: E402
 
 
 class RecallHasNoScenePriorTest(unittest.TestCase):
@@ -47,7 +41,7 @@ class RecallHasNoScenePriorTest(unittest.TestCase):
     """
 
     def setUp(self):
-        self.kb_recall = _load("kb_recall", "kb-recall.py")
+        self.kb_recall = load_script("kb-recall.py")
 
     def test_recall_hits_takes_no_scene_prior(self):
         params = inspect.signature(self.kb_recall.recall_hits).parameters

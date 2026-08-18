@@ -119,6 +119,15 @@ def tearDownModule():
         SetupDeployTest._gedeeld = None
 
 
+def _migrations_version() -> str:
+    import importlib.util
+    scripts = Path(__file__).resolve().parents[1] / "scripts"
+    spec = importlib.util.spec_from_file_location("_migrations", scripts / "_migrations.py")
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m.VERSION
+
+
 class SetupDeployTest(unittest.TestCase):
     #: Eenmalige installatie, gedeeld door de tests die hem alleen LEZEN.
     #: Gemeten: een setup.sh-run kost 42 s, en deze module riep hem 18 keer aan
@@ -413,7 +422,10 @@ class SetupDeployTest(unittest.TestCase):
         tmp, vault = self.gedeelde_installatie()
         stamp = vault / ".claude" / ".kennisbank-schema-version"
         self.assertTrue(stamp.is_file())
-        self.assertEqual(stamp.read_text(encoding="utf-8").strip(), "0.9.0")
+        # Pin op de bron, niet op een literal: de stempel volgt
+        # _migrations.VERSION en elke bump brak deze test anders opnieuw.
+        self.assertEqual(stamp.read_text(encoding="utf-8").strip(),
+                         _migrations_version())
 
     def test_doctor_reports_memory_hooks_and_version(self):
         tmp, vault = self.gedeelde_installatie()
@@ -421,7 +433,8 @@ class SetupDeployTest(unittest.TestCase):
         out = result.stdout
         self.assertRegex(out, r"\[PASS\].*kb-session-start\.py.*registered")
         self.assertRegex(out, r"\[PASS\].*kb-presearch\.py.*registered")
-        self.assertRegex(out, r"kennisbank-schema-versie.*0\.9\.0")
+        self.assertRegex(out, r"kennisbank-schema-versie.*"
+                              + re.escape(_migrations_version()))
         self.assertEqual(result.returncode, 0, f"doctor exited {result.returncode}:\n{out}")
 
     def test_rerun_preserves_user_data_and_refreshes_tooling(self):

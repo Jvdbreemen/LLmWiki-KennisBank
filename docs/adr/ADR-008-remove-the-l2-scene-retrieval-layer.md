@@ -196,5 +196,9 @@ Bad: resuming the experiment now costs restoring the schema and clusterers from
 git history rather than flipping a toggle. This is accepted because the follow-up
 needs a clusterer that does not exist, so it is new work either way.
 
-Neutral: `kb-scene.db` may remain in deployed vaults. It is derived, has no
-automated builder, and can be deleted at any time.
+Neutral: deployed vaults do not keep the layer either. `setup.sh` deploys
+additively and never prunes, so a version-gated migration
+(`_migrations.py`, `0.36.0 scene-laag-opruimen`) removes the four stale
+scripts and `kb-scene.db` from `$VAULT/.claude/` on the next upgrade —
+without it, the stale `scene-experiment.py` would crash with a `TypeError`
+against the upgraded `kb-recall.py`.

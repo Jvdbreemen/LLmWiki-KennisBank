@@ -43,10 +43,10 @@ doet:
 - **graph_retrieval** (default AAN sinds de A/B-poort van 2026-07-29, TASK-87) - haal de (buur)-entry in de hook-injectie uit de gewogen graafindex (kb-graph.db) in plaats van de legacy wikilink-scan. Aanzetten alleen na een kb-eval A/B op sets van >=100 vragen (bewijsregel TASK-86).
 
 Vraag de gewenste staat tekstueel uit (NIET via `AskUserQuestion`: die tool
-staat maximaal 4 opties per vraag toe, en er zijn 12 toggles; een enkele
+staat maximaal 4 opties per vraag toe, en er zijn 11 toggles; een enkele
 multiSelect-vraag met 10 opties faalt met een `InputValidationError`).
 
-Toon de 12 toggles genummerd met hun huidige staat (aan/uit uit stap 1) en vraag
+Toon de 11 toggles genummerd met hun huidige staat (aan/uit uit stap 1) en vraag
 de gebruiker welke moeten wijzigen, bijvoorbeeld: "Noem de toggles die je wilt
 omzetten (bv. `auto_archive uit, memory_recall aan`), of antwoord `niets` om de
 huidige staat te behouden." Neem voor elke niet-genoemde toggle de huidige

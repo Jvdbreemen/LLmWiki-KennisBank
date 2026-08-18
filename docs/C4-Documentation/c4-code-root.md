@@ -301,7 +301,7 @@
   "activity_llm_fallback": false, // Fall back to local LLM for date recognition
   "checkpoints": false,           // Store conversation checkpoints
   "orientation": false,           // Show orientation guide
-  "graph_retrieval": true,        // Enable graph-based retrieval
+  "graph_retrieval": true         // Enable graph-based retrieval
 }
 ```
 

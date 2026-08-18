@@ -426,10 +426,6 @@ Entry points for user interaction and scheduled work:
   - Retrieve relevant context for fact and ask judge if it's grounded.
   - **Location**: [_groundcheck.py:*](../../scripts/_groundcheck.py)
 
-**Purpose**: Scene (context cluster) management.
-
-**Functions**:
-
 #### _progress.py, _transcript.py, _provenance.py
 **Purpose**: Supporting modules for progress tracking, transcript handling, and provenance.
 

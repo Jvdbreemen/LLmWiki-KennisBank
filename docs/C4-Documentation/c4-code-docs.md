@@ -110,6 +110,11 @@ KennisBank uses Architecture Decision Records (MADR format for newer decisions) 
 - **Impacts**: `scripts/kb-session-start.py`, `scripts/_hooks_manifest.py`, `scripts/install-agent-envs.py`, `scripts/_copilot.py`
 - **Related**: Refines ADR-0003 D3; ADR-0002 cross-platform rules still apply
 
+#### ADR-008: Remove the L2 Scene Retrieval Layer After Its Measured Rejection
+- **Status**: Accepted (2026-08-18)
+- **Location**: [`docs/adr/ADR-008-remove-the-l2-scene-retrieval-layer.md`](../adr/ADR-008-remove-the-l2-scene-retrieval-layer.md)
+- **Decision**: remove the scene tier entirely after all four winner-rule conditions failed; the oracle ceiling (+0.040 recall@5) is the reopening condition.
+
 #### ADR-007: Coordinate Session Logging and Exit Work Behind One Client Hook
 - **Status**: Accepted
 - **Date**: 2026-07-19
@@ -306,7 +311,7 @@ graph LR
 
 ### Documentation Format Evolution
 
-ADRs 0001–0004 use the lightweight Nygard format. ADRs 005–007 use MADR (Markdown ADR) format with explicit status history, decision drivers, considered options, confirmation criteria, and enforcement patterns. The newer format is preferred for agent-readable structure but both are maintained for backward compatibility.
+ADRs 0001–0004 use the lightweight Nygard format. ADRs 005–008 use MADR (Markdown ADR) format with explicit status history, decision drivers, considered options, confirmation criteria, and enforcement patterns. The newer format is preferred for agent-readable structure but both are maintained for backward compatibility.
 
 ### Status Summary
 

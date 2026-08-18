@@ -130,3 +130,40 @@ class MigrationsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SceneLayerPruneTest(MigrationsTest):
+    """ADR-008 removed the scene layer from the repo, but setup.sh deploys
+    additively (copy per repo file, never a prune), so an upgraded vault would
+    keep the deleted scripts forever — and the stale scene-experiment.py would
+    crash with a TypeError against the upgraded kb-recall. The version-gated
+    migration is the one mechanism that already reaches into deployed vaults.
+    """
+
+    def _deploy_stale(self):
+        d = self.vault / ".claude" / "scripts"
+        d.mkdir(parents=True, exist_ok=True)
+        names = ["_scenes.py", "build-scene-index.py",
+                 "scene-experiment.py", "scene-report.py"]
+        for n in names:
+            (d / n).write_text("# stale copy\n", encoding="utf-8")
+        (self.vault / ".claude" / "kb-scene.db").write_bytes(b"sqlite fake")
+        return d, names
+
+    def test_prune_removes_stale_scene_scripts_and_db(self):
+        d, names = self._deploy_stale()
+        self.m.run(self.vault, self.settings, skip_hooks=True)
+        for n in names:
+            self.assertFalse((d / n).exists(), f"{n} survived the prune")
+        self.assertFalse((self.vault / ".claude" / "kb-scene.db").exists())
+
+    def test_prune_is_idempotent_and_quiet_when_nothing_is_there(self):
+        """A fresh vault has none of these files; the migration may not fail."""
+        self.m.run(self.vault, self.settings, skip_hooks=True)
+        self.m.run(self.vault, self.settings, skip_hooks=True)
+
+    def test_prune_leaves_everything_else_alone(self):
+        d, _ = self._deploy_stale()
+        (d / "kb-recall.py").write_text("# live script\n", encoding="utf-8")
+        self.m.run(self.vault, self.settings, skip_hooks=True)
+        self.assertTrue((d / "kb-recall.py").exists())
