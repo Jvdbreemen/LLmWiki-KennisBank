@@ -587,9 +587,35 @@ EOF2
   else
     report_pass "geheugen no-cloud" "LLM-keten lokaal"
   fi
-  rot="$(python3 "$SCRIPTS_DIR/memory-doctor.py" rot 2>/dev/null)"
-  if [ "${rot:-0}" -gt 0 ] 2>/dev/null; then
-    report_warn "geheugen quarantaine" "$rot unverified memories ouder dan 48u (sweep/judge hangt?)"
+  # TASK-200: dit was een telling met twee betekenissen en een advies dat maar
+  # op een van beide sloeg. `waiting` is nooit beoordeeld -- dat is een vraag
+  # over de sweep of het model. `undecided` is wel beoordeeld en bleef
+  # onbeslisbaar; geen automatische pas raakt die nog aan, alleen een mens.
+  # Zelfde splitsing en bewoording als memory-notify.py (TASK-198), zodat de
+  # twee meldingen niet opnieuw uit elkaar lopen.
+  rot_json="$(python3 "$SCRIPTS_DIR/memory-doctor.py" rot --json 2>/dev/null)"
+  rot_total="$(printf '%s' "$rot_json" | sed -n 's/.*"total":[[:space:]]*\([0-9][0-9]*\).*/\1/p')"
+  rot_wait="$(printf '%s' "$rot_json" | sed -n 's/.*"waiting":[[:space:]]*\([0-9][0-9]*\).*/\1/p')"
+  rot_undec="$(printf '%s' "$rot_json" | sed -n 's/.*"undecided":[[:space:]]*\([0-9][0-9]*\).*/\1/p')"
+  if [ -z "$rot_total" ]; then
+    # memory-doctor.py zonder --json (oudere deploy). De splitsing is onbekend,
+    # dus noem geen oorzaak: een verkeerde aanwijzing kost meer dan geen.
+    rot_total="$(python3 "$SCRIPTS_DIR/memory-doctor.py" rot 2>/dev/null)"
+    if [ "${rot_total:-0}" -gt 0 ] 2>/dev/null; then
+      report_warn "geheugen quarantaine" "$rot_total unverified memories ouder dan 48u"
+    else
+      report_pass "geheugen quarantaine" "geen rot"
+    fi
+  elif [ "$rot_total" -gt 0 ]; then
+    if [ "${rot_wait:-0}" -gt 0 ]; then
+      report_warn "geheugen quarantaine" "$rot_wait unverified memories ouder dan 48u wachten nog op een beoordeling (check sweep-launch/Ollama)"
+    fi
+    if [ "${rot_undec:-0}" -gt 0 ]; then
+      report_warn "geheugen quarantaine" "$rot_undec beoordeelde memories bleven onbeslisbaar; geen automatisch pad verplaatst die nog - bekijk ze met 'memory-doctor.py pending' en beslis per stuk met 'memory-doctor.py decide <stem> approve|reject|skip'"
+    fi
+    if [ "${rot_wait:-0}" -eq 0 ] && [ "${rot_undec:-0}" -eq 0 ]; then
+      report_warn "geheugen quarantaine" "$rot_total unverified memories ouder dan 48u"
+    fi
   else
     report_pass "geheugen quarantaine" "geen rot"
   fi

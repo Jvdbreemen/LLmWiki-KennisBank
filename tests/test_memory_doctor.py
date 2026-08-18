@@ -204,3 +204,105 @@ class MemoryDoctorTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RotJsonCliTest(MemoryDoctorTest):
+    """The waiting/undecided split has to reach a shell, not just Python.
+
+    rot_breakdown() existed since v0.34.0 but no CLI exposed it, so doctor.sh
+    read the total and invented a cause for it (TASK-200).
+    """
+
+    def _rot_cli(self, *args):
+        import subprocess
+        out = subprocess.run(
+            [sys.executable, str(SCRIPTS_DIR / "memory-doctor.py"), "rot", *args],
+            capture_output=True, text=True,
+            env={**os.environ, "KENNISBANK_VAULT": str(self.vault)},
+        )
+        self.assertEqual(out.returncode, 0, out.stderr)
+        return out.stdout.strip()
+
+    def test_rot_json_reports_both_buckets(self):
+        import json
+        old = (date.today() - timedelta(days=3)).isoformat()
+        self._mem("waiting.md", "unverified", old)
+        self._mem("judged.md", "unverified", old)
+        import _groundcheck
+        _groundcheck.record_attempt(
+            _groundcheck.attempt_key(self.vault / "09-memory" / "judged.md"), "partial")
+
+        data = json.loads(self._rot_cli("--json"))
+        self.assertEqual(data, {"total": 2, "waiting": 1, "undecided": 1})
+
+    def test_bare_rot_still_prints_only_the_total(self):
+        """The old contract stays: a caller asking 'is there rot?' need not parse JSON."""
+        old = (date.today() - timedelta(days=3)).isoformat()
+        self._mem("a.md", "unverified", old)
+        self.assertEqual(self._rot_cli(), "1")
+
+    def test_rot_json_honours_hours(self):
+        import json
+        self._mem("recent.md", "unverified", date.today().isoformat())
+        self.assertEqual(json.loads(self._rot_cli("--json", "--hours", "48"))["total"], 0)
+
+
+class DoctorQuarantineOutputTest(MemoryDoctorTest):
+    """doctor.sh must not blame the sweep for memories the sweep already judged.
+
+    This is the vault shape that exposed the bug: heartbeat clean, every
+    memory judged, verdict `partial` -- and the old check still printed
+    "(sweep/judge hangt?)" (TASK-200).
+    """
+
+    def _doctor_quarantine_lines(self):
+        import shutil
+        import subprocess
+        # doctor.sh reads its helpers from $VAULT/.claude/scripts, so the test
+        # vault needs the same deploy shape production has -- running it
+        # against the repo tree would test a layout no user ever has.
+        deployed = self.vault / ".claude" / "scripts"
+        if not deployed.exists():
+            shutil.copytree(SCRIPTS_DIR, deployed)
+        # Reuse the cross-platform bash finder rather than growing a second
+        # copy of the Git-Bash-vs-System32 logic (ADR-0002 portability).
+        from tests.test_setup_deploy import _find_bash
+        bash = _find_bash()
+        out = subprocess.run(
+            [bash, str(deployed / "doctor.sh")],
+            capture_output=True, text=True,
+            env={**os.environ, "KENNISBANK_VAULT": str(self.vault)},
+        )
+        return [ln for ln in (out.stdout + out.stderr).splitlines()
+                if "quarantaine" in ln]
+
+    def test_only_undecided_does_not_blame_the_sweep(self):
+        old = (date.today() - timedelta(days=3)).isoformat()
+        self._mem("judged.md", "unverified", old)
+        import _groundcheck
+        _groundcheck.record_attempt(
+            _groundcheck.attempt_key(self.vault / "09-memory" / "judged.md"), "partial")
+
+        lines = self._doctor_quarantine_lines()
+        self.assertTrue(lines, "expected a quarantine line")
+        joined = " ".join(lines)
+        self.assertNotIn("sweep/judge hangt", joined)
+        self.assertNotIn("sweep-launch", joined,
+                         "no memory is waiting, so the sweep must not be named")
+        self.assertIn("onbeslisbaar", joined)
+        # The action named must be one that can actually move an unverified
+        # memory. /kennisbank:review only offers demote/reopen and reads logs
+        # this memory is in neither of.
+        self.assertIn("memory-doctor.py decide", joined)
+        self.assertNotIn("/kennisbank:review", joined)
+
+    def test_only_waiting_still_points_at_the_sweep(self):
+        old = (date.today() - timedelta(days=3)).isoformat()
+        self._mem("waiting.md", "unverified", old)
+        joined = " ".join(self._doctor_quarantine_lines())
+        self.assertIn("sweep-launch", joined)
+        self.assertNotIn("onbeslisbaar", joined)
+
+    def test_clean_vault_passes(self):
+        joined = " ".join(self._doctor_quarantine_lines())
+        self.assertIn("geen rot", joined)
