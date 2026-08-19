@@ -1,6 +1,6 @@
 # ADR-0001: Default embedding model for semantic tiling
 
-- **Status**: Accepted
+- **Status**: Superseded by [ADR-009](ADR-009-default-embedding-model-qwen3-4b.md)
 - **Date**: 2026-06-20
 - **Deciders**: Jvdbreemen, Robert van den Breemen
 
