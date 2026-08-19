@@ -191,6 +191,20 @@ def retrieve_params(cfg: dict) -> dict:
         "top_n": int(_num("KB_RETRIEVE_TOP_N", cfg, "retrieve_top_n", 3)),
         "min_cos": _num("KB_RETRIEVE_THRESHOLD", cfg, "retrieve_threshold", 0.50),
         "expand": bool(int(_num("KB_RETRIEVE_EXPAND", cfg, "retrieve_expand", 1))),
+        # Relevantieterm-knoppen (TASK-203). Defaults = bestaand gedrag; de
+        # eval onder de winnaarsregel is wat ze mag verschuiven. memory_fusion
+        # "cos" laat de score de rauwe cosinus zijn (de term met de gradient);
+        # wiki_fusion "minmax" fuseert de twee wiki-armen gewogen binnen de
+        # pool. min_cos blijft in elke modus op de rauwe cosinus drempelen.
+        # Defaults geflipt 2026-08-19 onder de geamendeerde winnaarsregel
+        # voor ordering-klasse-ingrepen (+0.02 op de geinjecteerde diepte,
+        # r@5 niet lager): memory cos +0.060@3 / +0.235@1, wiki minmax
+        # +0.110@1. Meting en regel: docs/research/
+        # relevance-term-rrf-vs-cosine-2026-08.md. "rrf" blijft de terugvalweg.
+        "memory_fusion": (os.environ.get("KB_MEMORY_FUSION")
+                          or str(cfg.get("memory_fusion", "cos"))),
+        "wiki_fusion": (os.environ.get("KB_WIKI_FUSION")
+                        or str(cfg.get("wiki_fusion", "minmax"))),
         # Memory-layer knobs resolve HERE too (TASK-188): _memory_block and
         # kb-eval read these, so the hook and the eval harness cannot drift.
         "memory_top_n": int(_num("KB_RECALL_TOP_N", cfg, "memory_top_n", 3)),
@@ -235,7 +249,8 @@ def _wiki_block(prompt, emb, vault_root, cfg, qvec):
         try:
             if kb_recall.index_is_gated():
                 hits = kb_recall.wiki_hits(qvec, query_text=prompt, k=top_n,
-                                           expand=expand, min_cos=threshold)
+                                           expand=expand, min_cos=threshold,
+                                           fusion=params.get("wiki_fusion", "rrf"))
                 if not hits:
                     return ""
                 lines = ["KennisBank-wiki (semantisch gematcht op je prompt; raadpleeg bij twijfel):"]
@@ -303,7 +318,8 @@ def _memory_block(qvec, prompt, cfg, hits_fn=None):
             hits_fn = kb.memory_hits
         params = retrieve_params(cfg)
         hits = hits_fn(qvec, query_text=prompt, k=int(params["memory_top_n"]),
-                       min_cos=params["memory_min_cos"])
+                       min_cos=params["memory_min_cos"],
+                       fusion=params.get("memory_fusion", "rrf"))
     except Exception:
         return ""
     if not hits:

@@ -201,7 +201,7 @@ def _neighbor_entry(out) -> "dict | None":
 
 def recall_hits(query_vector, query_text: str = "", k: int = 3,
                 layers=("wiki", "memory"), expand: bool = False,
-                min_cos: float = 0.0) -> list:
+                min_cos: float = 0.0, fusion: str = "rrf") -> list:
     """Recall-hits over de opgegeven lagen (status=current), fail-soft -> [].
     Live-status-hercheck ALLEEN voor de memory-laag (wiki is gecureerd).
 
@@ -225,7 +225,7 @@ def recall_hits(query_vector, query_text: str = "", k: int = 3,
             return []
         rows = _kbindex.search(conn, query_vector=query_vector, query_text=query_text,
                                k=k, layers=tuple(layers), statuses=("current",),
-                               min_cos=min_cos)
+                               min_cos=min_cos, fusion=fusion)
         out = []
         for r in rows:
             layer = r.get("layer", "")
@@ -303,10 +303,10 @@ MEMORY_MIN_COS = env_float("KB_MEMORY_THRESHOLD", 0.45)
 
 
 def memory_hits(query_vector, query_text: str = "", k: int = 3,
-                min_cos: float = MEMORY_MIN_COS) -> list:
+                min_cos: float = MEMORY_MIN_COS, fusion: str = "rrf") -> list:
     """Dunne wrapper: alleen de memory-laag (backward-compat)."""
     return recall_hits(query_vector, query_text=query_text, k=k, layers=("memory",),
-                       min_cos=min_cos)
+                       min_cos=min_cos, fusion=fusion)
 
 
 def index_is_gated() -> bool:
@@ -361,7 +361,9 @@ def has_fts_match(query_text: str, layer: str = "wiki") -> bool:
 
 
 def wiki_hits(query_vector, query_text: str = "", k: int = 3,
-              expand: bool = False, min_cos: float = 0.0) -> list:
+              expand: bool = False, min_cos: float = 0.0,
+              fusion: str = "rrf") -> list:
     """Dunne wrapper: alleen de wiki-laag (hybride, optioneel met graafbuur)."""
     return recall_hits(query_vector, query_text=query_text, k=k,
-                       layers=("wiki",), expand=expand, min_cos=min_cos)
+                       layers=("wiki",), expand=expand, min_cos=min_cos,
+                       fusion=fusion)

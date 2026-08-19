@@ -201,11 +201,13 @@ def _live_hits_fn(layers=("wiki",), expand=None):
             # via exact dezelfde resolver als de hook (retrieve_params,
             # TASK-188 parity).
             rows = kb_recall.recall_hits(qv, query_text=q, k=k, layers=("memory",),
-                                         min_cos=params["memory_min_cos"])
+                                         min_cos=params["memory_min_cos"],
+                                         fusion=params.get("memory_fusion", "rrf"))
         else:
             # productie: _wiki_block -> wiki_hits met drempel + buur-expansie
             rows = kb_recall.recall_hits(qv, query_text=q, k=k, layers=tuple(layers),
-                                         expand=wiki_expand, min_cos=params["min_cos"])
+                                         expand=wiki_expand, min_cos=params["min_cos"],
+                                         fusion=params.get("wiki_fusion", "rrf"))
         return [Path(r["path"]).stem for r in rows]
 
     return hits_fn, None
