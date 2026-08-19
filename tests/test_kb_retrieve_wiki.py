@@ -110,7 +110,7 @@ class WikiBlockTest(unittest.TestCase):
         # Mock i.p.v. kale lambda: assert_called bewijst dat het hybride pad
         # DAADWERKELIJK is gelopen. Zonder die guard kan een signatuur-drift de
         # fail-soft except raken en stil naar de fallback vallen (false green).
-        wiki_hits = Mock(side_effect=lambda qv, query_text="", k=3, expand=False, min_cos=0.0: [
+        wiki_hits = Mock(side_effect=lambda qv, query_text="", k=3, expand=False, min_cos=0.0, fusion="rrf": [
             {"path": "/v/02-wiki/art.md", "layer": "wiki", "title": "Art",
              "created": "2026-06-01", "score": 0.5, "snippet": "hybride treffer"}])
         self.m.kb_recall.wiki_hits = wiki_hits
@@ -131,7 +131,7 @@ class WikiBlockTest(unittest.TestCase):
         self.m.kb_recall.index_is_gated = Mock(return_value=True)
         has_fts = Mock(return_value=True)
         self.m.kb_recall.has_fts_match = has_fts
-        wiki_hits = Mock(side_effect=lambda qv, query_text="", k=3, expand=False, min_cos=0.0: [
+        wiki_hits = Mock(side_effect=lambda qv, query_text="", k=3, expand=False, min_cos=0.0, fusion="rrf": [
             {"path": "/v/02-wiki/art.md", "layer": "wiki", "title": "Art",
              "created": "2026-06-01", "score": 0.5, "snippet": "exacte-term-treffer"}])
         self.m.kb_recall.wiki_hits = wiki_hits
@@ -182,7 +182,7 @@ class WikiBlockTest(unittest.TestCase):
         self.emb.load_cache = boom
         self.m.kb_recall.index_is_gated = Mock(return_value=True)
         self.m.kb_recall.wiki_hits = Mock(
-            side_effect=lambda qv, query_text="", k=3, expand=False, min_cos=0.0: [
+            side_effect=lambda qv, query_text="", k=3, expand=False, min_cos=0.0, fusion="rrf": [
                 {"path": "/v/02-wiki/art.md", "layer": "wiki", "title": "Art",
                  "created": "2026-06-01", "score": 0.5, "snippet": "index-treffer"}])
         qvec = [0.1, 0.2]
@@ -195,7 +195,7 @@ class WikiBlockTest(unittest.TestCase):
         self.emb.load_cache = lambda: {}
         self.m.kb_recall.index_is_gated = Mock(return_value=True)
         self.m.kb_recall.wiki_hits = Mock(
-            side_effect=lambda qv, query_text="", k=3, expand=False, min_cos=0.0: [
+            side_effect=lambda qv, query_text="", k=3, expand=False, min_cos=0.0, fusion="rrf": [
                 {"path": "/v/02-wiki/art.md", "layer": "wiki", "title": "Art",
                  "created": "2026-06-01", "score": 0.5, "snippet": "nog steeds gevonden"}])
         text = self.m._wiki_block("een vraag", self.emb, self.vault_root, self._cfg(), [0.1, 0.2])
@@ -221,7 +221,7 @@ class WikiBlockTest(unittest.TestCase):
     def test_gated_index_without_hits_injects_nothing(self):
         self.m.kb_recall.index_is_gated = Mock(return_value=True)
         self.m.kb_recall.wiki_hits = Mock(
-            side_effect=lambda qv, query_text="", k=3, expand=False, min_cos=0.0: [])
+            side_effect=lambda qv, query_text="", k=3, expand=False, min_cos=0.0, fusion="rrf": [])
         text = self.m._wiki_block("iets irrelevants", self.emb, self.vault_root,
                                   self._cfg(), [0.1, 0.2])
         self.assertEqual(text, "")
@@ -241,7 +241,7 @@ class WikiBlockTest(unittest.TestCase):
         self.emb.cosine = lambda a, b: 0.9
         self.m.kb_recall.index_is_gated = Mock(return_value=True)
         self.m.kb_recall.wiki_hits = Mock(
-            side_effect=lambda qv, query_text="", k=3, expand=False, min_cos=0.0: [
+            side_effect=lambda qv, query_text="", k=3, expand=False, min_cos=0.0, fusion="rrf": [
                 {"path": str(self.vault / "02-wiki" / "art.md"), "layer": "wiki",
                  "title": "Art", "created": "2026-06-01", "score": 0.83,
                  "snippet": "e2e-injectie-snippet"}])

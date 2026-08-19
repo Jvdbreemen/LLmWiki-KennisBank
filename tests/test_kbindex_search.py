@@ -273,3 +273,110 @@ class MemoryLayerSkipsLexicalArmTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FusionModesTest(unittest.TestCase):
+    """TASK-203: the relevance term entering rerank was an RRF rank artefact
+    whose top-8 spread is 1.12x, against a metadata-multiplier stack of up to
+    5.68x -- the reranker was substantially replacing relevance instead of
+    reweighting it. The cosine with the real gradient was computed, carried,
+    and discarded. These tests pin the two repairs, both behind a mode
+    argument that defaults to the unchanged behaviour.
+    """
+
+    def setUp(self):
+        self.conn = _kbindex.connect(":memory:")
+        _kbindex.ensure_schema(self.conn, dim=DIM, embed_id="ollama:test")
+        _kbindex.upsert(self.conn, path="a.md", layer="memory", status="current",
+                        body="alpha", vector=[1.0, 0.0, 0.0, 0.0],
+                        file_hash="a", created="2026-06-01")
+        _kbindex.upsert(self.conn, path="b.md", layer="memory", status="current",
+                        body="beta", vector=[0.9, 0.435889894, 0.0, 0.0],
+                        file_hash="b", created="2026-06-02")
+        _kbindex.upsert(self.conn, path="w1.md", layer="wiki", status="current",
+                        body="gamma delta zoekterm", vector=[0.0, 1.0, 0.0, 0.0],
+                        file_hash="w1", created="2026-06-03")
+        _kbindex.upsert(self.conn, path="w2.md", layer="wiki", status="current",
+                        body="gamma epsilon", vector=[0.0, 0.95, 0.312249899, 0.0],
+                        file_hash="w2", created="2026-06-04")
+        _kbindex.set_unit_norm(self.conn, True)
+
+    def tearDown(self):
+        self.conn.close()
+
+    def test_default_stays_rrf(self):
+        res = _kbindex.search(self.conn, query_vector=[1.0, 0.0, 0.0, 0.0],
+                              k=5, layers=("memory",))
+        # RRF-scores: 1/(60+rank)
+        self.assertAlmostEqual(res[0]["score"], 1 / 60, places=6)
+
+    def test_cos_mode_scores_are_the_cosines(self):
+        """Memory single-arm: score IS the raw cosine -- the term with the
+        gradient. Nothing new computed, nothing fused."""
+        res = _kbindex.search(self.conn, query_vector=[1.0, 0.0, 0.0, 0.0],
+                              k=5, layers=("memory",), fusion="cos")
+        self.assertEqual([r["path"] for r in res], ["a.md", "b.md"])
+        self.assertAlmostEqual(res[0]["score"], res[0]["cos"], places=6)
+        self.assertAlmostEqual(res[1]["score"], res[1]["cos"], places=6)
+        self.assertGreater(res[0]["score"] / max(res[1]["score"], 1e-9), 1.05,
+                           "cos mode must carry a real gradient")
+
+    def test_minmax_mode_fuses_both_arms_within_the_pool(self):
+        """Wiki two-arm: weighted min-max, intra-query. A doc found by both
+        arms outranks a vector-only doc with a slightly better cosine when
+        the lexical arm backs it."""
+        res = _kbindex.search(self.conn, query_vector=[0.0, 1.0, 0.0, 0.0],
+                              query_text="zoekterm", k=5, layers=("wiki",),
+                              fusion="minmax")
+        self.assertEqual(res[0]["path"], "w1.md")
+        self.assertTrue(res[0]["fts"])
+        for r in res:
+            self.assertGreaterEqual(r["score"], 0.0)
+            self.assertLessEqual(r["score"], 1.0)
+
+    def test_minmax_renormalises_onto_the_arms_that_fired(self):
+        """Single-arm query under minmax: no lexical hits means the vector arm
+        carries weight 1.0, not w_vec -- a query without keyword matches must
+        not be scaled down."""
+        res = _kbindex.search(self.conn, query_vector=[0.0, 1.0, 0.0, 0.0],
+                              query_text="", k=5, layers=("wiki",),
+                              fusion="minmax")
+        self.assertEqual(res[0]["path"], "w1.md")
+        self.assertAlmostEqual(res[0]["score"], 1.0, places=6,
+                               msg="best hit of the only firing arm must be 1.0")
+
+    def test_min_cos_still_gates_on_the_raw_cosine(self):
+        """AC#4: no fused or normalised score may become a cross-query gate.
+        The floor keeps reading the raw cosine in every mode."""
+        for mode in ("rrf", "cos", "minmax"):
+            res = _kbindex.search(self.conn, query_vector=[1.0, 0.0, 0.0, 0.0],
+                                  k=5, layers=("memory",), min_cos=0.995,
+                                  fusion=mode)
+            self.assertEqual([r["path"] for r in res], ["a.md"],
+                             f"floor leaked in mode {mode}")
+
+
+class FusionDefaultsShippedTest(unittest.TestCase):
+    """The 2026-08-19 flip, pinned. The defaults carry the measurement in
+    docs/research/relevance-term-rrf-vs-cosine-2026-08.md (memory cos
+    +0.060@3 / +0.235@1, wiki minmax +0.110@1 under the amended
+    ordering-class winner rule). Reverting them is a measured decision, not
+    an edit: run the frozen sets first."""
+
+    def test_retrieve_params_defaults(self):
+        import importlib.util
+        scripts = Path(__file__).resolve().parent.parent / "scripts"
+        spec = importlib.util.spec_from_file_location(
+            "kb_retrieve", scripts / "kb-retrieve.py")
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        saved = {k: os.environ.pop(k, None)
+                 for k in ("KB_MEMORY_FUSION", "KB_WIKI_FUSION")}
+        try:
+            params = m.retrieve_params({})
+            self.assertEqual(params["memory_fusion"], "cos")
+            self.assertEqual(params["wiki_fusion"], "minmax")
+        finally:
+            for k, v in saved.items():
+                if v is not None:
+                    os.environ[k] = v

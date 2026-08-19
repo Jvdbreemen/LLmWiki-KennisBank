@@ -76,10 +76,10 @@ class TestProductionParity(unittest.TestCase):
 
     def _fake_modules(self, calls, memory_min_cos=0.60):
         def recall_hits(qv, query_text="", k=3, layers=("wiki", "memory"),
-                        expand=False, min_cos=0.0):
+                        expand=False, min_cos=0.0, fusion="rrf"):
             calls.append({"layers": tuple(layers), "expand": expand,
                           "min_cos": min_cos, "k": k,
-                          })
+                          "fusion": fusion})
             return []
         fake_recall = types.SimpleNamespace(recall_hits=recall_hits,
                                             MEMORY_MIN_COS=memory_min_cos)

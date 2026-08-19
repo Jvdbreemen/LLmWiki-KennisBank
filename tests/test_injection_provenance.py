@@ -189,7 +189,7 @@ class _FakeRecall:
         # en de test faalt op een TypeError in plaats van op zijn eigen bewering.
         return True
 
-    def wiki_hits(self, qvec, query_text="", k=3, expand=False, min_cos=0.0):
+    def wiki_hits(self, qvec, query_text="", k=3, expand=False, min_cos=0.0, fusion="rrf"):
         return [{"path": "/vault/02-wiki/foo.md", "score": 0.9,
                  "snippet": "wiki snippet"}]
 

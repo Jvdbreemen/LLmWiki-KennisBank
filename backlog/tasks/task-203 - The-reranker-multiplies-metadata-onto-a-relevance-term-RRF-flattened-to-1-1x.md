@@ -2,7 +2,7 @@
 id: TASK-203
 title: >-
   The reranker multiplies metadata onto a relevance term RRF flattened to 1.1x
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-08-16 12:00'
 updated_date: '2026-08-16 16:30'
@@ -103,13 +103,13 @@ frozen eval set. A negative result is a real finding and closes the question.
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The relevance term entering `rerank` on the memory layer is the cosine, not the RRF rank artefact, behind a flag until measured
-- [ ] #2 Relevance and the metadata multipliers are on comparable scales; the measured spread of each is written down, not assumed
-- [ ] #3 Weighted min-max fusion is implemented for the two-arm (wiki) path and renormalises onto the arms that actually returned candidates
-- [ ] #4 `min_cos` still gates on the raw cosine; no normalised or fused score is ever used as a cross-query threshold
-- [ ] #5 The frozen eval set reports baseline versus cosine-relevance versus weighted fusion, on memory and on wiki separately
-- [ ] #6 TASK-128's lexical-arm question is re-run at a small weight, now that a weight exists
-- [ ] #7 Defaults change only on a win under the winner rule; numbers and method are written up in docs/research/
+- [x] #1 The relevance term entering `rerank` on the memory layer is the cosine, not the RRF rank artefact, behind a flag until measured
+- [x] #2 Relevance and the metadata multipliers are on comparable scales; the measured spread of each is written down, not assumed
+- [x] #3 Weighted min-max fusion is implemented for the two-arm (wiki) path and renormalises onto the arms that actually returned candidates
+- [x] #4 `min_cos` still gates on the raw cosine; no normalised or fused score is ever used as a cross-query threshold
+- [x] #5 The frozen eval set reports baseline versus cosine-relevance versus weighted fusion, on memory and on wiki separately
+- [x] #6 TASK-128's lexical-arm question is re-run at a small weight, now that a weight exists
+- [x] #7 Defaults change only on a win under the winner rule; numbers and method are written up in docs/research/
 <!-- AC:END -->
 
 ## Implementation Notes

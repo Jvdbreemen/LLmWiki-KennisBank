@@ -304,8 +304,27 @@ def _rrf(rank_lists, k_const: int = 60) -> dict:
     return scores
 
 
+#: Armgewichten voor fusion="minmax" (TASK-203). Vector draagt het meeste:
+#: TASK-128 mat de armen op wiki "close", maar de vector-arm blijft de
+#: sterkste; de eval (AC#5/#6) is wat deze waarden mag verschuiven.
+MINMAX_W_VEC = 0.7
+MINMAX_W_FTS = 0.3
+
+
+def _minmax(values: dict) -> dict:
+    """Min-max binnen de pool -> [0,1]. Een pool van 1 of met nul spreiding
+    krijgt overal 1.0 (beste-van-de-pool), nooit een deling door nul."""
+    if not values:
+        return {}
+    lo, hi = min(values.values()), max(values.values())
+    if hi - lo <= 0:
+        return {k: 1.0 for k in values}
+    return {k: (v - lo) / (hi - lo) for k, v in values.items()}
+
+
 def search(conn: sqlite3.Connection, *, query_vector, query_text: str = "",
-           k: int = 8, layers=None, statuses=("current",), min_cos: float = 0.0) -> list:
+           k: int = 8, layers=None, statuses=("current",), min_cos: float = 0.0,
+           fusion: str = "rrf") -> list:
     """Hybride zoek: vec0 KNN + FTS5, gefuseerd met RRF.
 
     `min_cos` is een relevantie-ondergrens op de COSINUS, niet op de
@@ -315,6 +334,24 @@ def search(conn: sqlite3.Connection, *, query_vector, query_text: str = "",
     afstand-naar-cosinus-omrekening niet en houden we het bestaande gedrag.
     Een document dat door FTS gevonden is passeert altijd: een letterlijke
     trefwoordtreffer is een eigenstandig relevantiesignaal.
+
+    ``fusion`` (TASK-203) kiest de relevantieterm die de score draagt:
+
+      - "rrf" (default): ongewijzigd. 1/(60+rank), top-8-spreiding 1.12x --
+        het rangartefact dat de metadata-multipliers (tot 5.68x) liet
+        domineren.
+      - "cos": de rauwe cosinus als score. Voor de een-armige memory-laag:
+        niets nieuws berekend, niets gefuseerd -- de term met de echte
+        gradient (gemeten p50 1.25x over echte pools) stopt met weggegooid
+        worden.
+      - "minmax": gewogen min-max-fusie voor het twee-armige wiki-pad. Elke
+        arm wordt BINNEN de pool genormaliseerd, gewogen, en de gewichten
+        hernormaliseren op de armen die daadwerkelijk vuurden -- een query
+        zonder trefwoordtreffers wordt niet omlaag geschaald. Intra-query
+        relatief, nooit cross-query gekalibreerd: de beste treffer van elke
+        pool landt bij 1.0, ook voor een off-topic vraag. Daarom blijft
+        ``min_cos`` in ELKE modus op de rauwe cosinus drempelen en mag geen
+        genormaliseerde score ooit een gate worden.
     """
     total = conn.execute("SELECT count(*) FROM docs").fetchone()[0]
     # vec0 accepteert maximaal k=4096; daarboven gooit de MATCH-query een
@@ -352,7 +389,35 @@ def search(conn: sqlite3.Connection, *, query_vector, query_text: str = "",
             fts_ids = set(fts_ranking)
         except sqlite3.OperationalError:
             pass  # FTS-syntaxfout (rare query) -> alleen vector
-    fused = _rrf(rankings)
+    if fusion == "cos":
+        # Een-armige relevantie: de cosinus IS de score. FTS-treffers zonder
+        # vectorafstand (kan alleen buiten de memory-laag) krijgen de laagste
+        # poolcosinus, zodat ze meedoen zonder de gradient te vervalsen.
+        fused = dict(sorted(
+            ((doc_id, cos_by_id.get(doc_id)) for doc_id in
+             dict.fromkeys(vec_ranking + sorted(fts_ids))),
+            key=lambda t: -(t[1] if t[1] is not None else -1)))
+        floor_cos = min(cos_by_id.values()) if cos_by_id else 0.0
+        fused = {d: (c if c is not None else floor_cos) for d, c in fused.items()}
+    elif fusion == "minmax":
+        arm_scores = []
+        weights = []
+        if cos_by_id:
+            arm_scores.append(_minmax(cos_by_id))
+            weights.append(MINMAX_W_VEC)
+        if fts_ids:
+            n = len(rankings[-1]) if len(rankings) > 1 else len(fts_ids)
+            pos = {doc_id: 1.0 - (idx / max(n - 1, 1))
+                   for idx, doc_id in enumerate(rankings[-1] if len(rankings) > 1 else sorted(fts_ids))}
+            arm_scores.append(_minmax(pos))
+            weights.append(MINMAX_W_FTS)
+        total_w = sum(weights) or 1.0
+        fused = {}
+        for arm, w in zip(arm_scores, weights):
+            for doc_id, v in arm.items():
+                fused[doc_id] = fused.get(doc_id, 0.0) + (w / total_w) * v
+    else:
+        fused = _rrf(rankings)
     if not fused:
         return []
     placeholders = ",".join("?" for _ in fused)
