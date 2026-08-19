@@ -18,7 +18,7 @@ jobs:
     # 781 is the measurement that set the 30 minutes, not a current count --
     # deliberately not overwritten, because "1131 tests in ~20 min" would be
     # a claim that was never measured. For the current state and the growth
-    # analysis (TASK-123): C4-Documentation/c4-code-github-workflows.md §4.
+    # analysis (TASK-123): docs/C4-Documentation/c4-code-github-workflows-baseline.md §4.
     timeout-minutes: 30
     steps:
       - name: Checkout

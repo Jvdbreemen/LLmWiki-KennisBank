@@ -183,3 +183,15 @@ C4Component
     Rel(builders, vaultfs, "read markdown, hash, chunk")
     Rel(vaultpath, vaultfs, "resolve KENNISBANK_VAULT root")
 ```
+
+## Data store: kb-usage.db
+
+Owned and schema-managed by `scripts/_usage.py` (`DB_NAME = "kb-usage.db"`, `_SCHEMA`, `_migrate()`), located at `$VAULT/.claude/kb-usage.db` — deliberately separate from `kb-index.db` so usage telemetry survives index rebuilds. Verified against source (2026-08-19, TASK-208):
+
+| table | columns | purpose |
+|---|---|---|
+| `usage` | `stem` PK, `injected`, `used`, `last_injected`, `last_used` | per-knowledge-item counters feeding the usage rerank factor and Atlas warmth |
+| `pending` | (`session_id`, `stem`) PK, `ts` | injections awaiting the SessionEnd transcript scan (`kb-usage-scan.py`) that decides used vs unused |
+| `neighbor_log` | `day` PK, `n` | per-day count of graph-neighbor injections |
+
+Writers: `_usage.py` via the retrieval hot path (inject) and the SessionEnd scan (resolve). Readers: `_rank.py` (usage factor) and the Atlas sidecar (read-only warmth ranking).
