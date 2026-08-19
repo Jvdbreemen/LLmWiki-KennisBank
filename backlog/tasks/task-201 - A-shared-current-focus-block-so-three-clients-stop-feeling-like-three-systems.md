@@ -2,7 +2,7 @@
 id: TASK-201
 title: >-
   A shared current_focus block, so three clients stop feeling like three systems
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-08-16 12:00'
 updated_date: '2026-08-16 12:00'
@@ -63,12 +63,12 @@ deliberately transient working state that is overwritten, not curated.
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 One shared focus block with a hard character cap, written off the interactive path
-- [ ] #2 Surfaced at SessionStart to every client, through the existing notification payload
-- [ ] #3 Replaced wholesale on each write; no unbounded growth and no history kept in the block
-- [ ] #4 Empty or absent yields no output at all, in every client
-- [ ] #5 Not indexed, not retrievable, and carries no rank factor
-- [ ] #6 The manual /checkpoint path keeps working unchanged alongside it
+- [x] #1 One shared focus block with a hard character cap, written off the interactive path
+- [x] #2 Surfaced at SessionStart to every client, through the existing notification payload
+- [x] #3 Replaced wholesale on each write; no unbounded growth and no history kept in the block
+- [x] #4 Empty or absent yields no output at all, in every client
+- [x] #5 Not indexed, not retrievable, and carries no rank factor
+- [x] #6 The manual /checkpoint path keeps working unchanged alongside it
 <!-- AC:END -->
 
 ## Implementation Notes
