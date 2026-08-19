@@ -2,7 +2,7 @@
 id: TASK-202
 title: >-
   SessionStart freshness gate is vault-global: a second client gets no notices
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-16 12:00'
 updated_date: '2026-08-16 12:00'
@@ -71,3 +71,7 @@ had a number pointed at it.
 
 <!-- SECTION:NOTES:BEGIN -->
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+Merged as PR #147 (e8fd440).

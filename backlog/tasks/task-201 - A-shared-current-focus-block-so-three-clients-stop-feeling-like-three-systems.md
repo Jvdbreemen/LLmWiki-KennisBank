@@ -2,7 +2,7 @@
 id: TASK-201
 title: >-
   A shared current_focus block, so three clients stop feeling like three systems
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-16 12:00'
 updated_date: '2026-08-16 12:00'
@@ -75,3 +75,7 @@ deliberately transient working state that is overwritten, not curated.
 
 <!-- SECTION:NOTES:BEGIN -->
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+Merged as PR #148 (184d8aa).

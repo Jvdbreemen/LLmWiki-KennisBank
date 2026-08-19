@@ -2,7 +2,7 @@
 id: TASK-203
 title: >-
   The reranker multiplies metadata onto a relevance term RRF flattened to 1.1x
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-16 12:00'
 updated_date: '2026-08-16 16:30'
@@ -122,3 +122,7 @@ thing to measure — if the cosine turns out to be nearly as flat as the RRF
 score on this corpus, the finding weakens considerably and that should be said
 plainly rather than worked around.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+Merged as PR #150 (ae4dff3). Defaults flipped under the owner-amended ordering-class winner rule; full method in docs/research/relevance-term-rrf-vs-cosine-2026-08.md.
