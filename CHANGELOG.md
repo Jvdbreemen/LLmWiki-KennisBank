@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.37.0] - 2026-08-19
+
+The top of the ranking belongs to relevance again. The reranker had been
+multiplying six metadata factors (spread up to 5.68x) onto an RRF rank
+artefact whose own spread was 1.12x — on the memory layer, metadata was
+substantially replacing relevance rather than reweighting it, while the
+cosine with the real gradient was computed, carried on every hit, and
+ignored. Around that repair: every client now gets its session-start
+notifications, and all clients share one "what is being worked on right now"
+block.
+
+### Upgrading
+
+- **Retrieval ordering changes visibly.** The memory layer's relevance term
+  is now the raw cosine (`memory_fusion: cos`) and the wiki layer fuses its
+  two arms with weighted intra-pool min-max (`wiki_fusion: minmax`).
+  Measured on the frozen sets: memory recall@1 0.245 -> 0.480, wiki recall@1
+  0.884 -> 0.994, recall@5 unchanged on both. `rrf` remains available as a
+  fallback (`KB_MEMORY_FUSION=rrf` / `KB_WIKI_FUSION=rrf` or the config
+  keys) — reverting is a measured decision, not an edit.
+- The session-start state file gains a `clients` map. An old-format file is
+  read fail-open; no migration needed.
+- A new NOTIFICATIONS job (`focus-notify.py`) surfaces the shared focus
+  block; the sweep writes `<vault>/.claude/current-focus.md` (2000-char cap).
+  Empty block = no output.
+- ADR-009: the default embedding model is now `qwen3-embedding:4b`. Existing
+  vaults with an explicit model in `kennisbank-embed.json` are unaffected.
+
+### Added
+
+- Shared `current_focus` block (TASK-201): one file, rewritten wholesale by
+  the sweep from the newest session logs (7-day window), local model only,
+  surfaced at SessionStart to every client. Deliberately not a memory layer:
+  not indexed, not retrievable, no rank factor — grep-guarded by tests.
+- `fusion` modes in `_kbindex.search` ("rrf" | "cos" | "minmax") with knobs
+  in `retrieve_params`, shared by the hook and kb-eval (parity by
+  construction).
+- An amended, pre-registered winner rule for ordering-class retrieval
+  interventions: +0.02 at the injected depth with recall@5 not lower.
+  Pool-class interventions keep the original @5 rule. Method and ruling:
+  `docs/research/relevance-term-rrf-vs-cosine-2026-08.md`.
+
+### Fixed
+
+- **A second client inside the 300 s freshness window received nothing**
+  (TASK-202): no memory health warning, no distill prompt, no orientation,
+  no upstream check — and silence is those scripts' success signal, so the
+  loss was invisible. The gate now answers its two questions separately:
+  maintenance stays vault-global (at most once per window), notifications
+  gate per client. State merge-writes so clients cannot erase each other.
+- The lexical arm on memory recall loses at every depth even with a weight
+  (w_fts 0.3: recall@5 -0.063). TASK-128's conclusion stands — the arm was
+  the problem, not the weight — and its reopened question closes.
+
 ## [0.36.0] - 2026-08-18
 
 The scene layer leaves, vaults included. TASK-134 measured the L2 scene tier
@@ -2251,7 +2305,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.36.0...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.37.0...HEAD
+[0.37.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.36.0...v0.37.0
 [0.36.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.35.0...v0.36.0
 [0.35.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.34.0...v0.35.0
 [0.34.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.33.0...v0.34.0

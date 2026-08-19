@@ -76,7 +76,34 @@ Geheugensystemen van leveranciers (Mem0, Zep, Letta, Cognee) zijn krachtig maar 
 
 De ontwerpvoorkeur is overal dezelfde: **deterministisch waar mogelijk, LLM alleen waar het oordeelsvermogen toevoegt, fail-open overal**. Een dood model blokkeert nooit een sessie, verliest nooit een transcript, en verwijdert nooit geverifieerde kennis.
 
-## Functie-highlights (v0.36.0)
+## Functie-highlights (v0.37.0)
+
+### Nieuw in v0.37.0
+
+De top van de ranking is weer van de relevantie.
+
+**De reranker vervangt relevantie niet langer.** Zes metadata-multipliers
+(spreiding tot 5,68x) stonden op een RRF-rangartefact met een eigen
+spreiding van 1,12x, waardoor een verse, belangrijke rang-7-memory de
+rang-0-treffer per constructie verdrong. De relevantieterm is nu de rauwe
+cosinus op de memory-laag en een gewogen min-max-fusie op de wiki-laag.
+Gemeten op de bevroren sets: memory recall@1 0,245 -> 0,480, wiki recall@1
+0,884 -> 0,994, met recall@5 ongewijzigd — de pool was al goed, de top van
+de volgorde niet. Uitgebracht onder een geamendeerde, voorgeregistreerde
+winnaarsregel voor volgorde-klasse-wijzigingen; `rrf` blijft beschikbaar
+als terugvalknop.
+
+**Elke client krijgt zijn sessiestart-meldingen.** De freshness-gate
+beantwoordde een per-client-vraag met vault-globale staat: een tweede
+client binnen 300 s na de eerste kreeg stilzwijgend geen enkele
+gezondheidsmelding. Onderhoud blijft vault-globaal; meldingen gaan nu per
+client.
+
+**Eén gedeeld "current focus"-blok.** De sweep destilleert de nieuwste
+sessielogs tot één blok van 2000 tekens dat elke client bij sessiestart
+ziet — het mechanisme waarmee drie clients stoppen zich als drie systemen
+over één vault te gedragen. Bewust geen geheugenlaag: niet geïndexeerd,
+niet op te vragen, geen rank-factor, en tests dwingen precies dat af.
 
 ### Nieuw in v0.36.0
 

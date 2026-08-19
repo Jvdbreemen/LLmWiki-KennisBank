@@ -73,7 +73,32 @@ Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: 
 
 The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
 
-## Feature highlights (v0.36.0)
+## Feature highlights (v0.37.0)
+
+### New in v0.37.0
+
+The top of the ranking belongs to relevance again.
+
+**The reranker stops replacing relevance.** Six metadata multipliers
+(spread up to 5.68x) sat on top of an RRF rank artefact whose own spread was
+1.12x, so a fresh, important rank-7 memory displaced the rank-0 hit by
+construction. The relevance term is now the raw cosine on the memory layer
+and a weighted min-max fusion on the wiki layer. Measured on the frozen
+sets: memory recall@1 0.245 -> 0.480, wiki recall@1 0.884 -> 0.994, with
+recall@5 unchanged — the pool was already right; the top of the ordering
+was not. Shipped under an amended, pre-registered winner rule for
+ordering-class changes; `rrf` stays available as a fallback knob.
+
+**Every client gets its session-start notifications.** The freshness gate
+answered a per-client question with vault-global state: a second client
+starting within 300 s of the first silently received no health warnings at
+all. Maintenance stays vault-global; notifications now gate per client.
+
+**One shared "current focus" block.** The sweep distils the newest session
+logs into a single 2000-character block that every client sees at session
+start — the mechanism by which three clients stop behaving like three
+systems over one vault. Deliberately not a memory layer: not indexed, not
+retrievable, no rank factor, and tests enforce exactly that.
 
 ### New in v0.36.0
 
