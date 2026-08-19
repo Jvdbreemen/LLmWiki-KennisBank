@@ -119,8 +119,11 @@ def test_freshness_skips_maintenance_but_keeps_copilot_capture(tmp_path):
     vault = tmp_path / "Kluis"
     runtime = vault / ".claude"
     (runtime / "scripts").mkdir(parents=True)
+    # TASK-202: freshness now has two halves. This test pins the fully-fresh
+    # case (maintenance recent AND this client already notified); the
+    # not-yet-notified case has its own tests below.
     (runtime / module.STATE_NAME).write_text(
-        json.dumps({"completed_at": 1000.0}),
+        json.dumps({"completed_at": 1000.0, "clients": {"copilot": 1000.0}}),
         encoding="utf-8",
     )
     called = []
@@ -202,3 +205,96 @@ def test_prewarm_fires_from_main_not_coordinate(tmp_path, monkeypatch):
     monkeypatch.setattr(module, "coordinate", lambda *_a, **_k: "")
     module.main(["--client", "claude"])
     assert calls["n"] == 1
+
+
+def _fresh_state(module, runtime, clients=None, completed=1000.0):
+    state = {"completed_at": completed, "client": "claude"}
+    if clients is not None:
+        state["clients"] = clients
+    (runtime / module.STATE_NAME).write_text(json.dumps(state), encoding="utf-8")
+
+
+def _tracking_runner(module, called):
+    def runner(job, _scripts, _payload):
+        called.append(job.script)
+        return module.Result(job.script)
+    return runner
+
+
+def test_second_client_inside_window_still_gets_notifications(tmp_path):
+    """TASK-202: the gate answered a per-client question with vault-global
+    state. Claude starts, Codex starts 100 s later: Codex received nothing --
+    no memory-notify, no distill prompt, no upstream check -- and silence is
+    indistinguishable from 'nothing to report'."""
+    module = _load()
+    vault = tmp_path / "Kluis"
+    runtime = vault / ".claude"
+    (runtime / "scripts").mkdir(parents=True)
+    _fresh_state(module, runtime, clients={"claude": 1000.0})
+    called = []
+    module.coordinate("codex", vault, b"{}",
+                      runner=_tracking_runner(module, called), now=1100.0)
+    for job in module.NOTIFICATIONS:
+        assert job.script in called, f"{job.script} withheld from second client"
+    for job in module.MAINTENANCE:
+        assert job.script not in called, f"{job.script} ran twice in one window"
+
+
+def test_same_client_twice_inside_window_stays_quiet(tmp_path):
+    module = _load()
+    vault = tmp_path / "Kluis"
+    runtime = vault / ".claude"
+    (runtime / "scripts").mkdir(parents=True)
+    _fresh_state(module, runtime, clients={"codex": 1000.0})
+    called = []
+    module.coordinate("codex", vault, b"{}",
+                      runner=_tracking_runner(module, called), now=1100.0)
+    assert called == ["kb-checkpoint.py"]
+
+
+def test_old_format_state_is_read_fail_open(tmp_path):
+    """A state file from before the clients map: no error, and a client that
+    cannot be proven notified is treated as not notified."""
+    module = _load()
+    vault = tmp_path / "Kluis"
+    runtime = vault / ".claude"
+    (runtime / "scripts").mkdir(parents=True)
+    _fresh_state(module, runtime, clients=None)  # old format
+    called = []
+    module.coordinate("codex", vault, b"{}",
+                      runner=_tracking_runner(module, called), now=1100.0)
+    for job in module.NOTIFICATIONS:
+        assert job.script in called
+    for job in module.MAINTENANCE:
+        assert job.script not in called
+
+
+def test_stale_state_runs_everything_and_records_the_client(tmp_path):
+    module = _load()
+    vault = tmp_path / "Kluis"
+    runtime = vault / ".claude"
+    (runtime / "scripts").mkdir(parents=True)
+    _fresh_state(module, runtime, clients={"claude": 1000.0}, completed=1000.0)
+    called = []
+    module.coordinate("codex", vault, b"{}",
+                      runner=_tracking_runner(module, called),
+                      now=1000.0 + module.FRESHNESS_SECONDS + 1)
+    for job in list(module.MAINTENANCE) + list(module.NOTIFICATIONS):
+        assert job.script in called
+    state = json.loads((runtime / module.STATE_NAME).read_text(encoding="utf-8"))
+    assert "codex" in state.get("clients", {}), "notified client not recorded"
+    assert "claude" in state.get("clients", {}), "merge lost the other client"
+
+
+def test_notification_only_pass_updates_own_entry_and_keeps_others(tmp_path):
+    module = _load()
+    vault = tmp_path / "Kluis"
+    runtime = vault / ".claude"
+    (runtime / "scripts").mkdir(parents=True)
+    _fresh_state(module, runtime, clients={"claude": 1000.0})
+    module.coordinate("codex", vault, b"{}",
+                      runner=_tracking_runner(module, []), now=1100.0)
+    state = json.loads((runtime / module.STATE_NAME).read_text(encoding="utf-8"))
+    assert state["clients"]["claude"] == 1000.0
+    assert state["clients"].get("codex", 0) >= 1100.0 or state["clients"].get("codex") is not None
+    assert isinstance(state.get("completed_at"), float), "global stamp lost"

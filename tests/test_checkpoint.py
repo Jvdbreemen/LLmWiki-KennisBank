@@ -136,7 +136,8 @@ class CoordinatorWiringTest(unittest.TestCase):
             runtime = vault / ".claude"
             (runtime / "scripts").mkdir(parents=True)
             (runtime / m.STATE_NAME).write_text(
-                json.dumps({"completed_at": 10_000.0}), encoding="utf-8")
+                json.dumps({"completed_at": 10_000.0,
+                            "clients": {"claude": 10_000.0}}), encoding="utf-8")
 
             seen = []
 
