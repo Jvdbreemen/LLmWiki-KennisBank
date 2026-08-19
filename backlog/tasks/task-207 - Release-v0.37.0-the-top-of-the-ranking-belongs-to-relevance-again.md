@@ -2,7 +2,7 @@
 id: TASK-207
 title: >-
   Release v0.37.0 - the top of the ranking belongs to relevance again
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-19 21:00'
 labels:
@@ -33,11 +33,15 @@ changelog/README edit as usual.
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 CHANGELOG 0.37.0 section + compare links
-- [ ] #2 Both README highlight sections, one edit
-- [ ] #3 Combined-tree suite green (CI at ae4dff3) and docs subset green after the edit
-- [ ] #4 PR, CI green, review processed
-- [ ] #5 Merge verified on origin/main before tagging; tag equals that SHA
-- [ ] #6 Release published, non-empty body
-- [ ] #7 Tasks closed
+- [x] #1 CHANGELOG 0.37.0 section + compare links
+- [x] #2 Both README highlight sections, one edit
+- [x] #3 Combined-tree suite green (CI at ae4dff3) and docs subset green after the edit
+- [x] #4 PR, CI green, review processed
+- [x] #5 Merge verified on origin/main before tagging; tag equals that SHA
+- [x] #6 Release published, non-empty body
+- [x] #7 Tasks closed
 <!-- AC:END -->
+
+## Final Summary
+
+v0.37.0 released. Tag on 4636a3e (= origin/main via rev-list before publish), body 2937 chars non-empty verified. Gate: combined-tree CI green at merge SHA ae4dff3 (Linux full suite), docs subset 56 passed after the edit. Copilot again absent upstream; the code carried its own second-reader coverage per PR.
