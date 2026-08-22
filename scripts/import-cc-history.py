@@ -43,6 +43,30 @@ CC_PROJECTS_DIR_DEFAULT = Path.home() / ".claude" / "projects"
 VAULT_DEFAULT = vault_root()
 
 
+def _is_agent_invocation(src: Path) -> bool:
+    """True als dit transcript een plugin- of agent-LLM-aanroep is, geen sessie.
+
+    Tweede verdedigingslinie naast dezelfde check in archive-transcript.py, voor
+    transcripts die al gearchiveerd waren voordat die filter bestond. De
+    ingekapselde prompt lijkt genoeg op een user-turn om de `no user turns`-skip
+    te passeren, dus die vangt ze niet.
+
+    Fail-open: bij twijfel of een leesfout is het antwoord False, zodat een
+    echte sessie nooit wordt overgeslagen.
+    """
+    try:
+        with src.open("r", encoding="utf-8", errors="replace") as fh:
+            first = fh.readline(1_048_576)
+        if not first.strip():
+            return False
+        try:
+            return json.loads(first).get("type") == "queue-operation"
+        except ValueError:
+            return '"type":"queue-operation"' in first[:4096].replace(" ", "")
+    except Exception:
+        return False
+
+
 def parse_session(jsonl_path: Path) -> dict | None:
     """Parse één sessie-jsonl. Return None als er geen user-turn in zit."""
     first_user_text: str | None = None
@@ -284,6 +308,11 @@ def main() -> int:
     imported_at = _utcnow_iso()
 
     for jp in jsonl_files:
+        if _is_agent_invocation(jp):
+            if args.verbose:
+                print(f"[skip] {jp.name}: agent/plugin-aanroep, geen sessie")
+            continue
+
         try:
             meta = parse_session(jp)
         except Exception as e:
