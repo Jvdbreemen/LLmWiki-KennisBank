@@ -66,7 +66,11 @@ def main() -> None:
 
     # Alleen schrijven als er echt iets veranderd is: de cache is tientallen MB
     # en json.dumps erover kostte ~2,5 s per sessie, ook als er niets te doen was.
-    if embedded or pruned:
+    # emb.migrated() erbij: een migratie naar de text_hash-sleutel verandert
+    # `hash` noch `id`, dus hij is aan de entry niet te zien. Zonder deze term
+    # blijft de upgrade in het geheugen hangen en migreert een stabiel corpus
+    # nooit -- precies de entries die er het meeste baat bij hebben.
+    if embedded or pruned or emb.migrated():
         emb.save_cache(cache)
 
     # NB: de graphify .needs-rebuild-vlag wordt hier bewust NIET geleegd. Dat
