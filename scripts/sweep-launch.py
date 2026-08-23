@@ -24,13 +24,17 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _common import outside_window  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402
+import _sweepstate  # noqa: E402
 
-LOCK_NAME = ".sweep.lock"
+#: Eigenaar is _sweepstate: de sweep zelf ververst deze lock als lease terwijl
+#: hij werkt. Alias hier zodat bestaande lezers van sweep-launch.LOCK_NAME
+#: blijven werken.
+LOCK_NAME = _sweepstate.LOCK_NAME
 STALE_SEC = 3600  # een lock ouder dan 1u geldt als verweesd
 
 
 def _lock_path() -> Path:
-    return vault_root() / ".claude" / LOCK_NAME
+    return _sweepstate.lock_path()
 
 
 def is_stale(lock: Path) -> bool:
@@ -59,8 +63,12 @@ def acquire_lock() -> bool:
     2. Bij FileExistsError: controleer of de lock stale is.
        - Niet stale → een actieve sweep draait; return False.
        - Stale → unlink + één retry van de O_EXCL-create (reclaim).
-    Concurrent sweeps zijn onschadelijk: de watermark (nu outage-veilig) +
-    dedup voorkomen dubbele writes.
+    Concurrent sweeps beschadigen elkaars data niet: de watermark (nu
+    outage-veilig) + dedup voorkomen dubbele writes. Ze zijn wel duur, want ze
+    delen een GPU en verdubbelen het werk, en dat was precies waar de oude
+    leeftijds-only staleness in liep: een sweep die langer dan STALE_SEC duurde
+    liet zijn eigen lock verlopen. De sweep ververst hem nu als lease
+    (_sweepstate.refresh_lock), dus stale betekent weer "niemand werkt eraan".
     """
     lock = _lock_path()
     lock.parent.mkdir(parents=True, exist_ok=True)

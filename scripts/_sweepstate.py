@@ -13,12 +13,71 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _vaultpath import vault_root  # noqa: E402
 
 WATERMARK = ".swept"
+
+#: De single-flight lock van de sweep. Woont hier en niet in sweep-launch.py,
+#: omdat zowel de launcher (die hem neemt) als de sweep zelf (die hem als lease
+#: ververst) hem nodig heeft.
+LOCK_NAME = ".sweep.lock"
+
+#: Hoe vaak refresh_lock() de mtime hoogstens aanraakt. De sweep roept hem aan
+#: op elke transcript- en passgrens; zonder rem is dat een schrijfactie per
+#: chunk voor een lease die in uren meet.
+LOCK_REFRESH_SEC = 30
+
+_last_refresh = 0.0
+
+
+def lock_path(vault=None) -> Path:
+    return (vault or vault_root()) / ".claude" / LOCK_NAME
+
+
+def refresh_lock(vault=None, now=None) -> bool:
+    """Vernieuw de lease op de sweep-lock. True als de mtime is aangeraakt.
+
+    De lock werd door de launcher genomen en daarna door niemand meer
+    aangeraakt, terwijl de staleness-check in uren rekent. "Ouder dan een uur"
+    betekende daardoor "de sweep draait langer dan een uur", niet "de sweep is
+    dood". Op een gegroeide vault haalt een sweep die drempel: gemeten liep een
+    enkele onderhoudspass 23m52s over 4077 memories. De volgende launcher
+    verklaarde de lock dan stale en spawnde een TWEEDE sweep naast de eerste.
+
+    Dat is zelfversterkend. Twee sweeps delen dezelfde GPU, dus allebei worden
+    ze trager, waardoor de drempel nog zekerder wordt overschreden. Waargenomen:
+    drie gelijktijdige sweeps. Ze beschadigen elkaars data niet -- de watermark
+    en de dedup dekken dat af, en een integriteitscheck op beide sqlite-bestanden
+    kwam schoon terug -- maar ze verdrievoudigen wel het werk.
+
+    Met een lease die tijdens het werk wordt ververst betekent een verlopen lock
+    weer wat de naam belooft: er is niemand meer die eraan werkt.
+    """
+    global _last_refresh
+    t = time.time() if now is None else now
+    if t - _last_refresh < LOCK_REFRESH_SEC:
+        return False
+    p = lock_path(vault)
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.touch(exist_ok=True)
+    except OSError:
+        # Fail-open: onderhoud mag nooit stoppen omdat een lease-touch faalt.
+        return False
+    _last_refresh = t
+    return True
+
+
+def release_lock(vault=None) -> None:
+    """Geef de lock vrij. Fail-open: een niet-verwijderbare lock verloopt vanzelf."""
+    try:
+        lock_path(vault).unlink()
+    except OSError:
+        pass
 
 
 def _tdir(vault=None) -> Path:

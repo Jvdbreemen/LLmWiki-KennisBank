@@ -234,7 +234,14 @@ def _note_pass_failure(s: dict, key: str, exc: BaseException) -> None:
 
 
 def _run_pass(s: dict, key: str, fn) -> None:
-    """Draai één onderhoudspass en houd vast of hij het gehaald heeft."""
+    """Draai een onderhoudspass en houd vast of hij het gehaald heeft.
+
+    Ververst eerst de lease op de sweep-lock. Deze passen zijn de langste van
+    de run -- gemeten 23m52s voor de burenberekening over 4077 memories -- en
+    juist daar liet de oude leeftijds-only lock de sweep zijn eigen slot
+    verliezen, waarna de volgende launcher een tweede sweep ernaast startte.
+    """
+    ss.refresh_lock()
     try:
         s[key] = fn()
     except Exception as e:
@@ -436,6 +443,7 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
             written_for_tp = 0
             for chunk_nr, ch in enumerate(chunk_iter, 1):
                 voortgang.step(0, note=f"{tp.stem[:38]} chunk {chunk_nr}/{len(chunk_iter)}")
+                ss.refresh_lock()
                 if max_memories_per_transcript and written_for_tp >= max_memories_per_transcript:
                     break
                 for cand in _extract.extract_candidates(ch):
@@ -602,6 +610,11 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
         _note_pass_failure(s, "focus_updated", e)
 
     _write_heartbeat(s)
+    # Klaar: geef het slot vrij in plaats van het te laten verlopen. Zonder dit
+    # blijft de lock nog STALE_SEC liggen en wordt een volgende run onnodig
+    # overgeslagen. De vroege-uitgangen hierboven laten hem bewust staan: daar
+    # is niets gedraaid, dus de lease van de launcher verloopt vanzelf.
+    ss.release_lock()
     return s
 
 
