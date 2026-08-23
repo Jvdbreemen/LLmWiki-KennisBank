@@ -215,3 +215,19 @@ class MemoryNotifyTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_verify_cap_loopt_niet_uiteen_met_groundcheck(self):
+        """_VERIFY_CAP dupliceert bewust; een comment is de enige bewaking.
+
+        memory-notify blijft opzettelijk op _vaultpath/_common/_sweepstate en
+        haalt _groundcheck niet binnen, want dat trekt _embeddings en _llm mee en
+        een notificatiescript mag geen LLM-stack laden. De prijs is drift, en die
+        kan alleen in de DEFAULT ontstaan: beide lezen env_int("KB_VERIFY_CAP").
+        Deze test maakt drift onmogelijk zonder de import terug te halen.
+        """
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "groundcheck", str(SCRIPTS_DIR / "_groundcheck.py"))
+        gc = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gc)
+        self.assertEqual(self.m._VERIFY_CAP, gc.VERIFY_PASS_CAP)

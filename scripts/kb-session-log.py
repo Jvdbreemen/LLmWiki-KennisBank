@@ -21,20 +21,34 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _vaultpath import vault_root  # noqa: E402
 from _common import env_int  # noqa: E402
 
-#: Per-job wall clock. 180s fits a vault of a few hundred documents, but
-#: build-kb-index.py scales with the corpus: its corrective pass hashes every
-#: indexed document, so the run time grows with the vault and not with what
-#: changed. Measured on a vault of 4320 indexed documents: 165 re-indexed took
-#: over 8.5 minutes, so the job is killed every single session.
+#: Per-job wall clock. 180s fits a vault of a few hundred documents but not a
+#: grown one: build-kb-index.py was killed every session on a vault of 4320
+#: indexed documents, and `timed out after 180s` then becomes a permanent line
+#: in the report, so a real index failure is no longer distinguishable from the
+#: routine one. The work itself survives -- _kbindex.upsert commits per record.
 #:
-#: The work itself survives -- _kbindex.upsert commits per record, so a killed
-#: run keeps its progress and the index converges over sessions. What does not
-#: survive is the signal: `timed out after 180s` becomes a permanent line, and
-#: a real index failure is then indistinguishable from the routine one.
+#: What drives the cost is NOT the corpus size. An earlier version of this
+#: comment blamed the corrective pass that hashes every indexed document;
+#: measured, that is 405 us per file, so ~1.7 s over 4320 documents -- under
+#: 0.5% of the run. The cost is the embedding round-trip on the documents that
+#: actually CHANGED: 165 re-indexed took over 510 s, i.e. ~3.1 s each.
 #:
-#: Deliberately still 180 by default. /sessielog is interactive and waiting nine
-#: minutes is worse than the notice; a large vault raises the knob instead.
-DEFAULT_JOB_TIMEOUT = env_int("KB_SESSION_LOG_TIMEOUT", 180)
+#: That matters for what this knob buys. Raising it does not help a vault that
+#: grew; it helps a session in which many documents changed. A session with 300
+#: changed documents needs roughly twice the budget of one with 165, whatever
+#: the corpus size.
+#:
+#: Deliberately still 180 by default. /sessielog is interactive, run_parallel
+#: waits for every future, so the slowest job sets the wall clock of the whole
+#: block and nine minutes of silence is worse than the notice. The better fix is
+#: not a bigger clock but taking the job off the interactive path altogether --
+#: detached, like sweep-launch already does, reporting at the next session. That
+#: is a larger change and deliberately not folded in here.
+#:
+#: max(1, ...) because env_int is fail-open on garbage but not on a valid 0 or a
+#: negative: both make subprocess.run kill every job instantly, and then every
+#: line in the report reads "timed out".
+DEFAULT_JOB_TIMEOUT = max(1, env_int("KB_SESSION_LOG_TIMEOUT", 180))
 
 
 @dataclass(frozen=True)
