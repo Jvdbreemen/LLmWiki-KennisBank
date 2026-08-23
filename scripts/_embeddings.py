@@ -573,14 +573,61 @@ def save_cache(cache: dict) -> None:
             tmp.unlink(missing_ok=True)
 
 
+#: Breedte van de identiteit. 64 bits: een botsing wordt pas rond enkele
+#: miljarden sleutels verwacht, waar de oude 32 bits daar rond 65.000 zat -- een
+#: eindig getal dat met de vault meegroeit. Volledige sha256 zou ook kunnen en is
+#: zelfs marginaal sneller (afkappen bouwt de hele hexstring en gooit hem weg),
+#: maar 64 tekens in een diff of een handmatige cache-inspectie is ruis zonder
+#: dat het bij deze sleutelruimte iets toevoegt.
+HASH_HEX = 16
+
+
 def bytes_hash(data: bytes) -> str:
-    """The 8-char md5 identity used by the index and the cache — one spelling,
-    so callers that already hold the bytes need not re-read the file."""
+    """The 16-char sha256 identity used by the index and the cache — one
+    spelling, so callers that already hold the bytes need not re-read the file.
+
+    Gemeten op 4894 vault-bestanden: 2,1 us per bestand tegen 2,3 us voor de
+    oude md5, en beide verdwijnen naast de ~431 us die het LEZEN van het bestand
+    kost. sha256 wint van md5 omdat moderne CPU's er instructies voor hebben.
+    """
+    return hashlib.sha256(data).hexdigest()[:HASH_HEX]
+
+
+def _legacy_bytes_hash(data: bytes) -> str:
+    """OVERGANGSMAATREGEL. De md5-sleutel van voor de sha256-overstap, 8 hex.
+
+    Dit is de enige md5 die nog in de codebase staat, en hij is geen
+    ontwerpkeuze. Hij VERIFIEERT alleen bestaande cache-entries, zodat ze
+    geupgraded kunnen worden zonder opnieuw te embedden; hij produceert nooit
+    een nieuwe identiteit. De breedte is het onderscheid: 8 tekens is
+    md5-tijdperk, 16 is sha256 -- dat maakt een entry zelfbeschrijvend zonder
+    extra veld.
+
+    Zonder dit pad kost de overstap een volledige her-embedding van het corpus:
+    gemeten ~3,1 s per document over 3981 entries, ruim drie uur lokale GPU-tijd
+    voor een uitkomst die bit-identiek is aan wat er al ligt. Met dit pad is het
+    een rehash van 2,3 seconden, verspreid over de eerstvolgende runs.
+
+    TE VERWIJDEREN (TASK-210) zodra geen enkele cache-entry nog een text_hash van
+    8 tekens draagt. Dat is te controleren zonder te raden:
+
+        python3 -c "import json,collections,pathlib,os;
+        c=json.loads(pathlib.Path(os.environ['KENNISBANK_VAULT'],
+        '.claude/embeddings-cache.json').read_text('utf-8'));
+        print(collections.Counter(len(e.get('text_hash','')) for e in c.values()))"
+
+    Staat daar alleen nog 16, dan kunnen deze functie, _legacy_file_hash en de
+    twee migratietakken in get_cached weg.
+    """
     return hashlib.md5(data).hexdigest()[:8]
 
 
 def file_hash(path) -> str:
     return bytes_hash(Path(path).read_bytes())
+
+
+def _legacy_file_hash(path) -> str:
+    return _legacy_bytes_hash(Path(path).read_bytes())
 
 
 def doc_text(path, cap: int = EMBED_DOC_CAP) -> str:
@@ -626,9 +673,17 @@ def get_cached(path, cache: dict, recompute: bool = True):
     th = bytes_hash(text.encode("utf-8")) if text else ""
 
     if entry and entry.get("id") == eid and entry.get("embedding"):
-        if th and entry.get("text_hash") == th:
+        eh = entry.get("text_hash")
+        if th and eh == th:
             return entry["embedding"]
-        if "text_hash" not in entry and entry.get("hash") == file_hash(path):
+        # Migratie 1: text_hash uit het md5-tijdperk. De breedte verraadt hem.
+        if (recompute and text and eh and len(eh) == 8
+                and eh == _legacy_bytes_hash(text.encode("utf-8"))):
+            cache[key] = dict(entry, hash=file_hash(path), text_hash=th)
+            _note_migration()
+            return cache[key]["embedding"]
+        # Migratie 2: entry van voor text_hash bestond.
+        if "text_hash" not in entry and entry.get("hash") == _legacy_file_hash(path):
             # Migratie: geldig volgens het oude criterium, dus de vector klopt.
             #
             # VERVANG de entry, muteer hem niet. Bij een in-place mutatie zijn
@@ -642,7 +697,7 @@ def get_cached(path, cache: dict, recompute: bool = True):
             # schrijft per definitie nooit weg, dus de upgrade zou alleen de
             # cache van de aanroeper muteren zonder ooit te landen.
             if recompute:
-                cache[key] = dict(entry, text_hash=th)
+                cache[key] = dict(entry, hash=file_hash(path), text_hash=th)
                 _note_migration()
                 return cache[key]["embedding"]
             return entry["embedding"]

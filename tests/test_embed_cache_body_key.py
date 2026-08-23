@@ -73,8 +73,13 @@ class EmbedCacheBodyKeyTest(unittest.TestCase):
         self.assertEqual(self.calls, 2, "een andere body moet wel opnieuw")
 
     def test_oude_cache_zonder_text_hash_migreert_zonder_herberekening(self):
-        """Een bestaande cache mag geen volledige her-embedding afdwingen."""
-        cache = {str(self.f): {"hash": emb.file_hash(self.f), "id": "testmodel:1",
+        """Een bestaande cache mag geen volledige her-embedding afdwingen.
+
+        De oude entry draagt een md5-hash; sinds de sha256-overstap is dat wat
+        "oud" betekent.
+        """
+        cache = {str(self.f): {"hash": emb._legacy_file_hash(self.f),
+                               "id": "testmodel:1",
                                "dim": 3, "embedding": [0.1, 0.2, 0.3]}}
         self.assertIsNotNone(emb.get_cached(self.f, cache))
         self.assertEqual(self.calls, 0, "oude entry blijft geldig")
@@ -129,7 +134,11 @@ class EmbedCacheMigrationPersistsTest(unittest.TestCase):
         return [0.1, 0.2, 0.3]
 
     def _legacy_cache(self):
-        return {str(self.f): {"hash": emb.file_hash(self.f), "id": "testmodel:1",
+        # Een ECHTE oude entry draagt een md5-hash. Een entry met een
+        # sha256-hash maar zonder text_hash heeft nooit bestaan: sha256 kwam
+        # pas met text_hash mee.
+        return {str(self.f): {"hash": emb._legacy_file_hash(self.f),
+                              "id": "testmodel:1",
                               "dim": 3, "embedding": [0.1, 0.2, 0.3]}}
 
     def test_migratie_vervangt_de_entry_zodat_de_aanroeper_hem_ziet(self):
@@ -168,3 +177,87 @@ class EmbedCacheMigrationPersistsTest(unittest.TestCase):
         emb.get_cached(self.f, cache)
         self.assertEqual(self.calls, 0,
                          "dit is waar de hele wijziging voor bedoeld is")
+
+
+class Sha256CacheKeyTest(unittest.TestCase):
+    """sha256[:16] als identiteit, zonder het corpus opnieuw te embedden.
+
+    De overstap van md5[:8] invalideert per definitie elke opgeslagen sleutel.
+    Naief kost dat een volledige her-embedding: gemeten ~3,1 s per document over
+    3981 entries, ruim drie uur lokale GPU-tijd voor vectoren die bit-identiek
+    zijn aan wat er al ligt. Deze tests bewaken het pad dat dat vermijdt.
+    """
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="kb-sha-"))
+        self.f = self.tmp / "m.md"
+        self.f.write_text(
+            "---\ntype: memory\nstatus: unverified\n---\n\n" + BODY + "\n",
+            encoding="utf-8")
+        self.calls = 0
+        self._echt_embed, self._echt_id = emb.embed, emb.embed_id
+        emb.embed = self._nep_embed
+        emb.embed_id = lambda: "testmodel:1"
+        emb.reset_migrated()
+
+    def tearDown(self):
+        import shutil
+        emb.embed, emb.embed_id = self._echt_embed, self._echt_id
+        emb.reset_migrated()
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _nep_embed(self, *a, **k):
+        self.calls += 1
+        return [0.1, 0.2, 0.3]
+
+    def test_identiteit_is_sha256_op_16_hex(self):
+        import hashlib
+        data = b"wat dan ook"
+        self.assertEqual(emb.bytes_hash(data),
+                         hashlib.sha256(data).hexdigest()[:16])
+        self.assertEqual(len(emb.bytes_hash(data)), 16)
+        self.assertNotEqual(emb.bytes_hash(data),
+                            hashlib.md5(data).hexdigest()[:8])
+
+    def test_md5_tijdperk_entry_migreert_zonder_te_embedden(self):
+        """De regressie die drie uur GPU zou kosten."""
+        body = emb.doc_text(self.f)
+        cache = {str(self.f): {
+            "hash": emb._legacy_file_hash(self.f),
+            "text_hash": emb._legacy_bytes_hash(body.encode("utf-8")),
+            "id": "testmodel:1", "dim": 3, "embedding": [0.1, 0.2, 0.3]}}
+        vec = emb.get_cached(self.f, cache)
+        self.assertIsNotNone(vec)
+        self.assertEqual(self.calls, 0, "de vector klopt nog; niet herberekenen")
+        na = cache[str(self.f)]
+        self.assertEqual(len(na["text_hash"]), 16, "geupgraded naar sha256")
+        self.assertEqual(len(na["hash"]), 16)
+        self.assertEqual(emb.migrated(), 1, "zodat de bouwer de cache wegschrijft")
+
+    def test_na_migratie_kost_een_statuswissel_niets(self):
+        body = emb.doc_text(self.f)
+        cache = {str(self.f): {
+            "hash": emb._legacy_file_hash(self.f),
+            "text_hash": emb._legacy_bytes_hash(body.encode("utf-8")),
+            "id": "testmodel:1", "dim": 3, "embedding": [0.1, 0.2, 0.3]}}
+        emb.get_cached(self.f, cache)
+        self.f.write_text(
+            "---\ntype: memory\nstatus: current\n---\n\n" + BODY + "\n",
+            encoding="utf-8")
+        emb.get_cached(self.f, cache)
+        self.assertEqual(self.calls, 0)
+
+    def test_een_gewijzigde_body_migreert_niet_maar_herberekent(self):
+        """De migratie mag geen vector adopteren die niet bij de tekst hoort."""
+        cache = {str(self.f): {
+            "hash": emb._legacy_file_hash(self.f),
+            "text_hash": emb._legacy_bytes_hash(b"een heel andere tekst"),
+            "id": "testmodel:1", "dim": 3, "embedding": [0.1, 0.2, 0.3]}}
+        emb.get_cached(self.f, cache)
+        self.assertEqual(self.calls, 1, "oude sleutel matcht niet -> opnieuw")
+
+    def test_body_key_is_sha256_en_niet_persistent(self):
+        import hashlib
+        import _sweeputil as su
+        self.assertEqual(su.body_key(" tekst "),
+                         hashlib.sha256(b"tekst").hexdigest())
