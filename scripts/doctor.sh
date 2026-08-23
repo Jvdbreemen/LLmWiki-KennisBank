@@ -608,7 +608,11 @@ EOF2
     fi
   elif [ "$rot_total" -gt 0 ]; then
     if [ "${rot_wait:-0}" -gt 0 ]; then
-      report_warn "geheugen quarantaine" "$rot_wait unverified memories ouder dan 48u wachten nog op een beoordeling (check sweep-launch/Ollama)"
+      # Zelfde tekst als memory-notify: wachtend is de VERWACHTE toestand na een
+      # grote extractie, want de sweep cap't trap 1 op KB_VERIFY_CAP per run.
+      # Naar sweep-launch/Ollama wijzen stuurt de lezer naar twee dingen die
+      # niets mankeren en noemt het enige gereedschap dat afvoert niet.
+      report_warn "geheugen quarantaine" "$rot_wait unverified memories ouder dan 48u wachten op beoordeling; de sweep doet er max ${KB_VERIFY_CAP:-40} per run, dus draai 'kb-verify.py' om de achterstand in een keer af te voeren (--dry-run toont eerst wat er zou promoveren)"
     fi
     if [ "${rot_undec:-0}" -gt 0 ]; then
       report_warn "geheugen quarantaine" "$rot_undec beoordeelde memories bleven onbeslisbaar; geen automatisch pad verplaatst die nog - bekijk ze met 'memory-doctor.py pending' en beslis per stuk met 'memory-doctor.py decide <stem> approve|reject|skip'"

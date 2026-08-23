@@ -296,11 +296,20 @@ class DoctorQuarantineOutputTest(MemoryDoctorTest):
         self.assertIn("memory-doctor.py decide", joined)
         self.assertNotIn("/kennisbank:review", joined)
 
-    def test_only_waiting_still_points_at_the_sweep(self):
+    def test_only_waiting_points_at_kb_verify(self):
+        """Wachtend is de VERWACHTE toestand, geen storing.
+
+        De sweep cap't trap 1 op KB_VERIFY_CAP per run, dus na een grote
+        extractie blijft er per definitie een achterstand liggen. doctor.sh
+        droeg dezelfde tekst die memory-notify eerder kreeg gecorrigeerd: naar
+        sweep-launch en Ollama wijzen stuurt de lezer naar twee dingen die niets
+        mankeren, en noemt het gereedschap dat wel afvoert niet.
+        """
         old = (date.today() - timedelta(days=3)).isoformat()
         self._mem("waiting.md", "unverified", old)
         joined = " ".join(self._doctor_quarantine_lines())
-        self.assertIn("sweep-launch", joined)
+        self.assertIn("kb-verify.py", joined)
+        self.assertNotIn("sweep-launch", joined)
         self.assertNotIn("onbeslisbaar", joined)
 
     def test_clean_vault_passes(self):
