@@ -19,6 +19,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _vaultpath import vault_root  # noqa: E402
+from _common import env_int  # noqa: E402
 import _sweepstate  # noqa: E402
 
 HEARTBEAT = "memory-sweep-status.json"
@@ -26,7 +27,7 @@ _STALE_HOURS = 26
 #: De cap die de sweep op trap 1 legt (KB_VERIFY_CAP in _groundcheck). Staat hier
 #: alleen om de melding te laten uitleggen WAAROM er een achterstand is; de
 #: waarheid blijft _groundcheck.
-_VERIFY_CAP = int(os.environ.get("KB_VERIFY_CAP", "40"))
+_VERIFY_CAP = env_int("KB_VERIFY_CAP", 40)
 
 
 def _worker_running(vault: Path) -> bool:
