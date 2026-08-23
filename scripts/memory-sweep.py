@@ -307,11 +307,11 @@ CHUNK_BUDGET = env_int("KB_SWEEP_CHUNK_BUDGET", 150)
 TIME_BUDGET_SEC = env_int("KB_SWEEP_TIME_BUDGET", 900)
 
 
-def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
-              max_memories_per_transcript: int = MAX_MEMORIES_PER_TRANSCRIPT,
-              ignore_watermark: bool = False,
-              chunk_budget: int = CHUNK_BUDGET,
-              time_budget: int = TIME_BUDGET_SEC) -> dict:
+def _run_sweep_locked(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
+                      max_memories_per_transcript: int = MAX_MEMORIES_PER_TRANSCRIPT,
+                      ignore_watermark: bool = False,
+                      chunk_budget: int = CHUNK_BUDGET,
+                      time_budget: int = TIME_BUDGET_SEC) -> dict:
     """Verwerk pending (of alle) transcripts naar memory-files.
 
     Bij ignore_watermark=True worden ALLE *.jsonl in 01-raw/transcripts/ verwerkt,
@@ -322,11 +322,6 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
     Returns een samenvatting-dict met sleutels:
         enabled, processed, written, current, unverified, duplicates, expired, errors
     """
-    # Lease op de single-flight lock voor de HELE looptijd. Niet op lus- en
-    # passgrenzen: het inlezen van de geheugenlaag en de burenberekening zitten
-    # in andere modules en duren samen het leeuwendeel van de run, dus daar is
-    # geen grens om een aanroep aan op te hangen.
-    lease = ss.start_lease()
     s = {
         "enabled": True,
         "processed": 0,
@@ -609,12 +604,35 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
         _note_pass_failure(s, "focus_updated", e)
 
     _write_heartbeat(s)
-    # Klaar: lease stoppen en het slot vrijgeven in plaats van het te laten
-    # verlopen. Zonder dit blijft de lock nog STALE_SEC liggen en wordt een
-    # volgende run onnodig overgeslagen.
-    lease.set()
-    ss.release_lock()
     return s
+
+
+def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
+              max_memories_per_transcript: int = MAX_MEMORIES_PER_TRANSCRIPT,
+              ignore_watermark: bool = False,
+              chunk_budget: int = CHUNK_BUDGET,
+              time_budget: int = TIME_BUDGET_SEC) -> dict:
+    """Draai een sweep, maar alleen als dit proces de single-flight lock krijgt.
+
+    De sweep verwerft het slot zelf in plaats van aan te nemen dat een launcher
+    dat deed. Drie aanroepers bestaan -- sweep-launch, /kennisbank:rebuild-memory
+    en index-launch -- en twee daarvan slaan de launcher over. Zolang alleen de
+    launcher verwierf, gaven die twee bij afloop een slot vrij dat ze nooit namen
+    en verdween het slot van een sweep die nog draaide.
+
+    Krijgt hij de lock niet, dan is er al een sweep bezig en is niets doen het
+    juiste antwoord. De heartbeat blijft dan ongemoeid: die van de draaiende
+    sweep is actueler dan een lege van deze.
+    """
+    with ss.sweep_lock() as owned:
+        if not owned:
+            return {"enabled": True, "skipped": "lock", "processed": 0,
+                    "written": 0, "errors": 0}
+        return _run_sweep_locked(
+            max_transcripts=max_transcripts, max_chunks=max_chunks,
+            max_memories_per_transcript=max_memories_per_transcript,
+            ignore_watermark=ignore_watermark, chunk_budget=chunk_budget,
+            time_budget=time_budget)
 
 
 def main(argv=None) -> int:
@@ -648,7 +666,9 @@ def main(argv=None) -> int:
     ignore = "--all" in argv
     s = run_sweep(max_transcripts=mx, max_memories_per_transcript=mm,
                   ignore_watermark=ignore)
-    if s.get("enabled"):
+    if s.get("skipped") == "lock":
+        print("memory-sweep: overgeslagen, er draait al een sweep")
+    elif s.get("enabled"):
         print(
             f"memory-sweep: {s['processed']} transcripts, {s['written']} geschreven "
             f"({s['current']} current, {s['unverified']} unverified), "

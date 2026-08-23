@@ -10,103 +10,203 @@ Stdlib only.
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import sys
+import threading
 import time
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _common import outside_window  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402
 
 WATERMARK = ".swept"
 
-#: De single-flight lock van de sweep. Woont hier en niet in sweep-launch.py,
-#: omdat zowel de launcher (die hem neemt) als de sweep zelf (die hem als lease
-#: ververst) hem nodig heeft.
+#: De single-flight lock van de sweep. Woont hier omdat de sweep hem zelf
+#: verwerft, vasthoudt en vrijgeeft; sweep-launch is alleen nog een spawn-gate.
+#:
+#: Waarom de sweep en niet de launcher. De launcher spawnt gedetacheerd en
+#: eindigt direct, dus er is geen proces meer dat een lease kan verversen. De
+#: sweep is het enige proces dat weet dat hij nog leeft. En er zijn drie
+#: aanroepers: sweep-launch, commands/kennisbank/rebuild-memory.md en
+#: index-launch.py -- de laatste twee slaan de launcher over. Zolang alleen de
+#: launcher verwierf, was "de launcher neemt, de sweep geeft vrij" geen contract
+#: maar een aanname, en gaven die twee een slot vrij dat ze nooit namen.
 LOCK_NAME = ".sweep.lock"
 
-#: Hoe vaak refresh_lock() de mtime hoogstens aanraakt. De sweep roept hem aan
-#: op elke transcript- en passgrens; zonder rem is dat een schrijfactie per
-#: chunk voor een lease die in uren meet.
-LOCK_REFRESH_SEC = 30
+#: Een lock ouder dan dit geldt als verweesd. Woonde in sweep-launch; verhuisd
+#: omdat verwerven en oordelen bij elkaar horen.
+STALE_SEC = 3600
 
-_last_refresh = 0.0
+#: Hoe vaak de lease-thread de mtime aanraakt.
+LEASE_REFRESH_SEC = 30
+
+#: Bovengrens op de lease. Een tikkende thread bewijst dat het PROCES leeft, niet
+#: dat er voortgang is. Zonder plafond houdt een vastgelopen sweep zijn slot voor
+#: onbepaalde tijd en ligt al het onderhoud stil tot iemand het lockbestand met
+#: de hand weggooit -- de spiegel van de bug die de lease oploste: eerst dubbel
+#: werk door valse staleness, dan nul werk door valse liveness. Met een plafond
+#: verloopt het slot alsnog, en is het ergste geval weer een vertraging in plaats
+#: van een blokkade.
+LEASE_MAX_SEC = 4 * STALE_SEC
 
 
 def lock_path(vault=None) -> Path:
     return (vault or vault_root()) / ".claude" / LOCK_NAME
 
 
-def refresh_lock(vault=None, now=None) -> bool:
-    """Vernieuw de lease op de sweep-lock. True als de mtime is aangeraakt.
+def is_stale(lock: Path) -> bool:
+    """True als de lock verder dan STALE_SEC van nu af ligt -- in het verleden
+    (verweesd) of in de toekomst (klokverzetting; zonder die kant verloopt zo'n
+    lock nooit en ligt het onderhoud permanent stil).
 
-    De lock werd door de launcher genomen en daarna door niemand meer
-    aangeraakt, terwijl de staleness-check in uren rekent. "Ouder dan een uur"
-    betekende daardoor "de sweep draait langer dan een uur", niet "de sweep is
-    dood". Op een gegroeide vault haalt een sweep die drempel: gemeten liep een
-    enkele onderhoudspass 23m52s over 4077 memories. De volgende launcher
-    verklaarde de lock dan stale en spawnde een TWEEDE sweep naast de eerste.
-
-    Dat is zelfversterkend. Twee sweeps delen dezelfde GPU, dus allebei worden
-    ze trager, waardoor de drempel nog zekerder wordt overschreden. Waargenomen:
-    drie gelijktijdige sweeps. Ze beschadigen elkaars data niet -- de watermark
-    en de dedup dekken dat af, en een integriteitscheck op beide sqlite-bestanden
-    kwam schoon terug -- maar ze verdrievoudigen wel het werk.
-
-    Met een lease die tijdens het werk wordt ververst betekent een verlopen lock
-    weer wat de naam belooft: er is niemand meer die eraan werkt.
-    """
-    global _last_refresh
-    t = time.time() if now is None else now
-    if t - _last_refresh < LOCK_REFRESH_SEC:
-        return False
-    p = lock_path(vault)
+    Het venster is SYMMETRISCH en niet `age < 0`, want een verse mtime kan op
+    Windows in de toekomst liggen: `time.time()` leest daar
+    GetSystemTimeAsFileTime met een resolutie van 15,625 ms, terwijl het
+    bestandssysteem de mtime van een fijnere klok stempelt. Gemeten: 586 van
+    5000 net aangemaakte bestanden gaven age < 0 (max +0,016 s). Met `age < 0`
+    verklaarde acquire_lock dus 12% van zijn EIGEN verse locks stale, ruimde ze
+    op en gaf single-flight weg (TASK-140)."""
     try:
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.touch(exist_ok=True)
+        age = time.time() - lock.stat().st_mtime
+        return outside_window(age, STALE_SEC)
     except OSError:
-        # Fail-open: onderhoud mag nooit stoppen omdat een lease-touch faalt.
-        return False
-    _last_refresh = t
-    return True
+        return True
 
 
-def start_lease(vault=None):
-    """Ververs de lock in een daemon-thread tot de teruggegeven Event gezet is.
-
-    Losse refresh_lock()-aanroepen op lus- en passgrenzen dekken de looptijd
-    NIET. Gemeten: de sweep besteedde minuten aan het inlezen van 4387 memories
-    en 23m52s aan een burenberekening, allebei in andere modules, waar geen
-    grens ligt om een aanroep aan op te hangen. Een lock die tijdens die fases
-    stilstaat verloopt precies waar hij het hardst nodig is.
-
-    Een thread hangt niet aan de codestructuur en dekt daarom elke fase. Sterft
-    het proces, dan stopt de thread mee en verloopt de lock zoals bedoeld: dat
-    is precies het signaal dat staleness hoort te geven.
-    """
-    import threading
-    stop = threading.Event()
-
-    def _loop():
-        while not stop.wait(LOCK_REFRESH_SEC):
-            p = lock_path(vault)
-            try:
-                p.parent.mkdir(parents=True, exist_ok=True)
-                p.touch(exist_ok=True)
-            except OSError:
-                pass  # fail-open; de volgende ronde probeert opnieuw
-
-    threading.Thread(target=_loop, daemon=True, name="sweep-lease").start()
-    return stop
+def _new_token() -> str:
+    """Een token dat dit proces identificeert. PID alleen volstaat niet: PIDs
+    worden hergebruikt, en na een reboot kan een vreemd proces het nummer van de
+    vorige houder dragen."""
+    return f"{os.getpid()}:{os.urandom(8).hex()}"
 
 
-def release_lock(vault=None) -> None:
-    """Geef de lock vrij. Fail-open: een niet-verwijderbare lock verloopt vanzelf."""
+def _read_token(lock: Path) -> "str | None":
     try:
-        lock_path(vault).unlink()
+        return lock.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+
+
+def _touch(lock: Path) -> None:
+    """Werk de mtime bij zonder een symlink te volgen.
+
+    `Path.touch()` volgt symlinks; `acquire` gebruikt O_CREAT|O_EXCL en doet dat
+    bewust niet. Die asymmetrie weghalen scheelt een pad waarop de sweep de mtime
+    van een willekeurig bestand bijwerkt. O_NOFOLLOW bestaat niet op Windows;
+    daar valt hij terug op utime, wat geen regressie is ten opzichte van touch().
+    """
+    if os.utime not in getattr(os, "supports_fd", ()):
+        # Windows kent geen utime op een fd en geen O_NOFOLLOW. Terugvallen op
+        # het pad is daar geen regressie: Path.touch() deed niets anders.
+        try:
+            os.utime(str(lock))
+        except OSError:
+            pass
+        return
+    flags = os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(str(lock), flags)
+    except OSError:
+        return  # fail-open: onderhoud stopt nooit op een lease-touch
+    try:
+        os.utime(fd)
     except OSError:
         pass
+    finally:
+        os.close(fd)
+
+
+def acquire_lock(vault=None, token: "str | None" = None) -> "str | None":
+    """Neem de lock atomair. Geeft het token terug, of None als een ander hem heeft.
+
+    1. O_CREAT|O_EXCL direct -- slaagt als de lock nog niet bestaat.
+    2. Bij FileExistsError: is hij stale?
+       - Nee  -> er draait een sweep; None.
+       - Ja   -> opruimen en een keer opnieuw proberen.
+    """
+    lock = lock_path(vault)
+    tok = token or _new_token()
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    for poging in (1, 2):
+        try:
+            fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            try:
+                os.write(fd, tok.encode("utf-8"))
+            finally:
+                os.close(fd)
+            return tok
+        except FileExistsError:
+            if poging == 2 or not is_stale(lock):
+                return None
+            try:
+                lock.unlink()
+            except OSError:
+                return None
+        except OSError:
+            return None
+    return None
+
+
+def release_lock(vault=None, token: "str | None" = None) -> bool:
+    """Geef de lock vrij. Met een token: alleen als hij nog van ons is.
+
+    Zonder eigenaarscheck verwijdert een sweep die de lock nooit nam het slot van
+    een sweep die nog draait, waarna de volgende launcher een tweede spawnt. Het
+    patroon staat al in index-launch.py:249 -- "Release only our lock; an old
+    worker must not remove a newer one".
+
+    Fail-open: een niet-verwijderbare lock verloopt vanzelf na STALE_SEC.
+    """
+    lock = lock_path(vault)
+    if token is not None and _read_token(lock) != token:
+        return False
+    try:
+        lock.unlink()
+        return True
+    except OSError:
+        return False
+
+
+@contextlib.contextmanager
+def sweep_lock(vault=None):
+    """Yield True als dit proces de lock bezit, False als een ander hem heeft.
+
+    Verwerven, verversen en vrijgeven zitten in een constructie, zodat er geen
+    pad meer bestaat waarop de lock blijft liggen: elke vroege return en elke
+    exception loopt door de finally. Voorheen stonden acquire en release in
+    verschillende modules met ~290 regels ertussen en zonder try/finally.
+
+    De lease-thread bindt het vault-pad EEN keer. Resolveerde hij `vault_root()`
+    per tik, dan volgt hij een gewijzigde KENNISBANK_VAULT: gemeten schrijft een
+    thread die een test overleeft daarna in de vault waar de env-var naartoe is
+    hersteld. De tests gebruiken juist een tijdelijke vault om dat te vermijden.
+    """
+    lock = lock_path(vault)
+    tok = acquire_lock(vault)
+    if tok is None:
+        yield False
+        return
+
+    stop = threading.Event()
+    begin = time.monotonic()
+
+    def _loop():
+        while not stop.wait(LEASE_REFRESH_SEC):
+            if time.monotonic() - begin > LEASE_MAX_SEC:
+                return          # plafond: laat het slot alsnog verlopen
+            if _read_token(lock) != tok:
+                return          # niet meer van ons; niet blijven tikken
+            _touch(lock)
+
+    threading.Thread(target=_loop, daemon=True, name="sweep-lease").start()
+    try:
+        yield True
+    finally:
+        stop.set()
+        release_lock(vault, tok)
 
 
 def _tdir(vault=None) -> Path:

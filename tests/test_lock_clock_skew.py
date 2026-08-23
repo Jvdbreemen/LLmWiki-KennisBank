@@ -25,6 +25,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _loader import load_script  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+import _sweepstate as ss  # noqa: E402
 
 #: Smaller than one tick of the Windows system clock, i.e. exactly the noise the
 #: old check mistook for a clock change.
@@ -60,10 +62,10 @@ class SweepLaunchSkewTest(_VaultCase):
         self.m = load_script("sweep-launch.py")
 
     def test_barely_future_lock_is_held_not_reclaimed(self):
-        self.assertTrue(self.m.acquire_lock())
-        _stamp_future(self.m._lock_path())
-        self.assertFalse(self.m.is_stale(self.m._lock_path()))
-        self.assertFalse(self.m.acquire_lock(), "single-flight gave the lock away")
+        self.assertTrue(ss.acquire_lock())
+        _stamp_future(ss.lock_path())
+        self.assertFalse(ss.is_stale(ss.lock_path()))
+        self.assertFalse(ss.acquire_lock(), "single-flight gave the lock away")
 
 
 class IndexLaunchSkewTest(_VaultCase):
@@ -109,14 +111,14 @@ class SessionStartSkewTest(_VaultCase):
         self.m = load_script("kb-session-start.py")
 
     def test_barely_future_lock_is_held_not_reclaimed(self):
-        lock = self.vault / ".claude" / self.m.LOCK_NAME
+        lock = self.vault / ".claude" / ss.LOCK_NAME
         self.assertTrue(self.m.acquire_lock(lock))
         _stamp_future(lock)
         self.assertFalse(self.m.acquire_lock(lock), "coordinator lock reclaimed itself")
 
     def test_far_future_lock_still_expires(self):
         """A real clock change must not park SessionStart maintenance forever."""
-        lock = self.vault / ".claude" / self.m.LOCK_NAME
+        lock = self.vault / ".claude" / ss.LOCK_NAME
         self.assertTrue(self.m.acquire_lock(lock))
         _stamp_future(lock, self.m.LOCK_STALE_SECONDS + 60)
         self.assertTrue(self.m.acquire_lock(lock))

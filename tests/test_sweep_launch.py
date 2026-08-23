@@ -11,6 +11,12 @@ from pathlib import Path
 
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
 
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+import _sweepstate as ss  # noqa: E402
+
+
+
 
 def _load():
     spec = importlib.util.spec_from_file_location("sweep_launch", str(SCRIPTS_DIR / "sweep-launch.py"))
@@ -37,10 +43,10 @@ class SweepLaunchTest(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def test_acquire_then_second_fails(self):
-        self.assertTrue(self.m.acquire_lock())
-        self.assertFalse(self.m.acquire_lock())  # single-flight
-        self.m.release_lock()
-        self.assertTrue(self.m.acquire_lock())
+        self.assertTrue(ss.acquire_lock())
+        self.assertFalse(ss.acquire_lock())  # single-flight
+        ss.release_lock()
+        self.assertTrue(ss.acquire_lock())
 
     def test_gated_off_skips_spawn(self):
         (self.vault / "kennisbank-settings.json").write_text(
@@ -67,25 +73,25 @@ class SweepLaunchTest(unittest.TestCase):
         """IMPORTANT 2: een stale lock (backdated mtime) moet door acquire_lock worden hergebruikt."""
         import time
         # Verwerf de lock normaal
-        self.assertTrue(self.m.acquire_lock())
-        lock_path = self.m._lock_path()
+        self.assertTrue(ss.acquire_lock())
+        lock_path = ss.lock_path()
         self.assertTrue(lock_path.exists())
         # Zet de mtime terug in het verleden, voorbij STALE_SEC
-        old = time.time() - self.m.STALE_SEC - 10
+        old = time.time() - ss.STALE_SEC - 10
         os.utime(str(lock_path), (old, old))
         # Tweede acquire moet slagen (stale reclaim)
-        self.assertTrue(self.m.acquire_lock(), "stale lock should be reclaimed")
+        self.assertTrue(ss.acquire_lock(), "stale lock should be reclaimed")
 
     def test_future_mtime_treated_as_stale(self):
         """BUG 5a: een lock met toekomstige mtime (clock skew) moet als stale worden gezien."""
         import time
-        lock_path = self.m._lock_path()
+        lock_path = ss.lock_path()
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         lock_path.write_text("pid", encoding="utf-8")
         # Zet de mtime in de toekomst (clock skew simulatie)
         future = time.time() + 7200
         os.utime(str(lock_path), (future, future))
-        self.assertTrue(self.m.is_stale(lock_path), "future mtime should be treated as stale")
+        self.assertTrue(ss.is_stale(lock_path), "future mtime should be treated as stale")
 
 
 if __name__ == "__main__":

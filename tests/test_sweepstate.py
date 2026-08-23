@@ -90,109 +90,132 @@ if __name__ == "__main__":
     unittest.main()
 
 
-class SweepLockLeaseTest(unittest.TestCase):
-    """De sweep-lock als lease in plaats van een leeftijdsstempel.
+class SweepLockOwnershipTest(unittest.TestCase):
+    """De sweep-lock als bezit, niet als leeftijdsstempel.
 
-    De launcher nam de lock en niemand raakte hem daarna nog aan, terwijl de
-    staleness-check in uren rekent. "Ouder dan STALE_SEC" betekende daardoor
-    "de sweep draait al langer dan een uur", niet "de sweep is dood". Op een
-    gegroeide vault haalt een sweep die drempel -- gemeten 23m52s voor een
-    enkele onderhoudspass over 4077 memories -- en dan startte de volgende
-    launcher een tweede sweep naast de eerste. Waargenomen: drie tegelijk.
+    Twee defecten die deze tests bewaken, beide gevonden in review nadat de
+    lease-versie al gemerged was:
+
+    1. run_sweep startte onvoorwaardelijk een lease en gaf het slot
+       onvoorwaardelijk vrij, ook als het proces het nooit verwierf. Er zijn
+       drie aanroepers en twee daarvan slaan sweep-launch over
+       (commands/kennisbank/rebuild-memory.md, scripts/index-launch.py), dus
+       die verwijderden het slot van een sweep die nog draaide.
+    2. De lease tikte door zolang het proces leefde. Een vastgelopen sweep hield
+       daarmee zijn slot voor onbepaalde tijd, waar de oude leeftijdslogica na
+       STALE_SEC vanzelf herstelde.
     """
 
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="kb-lease-"))
+        self.tmp = Path(tempfile.mkdtemp(prefix="kb-lock-"))
         (self.tmp / ".claude").mkdir(parents=True)
-        ss._last_refresh = 0.0
 
     def tearDown(self):
         import shutil
-        ss._last_refresh = 0.0
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def _launcher(self):
-        """sweep-launch.py laden, met zijn is_stale en STALE_SEC."""
-        import importlib.util
-        spec = importlib.util.spec_from_file_location(
-            "sweep_launch", str(SCRIPTS_DIR / "sweep-launch.py"))
-        m = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(m)
-        return m
+    def test_tweede_verwerving_faalt_en_release_geeft_vrij(self):
+        tok = ss.acquire_lock(self.tmp)
+        self.assertIsNotNone(tok)
+        self.assertIsNone(ss.acquire_lock(self.tmp), "single-flight")
+        self.assertTrue(ss.release_lock(self.tmp, tok))
+        self.assertIsNotNone(ss.acquire_lock(self.tmp), "na vrijgave weer te nemen")
 
-    def test_refresh_touches_and_throttles(self):
+    def test_release_verwijdert_het_slot_van_een_ander_niet(self):
+        """De regressie. Een sweep die het slot nooit nam mag het niet weggooien."""
+        eigenaar = ss.acquire_lock(self.tmp)
+        vreemde = "999999:deadbeefdeadbeef"
+        self.assertFalse(ss.release_lock(self.tmp, vreemde),
+                         "een vreemd token mag niets vrijgeven")
+        self.assertTrue(ss.lock_path(self.tmp).exists(),
+                        "het slot van de eigenaar staat er nog")
+        self.assertTrue(ss.release_lock(self.tmp, eigenaar))
+
+    def test_stale_lock_wordt_heroverd(self):
+        ss.acquire_lock(self.tmp)
         lock = ss.lock_path(self.tmp)
-        self.assertTrue(ss.refresh_lock(self.tmp, now=1000.0))
-        self.assertTrue(lock.exists())
-        # Binnen het venster niet nog eens aanraken: de lease meet in uren, een
-        # schrijfactie per chunk is pure I/O.
-        self.assertFalse(ss.refresh_lock(self.tmp, now=1000.0 + ss.LOCK_REFRESH_SEC - 1))
-        self.assertTrue(ss.refresh_lock(self.tmp, now=1000.0 + ss.LOCK_REFRESH_SEC))
-
-    def test_een_lopende_sweep_verliest_zijn_slot_niet(self):
-        """De regressie. Zonder lease was deze lock stale en spawnde de
-        volgende launcher een tweede sweep."""
-        launcher = self._launcher()
-        lock = ss.lock_path(self.tmp)
-        lock.write_text("123", encoding="utf-8")
-
-        # Doe alsof de run al ruim over de stale-drempel loopt.
-        oud = time.time() - (launcher.STALE_SEC + 600)
+        oud = time.time() - ss.STALE_SEC - 10
         os.utime(lock, (oud, oud))
-        self.assertTrue(launcher.is_stale(lock), "opzet: zonder refresh is hij stale")
+        self.assertIsNotNone(ss.acquire_lock(self.tmp), "verweesd slot is herbruikbaar")
 
-        # De sweep ververst zijn lease zoals hij dat op elke passgrens doet.
-        self.assertTrue(ss.refresh_lock(self.tmp, now=time.time()))
-        self.assertFalse(launcher.is_stale(lock),
-                         "een sweep die nog werkt houdt zijn slot")
+    def test_context_manager_geeft_altijd_vrij(self):
+        """Elke vroege return en elke exception moet door de finally lopen."""
+        with ss.sweep_lock(self.tmp) as owned:
+            self.assertTrue(owned)
+            self.assertTrue(ss.lock_path(self.tmp).exists())
+        self.assertFalse(ss.lock_path(self.tmp).exists(), "vrijgegeven bij nette exit")
 
-    def test_release_geeft_het_slot_direct_vrij(self):
-        lock = ss.lock_path(self.tmp)
-        ss.refresh_lock(self.tmp, now=time.time())
-        self.assertTrue(lock.exists())
-        ss.release_lock(self.tmp)
-        self.assertFalse(lock.exists(),
-                         "klaar is klaar; niet STALE_SEC laten liggen")
-        ss.release_lock(self.tmp)  # tweede keer mag niet gooien
+        with self.assertRaises(RuntimeError):
+            with ss.sweep_lock(self.tmp) as owned:
+                self.assertTrue(owned)
+                raise RuntimeError("boem")
+        self.assertFalse(ss.lock_path(self.tmp).exists(),
+                         "ook vrijgegeven na een exception")
 
-    def test_launcher_en_sweep_wijzen_naar_hetzelfde_bestand(self):
-        launcher = self._launcher()
-        self.assertEqual(launcher.LOCK_NAME, ss.LOCK_NAME)
+    def test_tweede_sweep_krijgt_false_en_raakt_het_slot_niet(self):
+        buiten = ss.acquire_lock(self.tmp)
+        with ss.sweep_lock(self.tmp) as owned:
+            self.assertFalse(owned, "er draait al een sweep")
+        self.assertEqual(ss._read_token(ss.lock_path(self.tmp)), buiten,
+                         "het slot is nog van de eerste houder")
 
-    def test_lease_thread_dekt_ook_fases_zonder_grens(self):
-        """Losse refresh-aanroepen dekten de looptijd niet.
-
-        Gemeten op een echte run: de lock bleef 165 seconden op zijn starttijd
-        staan terwijl de sweep werkte, omdat het inlezen van 4387 memories en
-        de burenberekening in andere modules zitten en er dus geen lus- of
-        passgrens is om een aanroep aan op te hangen. Een thread hangt niet aan
-        de codestructuur en dekt daarom elke fase.
-        """
-        origineel = ss.LOCK_REFRESH_SEC
-        ss.LOCK_REFRESH_SEC = 0.05
+    def test_lease_houdt_het_slot_levend(self):
+        origineel = ss.LEASE_REFRESH_SEC
+        ss.LEASE_REFRESH_SEC = 0.05
         try:
-            lock = ss.lock_path(self.tmp)
-            lock.write_text("x", encoding="utf-8")
-            oud = time.time() - 3600
-            os.utime(lock, (oud, oud))
-
-            stop = ss.start_lease(self.tmp)
-            try:
+            with ss.sweep_lock(self.tmp) as owned:
+                self.assertTrue(owned)
+                lock = ss.lock_path(self.tmp)
+                oud = time.time() - ss.STALE_SEC - 600
+                os.utime(lock, (oud, oud))
+                self.assertTrue(ss.is_stale(lock), "opzet: nu is hij stale")
                 deadline = time.time() + 5
-                while time.time() < deadline:
-                    if lock.stat().st_mtime > oud + 60:
-                        break
+                while time.time() < deadline and ss.is_stale(lock):
                     time.sleep(0.05)
-                self.assertGreater(lock.stat().st_mtime, oud + 60,
-                                   "de thread heeft de lease niet ververst")
-            finally:
-                stop.set()
-
-            # Na stop() staat de lease stil: dat is wat een dode sweep hoort te doen.
-            time.sleep(0.2)
-            na_stop = lock.stat().st_mtime
-            time.sleep(0.3)
-            self.assertEqual(lock.stat().st_mtime, na_stop,
-                             "na stop() mag de lease niet meer bewegen")
+                self.assertFalse(ss.is_stale(lock),
+                                 "een draaiende sweep houdt zijn slot")
         finally:
-            ss.LOCK_REFRESH_SEC = origineel
+            ss.LEASE_REFRESH_SEC = origineel
+
+    def test_lease_stopt_bij_het_plafond(self):
+        """Een tikkende thread bewijst dat het proces leeft, niet dat er voortgang is."""
+        r, m = ss.LEASE_REFRESH_SEC, ss.LEASE_MAX_SEC
+        ss.LEASE_REFRESH_SEC, ss.LEASE_MAX_SEC = 0.05, 0.15
+        try:
+            with ss.sweep_lock(self.tmp):
+                lock = ss.lock_path(self.tmp)
+                time.sleep(0.5)          # ruim voorbij het plafond
+                gestopt = lock.stat().st_mtime
+                time.sleep(0.4)
+                self.assertEqual(lock.stat().st_mtime, gestopt,
+                                 "voorbij het plafond mag de lease niet meer tikken")
+        finally:
+            ss.LEASE_REFRESH_SEC, ss.LEASE_MAX_SEC = r, m
+
+    def test_lease_volgt_geen_gewijzigde_vault(self):
+        """De thread bindt het vault-pad een keer.
+
+        Resolveerde hij vault_root() per tik, dan schreef een thread die een test
+        overleeft daarna in de vault waar KENNISBANK_VAULT naartoe is hersteld.
+        Gemeten gedrag van de vorige versie; de tests gebruiken juist een
+        tijdelijke vault om productie nooit te raken.
+        """
+        ander = Path(tempfile.mkdtemp(prefix="kb-ander-"))
+        (ander / ".claude").mkdir(parents=True)
+        origineel = ss.LEASE_REFRESH_SEC
+        ss.LEASE_REFRESH_SEC = 0.05
+        bewaard = os.environ.get("KENNISBANK_VAULT")
+        try:
+            with ss.sweep_lock(self.tmp):
+                os.environ["KENNISBANK_VAULT"] = str(ander)
+                time.sleep(0.4)
+                self.assertFalse((ander / ".claude" / ss.LOCK_NAME).exists(),
+                                 "de lease hoort bij de vault waar hij begon")
+        finally:
+            ss.LEASE_REFRESH_SEC = origineel
+            if bewaard is None:
+                os.environ.pop("KENNISBANK_VAULT", None)
+            else:
+                os.environ["KENNISBANK_VAULT"] = bewaard
+            import shutil
+            shutil.rmtree(ander, ignore_errors=True)
