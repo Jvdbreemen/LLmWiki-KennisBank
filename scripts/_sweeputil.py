@@ -47,5 +47,15 @@ def is_duplicate(vec, existing_vecs, threshold: float = 0.92) -> bool:
 
 
 def body_key(body: str) -> str:
-    """Deterministische sleutel voor exacte-body-dedup."""
-    return hashlib.md5((body or "").strip().encode("utf-8")).hexdigest()
+    """Deterministische sleutel voor exacte-body-dedup.
+
+    Volledige sha256, niet afgekapt: deze sleutel wordt door geen mens gelezen
+    en staat in geen diff, dus er is niets te winnen met een kortere vorm.
+
+    Omzetten van md5 kostte niets. De sleutel wordt per run vers berekend uit de
+    bodies op schijf (memory-sweep._dedup_items) en leeft alleen als in-memory
+    set binnen diezelfde run; hij staat nergens opgeslagen. Beide zijden van elke
+    vergelijking komen dus uit deze functie in dezelfde run, en een
+    algoritmewissel is daarmee onzichtbaar voor de dedup.
+    """
+    return hashlib.sha256((body or "").strip().encode("utf-8")).hexdigest()
