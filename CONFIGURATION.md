@@ -214,6 +214,20 @@ override the config file; both override the built-in defaults.
   requested timeout. Raise this explicitly only when the client hook budget has
   matching headroom; otherwise a legacy/high `KB_RETRIEVE_TIMEOUT` is clamped.
 
+### Fan-out breedte van de sessie-coordinatoren (`KB_MAX_WORKERS`)
+
+- **Wat**: hoeveel kindprocessen `kb-session-start.py`, `kb-session-log.py` en
+  `kb-session-end.py` tegelijk laten lopen.
+- **Default**: `os.cpu_count() - 2`, met een ondergrens van 2 en nooit meer dan
+  het aantal jobs. Twee cores blijven vrij omdat een hook een achtergrondgunst
+  is: degene die hem uitlokte zit nog op dezelfde machine te typen.
+- **Waarom de knop bestaat**: `os.cpu_count()` ziet de cgroup-quota van een
+  container niet. Draai je in CI met een fractionele CPU-limiet, zet hem dan
+  handmatig (`KB_MAX_WORKERS=2`). Onzin-waarden vallen stil terug op de default.
+- **Ondergrens**: `1` is toegestaan via de knop en maakt de coordinator
+  effectief serieel. Handig om een fan-out-probleem te isoleren, niet als
+  dagelijkse instelling: de traagste job blokkeert dan alle snelle.
+
 ### Index builder (`scripts/build-embed-index.py`, coordinated SessionStart)
 
 - **Effect**: warms/refreshes the wiki embedding cache once per session, off the per-prompt path, and warms the local model. Incremental (only changed files or a model switch trigger real embed calls); prunes vanished files. Run by `kb-session-start.py`. It does **not** touch the graphify `.needs-rebuild` flag: that signal must survive until the graph is actually rebuilt.

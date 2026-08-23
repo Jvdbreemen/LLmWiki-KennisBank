@@ -34,6 +34,37 @@ def env_int(name: str, default: int) -> int:
         return default
 
 
+#: Cores left free when a session hook fans out. A hook is a background
+#: courtesy: the person who triggered it is still typing in the same machine,
+#: so the fan-out must never be able to claim the whole box.
+POOL_HEADROOM = 2
+
+
+def pool_workers(jobs: int) -> int:
+    """How many of *jobs* child processes may run at once.
+
+    The three session coordinators used ``max_workers=len(jobs)``, which sizes
+    the pool to the WORK instead of to the MACHINE. Each job starts a real
+    Python interpreter, so that spelling has no upper bound: add a sixth index
+    builder and every one of them starts at the same instant, on whatever
+    hardware happens to run it. Today the job lists are short enough that the
+    difference is invisible on a 16-core desktop -- which is exactly why it is
+    worth pinning down now, while it is a one-line change and not an incident
+    on someone's two-core laptop or a CI container with a fractional CPU quota.
+
+    Leave POOL_HEADROOM cores free so the machine stays usable, never go below
+    2 (a fan-out of one is not a fan-out), and never exceed the job count.
+    ``KB_MAX_WORKERS`` overrides the whole calculation for the rare case where
+    the operator knows better than the core count -- a CI container whose
+    cgroup quota os.cpu_count() cannot see, most of all."""
+    if jobs <= 0:
+        return 1
+    cap = env_int("KB_MAX_WORKERS", 0)
+    if cap <= 0:
+        cap = max(2, (os.cpu_count() or 4) - POOL_HEADROOM)
+    return max(1, min(jobs, cap))
+
+
 def env_float(name: str, default: float) -> float:
     """Float twin of :func:`env_int`, same fallback contract."""
     try:
