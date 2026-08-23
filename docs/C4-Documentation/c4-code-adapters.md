@@ -158,7 +158,7 @@ validate the Claude deploy. Stdlib only. Called from `setup.sh:215`, `:219`, `:2
 - `validate_mcp_runtime(vault: Path, timeout: int = 15) -> list[str]` — `:793`
   Proves the configured stdio server actually works. Two subprocess steps: an import check for
   `mcp`, `mcp.client.stdio`, `mcp.server.fastmcp` (`:800`), then a real client that performs
-  `initialize()` + `list_tools()` and requires all six tools
+  `initialize()` + `list_tools()` and requires the six gated tools (`recall`, `capture`, `what_did_i_do`, `timeline`, `weeklog`, `topic_timeline`; the server exposes eight — the two review tools are not part of the gate)
   `{recall, capture, what_did_i_do, timeline, weeklog, topic_timeline}` (`:854`).
   Depends on the `mcp` package (pinned `mcp==1.28.1` in the remediation hint at `:818`), `anyio`,
   and `<vault>/.claude/scripts/kb-mcp.py`.
@@ -380,7 +380,7 @@ where it is enforced.
 | C6 | **Fail-open, always.** A hook must never block the harness. Missing Ollama, a script error, or a malformed payload skips the side effect and exits 0. A `preToolUse` hook must never emit a deny decision. | `_copilot.py:406` (`; exit 0`), `kb-copilot-capture.py:232-236`, `quiet-hook.py:104-106`, `install-agent-envs.py:531-533` (OpenCode plugin try/catch) | ADR-0003 D3 (`docs/adr/0003-copilot-cli-integration.md:166-176`); `tests/test_copilot_capture.py:132`, `:137` ("must fail open (exit 0) on garbage"), `:141`; `tests/test_quiet_hook.py:28`, `:57` |
 | C7 | **Timeouts come from one place.** No adapter may declare its own number, and a user's own value is never overwritten. | `_hooks_manifest.py:48` consumed at `install-agent-envs.py:400`, `register-hooks.py:245`, `_copilot.py:341` | `tests/test_register_hooks.py:182`, `:197` (registered timeout equals `man.timeout("kb-retrieve.py")`), `:206` (an existing user timeout of 25 is preserved). Note: `tests/test_hooks_manifest.py` asserts events, matchers, copy semantics and coordinator uniqueness — it does **not** assert `TIMEOUTS`. |
 | C8 | **Hermetic and login-free.** Config home must be overridable (`COPILOT_HOME`, `CODEX_HOME`, `OPENCODE_CONFIG_DIR`) so tests never touch the real home, and install/validate must work without a cloud login. | `_copilot.py:92-99`, `install-agent-envs.py:128-138` | `_copilot.py:741-742` (probe runs under an explicit `COPILOT_HOME`); ADR-0003 (`:39-43`, `:257-261`) |
-| C9 | **Runtime proof, not just file presence.** MCP registration is only accepted after a real `initialize()` + `list_tools()` handshake that finds all six tools. | `install-agent-envs.py:793-882` | `install-agent-envs.py:1142-1143` (runs whenever codex/opencode/copilot is selected); `tests/test_agent_envs_install.py:264` (missing dependency), `:275` (handshake failure), `:291` (success) |
+| C9 | **Runtime proof, not just file presence.** MCP registration is only accepted after a real `initialize()` + `list_tools()` handshake that finds the six gated tool names (of the eight the server exposes; the review tools are not gated). | `install-agent-envs.py:793-882` | `install-agent-envs.py:1142-1143` (runs whenever codex/opencode/copilot is selected); `tests/test_agent_envs_install.py:264` (missing dependency), `:275` (handshake failure), `:291` (success) |
 | C10 | **Capture carries provenance, is deduped, and is redacted before disk.** Every imported event is stamped with its agent, keyed by a content hash, and secret-scrubbed. | `kb-copilot-capture.py:36`, `:40-52`, `import-copilot.py:36`, `:61` | `tests/test_copilot_capture.py:51` (`agent == "github-copilot-cli"`), `:67`, `:75` (redaction to `***`); `tests/test_copilot_import.py:75` (agent stamp on every imported event), `:78-89` (re-import yields 0 new / 1 duplicate), `:91-98` (active-session skip) |
 | C11 | **Surgical rollback.** Everything written must be removable without touching user content. | `_copilot.py:612` (`remove`), `:623` (`_remove_hooks`, deletes the file only when nothing of anyone's is left) | ADR-0003 Rollback (`docs/adr/0003-copilot-cli-integration.md:283-287`) |
 
@@ -637,5 +637,5 @@ through hooks only and never writes a Claude MCP registration (§3.1).
    integration is opt-in. KennisBank's own retrieval stays local; Copilot's model traffic does not.
 6. **Recent MCP enhancement: response compaction for Copilot.** Commit `1969dfd` (Aug 12 2026)
    added `KENNISBANK_MCP_COMPACT_OUTPUT=1` to Copilot's env (`_copilot.py:46`) so temporal tools
-   return short summaries. The six tools and their interface remain unchanged; this is a
+   return short summaries. The eight tools and their interface remain unchanged; this is a
    Copilot-only optimization that does not affect the contract (C1, C9).

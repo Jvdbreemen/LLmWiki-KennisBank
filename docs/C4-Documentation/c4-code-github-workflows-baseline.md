@@ -1,3 +1,5 @@
+> **Provenance (2026-08-19, TASK-208):** moved from the retired root `C4-Documentation/` set. Kept because `.github/workflows/ci.yml` cites its section 4 (measured runtime baselines, TASK-123). The maintained architecture set lives in `docs/C4-Documentation/`; for current CI structure see [c4-code-github.md](./c4-code-github.md).
+
 # C4 Code Level — `.github/workflows/` (CI definitions)
 
 ## 1. Overview
