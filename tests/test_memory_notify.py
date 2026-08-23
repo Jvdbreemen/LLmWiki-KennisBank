@@ -131,11 +131,28 @@ class MemoryNotifyTest(unittest.TestCase):
         self.assertNotIn("ollama", melding.lower(),
                          "niets wees op het model; noem het dan ook niet")
 
-    def test_alleen_wachtend_houdt_het_sweep_advies(self):
+    def test_alleen_wachtend_wijst_naar_kb_verify(self):
+        """Wachtend is de VERWACHTE toestand, geen storing.
+
+        De sweep cap't trap 1 op KB_VERIFY_CAP per run zodat zijn staart
+        begrensd blijft, dus na een grote extractie blijft er per definitie
+        een achterstand liggen. De oude tekst stuurde naar sweep-launch en
+        Ollama: op de vault die dit blootlegde draaide de sweep gewoon, was
+        Ollama bereikbaar en gaf de judge 12 van 12 `supported` -- de melding
+        wees dus naar twee dingen die niets mankeerden en noemde het enige
+        gereedschap dat de achterstand wel afvoert niet. Dat is dezelfde
+        faalvorm die de `undecided`-tak in TASK-198 al opgelost kreeg.
+        """
         self._hb({"errors": 0, "model_unreachable": False, "rot": 4,
                   "rot_hours": 48, "rot_waiting": 4, "rot_undecided": 0})
         melding = self.m.notice()
         self.assertIn("4", melding)
+        self.assertIn("kb-verify.py", melding,
+                      "noem het gereedschap dat de achterstand wel afvoert")
+        self.assertNotIn("sweep-launch", melding,
+                         "de sweep draait; wijs er niet naar")
+        self.assertNotIn("ollama", melding.lower(),
+                         "niets wees op het model; noem het dan ook niet")
         self.assertNotIn("decide", melding,
                          "niets is beoordeeld, dus er valt niets te beslissen")
 
