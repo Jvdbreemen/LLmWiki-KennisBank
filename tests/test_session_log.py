@@ -80,3 +80,41 @@ def test_rejects_paths_outside_session_log_directory(tmp_path):
         assert "01-raw/sessies" in str(exc)
     else:
         raise AssertionError("outside session log path was accepted")
+
+
+def test_job_timeout_is_configurable(monkeypatch):
+    """180s is fixed while build-kb-index.py scales with the corpus.
+
+    Its corrective pass hashes every indexed document, so the run time grows
+    with the vault instead of with what changed. Measured on a vault of 4320
+    indexed documents: 165 re-indexed took over 8.5 minutes, so the job was
+    killed every single session. The work survives (_kbindex.upsert commits per
+    record) but the signal does not: `timed out` becomes a permanent line and a
+    real index failure is no longer distinguishable from the routine one.
+    """
+    module = _load()
+    assert module.Job("x").timeout == 180, "default must stay 180"
+
+    monkeypatch.setenv("KB_SESSION_LOG_TIMEOUT", "900")
+    reloaded = _load()
+    assert reloaded.Job("x").timeout == 900
+    assert reloaded.Job("x", timeout=30).timeout == 30, "explicit wins over env"
+
+    monkeypatch.setenv("KB_SESSION_LOG_TIMEOUT", "onzin")
+    assert _load().Job("x").timeout == 180, "malformed value falls back"
+
+
+def test_timeout_message_names_the_knob(tmp_path):
+    """Een teller zonder knop laat de lezer met een probleem zonder oplossing.
+
+    Op een grote vault is dit de regel die elke sessie terugkomt, dus hij moet
+    zeggen wat de lezer eraan kan doen. Dwingt een echte timeout af in plaats
+    van te asserten onder een if: een test die ook zonder de fix slaagt bewaakt
+    niets.
+    """
+    module = _load()
+    (tmp_path / "sleeper.py").write_text(
+        "import time\ntime.sleep(30)\n", encoding="utf-8")
+    result = module.run_child(module.Job("sleeper.py", timeout=1), tmp_path)
+    assert "timed out" in result.error, result
+    assert "KB_SESSION_LOG_TIMEOUT" in result.error, result

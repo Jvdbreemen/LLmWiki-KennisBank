@@ -19,13 +19,29 @@ from typing import Callable
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _vaultpath import vault_root  # noqa: E402
+from _common import env_int  # noqa: E402
+
+#: Per-job wall clock. 180s fits a vault of a few hundred documents, but
+#: build-kb-index.py scales with the corpus: its corrective pass hashes every
+#: indexed document, so the run time grows with the vault and not with what
+#: changed. Measured on a vault of 4320 indexed documents: 165 re-indexed took
+#: over 8.5 minutes, so the job is killed every single session.
+#:
+#: The work itself survives -- _kbindex.upsert commits per record, so a killed
+#: run keeps its progress and the index converges over sessions. What does not
+#: survive is the signal: `timed out after 180s` becomes a permanent line, and
+#: a real index failure is then indistinguishable from the routine one.
+#:
+#: Deliberately still 180 by default. /sessielog is interactive and waiting nine
+#: minutes is worse than the notice; a large vault raises the knob instead.
+DEFAULT_JOB_TIMEOUT = env_int("KB_SESSION_LOG_TIMEOUT", 180)
 
 
 @dataclass(frozen=True)
 class Job:
     script: str
     args: tuple[str, ...] = ()
-    timeout: int = 180
+    timeout: int = DEFAULT_JOB_TIMEOUT
 
 
 @dataclass
@@ -70,7 +86,12 @@ def run_child(job: Job, scripts: Path) -> Result:
             returncode=proc.returncode,
         )
     except subprocess.TimeoutExpired:
-        return Result(job.script, error=f"timed out after {job.timeout}s")
+        # Noem de knop. Een teller zonder knop laat de lezer met een probleem
+        # zonder oplossing zitten, en op een grote vault is dit de regel die
+        # elke sessie terugkomt.
+        return Result(job.script,
+                      error=f"timed out after {job.timeout}s "
+                            f"(raise KB_SESSION_LOG_TIMEOUT)")
     except (OSError, subprocess.SubprocessError) as exc:
         return Result(job.script, error=f"could not run: {exc}")
 
