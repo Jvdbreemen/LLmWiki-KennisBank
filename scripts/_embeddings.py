@@ -519,7 +519,31 @@ def warm_async(min_interval: float = 60.0) -> None:
         pass
 
 
-# --- shared embedding cache (path -> {hash, id, dim, embedding}) -------------
+# --- shared embedding cache (path -> {hash, text_hash, id, dim, embedding}) --
+
+#: Hoeveel entries dit proces heeft geupgraded van de oude file-hash-sleutel naar
+#: text_hash. Een migratie verandert `hash` noch `id`, dus geen enkele aanroeper
+#: kan hem aan de entry zien; zonder dit signaal blijft de upgrade in het
+#: geheugen hangen en migreert een stabiel corpus nooit. Aanroepers die de cache
+#: wegschrijven nemen migrated() op in hun schrijfconditie.
+_migrated = 0
+
+
+def _note_migration() -> None:
+    global _migrated
+    _migrated += 1
+
+
+def migrated() -> int:
+    """Aantal cache-entries dat dit proces naar text_hash heeft geupgraded."""
+    return _migrated
+
+
+def reset_migrated() -> None:
+    """Alleen voor tests: zet de teller terug."""
+    global _migrated
+    _migrated = 0
+
 
 def load_cache() -> dict:
     try:
@@ -606,7 +630,21 @@ def get_cached(path, cache: dict, recompute: bool = True):
             return entry["embedding"]
         if "text_hash" not in entry and entry.get("hash") == file_hash(path):
             # Migratie: geldig volgens het oude criterium, dus de vector klopt.
-            entry["text_hash"] = th
+            #
+            # VERVANG de entry, muteer hem niet. Bij een in-place mutatie zijn
+            # `before` en `after` in build-embed-index.py hetzelfde dict-object,
+            # dus de wijzigingsdetectie ziet niets en save_cache wordt
+            # overgeslagen. De persistentie-gate is dan circulair: text_hash
+            # belandt alleen op schijf bij een miss, en die miss vermijden is het
+            # hele doel. Juist een stabiel corpus migreerde daardoor nooit.
+            #
+            # Bij recompute=False niet upgraden: dat pad (find-similar.py)
+            # schrijft per definitie nooit weg, dus de upgrade zou alleen de
+            # cache van de aanroeper muteren zonder ooit te landen.
+            if recompute:
+                cache[key] = dict(entry, text_hash=th)
+                _note_migration()
+                return cache[key]["embedding"]
             return entry["embedding"]
     if not recompute:
         return None

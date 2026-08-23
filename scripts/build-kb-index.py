@@ -256,7 +256,9 @@ def main(rebuild: bool = False) -> None:
         print(notice, file=sys.stderr)
     # De cache muteert alleen op het niet-overgeslagen pad; zonder nieuw
     # ingedexte bestanden is wegschrijven pure I/O.
-    if indexed:
+    # Zie build-embed-index: een text_hash-migratie is aan de entry niet te zien,
+    # dus zonder emb.migrated() landt hij nooit op schijf.
+    if indexed or emb.migrated():
         emb.save_cache(cache)
     conn.close()
     print(f"kb-index: {len(seen)} files, {indexed} (re)indexed, {skipped} ongewijzigd, "
