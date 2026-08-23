@@ -26,29 +26,35 @@ def test_post_save_jobs_are_parallel_and_notices_follow(tmp_path):
     sessions.mkdir(parents=True)
     log = sessions / "raw-sessie-2026-07-19-test.md"
     log.write_text("# session", encoding="utf-8")
+    # Een barrier in plaats van een sleep. De oude vorm telde hoeveel jobs
+    # binnen een venster van 40 ms toevallig tegelijk actief waren, en dat is
+    # geen eigenschap van de code maar van de scheduler: op een belaste machine
+    # faalde hij 3 van de 5 runs. De barrier maakt de assertie hard -- komen
+    # niet alle jobs samen, dan blokkeert hij en valt de test op de timeout in
+    # plaats van op een toevallige piek.
+    barrier = threading.Barrier(len(module.INDEX_JOBS), timeout=30)
     lock = threading.Lock()
-    active = 0
-    peak = 0
     indexed = set()
+    samen = []
 
     def runner(job, _scripts):
-        nonlocal active, peak
         if job in module.INDEX_JOBS:
             if job.script == "build-karpathy-index.py":
                 assert job.args == ("--force",)
+            try:
+                barrier.wait()
+                samen.append(job.script)
+            except threading.BrokenBarrierError:
+                pass  # laat de assertie hieronder het verschil melden
             with lock:
-                active += 1
-                peak = max(peak, active)
-            time.sleep(0.04)
-            with lock:
-                active -= 1
                 indexed.add(job.script)
         else:
             assert indexed == {item.script for item in module.INDEX_JOBS}
         return module.Result(job.script)
 
     assert module.coordinate(vault, str(log), runner=runner) == ""
-    assert peak == len(module.INDEX_JOBS)
+    assert len(samen) == len(module.INDEX_JOBS), (
+        "niet alle indexjobs bereikten de barrier, dus ze liepen niet parallel")
 
 
 def test_reports_unwrap_notices_and_ignore_routine_progress():
