@@ -569,23 +569,53 @@ def doc_text(path, cap: int = EMBED_DOC_CAP) -> str:
 
 
 def get_cached(path, cache: dict, recompute: bool = True):
-    """Return the embedding for path. A changed file hash OR a different
-    embed_id() is a cache miss; recompute unless recompute=False. Cross-model
-    vectors are never reused (see embed_id)."""
+    """Return the embedding for path. Cache validity is keyed on the BODY, not
+    on the file bytes; a different embed_id() is always a miss (cross-model
+    vectors are never reused, see embed_id). recompute=False returns None
+    instead of embedding.
+
+    Why the body and not the file. doc_text() strips the frontmatter, so only
+    the body is ever embedded. Keying the cache on file_hash() therefore
+    invalidated on changes that provably cannot move the vector: flipping
+    `status: unverified` to `current` rewrote the frontmatter, changed the file
+    hash, and forced a recompute that produced a bit-identical vector.
+
+    That is not a rare edge. The promotion pass rewrites exactly that field in
+    bulk: 578 promotions logged over two days on one vault, so 578 needless
+    embeddings. Each one also dirties the cache, and the cache is written
+    whole -- measured at 300 MB -- so every avoidable miss costs a full rewrite
+    on top of the model round-trip.
+
+    `hash` is still recorded, now purely informationally: it is the file hash at
+    the moment the vector was computed. It is deliberately NOT refreshed on a
+    body-hit, because doing so would mark the entry dirty and trigger exactly
+    the whole-file write this change exists to avoid.
+
+    Entries written before this change carry no `text_hash`. They fall back to
+    the old file-hash comparison once and are upgraded in place, so an existing
+    cache keeps working instead of forcing a full re-embed of the corpus.
+    """
     key = str(Path(path))
     eid = embed_id()
-    h = file_hash(path)
     entry = cache.get(key)
-    if entry and entry.get("hash") == h and entry.get("id") == eid and entry.get("embedding"):
-        return entry["embedding"]
+    text = doc_text(path)
+    th = bytes_hash(text.encode("utf-8")) if text else ""
+
+    if entry and entry.get("id") == eid and entry.get("embedding"):
+        if th and entry.get("text_hash") == th:
+            return entry["embedding"]
+        if "text_hash" not in entry and entry.get("hash") == file_hash(path):
+            # Migratie: geldig volgens het oude criterium, dus de vector klopt.
+            entry["text_hash"] = th
+            return entry["embedding"]
     if not recompute:
         return None
-    text = doc_text(path)
     if not text:
         return None
     vec = embed(text, kind="doc")
     if vec:
-        cache[key] = {"hash": h, "id": eid, "dim": len(vec), "embedding": vec}
+        cache[key] = {"hash": file_hash(path), "text_hash": th, "id": eid,
+                      "dim": len(vec), "embedding": vec}
     return vec
 
 
