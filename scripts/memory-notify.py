@@ -23,6 +23,10 @@ import _sweepstate  # noqa: E402
 
 HEARTBEAT = "memory-sweep-status.json"
 _STALE_HOURS = 26
+#: De cap die de sweep op trap 1 legt (KB_VERIFY_CAP in _groundcheck). Staat hier
+#: alleen om de melding te laten uitleggen WAAROM er een achterstand is; de
+#: waarheid blijft _groundcheck.
+_VERIFY_CAP = int(os.environ.get("KB_VERIFY_CAP", "40"))
 
 
 def _worker_running(vault: Path) -> bool:
@@ -89,8 +93,17 @@ def _rot_msgs(hb: dict) -> list:
         return [f"geheugen: {rot} unverified memories ouder dan {uren}u."]
     msgs = []
     if wacht > 0:
+        # NIET naar sweep-launch/Ollama sturen. Dat is dezelfde faalvorm die de
+        # `undecided`-tak hieronder al opgelost kreeg: een aanwijzing naar iets
+        # dat in orde is. De sweep cap't trap 1 bewust op KB_VERIFY_CAP per run
+        # zodat zijn staart begrensd blijft, dus een achterstand na een grote
+        # extractie is de VERWACHTE toestand, geen storing. Draait de sweep echt
+        # niet, dan meldt de stale-heartbeat-tak dat apart en met eigen tekst.
         msgs.append(f"geheugen: {wacht} unverified memories ouder dan {uren}u "
-                    f"wachten nog op een beoordeling (check sweep-launch/Ollama).")
+                    f"wachten op beoordeling; de sweep doet er max "
+                    f"{_VERIFY_CAP} per run, dus draai 'kb-verify.py' om de "
+                    f"achterstand in een keer af te voeren "
+                    f"(--dry-run toont eerst wat er zou promoveren).")
     if onbeslist > 0:
         # NIET /kennisbank:review: dat is de audit-view over de promotie- en
         # sluitingslogboeken en kan alleen `demote` en `reopen`. Een unverified
