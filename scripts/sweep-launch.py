@@ -66,7 +66,12 @@ def main() -> int:
     # iets de "sweep eerst, dan de index"-ordening uit de comment afdwong.
     # index-launch.py draait beide sequentieel achter een gedeelde lock.
     _spawn_detached(os.path.join(d, "memory-sweep.py"))
-    # de lock wordt door de volgende run als 'stale' opgeruimd; sweep zelf is kort
+    # Deze launcher neemt geen lock; de gespawnde sweep verwerft en beheert hem
+    # zelf. Verliest hij de race met een andere sweep, dan verwerft hij niets en
+    # eindigt hij meteen. Het comment dat hier stond ("de lock wordt door de
+    # volgende run als stale opgeruimd; sweep zelf is kort") klopte op beide
+    # punten niet meer: de sweep geeft nu zelf vrij, en een gemeten run duurde
+    # 23m52s.
     return 0
 
 
