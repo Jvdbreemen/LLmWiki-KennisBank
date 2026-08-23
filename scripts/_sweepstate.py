@@ -72,6 +72,35 @@ def refresh_lock(vault=None, now=None) -> bool:
     return True
 
 
+def start_lease(vault=None):
+    """Ververs de lock in een daemon-thread tot de teruggegeven Event gezet is.
+
+    Losse refresh_lock()-aanroepen op lus- en passgrenzen dekken de looptijd
+    NIET. Gemeten: de sweep besteedde minuten aan het inlezen van 4387 memories
+    en 23m52s aan een burenberekening, allebei in andere modules, waar geen
+    grens ligt om een aanroep aan op te hangen. Een lock die tijdens die fases
+    stilstaat verloopt precies waar hij het hardst nodig is.
+
+    Een thread hangt niet aan de codestructuur en dekt daarom elke fase. Sterft
+    het proces, dan stopt de thread mee en verloopt de lock zoals bedoeld: dat
+    is precies het signaal dat staleness hoort te geven.
+    """
+    import threading
+    stop = threading.Event()
+
+    def _loop():
+        while not stop.wait(LOCK_REFRESH_SEC):
+            p = lock_path(vault)
+            try:
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.touch(exist_ok=True)
+            except OSError:
+                pass  # fail-open; de volgende ronde probeert opnieuw
+
+    threading.Thread(target=_loop, daemon=True, name="sweep-lease").start()
+    return stop
+
+
 def release_lock(vault=None) -> None:
     """Geef de lock vrij. Fail-open: een niet-verwijderbare lock verloopt vanzelf."""
     try:

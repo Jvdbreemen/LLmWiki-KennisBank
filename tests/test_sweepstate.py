@@ -158,3 +158,41 @@ class SweepLockLeaseTest(unittest.TestCase):
     def test_launcher_en_sweep_wijzen_naar_hetzelfde_bestand(self):
         launcher = self._launcher()
         self.assertEqual(launcher.LOCK_NAME, ss.LOCK_NAME)
+
+    def test_lease_thread_dekt_ook_fases_zonder_grens(self):
+        """Losse refresh-aanroepen dekten de looptijd niet.
+
+        Gemeten op een echte run: de lock bleef 165 seconden op zijn starttijd
+        staan terwijl de sweep werkte, omdat het inlezen van 4387 memories en
+        de burenberekening in andere modules zitten en er dus geen lus- of
+        passgrens is om een aanroep aan op te hangen. Een thread hangt niet aan
+        de codestructuur en dekt daarom elke fase.
+        """
+        origineel = ss.LOCK_REFRESH_SEC
+        ss.LOCK_REFRESH_SEC = 0.05
+        try:
+            lock = ss.lock_path(self.tmp)
+            lock.write_text("x", encoding="utf-8")
+            oud = time.time() - 3600
+            os.utime(lock, (oud, oud))
+
+            stop = ss.start_lease(self.tmp)
+            try:
+                deadline = time.time() + 5
+                while time.time() < deadline:
+                    if lock.stat().st_mtime > oud + 60:
+                        break
+                    time.sleep(0.05)
+                self.assertGreater(lock.stat().st_mtime, oud + 60,
+                                   "de thread heeft de lease niet ververst")
+            finally:
+                stop.set()
+
+            # Na stop() staat de lease stil: dat is wat een dode sweep hoort te doen.
+            time.sleep(0.2)
+            na_stop = lock.stat().st_mtime
+            time.sleep(0.3)
+            self.assertEqual(lock.stat().st_mtime, na_stop,
+                             "na stop() mag de lease niet meer bewegen")
+        finally:
+            ss.LOCK_REFRESH_SEC = origineel
