@@ -118,3 +118,14 @@ def test_timeout_message_names_the_knob(tmp_path):
     result = module.run_child(module.Job("sleeper.py", timeout=1), tmp_path)
     assert "timed out" in result.error, result
     assert "KB_SESSION_LOG_TIMEOUT" in result.error, result
+
+
+def test_timeout_never_drops_below_one(monkeypatch):
+    """env_int is fail-open op onzin, maar niet op een geldige 0 of negatief.
+
+    Beide maken dat subprocess.run elke job direct afkapt, waarna elke regel in
+    het rapport "timed out" leest -- een zelf toegebrachte permanente storing.
+    """
+    for waarde in ("0", "-5"):
+        monkeypatch.setenv("KB_SESSION_LOG_TIMEOUT", waarde)
+        assert _load().Job("x").timeout >= 1, waarde
