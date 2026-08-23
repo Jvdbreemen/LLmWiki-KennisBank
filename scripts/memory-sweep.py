@@ -234,7 +234,9 @@ def _note_pass_failure(s: dict, key: str, exc: BaseException) -> None:
 
 
 def _run_pass(s: dict, key: str, fn) -> None:
-    """Draai één onderhoudspass en houd vast of hij het gehaald heeft."""
+    """Draai een onderhoudspass en houd vast of hij het gehaald heeft.
+
+"""
     try:
         s[key] = fn()
     except Exception as e:
@@ -320,6 +322,11 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
     Returns een samenvatting-dict met sleutels:
         enabled, processed, written, current, unverified, duplicates, expired, errors
     """
+    # Lease op de single-flight lock voor de HELE looptijd. Niet op lus- en
+    # passgrenzen: het inlezen van de geheugenlaag en de burenberekening zitten
+    # in andere modules en duren samen het leeuwendeel van de run, dus daar is
+    # geen grens om een aanroep aan op te hangen.
+    lease = ss.start_lease()
     s = {
         "enabled": True,
         "processed": 0,
@@ -602,6 +609,11 @@ def run_sweep(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
         _note_pass_failure(s, "focus_updated", e)
 
     _write_heartbeat(s)
+    # Klaar: lease stoppen en het slot vrijgeven in plaats van het te laten
+    # verlopen. Zonder dit blijft de lock nog STALE_SEC liggen en wordt een
+    # volgende run onnodig overgeslagen.
+    lease.set()
+    ss.release_lock()
     return s
 
 

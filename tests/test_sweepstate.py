@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -87,3 +88,111 @@ class SweepStateTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SweepLockLeaseTest(unittest.TestCase):
+    """De sweep-lock als lease in plaats van een leeftijdsstempel.
+
+    De launcher nam de lock en niemand raakte hem daarna nog aan, terwijl de
+    staleness-check in uren rekent. "Ouder dan STALE_SEC" betekende daardoor
+    "de sweep draait al langer dan een uur", niet "de sweep is dood". Op een
+    gegroeide vault haalt een sweep die drempel -- gemeten 23m52s voor een
+    enkele onderhoudspass over 4077 memories -- en dan startte de volgende
+    launcher een tweede sweep naast de eerste. Waargenomen: drie tegelijk.
+    """
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="kb-lease-"))
+        (self.tmp / ".claude").mkdir(parents=True)
+        ss._last_refresh = 0.0
+
+    def tearDown(self):
+        import shutil
+        ss._last_refresh = 0.0
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _launcher(self):
+        """sweep-launch.py laden, met zijn is_stale en STALE_SEC."""
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "sweep_launch", str(SCRIPTS_DIR / "sweep-launch.py"))
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        return m
+
+    def test_refresh_touches_and_throttles(self):
+        lock = ss.lock_path(self.tmp)
+        self.assertTrue(ss.refresh_lock(self.tmp, now=1000.0))
+        self.assertTrue(lock.exists())
+        # Binnen het venster niet nog eens aanraken: de lease meet in uren, een
+        # schrijfactie per chunk is pure I/O.
+        self.assertFalse(ss.refresh_lock(self.tmp, now=1000.0 + ss.LOCK_REFRESH_SEC - 1))
+        self.assertTrue(ss.refresh_lock(self.tmp, now=1000.0 + ss.LOCK_REFRESH_SEC))
+
+    def test_een_lopende_sweep_verliest_zijn_slot_niet(self):
+        """De regressie. Zonder lease was deze lock stale en spawnde de
+        volgende launcher een tweede sweep."""
+        launcher = self._launcher()
+        lock = ss.lock_path(self.tmp)
+        lock.write_text("123", encoding="utf-8")
+
+        # Doe alsof de run al ruim over de stale-drempel loopt.
+        oud = time.time() - (launcher.STALE_SEC + 600)
+        os.utime(lock, (oud, oud))
+        self.assertTrue(launcher.is_stale(lock), "opzet: zonder refresh is hij stale")
+
+        # De sweep ververst zijn lease zoals hij dat op elke passgrens doet.
+        self.assertTrue(ss.refresh_lock(self.tmp, now=time.time()))
+        self.assertFalse(launcher.is_stale(lock),
+                         "een sweep die nog werkt houdt zijn slot")
+
+    def test_release_geeft_het_slot_direct_vrij(self):
+        lock = ss.lock_path(self.tmp)
+        ss.refresh_lock(self.tmp, now=time.time())
+        self.assertTrue(lock.exists())
+        ss.release_lock(self.tmp)
+        self.assertFalse(lock.exists(),
+                         "klaar is klaar; niet STALE_SEC laten liggen")
+        ss.release_lock(self.tmp)  # tweede keer mag niet gooien
+
+    def test_launcher_en_sweep_wijzen_naar_hetzelfde_bestand(self):
+        launcher = self._launcher()
+        self.assertEqual(launcher.LOCK_NAME, ss.LOCK_NAME)
+
+    def test_lease_thread_dekt_ook_fases_zonder_grens(self):
+        """Losse refresh-aanroepen dekten de looptijd niet.
+
+        Gemeten op een echte run: de lock bleef 165 seconden op zijn starttijd
+        staan terwijl de sweep werkte, omdat het inlezen van 4387 memories en
+        de burenberekening in andere modules zitten en er dus geen lus- of
+        passgrens is om een aanroep aan op te hangen. Een thread hangt niet aan
+        de codestructuur en dekt daarom elke fase.
+        """
+        origineel = ss.LOCK_REFRESH_SEC
+        ss.LOCK_REFRESH_SEC = 0.05
+        try:
+            lock = ss.lock_path(self.tmp)
+            lock.write_text("x", encoding="utf-8")
+            oud = time.time() - 3600
+            os.utime(lock, (oud, oud))
+
+            stop = ss.start_lease(self.tmp)
+            try:
+                deadline = time.time() + 5
+                while time.time() < deadline:
+                    if lock.stat().st_mtime > oud + 60:
+                        break
+                    time.sleep(0.05)
+                self.assertGreater(lock.stat().st_mtime, oud + 60,
+                                   "de thread heeft de lease niet ververst")
+            finally:
+                stop.set()
+
+            # Na stop() staat de lease stil: dat is wat een dode sweep hoort te doen.
+            time.sleep(0.2)
+            na_stop = lock.stat().st_mtime
+            time.sleep(0.3)
+            self.assertEqual(lock.stat().st_mtime, na_stop,
+                             "na stop() mag de lease niet meer bewegen")
+        finally:
+            ss.LOCK_REFRESH_SEC = origineel
