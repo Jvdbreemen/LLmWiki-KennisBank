@@ -8,6 +8,9 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts" / "kb-session-log.py"
 
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+from _common import pool_workers  # noqa: E402
+
 
 def _load():
     spec = importlib.util.spec_from_file_location("kb_session_log", SCRIPT)
@@ -26,35 +29,54 @@ def test_post_save_jobs_are_parallel_and_notices_follow(tmp_path):
     sessions.mkdir(parents=True)
     log = sessions / "raw-sessie-2026-07-19-test.md"
     log.write_text("# session", encoding="utf-8")
-    # Een barrier in plaats van een sleep. De oude vorm telde hoeveel jobs
+    # Een poort in plaats van een sleep. De oude vorm telde hoeveel jobs
     # binnen een venster van 40 ms toevallig tegelijk actief waren, en dat is
     # geen eigenschap van de code maar van de scheduler: op een belaste machine
-    # faalde hij 3 van de 5 runs. De barrier maakt de assertie hard -- komen
-    # niet alle jobs samen, dan blokkeert hij en valt de test op de timeout in
-    # plaats van op een toevallige piek.
-    barrier = threading.Barrier(len(module.INDEX_JOBS), timeout=30)
+    # faalde hij 3 van de 5 runs.
+    #
+    # De poort stelt dezelfde eis als een harde voorwaarde. Elke job meldt zich
+    # aan en blokkeert; zodra er zoveel jobs tegelijk binnen zijn als de pool
+    # breed mag zijn, gaat de poort open en mag iedereen door. Loopt de pool in
+    # werkelijkheid serieel, dan wordt dat aantal nooit gehaald en valt de test
+    # op de wachttijd, met een melding die zegt waarom.
+    #
+    # De breedte is pool_workers(), niet len(INDEX_JOBS): sinds de coordinator
+    # zijn fan-out begrenst is "allemaal tegelijk" niet langer de belofte. Een
+    # threading.Barrier op de jobtelling zou op een machine met weinig cores
+    # juist vastlopen -- de test zou dan de cap kapotmelden in plaats van de
+    # parallelliteit te meten.
+    breedte = pool_workers(len(module.INDEX_JOBS))
+    poort = threading.Event()
     lock = threading.Lock()
     indexed = set()
-    samen = []
+    tegelijk = 0
+    piek = 0
 
     def runner(job, _scripts):
+        nonlocal tegelijk, piek
         if job in module.INDEX_JOBS:
             if job.script == "build-karpathy-index.py":
                 assert job.args == ("--force",)
-            try:
-                barrier.wait()
-                samen.append(job.script)
-            except threading.BrokenBarrierError:
-                pass  # laat de assertie hieronder het verschil melden
             with lock:
+                tegelijk += 1
+                piek = max(piek, tegelijk)
+                if tegelijk >= breedte:
+                    poort.set()
+            assert poort.wait(30), (
+                f"nooit {breedte} indexjobs tegelijk actief, dus de pool "
+                f"serialiseert")
+            with lock:
+                tegelijk -= 1
                 indexed.add(job.script)
         else:
             assert indexed == {item.script for item in module.INDEX_JOBS}
         return module.Result(job.script)
 
     assert module.coordinate(vault, str(log), runner=runner) == ""
-    assert len(samen) == len(module.INDEX_JOBS), (
-        "niet alle indexjobs bereikten de barrier, dus ze liepen niet parallel")
+    assert piek >= breedte, "de pool werd niet zo breed als toegestaan"
+    assert piek <= breedte, (
+        f"pool werd {piek} breed terwijl de cap {breedte} toestaat")
+    assert indexed == {item.script for item in module.INDEX_JOBS}
 
 
 def test_reports_unwrap_notices_and_ignore_routine_progress():

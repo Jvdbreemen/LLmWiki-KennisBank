@@ -19,7 +19,7 @@ from typing import Callable
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _vaultpath import vault_root  # noqa: E402
-from _common import env_int  # noqa: E402
+from _common import env_int, pool_workers  # noqa: E402
 
 #: Per-job wall clock. 180s fits a vault of a few hundred documents but not a
 #: grown one: build-kb-index.py was killed every session on a vault of 4320
@@ -117,7 +117,8 @@ def run_parallel(
 ) -> list[Result]:
     if not jobs:
         return []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=len(jobs)) as pool:
+    with concurrent.futures.ThreadPoolExecutor(
+            max_workers=pool_workers(len(jobs))) as pool:
         futures = [pool.submit(runner, job, scripts) for job in jobs]
         return [future.result() for future in futures]
 

@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Callable
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _common import pool_workers  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402
 
 
@@ -86,7 +87,8 @@ def run_parallel(
 ) -> list[Result]:
     if not jobs:
         return []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=len(jobs)) as pool:
+    with concurrent.futures.ThreadPoolExecutor(
+            max_workers=pool_workers(len(jobs))) as pool:
         futures = [pool.submit(runner, job, scripts, payload) for job in jobs]
         return [future.result() for future in futures]
 
