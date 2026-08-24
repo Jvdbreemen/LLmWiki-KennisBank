@@ -6,13 +6,21 @@ where bash is unavailable. Hermetic: never touches the real ~/.copilot.
 """
 import os
 import shutil
-import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DOCTOR = REPO_ROOT / "scripts" / "doctor.sh"
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _proc import run_bounded  # noqa: E402
+
+#: Gemeten op een rustige machine: de hele doctor.sh tegen deze
+#: fixture kost ~18 s. 120 s laat ruimte voor een trage of belaste
+#: machine zonder dat een echte hang de suite gijzelt.
+DOCTOR_TIMEOUT = 120
 
 
 def _find_bash():
@@ -82,14 +90,20 @@ class CopilotDoctorTest(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def _run_doctor(self):
+        # run_bounded in plaats van subprocess.run: die laatste hield zijn
+        # timeout niet. doctor.sh start 54 Python-processen, en een kleinkind
+        # dat de stdout-PIJP erft houdt communicate() vast tot HET klaar is.
+        # Gemeten gevolg: deze test liep 393 s op een budget van 120 en viel
+        # daarna alsnog om. Zie tests/_proc.py voor het bewijs.
         env = {**os.environ, "KENNISBANK_VAULT": _posix(self.vault),
                "COPILOT_HOME": str(self.tmp / ".copilot")}
-        proc = subprocess.run(
-            [BASH, "scripts/doctor.sh"], cwd=str(REPO_ROOT), env=env,
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            timeout=120,
-        )
-        return proc.stdout + proc.stderr
+        r = run_bounded([BASH, "scripts/doctor.sh"], cwd=str(REPO_ROOT),
+                        env=env, timeout=DOCTOR_TIMEOUT)
+        self.assertFalse(
+            r.timed_out,
+            f"doctor.sh kwam niet binnen {DOCTOR_TIMEOUT}s klaar "
+            f"({r.duur:.0f}s). Laatste uitvoer:" + os.linesep + r.output[-2000:])
+        return r.output
 
     def _install_copilot(self):
         import importlib.util
