@@ -66,6 +66,20 @@ class KbMcpTest(unittest.TestCase):
         self.emb.embed = lambda *a, **k: None
         self.assertIn("geen", self.m.recall_tool("iets").lower())
 
+    def test_deeper_recall_tools_delegate_to_the_gated_cli_routes(self):
+        class Gateway:
+            @staticmethod
+            def run(request):
+                return {"status": "no_hit", "mode": request["mode"], "hits": []}
+        old_source, old_experience = self.m.source_recall, self.m.experience_recall
+        self.m.source_recall = Gateway
+        self.m.experience_recall = Gateway
+        try:
+            self.assertEqual(json.loads(self.m.source_recall_tool("where", "verify"))["mode"], "verify")
+            self.assertEqual(json.loads(self.m.experience_recall_tool("what worked", "failure"))["mode"], "failure")
+        finally:
+            self.m.source_recall, self.m.experience_recall = old_source, old_experience
+
     def test_build_server_registers_eight_annotated_tools(self):
         """Vervangt test_build_server_none_without_mcp, dat op 'MCPServer is None'
         aftakte en in BEIDE takken slaagde: die kon niets bewijzen.
@@ -107,10 +121,10 @@ class KbMcpTest(unittest.TestCase):
 
         self.assertIsNotNone(srv)
         self.assertEqual(set(registered), {
-            "recall", "capture", "review_pending", "review_decide",
+            "recall", "source_recall", "experience_recall", "capture", "review_pending", "review_decide",
             "what_did_i_do", "timeline", "weeklog", "topic_timeline"})
 
-        read_only = {"recall", "review_pending", "what_did_i_do", "timeline",
+        read_only = {"recall", "source_recall", "experience_recall", "review_pending", "what_did_i_do", "timeline",
                      "weeklog", "topic_timeline"}
         for name in read_only:
             ann = registered[name]["annotations"]

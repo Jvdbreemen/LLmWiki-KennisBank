@@ -27,11 +27,11 @@ from pathlib import Path
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
 SERVER = SCRIPTS_DIR / "kb-mcp.py"
 
-# De acht tools die de server sinds v0.19 aanbiedt. Namen zijn een CONTRACT:
+# De tien tools die de server sinds v0.37 aanbiedt. Namen zijn een CONTRACT:
 # ze staan in uitgerolde client-configuraties, dus een rename hoort hier te
 # falen en niet stil door te glippen.
 EXPECTED_TOOLS = {
-    "recall", "capture", "review_pending", "review_decide",
+    "recall", "source_recall", "experience_recall", "capture", "review_pending", "review_decide",
     "what_did_i_do", "timeline", "weeklog", "topic_timeline",
 }
 
@@ -182,7 +182,7 @@ class KbMcpWireTest(unittest.TestCase):
         rid = self.client.send("tools/list", {})
         reply = self.client.read_result(rid)
         tools = {t["name"]: t for t in reply["result"]["tools"]}
-        read_only = {"recall", "review_pending", "what_did_i_do", "timeline",
+        read_only = {"recall", "source_recall", "experience_recall", "review_pending", "what_did_i_do", "timeline",
                      "weeklog", "topic_timeline"}
         for name in read_only:
             ann = tools[name].get("annotations") or {}

@@ -1,10 +1,10 @@
 ---
 id: TASK-216
 title: Persist injection attribution and measure weak session outcomes
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-25 00:00'
-updated_date: '2026-08-25 00:00'
+updated_date: '2026-08-26 00:00'
 labels:
   - outcome-telemetry
   - usage
@@ -42,14 +42,14 @@ only.
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A persistent ledger links every exposed item to session, task/work-unit, query, layer, rank, timestamp, and source/provenance id
-- [ ] #2 Labelled per-client usage tests from TASK-179 pass or record a measured limitation for in-context use
-- [ ] #3 A weak outcome record is derived from existing local artefacts and preserves success, failure, mixed, and unknown evidence states
-- [ ] #4 The ledger distinguishes exposure, read/use evidence, outcome evidence, and attribution strength
-- [ ] #5 A correlation report compares exposed items in outcome groups without claiming individual causality
-- [ ] #6 No recall-time latency, ranking, memory status, noise status, or skill state changes
-- [ ] #7 Missing transcripts, mixed-task sessions, failed tests, unrelated commits, and session-end crashes are tested
-- [ ] #8 The report states what additional signal would be required before outcome-aware ranking could be justified
+- [x] #1 A persistent ledger links every exposed item to session, task/work-unit, query, layer, rank, timestamp, and source/provenance id
+- [x] #2 Labelled per-client usage tests from TASK-179 pass or record a measured limitation for in-context use
+- [x] #3 A weak outcome record is derived from existing local artefacts and preserves success, failure, mixed, and unknown evidence states
+- [x] #4 The ledger distinguishes exposure, read/use evidence, outcome evidence, and attribution strength
+- [x] #5 A correlation report compares exposed items in outcome groups without claiming individual causality
+- [x] #6 No recall-time latency, ranking, memory status, noise status, or skill state changes
+- [x] #7 Missing transcripts, mixed-task sessions, failed tests, unrelated commits, and session-end crashes are tested
+- [x] #8 The report states what additional signal would be required before outcome-aware ranking could be justified
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -57,5 +57,17 @@ only.
 This is the implementation of the measurement scope already described by
 TASK-173. Do not close TASK-173 by merely adding a scalar session score; retain
 the evidence ledger and attribution limitations.
-<!-- SECTION:NOTES:END -->
 
+### Evidence
+
+- `scripts/_usage.py` separates durable `exposures` from session-bound
+  `use_events`; `scripts/kb-usage-scan.py` records tool-use evidence at
+  SessionEnd without changing recall ranking or memory state.
+- `scripts/_outcome.py` retains success, failure, mixed, and unknown states;
+  `scripts/_outcome_report.py` remains explicitly `association_only`.
+- Focused evidence: `25 passed` across the exposure/outcome ledger and usage
+  scan tests, including missing transcripts, prose-only mentions, and
+  session-bound use evidence.
+- The baseline report remains honest: no live exposure/outcome pairs were
+  available before this measurement layer, so no usefulness claim is made.
+<!-- SECTION:NOTES:END -->

@@ -36,6 +36,7 @@ om de server te DRAAIEN; ontbreekt het pakket, dan blijven de *_tool-functies
 bruikbaar. Stdlib + optioneel mcp.
 """
 import importlib.util
+import json
 import os
 import sys
 from pathlib import Path
@@ -100,6 +101,21 @@ try:
     import _activity as activity  # type: ignore
 except Exception:
     activity = None
+
+
+def _load_optional_gateway(filename: str, name: str):
+    try:
+        spec = importlib.util.spec_from_file_location(
+            name, os.path.join(os.path.dirname(os.path.abspath(__file__)), filename))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    except Exception:
+        return None
+
+
+source_recall = _load_optional_gateway("kb-source-recall.py", "kb_source_recall")
+experience_recall = _load_optional_gateway("kb-experience-recall.py", "kb_experience_recall")
 
 
 def _compact_output_enabled() -> bool:
@@ -174,6 +190,28 @@ def recall_tool(query: str, k: int = 5, *, compact: bool = False) -> str:
         lines.append(f"- [{tag}] [[{stem}|{title}]] ({h.get('score', 0.0):.2f}): "
                      f"{snippet}")
     return "KennisBank-treffers:\n" + "\n".join(lines)
+
+
+def source_recall_tool(query: str, mode: str = "explicit", k: int = 5) -> str:
+    """Explicit provenance-first source recall; never part of normal injection."""
+    if source_recall is None:
+        return '{"status": "unavailable", "hits": []}'
+    try:
+        result = source_recall.run({"mode": mode, "prompt": query, "k": int(k)})
+        return json.dumps(result, ensure_ascii=False, sort_keys=True)
+    except Exception:
+        return '{"status": "unavailable", "hits": []}'
+
+
+def experience_recall_tool(query: str, mode: str = "explicit", k: int = 5) -> str:
+    """Gated recall of validated experiences or failure advisories."""
+    if experience_recall is None:
+        return '{"status": "unavailable", "hits": []}'
+    try:
+        result = experience_recall.run({"mode": mode, "prompt": query, "k": int(k)})
+        return json.dumps(result, ensure_ascii=False, sort_keys=True)
+    except Exception:
+        return '{"status": "unavailable", "hits": []}'
 
 
 def capture_tool(title: str, body: str, memory_type: str = "feit",
@@ -313,11 +351,13 @@ def topic_timeline_tool(topic: str, period: str = "afgelopen 90 dagen",
 # managed block in .github/copilot-instructions.md.
 INSTRUCTIONS_TEXT = (
     "You have a local KennisBank (personal memory + curated wiki) available "
-    "through the MCP tools `recall` and `capture`.\n\n"
+    "through the MCP tools `recall`, `source_recall`, `experience_recall` and `capture`.\n\n"
     "- Call `recall` BEFORE searching externally or making an assumption: your "
     "own earlier lessons, decisions and bug fixes may already be in there.\n"
     "- Call `capture` whenever a reusable fact, preference, procedure or "
     "decision appears that you want back in a later session.\n"
+    "- Call `source_recall` only for explicit source reconstruction or verification; "
+    "call `experience_recall` only for validated prior outcomes or failure prevention.\n"
     "- Call `what_did_i_do`, `timeline`, `weeklog` or `topic_timeline` for "
     "questions about what happened on a date, in a week, or around a topic.\n"
     "- `review_pending` lists unverified memories awaiting human review; "
@@ -345,6 +385,18 @@ def build_server():
         best-matching entries back."""
         compact = _compact_output_enabled()
         return recall_tool(query, k=min(int(k), 3) if compact else k, compact=compact)
+
+    @srv.tool(annotations=_ann(title="Recall source evidence", readOnlyHint=True, openWorldHint=False))
+    def source_recall(query: str, mode: str = "explicit", k: int = 5) -> str:
+        """Retrieve hash- and offset-bound source passages for explicit
+        reconstruction or verification. Never use this as normal injection."""
+        return source_recall_tool(query, mode=mode, k=k)
+
+    @srv.tool(annotations=_ann(title="Recall validated experience", readOnlyHint=True, openWorldHint=False))
+    def experience_recall(query: str, mode: str = "explicit", k: int = 5) -> str:
+        """Retrieve validated outcome-bound experiences or a labelled failure
+        advisory. Candidates and unknown outcomes remain excluded."""
+        return experience_recall_tool(query, mode=mode, k=k)
 
     @srv.tool(annotations=_ann(title="Capture a memory", readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False))
     def capture(title: str, body: str, memory_type: str = "feit",

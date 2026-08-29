@@ -5,6 +5,8 @@
   "daily_graphify": true,
   "memory_capture": true,
   "memory_recall": true,
+  "source_recall": false,
+  "experience_recall": false,
   "usage_telemetry": true,
   "activity_llm_fallback": false,
   "checkpoints": false,

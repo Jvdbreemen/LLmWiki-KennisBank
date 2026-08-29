@@ -1,7 +1,7 @@
 ---
 id: TASK-212
 title: Source recall and experience architecture contract and schemas
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-25 00:00'
 updated_date: '2026-08-25 00:00'
@@ -55,13 +55,13 @@ Record the distinctions that implementation must preserve:
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A design document and, where repository practice requires it, an ADR describe the target data flow and ownership of every layer
-- [ ] #2 Source, episode, outcome, experience, procedure, and skill schemas are written with required fields, optional fields, status values, and versioning rules
-- [ ] #3 The document defines exact provenance and retraction behaviour for every derived record
-- [ ] #4 The document defines how task/work-unit boundaries are represented when one session contains multiple tasks
-- [ ] #5 The document explicitly rejects a single scalar success score as the initial outcome model
-- [ ] #6 Storage, rebuild, retention, privacy, redaction, and fail-open decisions are recorded
-- [ ] #7 The design maps each schema to existing scripts, hooks, indexes, tests, and relevant backlog tasks
+- [x] #1 A design document and, where repository practice requires it, an ADR describe the target data flow and ownership of every layer
+- [x] #2 Source, episode, outcome, experience, procedure, and skill schemas are written with required fields, optional fields, status values, and versioning rules
+- [x] #3 The document defines exact provenance and retraction behaviour for every derived record
+- [x] #4 The document defines how task/work-unit boundaries are represented when one session contains multiple tasks
+- [x] #5 The document explicitly rejects a single scalar success score as the initial outcome model
+- [x] #6 Storage, rebuild, retention, privacy, redaction, and fail-open decisions are recorded
+- [x] #7 The design maps each schema to existing scripts, hooks, indexes, tests, and relevant backlog tasks
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -71,4 +71,3 @@ ReasoningBank, ProjectMem, SWE-Exp, Memp, EverOS, Hindsight, EverMemOS, and the
 warning that continuous LLM consolidation can damage useful memory. Do not copy
 third-party code or introduce a hosted memory dependency.
 <!-- SECTION:NOTES:END -->
-

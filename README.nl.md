@@ -152,7 +152,7 @@ zodat een aanroeper die enkel vraagt "is er rot?" geen JSON hoeft te parsen.
 
 **Architectuurdocumentatie die benoemt wat ze aantrof.** Een volledige C4-set
 onder `docs/C4-Documentation/` — vier niveaus, een OpenAPI-specificatie voor de
-13 routes van de Atlas-sidecar, en een toolcontract voor de 8 MCP-tools. De
+13 routes van de Atlas-sidecar, en een toolcontract voor de 10 MCP-tools. De
 containers beschrijven wat er echt draait in plaats van een geïdealiseerde
 topologie, en de drift die de pass vond staat er als drift in: ADR-0001 nog
 Accepted op `qwen3-embedding:8b` terwijl het onderzoek `:4b` aanbeveelt,
@@ -725,6 +725,16 @@ melden had.
 - Hybride index (`kb-index.db`): semantische vectoren (sqlite-vec) gefuseerd met FTS5-trefwoordzoeken, zodat exacte termen worden gevonden zelfs wanneer embeddings ze missen.
 - Rangschikking: relevantie x recentheid (halveringstijd per geheugentype) x belang, plus een gebruiksboost voor documenten die recent nuttig bleken.
 - **Graaf-buur-uitbreiding**: de meest-gerefereerde wikilink-buur van je treffers lift mee als één extra vermelding, wat losse treffers omzet in een samenhangende kennisbuurt.
+- **Experimentele bron- en ervaringsrecall**: `rebuild-source-index.py` bouwt
+  een provenance-first bronprojectie voor expliciete reconstructie/verificatie;
+  `source_recall` blijft buiten normale promptinjectie. `rebuild-experience.py`
+  bouwt de outcome-laag uit append-only events en uitkomsten, met
+  `--incremental` en `--records-only`; `experience_recall` geeft uitsluitend
+  gevalideerde ervaringen of gelabelde failure-advisories terug.
+- `kb-projection-doctor.py` rapporteert read-only freshness, provenance,
+  orphan-, redaction- en lifecycle-signalen. De twee projecties zijn lokaal,
+  opt-in, fail-open en atomisch herbouwbaar; zonder beoordeelde holdout en
+  downstream-verbetering blijft de evaluatie `hold`.
 
 ### Meting (de vertrouwenslaag)
 - `kb-eval.py`: recall@1/3/5 en MRR tegen je persoonlijke evalset van vragen. Draai het vóór en na elke retrieval-wijziging; een daling is een regressie, geen mening.
@@ -840,6 +850,10 @@ De hooks zijn fail-open van opzet: een fout betekent geen geïnjecteerde context
 | `/kennisbank:settings` | geen | Toont en schakelt de achtergrond-automatiek-toggles |
 | `/kennisbank:review` | optioneel onderwerp | Loop de unverified-memory-wachtrij door; de mens beslist approve/reject/skip per item |
 | `/kennisbank:rebuild-index` | geen | Herbouwt de hybride zoekindex uit de kluis-markdown |
+| `/kennisbank:rebuild-source-index` | geen | Herbouwt de opt-in provenance-first bronprojectie |
+| `/kennisbank:rebuild-experience` | `--incremental` of `--records-only` | Herbouwt outcome/experience-records en de lokale vectorprojectie |
+| `/kennisbank:source-recall` | expliciet/verify/reconstruct | Haalt bronpassages op met hash en offsets |
+| `/kennisbank:experience-recall` | expliciet/failure | Haalt gevalideerde ervaringen of failure-advisories op |
 | `/kennisbank:rebuild-memory` | geen | Her-extraheert ALLE geheugen uit gearchiveerde transcripts (zwaar; semantische dedup maakt het bijna-idempotent) |
 | `/kennisbank-upgrade` | optioneel `--dry-run` | Upgradet de gedeployde kluis naar de nieuwste release-tag |
 | `/kennisbank-contribute` | optioneel `--dry-run` | PR't lokale tooling-wijzigingen terug upstream |
@@ -925,9 +939,9 @@ lokale LibreOffice-/ImageMagick-tooling vereisen, zoals LiteParse rapporteert.
 
 ## KennisBank gebruiken vanuit andere agents (Codex, OpenCode, Copilot, ChatGPT)
 
-De kluis is niet alleen voor Claude Code. `scripts/kb-mcp.py` is een lokale **MCP-server** die negen primitieven blootstelt: acht tools - `recall` (zoek geheugen + wiki), `capture` (sla een nieuwe herinnering op), `review_pending` en `review_decide` (de menselijke reviewwachtrij), en de temporele set `what_did_i_do`, `timeline`, `weeklog`, `topic_timeline` - plus een `instructions`-resource (een duwtje om te trekken vóór je extern zoekt). MCP is het ene protocol dat elke moderne agent al spreekt, dus elke client die **op deze machine** draait kan de kluis gebruiken.
+De kluis is niet alleen voor Claude Code. `scripts/kb-mcp.py` is een lokale **MCP-server** die elf primitieven blootstelt: tien tools - `recall` (zoek geheugen + wiki), `source_recall` en `experience_recall` (expliciete, gated diepe recall), `capture` (sla een nieuwe herinnering op), `review_pending` en `review_decide` (de menselijke reviewwachtrij), en de temporele set `what_did_i_do`, `timeline`, `weeklog`, `topic_timeline` - plus een `instructions`-resource (een duwtje om te trekken vóór je extern zoekt). MCP is het ene protocol dat elke moderne agent al spreekt, dus elke client die **op deze machine** draait kan de kluis gebruiken.
 
-Elke tool draagt MCP-annotaties, en dat is niet cosmetisch: een client leidt uit `readOnlyHint` af of een aanroep bevestiging nodig heeft en of hij parallel mag draaien, en zet beide op "nee" als de hint ontbreekt. De zes read-only retrieval-tools zijn als zodanig gemarkeerd; `capture` is een niet-destructieve schrijver, `review_decide` een destructieve. Het pull-duwtje reist via drie dragers, omdat geen enkele op zichzelf elke client bereikt: het `instructions`-veld van de protocol-handshake, de `kennisbank://instructions`-resource, en de managed block in `.github/copilot-instructions.md`.
+Elke tool draagt MCP-annotaties, en dat is niet cosmetisch: een client leidt uit `readOnlyHint` af of een aanroep bevestiging nodig heeft en of hij parallel mag draaien, en zet beide op "nee" als de hint ontbreekt. De acht read-only retrieval/temporal-tools zijn als zodanig gemarkeerd; `capture` is een niet-destructieve schrijver, `review_decide` een destructieve. Het pull-duwtje reist via drie dragers, omdat geen enkele op zichzelf elke client bereikt: het `instructions`-veld van de protocol-handshake, de `kennisbank://instructions`-resource, en de managed block in `.github/copilot-instructions.md`.
 
 **De harde grens: alleen lokaal.** De MCP-server bindt niets aan het netwerk
 (stdio-transport); de kluis verlaat nooit je machine. Claude Code, Codex,

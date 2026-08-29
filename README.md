@@ -145,7 +145,7 @@ needs no JSON parser.
 
 **Architecture documentation that admits what it found.** A full C4 set under
 `docs/C4-Documentation/` — four levels, an OpenAPI specification for the Atlas
-sidecar's 13 routes, and a tool contract for the 8 MCP tools. The containers
+sidecar's 13 routes, and a tool contract for the 10 MCP tools. The containers
 describe what is actually deployed rather than an idealised topology, and the
 drift the pass uncovered is written down as drift: ADR-0001 still Accepted on
 `qwen3-embedding:8b` where the research recommends `:4b`, `kb-usage.db`
@@ -682,6 +682,22 @@ so a component that never answers looks exactly like one with nothing to report.
 - **Write-time invalidation** (Mem0 pattern, local): a new fact reconciles against the most similar existing memories at write time: ADD, SUPERSEDE (the old fact is closed and linked), or NOOP. A deterministic temporal guard ensures an older fact can never invalidate a newer one, so bulk re-imports are safe.
 - Cross-memory maintenance: supersede pass, noise recheck, and cluster promotion (recurring themes get flagged as wiki candidates).
 
+### Experimental source and experience recall
+
+This branch keeps two deeper recall paths separate from ordinary memory
+injection. Source recall is a provenance-first RAG projection over approved raw
+files: it is invoked explicitly for reconstruction or verification and returns
+the exact source path, hash, and offsets. Experience recall is an outcome layer
+over typed append-only events: it returns only validated prior approaches or
+clearly labelled failure advisories, never a candidate or unknown lesson.
+
+Both projections are local, opt-in, fail-open, and disposable. Rebuild them
+with `rebuild-source-index.py` and `rebuild-experience.py`; use
+`kb-projection-doctor.py` for read-only freshness, provenance, orphan, and
+redaction diagnostics. The evidence gate is deliberately stricter than
+retrieval quality: without reviewed holdouts and a downstream correctness
+improvement, the result remains `hold` and the toggles stay off.
+
 ### Retrieval (the hooks layer)
 - **Every prompt, every project**: a UserPromptSubmit hook embeds your prompt and injects the top-matching wiki articles and memories as context. A PreToolUse hook checks the vault before Claude searches the web.
 - Hybrid index (`kb-index.db`): semantic vectors (sqlite-vec) fused with FTS5 keyword search, so exact terms are found even when embeddings miss them.
@@ -801,6 +817,10 @@ The hooks are fail-open by design: an error means no injected context or a skipp
 | `/kennisbank:settings` | none | Show and flip the background-automation toggles |
 | `/kennisbank:review` | optional topic | Walk the unverified-memory queue; the human decides approve/reject/skip per item |
 | `/kennisbank:rebuild-index` | none | Rebuild the hybrid search index from the vault markdown |
+| `/kennisbank:rebuild-source-index` | none | Rebuild the opt-in provenance-first raw-source projection |
+| `/kennisbank:rebuild-experience` | `--incremental` or `--records-only` | Rebuild outcome/experience records and the optional local vector projection |
+| `/kennisbank:source-recall` | explicit/verify/reconstruct | Retrieve hash- and offset-bound source passages; never normal prompt injection |
+| `/kennisbank:experience-recall` | explicit/failure | Retrieve validated experiences or labelled failure advisories |
 | `/kennisbank:rebuild-memory` | none | Re-extract ALL memory from archived transcripts (heavy; semantic dedup makes it near-idempotent) |
 | `/kennisbank-upgrade` | optional `--dry-run` | Upgrade the deployed vault to the latest release tag |
 | `/kennisbank-contribute` | optional `--dry-run` | PR local tooling edits back upstream |
@@ -886,9 +906,9 @@ reports.
 
 ## Using KennisBank from other agents (Codex, OpenCode, Copilot, ChatGPT)
 
-The vault is not Claude-Code-only. `scripts/kb-mcp.py` is a local **MCP server** exposing nine primitives: eight tools - `recall` (search memory + wiki), `capture` (save a new memory), `review_pending` and `review_decide` (the human review queue), and the temporal set `what_did_i_do`, `timeline`, `weeklog`, `topic_timeline` - plus an `instructions` resource (a nudge to pull before searching externally). MCP is the one protocol every modern agent already speaks, so any client running **on this machine** can use the vault.
+The vault is not Claude-Code-only. `scripts/kb-mcp.py` is a local **MCP server** exposing eleven primitives: ten tools - `recall` (search memory + wiki), `source_recall` and `experience_recall` (explicit gated deeper recall), `capture` (save a new memory), `review_pending` and `review_decide` (the human review queue), and the temporal set `what_did_i_do`, `timeline`, `weeklog`, `topic_timeline` - plus an `instructions` resource (a nudge to pull before searching externally). MCP is the one protocol every modern agent already speaks, so any client running **on this machine** can use the vault.
 
-Every tool carries MCP annotations, which is not cosmetic: a client derives from `readOnlyHint` whether a call needs confirmation and whether it may run in parallel, and defaults both to "no" when the hint is absent. The six read-only retrieval tools are marked as such; `capture` is a non-destructive writer, `review_decide` a destructive one. The pull nudge travels on three carriers, because none of them reaches every client on its own: the `instructions` field of the protocol handshake, the `kennisbank://instructions` resource, and the managed block in `.github/copilot-instructions.md`.
+Every tool carries MCP annotations, which is not cosmetic: a client derives from `readOnlyHint` whether a call needs confirmation and whether it may run in parallel, and defaults both to "no" when the hint is absent. The eight read-only retrieval/temporal tools are marked as such; `capture` is a non-destructive writer, `review_decide` a destructive one. The pull nudge travels on three carriers, because none of them reaches every client on its own: the `instructions` field of the protocol handshake, the `kennisbank://instructions` resource, and the managed block in `.github/copilot-instructions.md`.
 
 **The hard boundary: local only.** The MCP server binds nothing to the network
 (stdio transport); the vault never leaves your machine. Claude Code, Codex,

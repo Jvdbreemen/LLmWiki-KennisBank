@@ -17,7 +17,7 @@ dagelijkse graphify-gate).
 Lees per toggle de waarde via de helper. Gebruik de canonieke keys en hun default:
 
 ```bash
-for key in auto_archive distill_notify embed_index daily_graphify memory_capture memory_recall usage_telemetry activity_llm_fallback checkpoints orientation graph_retrieval; do
+for key in auto_archive distill_notify embed_index daily_graphify memory_capture memory_recall source_recall experience_recall usage_telemetry activity_llm_fallback checkpoints orientation graph_retrieval; do
   val=$(python3 "$VAULT/.claude/scripts/_settings.py" get "$key")
   echo "$key=$val"
 done
@@ -36,6 +36,8 @@ doet:
 - **daily_graphify** - draai 1x/dag automatisch `/graphify --update` (kost-gated op 20u). Uit = alleen `.needs-rebuild` bijhouden; draai de graph handmatig.
 - **memory_capture** - extractie+judge van memories naar `09-memory/` + onderhoud. Uit = geen memory-opslag.
 - **memory_recall** - injecteer memories in de context via hook + lokale MCP. Uit = geen memory-retrieval bij sessiestart.
+- **source_recall** (default UIT) - raadpleeg expliciet de provenance-first bronindex voor reconstructie/verificatie. Uit = geen raw-source recall.
+- **experience_recall** (default UIT) - raadpleeg expliciet gevalideerde outcome/experience records. Uit = geen experience recall of failure advisory.
 - **usage_telemetry** - registreer welke geinjecteerde kennis daadwerkelijk gebruikt wordt (kb-usage.db; voedt ranking-boost en stale-warm-skip). Uit = geen gebruiksmeting.
 - **activity_llm_fallback** (default UIT) - laat een lokale LLM een datum/periode duiden die de deterministische lagen niet herkennen (laag 3 van de temporele parser). Aan = tragere maar bredere taaldekking; uit = alleen de locale-tabellen en dateparser.
 - **checkpoints** (default UIT) - schrijf bij context-compaction (Claude PreCompact) automatisch een werkstand-stub en meld die bij de volgende sessiestart. Uit = alleen handmatige checkpoints via `/checkpoint`.
@@ -66,6 +68,8 @@ python3 "$VAULT/.claude/scripts/_settings.py" set embed_index    <true|false>
 python3 "$VAULT/.claude/scripts/_settings.py" set daily_graphify <true|false>
 python3 "$VAULT/.claude/scripts/_settings.py" set memory_capture  <true|false>
 python3 "$VAULT/.claude/scripts/_settings.py" set memory_recall   <true|false>
+python3 "$VAULT/.claude/scripts/_settings.py" set source_recall   <true|false>
+python3 "$VAULT/.claude/scripts/_settings.py" set experience_recall <true|false>
 python3 "$VAULT/.claude/scripts/_settings.py" set usage_telemetry <true|false>
 python3 "$VAULT/.claude/scripts/_settings.py" set activity_llm_fallback <true|false>
 python3 "$VAULT/.claude/scripts/_settings.py" set checkpoints <true|false>

@@ -1,10 +1,10 @@
 ---
 id: TASK-214
 title: Build a rebuildable raw-source index with exact provenance
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-25 00:00'
-updated_date: '2026-08-25 00:00'
+updated_date: '2026-08-26 00:00'
 labels:
   - source-recall
   - indexing
@@ -38,14 +38,14 @@ memory status.
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A deterministic offline builder indexes all approved source roots and records its manifest and configuration
-- [ ] #2 Every returned chunk maps to an existing source path, hash, document id, and exact passage/window location
-- [ ] #3 Deleting the derived index and rebuilding produces equivalent ids and metadata for unchanged sources
-- [ ] #4 Changed, deleted, unreadable, and redacted sources are handled explicitly and reported
-- [ ] #5 The builder is fail-safe: a partial or failed rebuild cannot silently replace a known-good index
-- [ ] #6 Full and incremental rebuilds emit progress and do not run on the normal recall hot path
-- [ ] #7 Unit tests cover chunk identity, context windows, stale entries, hash changes, model version changes, and provenance failures
-- [ ] #8 No new hosted service or cloud data path is required
+- [x] #1 A deterministic offline builder indexes all approved source roots and records its manifest and configuration
+- [x] #2 Every returned chunk maps to an existing source path, hash, document id, and exact passage/window location
+- [x] #3 Deleting the derived index and rebuilding produces equivalent ids and metadata for unchanged sources
+- [x] #4 Changed, deleted, unreadable, and redacted sources are handled explicitly and reported
+- [x] #5 The builder is fail-safe: a partial or failed rebuild cannot silently replace a known-good index
+- [x] #6 Full and incremental rebuilds emit progress and do not run on the normal recall hot path
+- [x] #7 Unit tests cover chunk identity, context windows, stale entries, hash changes, model version changes, and provenance failures
+- [x] #8 No new hosted service or cloud data path is required
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -53,5 +53,16 @@ memory status.
 Keep raw source indexing logically separate from current wiki/memory ranking.
 The exact module and database names are chosen by TASK-212, but the default
 should reuse the repository's existing SQLite/sqlite-vec primitives.
-<!-- SECTION:NOTES:END -->
 
+### Evidence
+
+- `scripts/build-source-index.py` uses the existing local SQLite/sqlite-vec
+  projection, staging plus atomic replacement, a version stamp, source
+  manifest, exact hashes/offsets, approved scalar frontmatter metadata, and an
+  optional progress callback/CLI stream.
+- `tests/test_build_source_index.py`: 11 tests cover approved roots, metadata,
+  stable rebuild ids, changed/deleted/unreadable/redacted sources, failed
+  rebuild preservation, model changes, and full/incremental progress.
+- The source retrieval contract tests independently cover exact provenance,
+  freshness, chunk boundaries, and normal-path routing.
+<!-- SECTION:NOTES:END -->

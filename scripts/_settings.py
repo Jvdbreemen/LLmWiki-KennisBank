@@ -39,6 +39,10 @@ DEFAULTS = {
     # bewust afwijkend van de opt-in-conventie van auto_archive.
     "memory_capture": True,
     "memory_recall": True,
+    # Nieuwe source/experience projections are experimental until their paired
+    # holdout gates pass; keeping them off protects the existing hot path.
+    "source_recall": False,
+    "experience_recall": False,
     # Retrieval-feedbackloop: passief en lokaal, dus default aan.
     "usage_telemetry": True,
     # Optionele LLM-laatste-redmiddel voor temporele recall (Laag 3): normaliseert

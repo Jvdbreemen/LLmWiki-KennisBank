@@ -576,6 +576,39 @@ The five env vars below control the behavior of the vault-onderhoud scripts
 
 ---
 
+## 4c. Experimental source and experience projections
+
+These layers are derived, local, and disabled by default until their paired
+holdout gates pass. `source_recall` enables explicit source reconstruction or
+verification through `kb-source-recall.py`; `experience_recall` enables
+validated outcome/experience recall and failure advisories through
+`kb-experience-recall.py`. Neither toggle changes normal prompt injection.
+
+The source projection is rebuilt from approved `01-raw`, `05-bronnen`, and
+`08-archive` files. It stores chunks, hashes, offsets, and an allowlisted set of
+scalar metadata, not arbitrary frontmatter or a replacement for the raw files.
+The experience projection is rebuilt from append-only events and outcomes;
+candidate, unknown, retracted, superseded, stale, and redaction-affected
+records remain labelled and are not silently promoted.
+
+Use `rebuild-source-index.py --progress`, `rebuild-experience.py --progress`,
+and `kb-projection-doctor.py` off the hot path. Builders use staging and an
+atomic replacement, so an embedding, read, or schema failure preserves the
+previous derived database. The doctor is read-only. Raw source deletion or
+redaction therefore produces a stale/orphan/lifecycle signal and requires an
+operator decision; it does not erase audit history automatically.
+
+All four supported client integrations (Claude Code, Codex, OpenCode, and
+Copilot) receive the same configured `KENNISBANK_VAULT` boundary and local
+MCP/command paths where supported. The retrieval layers do not create a cloud
+fallback. Cloud LLM or embedding endpoints remain separate explicit settings
+and are not permitted by these rebuild commands unless the operator changes
+the endpoint policy.
+
+The release gate is `kb-layer-eval.py`: source and experience decisions are
+independent, six-arm coverage is explicit, downstream correctness deltas and
+latency are required, and missing reviewed holdouts produce `hold`, not `go`.
+
 ## 5. autoresearch skill
 
 ### Output path

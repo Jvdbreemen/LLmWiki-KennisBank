@@ -1,10 +1,10 @@
 ---
 id: TASK-217
 title: Add an append-only experience event model and derived store
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-25 00:00'
-updated_date: '2026-08-25 00:00'
+updated_date: '2026-08-26 00:00'
 labels:
   - experience-memory
   - event-log
@@ -12,7 +12,6 @@ labels:
   - lifecycle
 dependencies:
   - TASK-212
-  - TASK-216
 ordinal: 175600
 ---
 
@@ -37,12 +36,22 @@ after a prompt/model change.
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Typed experience events are append-only, inspectable, versioned, and linked to source/session/task identities
-- [ ] #2 Derived records contain situation, goal, approach, action, observed result, lesson, applicability, outcome, evidence, confidence, and attribution limits
-- [ ] #3 Both successful and failed attempts are retained and queryable
-- [ ] #4 Candidate, validated, superseded, retracted, and unknown states have deterministic transition rules
-- [ ] #5 Rebuilding derived experience records from the event log is idempotent and does not mutate raw evidence
-- [ ] #6 Missing or contradictory evidence prevents validation rather than creating a confident lesson
-- [ ] #7 Tests cover duplicate events, partial sessions, retractions, supersession, schema migration, and provenance failure
+- [x] #1 Typed experience events are append-only, inspectable, versioned, and linked to source/session/task identities
+- [x] #2 Derived records contain situation, goal, approach, action, observed result, lesson, applicability, outcome, evidence, confidence, and attribution limits
+- [x] #3 Both successful and failed attempts are retained and queryable
+- [x] #4 Candidate, validated, superseded, retracted, and unknown states have deterministic transition rules
+- [x] #5 Rebuilding derived experience records from the event log is idempotent and does not mutate raw evidence
+- [x] #6 Missing or contradictory evidence prevents validation rather than creating a confident lesson
+- [x] #7 Tests cover duplicate events, partial sessions, retractions, supersession, schema migration, and provenance failure
 <!-- AC:END -->
 
+## Evidence
+
+- `scripts/_experience.py` validates event types, supports `partial` outcomes,
+  records schema versions, migrates derived-link columns, and preserves
+  exposure/procedure/skill references.
+- `scripts/_experience_extract.py` derives records idempotently and forces
+  contradictory success/failure evidence to `mixed` plus `candidate` rather
+  than silently validating it.
+- Focused evidence: 24 experience/store/recall/CLI tests pass; the smaller
+  store/extractor/promotion selection passes 15 tests.

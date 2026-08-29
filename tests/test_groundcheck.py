@@ -206,6 +206,18 @@ class VerifyPassTest(unittest.TestCase):
         rows = _memory.recent_promotions()
         self.assertEqual(rows[0]["route"], "stamp")
 
+    def test_source_recall_can_supply_a_missing_groundcheck_passage(self):
+        seen = {}
+        def fake(prompt, system=""):
+            seen["prompt"] = prompt
+            return self._answer("supported")
+        self._llm.generate = fake
+        result = _groundcheck.verify_grounded(
+            "claim", [], source_recall_fn=lambda _claim: {
+                "passage": "raw source evidence", "source_path": "raw.md"})
+        self.assertEqual(result["route"], "source-recall")
+        self.assertIn("raw source evidence", seen["prompt"])
+
 
 class CandidateOrderTest(unittest.TestCase):
     """Trap 1 must remember what it already judged, or it re-judges forever.

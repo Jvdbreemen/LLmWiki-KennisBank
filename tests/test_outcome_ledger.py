@@ -49,6 +49,32 @@ class OutcomeLedgerContractTest(unittest.TestCase):
         _usage.clear_pending("session-1")
         self.assertEqual(len(_usage.exposures_for("session-1")), 1)
 
+    def test_use_evidence_is_persisted_separately_from_exposure(self):
+        _usage.log_exposures(
+            [{"item_id": "memory-a", "layer": "memory", "rank": 1}],
+            session_id="session-use", task_id="task-use", query="q",
+            ts="2026-08-25T10:00:00Z")
+        n = _usage.log_use_evidence(
+            [{"item_id": "memory-a", "layer": "memory"}],
+            session_id="session-use", task_id="task-use",
+            ts="2026-08-25T10:05:00Z", evidence_kind="tool_use",
+            evidence_ref="transcript.jsonl")
+        self.assertEqual(n, 1)
+        uses = _usage.use_evidence_for("session-use", task_id="task-use")
+        self.assertEqual(uses[0]["item_id"], "memory-a")
+        self.assertEqual(uses[0]["evidence_kind"], "tool_use")
+        self.assertEqual(uses[0]["evidence_ref"], "transcript.jsonl")
+        self.assertEqual(len(_usage.exposures_for("session-use", task_id="task-use")), 1)
+
+    def test_context_parser_preserves_layer_and_rank(self):
+        items = _usage.exposures_from_context(
+            "KennisBank-wiki:\n- [[article-a]] (0.8): text\n\n"
+            "KennisBank-geheugen:\n- [[memory-b]] (0.7): lesson",
+            query="fix timeout")
+        self.assertEqual([(item["item_id"], item["layer"], item["rank"])
+                          for item in items],
+                         [("article-a", "wiki", 1), ("memory-b", "memory", 1)])
+
     def test_no_signal_is_unknown_not_failure(self):
         outcome = _outcome.derive_outcome({})
         self.assertEqual(outcome["state"], "unknown")
@@ -74,4 +100,3 @@ class OutcomeLedgerContractTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

@@ -90,6 +90,19 @@ def run_bounded(cmd, *, cwd=None, env=None, timeout: float,
     # Windows houdt een zojuist gedood kleinkind de geerfde handle nog even
     # vast, en dan gooit de automatische opruiming een PermissionError -- een
     # test die correct afkapte zou dan alsnog rood worden op het opruimen.
+    # Git-for-Windows bash interprets backslashes in a Windows argument as
+    # escapes. Normalize only bash script arguments; Python/native commands
+    # must retain their original argv semantics.
+    command = list(cmd)
+    if os.name == "nt" and command and Path(str(command[0])).name.lower() in {"bash", "bash.exe"}:
+        def _bash_arg(value):
+            if not isinstance(value, (str, os.PathLike)):
+                return value
+            text = str(value).replace("\\", "/")
+            if len(text) >= 3 and text[1:3] == ":/":
+                text = "/mnt/" + text[0].lower() + text[2:]
+            return text
+        command = [command[0]] + [_bash_arg(value) for value in command[1:]]
     d = tempfile.mkdtemp(prefix="kb-proc-")
     try:
         uit = Path(d) / "uit.txt"
@@ -98,7 +111,7 @@ def run_bounded(cmd, *, cwd=None, env=None, timeout: float,
             if os.name != "nt":
                 kw["start_new_session"] = True   # eigen procesgroep om te killen
             proc = subprocess.Popen(
-                cmd, cwd=cwd, env=env, stdout=fh,
+                command, cwd=cwd, env=env, stdout=fh,
                 stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, **kw)
             begin = time.monotonic()
             afgekapt = False

@@ -38,7 +38,7 @@ def test_claude_capture_finishes_before_usage_scan(tmp_path):
     assert module.coordinate(
         "claude", vault, b'{"session_id":"one"}', runner=runner
     ) == []
-    assert calls == ["archive-transcript.py", "kb-usage-scan.py"]
+    assert calls == ["archive-transcript.py", "kb-usage-scan.py", "kb-outcome.py"]
 
 
 def test_copilot_capture_precedes_parallel_import_and_usage(tmp_path):

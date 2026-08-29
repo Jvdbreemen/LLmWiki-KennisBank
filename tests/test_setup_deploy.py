@@ -230,6 +230,24 @@ class SetupDeployTest(unittest.TestCase):
         self.assertTrue(cmd.is_file(),
                         f"/kennisbank:settings niet gedeployed op {cmd}")
 
+    def test_experimental_memory_commands_deploy_to_namespace(self):
+        tmp, vault = self.gedeelde_installatie()
+        commands = tmp / ".claude" / "commands" / "kennisbank"
+        for name in ("rebuild-source-index.md", "rebuild-experience.md",
+                     "source-recall.md", "experience-recall.md",
+                     "experience-proposal.md", "layer-eval.md"):
+            self.assertTrue((commands / name).is_file(), name)
+
+    def test_new_projection_scripts_are_deployed(self):
+        _tmp, vault = self.gedeelde_installatie()
+        scripts = vault / ".claude" / "scripts"
+        for name in ("build-source-index.py", "build-source-holdout.py",
+                     "kb-source-recall.py", "build-experience-index.py",
+                     "rebuild-experience.py", "kb-experience-recall.py",
+                     "kb-experience-proposal.py", "kb-layer-eval.py",
+                     "kb-projection-doctor.py"):
+            self.assertTrue((scripts / name).is_file(), name)
+
     def test_settings_file_bootstrapped_with_defaults(self):
         import json
         tmp, vault = self.gedeelde_installatie()  # run_setup gebruikt --yes (niet-interactief)

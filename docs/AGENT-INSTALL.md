@@ -142,6 +142,14 @@ bash "$VAULT/.claude/scripts/doctor.sh"
 Report the summary (PASS/WARN/FAIL). A healthy install ends with zero FAIL.
 Then restart the agent client so hooks and MCP tools load.
 
+The source and experience projections are available to all supported CLI
+clients through the deployed scripts, namespaced commands, and MCP-compatible
+local vault boundary where applicable. They are not added to normal prompt
+injection: enable `source_recall` or `experience_recall` only after reviewing
+the evidence packet. Run `kb-projection-doctor.py` for a read-only health check;
+run the two rebuild commands off the interactive path. These paths preserve
+`KENNISBANK_VAULT` and have no implicit cloud fallback.
+
 ## Upgrade
 
 Deployed vaults upgrade with the `kennisbank-upgrade` skill

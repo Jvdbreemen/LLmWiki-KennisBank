@@ -473,6 +473,16 @@ These are invoked by the Claude Code harness on UserPromptSubmit (synchronously,
   - Rebuild activity log from source files.
   - **Location**: [build-activity-index.py](../../scripts/build-activity-index.py)
 
+- **build-source-index.py**
+  - Build the isolated provenance-first raw-source projection from approved
+    local roots; supports staged full/incremental work and progress reporting.
+  - **Location**: [build-source-index.py](../../scripts/build-source-index.py)
+
+- **rebuild-experience.py** / **build-experience-index.py**
+  - Rebuild typed experience records from append-only events/outcomes and,
+    when configured, materialize the local vector/FTS projection.
+  - **Location**: [rebuild-experience.py](../../scripts/rebuild-experience.py)
+
 
 - **build-graph-index.py** (~4.6KB)
   - Build knowledge graph (wiki links, cross-references).
@@ -500,6 +510,11 @@ These are invoked by the Claude Code harness on UserPromptSubmit (synchronously,
 - **memory-doctor.py** (~401 lines)
   - Diagnostic and repair tool for memory system.
   - **Location**: [memory-doctor.py](../../scripts/memory-doctor.py)
+
+- **kb-projection-doctor.py**
+  - Read-only source/experience health: schema, freshness, provenance gaps,
+    orphan/redaction signals, lifecycle statuses, and route state.
+  - **Location**: [kb-projection-doctor.py](../../scripts/kb-projection-doctor.py)
 
 - **stale-check.py**
   - Identify out-of-date memories (by age, usage).
@@ -538,6 +553,11 @@ These are invoked by the Claude Code harness on UserPromptSubmit (synchronously,
 - **kb-verify.py**
   - Ground a fact against the knowledge base.
   - **Location**: [kb-verify.py](../../scripts/kb-verify.py)
+
+- **kb-source-recall.py** / **kb-experience-recall.py**
+  - Explicit, opt-in gateways for source reconstruction/verification and
+    validated outcome/experience recall; both fail open and label evidence state.
+  - **Location**: [kb-source-recall.py](../../scripts/kb-source-recall.py), [kb-experience-recall.py](../../scripts/kb-experience-recall.py)
 
 - **kb-lint.py** (~321 lines)
   - Lint memory files for format/content issues.
@@ -589,6 +609,11 @@ These are invoked by the Claude Code harness on UserPromptSubmit (synchronously,
 - **recall-ablation.py**
   - Ablation study on recall components.
   - **Location**: [recall-ablation.py](../../scripts/recall-ablation.py)
+
+- **kb-layer-eval.py**
+  - Build the content-safe six-arm evidence packet and independent source and
+    experience go/hold/reject decisions.
+  - **Location**: [kb-layer-eval.py](../../scripts/kb-layer-eval.py)
 
 #### Other Utilities
 - **kb-mcp.py** (~442 lines)

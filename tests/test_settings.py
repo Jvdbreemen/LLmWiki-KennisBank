@@ -135,6 +135,12 @@ class SettingsTest(unittest.TestCase):
         self.assertIs(_settings.DEFAULTS.get("memory_capture"), True)
         self.assertIs(_settings.DEFAULTS.get("memory_recall"), True)
 
+    def test_experimental_layers_are_opt_in_by_default(self):
+        self.assertIs(_settings.DEFAULTS.get("source_recall"), False)
+        self.assertIs(_settings.DEFAULTS.get("experience_recall"), False)
+        self.assertFalse(_settings.get("source_recall", _settings.DEFAULTS["source_recall"]))
+        self.assertFalse(_settings.get("experience_recall", _settings.DEFAULTS["experience_recall"]))
+
     def test_memory_toggle_independently_settable(self):
         # recall uit, capture aan: onafhankelijk schakelbaar.
         _settings.set("memory_recall", False)

@@ -128,7 +128,7 @@ Toon daarom de huidige waarden en bied aan ze te tunen — niet "vraag-indien-af
 Lees elke canonieke toggle's huidige waarde:
 
 ```bash
-for key in auto_archive distill_notify embed_index daily_graphify memory_capture memory_recall usage_telemetry activity_llm_fallback checkpoints orientation graph_retrieval; do
+for key in auto_archive distill_notify embed_index daily_graphify memory_capture memory_recall source_recall experience_recall usage_telemetry activity_llm_fallback checkpoints orientation graph_retrieval; do
   echo "$key=$(python3 "$VAULT/.claude/scripts/_settings.py" get "$key")"
 done
 ```
@@ -143,6 +143,8 @@ enable it, suggesting the default:
 - daily_graphify (default ON) - update the graph automatically once a day
 - memory_capture (default ON) - extract and judge memories into 09-memory/ with maintenance
 - memory_recall (default ON) - inject memories into context via hook and local MCP
+- source_recall (default OFF) - explicitly retrieve provenance-first passages from the isolated raw-source index
+- experience_recall (default OFF) - explicitly retrieve validated outcome-bound experiences and failure advisories
 - usage_telemetry (default ON) - record which injected knowledge was actually used
 - activity_llm_fallback (default OFF) - let a local LLM resolve dates the deterministic layers miss
 - checkpoints (default OFF) - auto-save a work-state stub at context compaction (Claude PreCompact) and surface it at the next session start

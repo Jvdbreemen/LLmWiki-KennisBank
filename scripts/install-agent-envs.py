@@ -851,7 +851,8 @@ async def main():
             await session.initialize()
             tools = await session.list_tools()
             names = {t.name for t in tools.tools}
-            missing = {"recall", "capture", "what_did_i_do", "timeline", "weeklog", "topic_timeline"} - names
+            missing = {"recall", "source_recall", "experience_recall", "capture",
+                       "what_did_i_do", "timeline", "weeklog", "topic_timeline"} - names
             if missing:
                 raise SystemExit("missing MCP tools: " + ", ".join(sorted(missing)))
             print("MCP handshake OK: " + ", ".join(sorted(names)))

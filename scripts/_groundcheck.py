@@ -197,7 +197,33 @@ def select_passage(claim: str, chunks: list) -> str:
     return "\n[…]\n".join(w for _i, _j, w in kept)
 
 
-def verify_grounded(body: str, chunks: list, stamp: str = "") -> dict:
+def source_recall_passage(claim: str) -> dict:
+    """Optional reusable source-index adapter for verification only."""
+    try:
+        import _settings
+        if not _settings.get("source_recall", False):
+            return {}
+        import _source_recall
+        qvec = emb.embed_query(claim)
+        if qvec is None:
+            return {}
+        db = vault_root() / ".claude" / "kb-source.db"
+        if not db.is_file():
+            return {}
+        conn = _source_recall.connect(db)
+        try:
+            hits = _source_recall.source_hits(
+                conn, query_vector=qvec, query_text=claim, k=1,
+                embed_id=emb.embed_id(), source_root=vault_root())
+        finally:
+            conn.close()
+        return hits[0] if hits else {}
+    except Exception:
+        return {}
+
+
+def verify_grounded(body: str, chunks: list, stamp: str = "", *,
+                    source_recall_fn=None) -> dict:
     """One grounded verdict for a memory body against its transcript chunks.
 
     Returns {"verdict", "reason", "route"}; verdict is one of VERDICTS,
@@ -209,6 +235,16 @@ def verify_grounded(body: str, chunks: list, stamp: str = "") -> dict:
         passage, route = exact[:PASSAGE_BUDGET], "stamp"
     else:
         passage, route = select_passage(body, chunks), "windows"
+    if source_recall_fn is None:
+        source_recall_fn = source_recall_passage
+    if not passage and source_recall_fn is not None:
+        try:
+            source_hit = source_recall_fn(body) or {}
+            passage = str(source_hit.get("passage") or "")[:PASSAGE_BUDGET]
+            if passage:
+                route = "source-recall"
+        except Exception:
+            pass
     if not passage:
         return {"verdict": "no_transcript", "reason": "", "route": route}
     import _llm

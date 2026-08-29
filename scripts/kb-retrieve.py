@@ -417,6 +417,11 @@ def main() -> None:
                                for m in _re2.findall(r"\[\[([^\[\]|#]+)\]\]", line)})
             _usage.log_injected(stems, session_id=str(data.get("session_id") or ""),
                                 neighbor_stems=nb_stems)
+            _usage.log_exposures(
+                _usage.exposures_from_context(ctx, query=prompt),
+                session_id=str(data.get("session_id") or ""),
+                task_id=str(data.get("task_id") or ""), query=prompt,
+                ts=str(data.get("timestamp") or ""))
         except Exception:
             pass
 

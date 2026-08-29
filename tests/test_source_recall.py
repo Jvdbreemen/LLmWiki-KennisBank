@@ -120,6 +120,15 @@ class SourceIndexContractTest(unittest.TestCase):
             [],
         )
 
+    def test_unrelated_vector_only_hit_is_a_no_hit(self):
+        sr.upsert_source(
+            self.conn, source_path="a.md", source_hash="h",
+            chunks=[{"index": 0, "start": 0, "end": 8, "text": "timeout"}],
+            vectors=[_vec(1, 0, 0, 0)], metadata={})
+        self.assertEqual(
+            sr.source_hits(self.conn, query_vector=_vec(0, 1, 0, 0),
+                           query_text="unrelated phrase", k=3), [])
+
 
 class SourceRouteContractTest(unittest.TestCase):
     def test_explicit_verify_and_reconstruct_always_route(self):
@@ -145,4 +154,3 @@ class ContractFixtureTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

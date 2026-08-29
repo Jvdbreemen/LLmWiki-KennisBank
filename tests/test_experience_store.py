@@ -36,6 +36,25 @@ class ExperienceStoreContractTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             exp.append_event(self.conn, **changed)
 
+    def test_event_types_are_typed_and_unknown_types_are_rejected(self):
+        with self.assertRaisesRegex(ValueError, "event type"):
+            exp.append_event(self.conn, event_id="bad", session_id="s1", task_id="t1",
+                             event_type="invented", observed_at="now", payload={})
+
+    def test_schema_migration_adds_new_derived_link_columns(self):
+        legacy = exp.connect(Path(self.tmp.name) / "legacy.db")
+        try:
+            legacy.execute(
+                "CREATE TABLE experiences (experience_id TEXT PRIMARY KEY, status TEXT, "
+                "outcome_state TEXT)")
+            legacy.commit()
+            exp.ensure_schema(legacy)
+            columns = {row[1] for row in legacy.execute("PRAGMA table_info(experiences)")}
+            self.assertTrue({"exposed_refs_json", "procedure_refs_json", "skill_refs_json"}
+                            <= columns)
+        finally:
+            legacy.close()
+
     def test_outcome_preserves_evidence_and_unknown(self):
         exp.record_outcome(self.conn, outcome_id="out-1", session_id="s1",
                            task_id="t1", state="unknown", evidence=[],
@@ -62,6 +81,22 @@ class ExperienceStoreContractTest(unittest.TestCase):
                             source_refs=["01-raw/a.md#0:20"],
                             outcome_refs=["out-1"], **common)
         self.assertEqual(exp.experience(self.conn, "exp-1")["status"], "validated")
+
+    def test_experience_preserves_exposure_procedure_and_skill_links(self):
+        exp.record_outcome(self.conn, outcome_id="out-links", session_id="s1",
+                           task_id="t1", state="partial", evidence=[{"kind": "test"}],
+                           attribution_strength="weak")
+        exp.save_experience(
+            self.conn, experience_id="exp-links", session_id="s1", task_id="t1",
+            status="candidate", situation="s", approach="a", observed_result="r",
+            lesson="l", applicability="scope", outcome_state="partial", confidence=0.4,
+            source_refs=["raw#1"], outcome_refs=["out-links"],
+            exposed_refs=["memory:m1"], procedure_refs=["procedure:p1"],
+            skill_refs=["skill:s1"])
+        row = exp.experience(self.conn, "exp-links")
+        self.assertEqual(row["exposed_refs"], ["memory:m1"])
+        self.assertEqual(row["procedure_refs"], ["procedure:p1"])
+        self.assertEqual(row["skill_refs"], ["skill:s1"])
 
     def test_candidate_may_preserve_uncertainty_but_not_become_validated_implicitly(self):
         exp.save_experience(
@@ -91,4 +126,3 @@ class ExperienceStoreContractTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
