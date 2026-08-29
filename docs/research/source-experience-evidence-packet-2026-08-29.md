@@ -9,13 +9,14 @@ Policy: both routes remain opt-in; outcome-aware ranking remains disabled.
 | layer | measured result | decision |
 |---|---|---|
 | source recall | reviewed oracle is complete, but the full vector arm was not built; full-corpus lexical hit@5 is 0.66 and returns a hit for every negative probe | **hold; reject naive full-corpus pre-embedding as the next step** |
-| experience recall | hybrid hit@3 is 0.90 versus lexical 0.80, but failure advisories fire on 2 of 10 abstention probes | **reject for rollout; retain as an experiment** |
+| experience recall | hybrid hit@3 is 0.90 versus lexical 0.80; after two-axis human outcome review, false warnings are 1 of 10 but failure hit@3 and advisory precision are both 0.667 | **reject for rollout; retain as an experiment** |
 | outcome-aware ranking | no longitudinal exposed/control evidence | **reject** |
 
 These decisions distinguish a useful mechanism from a justified product
 feature. Experience retrieval shows a real ten-point retrieval gain. It still
-fails its safety gate. Source grounding has a complete reviewed oracle, but the
-proposed full vector projection has not earned its storage and ingest cost.
+fails its failure-recall and advisory-precision gates. Source grounding has a
+complete reviewed oracle, but the proposed full vector projection has not
+earned its storage and ingest cost.
 
 ## Reviewed datasets
 
@@ -28,10 +29,14 @@ The private evaluation boundary contains 120 human-reviewed cases:
   already reviewed source negatives.
 
 All 50 positive source hashes and windows still resolve, so the source oracle
-ceiling is 1.00. The provisional experience outcome labels contain 22 failure,
-21 success, 11 mixed, and 6 partial episodes. Those state labels were assigned
-after the keep/reject review and are not independent human labels; paired
-answer/action claims therefore remain unmeasured.
+ceiling is 1.00. The owner subsequently reviewed all 60 experience outcomes
+using separate attempt, resolution, and final-state axes. The evaluator-facing
+final states contain 38 success, 18 partial, 1 mixed, and 3 failure episodes.
+The attempt axis preserves 29 failures, 3 mixed, 5 partial, and 23 successes;
+resolution records 23 validated fixes, 13 proposed fixes, 6 diagnoses, 2
+unresolved cases, 1 correction with cost, and 15 cases where recovery was not
+applicable. This avoids erasing a failed approach merely because its later fix
+succeeded. Paired answer/action claims remain unmeasured.
 
 Private prompts, answers, source coordinates, and generated databases live
 under `06-claude/evaluations/source-experience-2026-08-27` in the configured
@@ -75,23 +80,26 @@ The real SQLite FTS/vector projection used `ollama:qwen3-embedding:4b` over the
 | hit@1 | 0.817 | 0.750 |
 | hit@3 | 0.900 | 0.800 |
 | MRR | 0.858 | 0.775 |
-| validated failure hit@3 | 0.864 | 0.773 |
+| validated failure hit@3 | 0.667 | 0.667 |
 | outcome calibration | 0.900 | 0.800 |
 
-Hybrid therefore meets the preregistered absolute and relative retrieval
-thresholds. Evidence precision is 1.00, candidate leakage is zero, and no
-unsupported lesson was returned. Explicit experience query latency was 88.2 ms
-p50 and 105.6 ms p95.
+Hybrid therefore meets the preregistered absolute and relative overall
+retrieval thresholds. Evidence precision is 1.00, candidate leakage is zero,
+and no unsupported lesson was returned. Explicit experience query latency was
+97.5 ms p50 and 133.0 ms p95.
 
-The failure-advisory route returned 22 warnings, 20 of which matched the
-expected failed experience. Advisory precision is 0.909, but 2 of 10 negative
-probes received a warning: false-warning rate 0.20 versus the maximum 0.10.
-This is a measured safety failure and makes the rollout decision **reject**.
+The failure-advisory route returned three warnings, two of which matched the
+expected final-failure experience. E-038 was missed, and abstention probe
+XP-S-005 incorrectly received the E-010 warning. Advisory precision is 0.667,
+and 1 of 10 negative probes received a warning, so false-warning rate 0.10
+meets its boundary exactly. Failure hit@3 and advisory precision still miss
+their preregistered thresholds, making the rollout decision **reject**.
 Changing the threshold on this holdout would be test-set tuning; calibration
 requires a separate development set followed by one untouched rerun.
 
-All 22 failure-labelled episodes survived as evidence-bound lessons in the
-dead-end report (survival 1.00). This check is based on the curated records that
+All 29 failure-attempt episodes survived as evidence-bound lessons in the
+dead-end report (survival 1.00), including episodes whose validated fix makes
+their final state success. This check is based on the curated records that
 seeded the projection, so it proves lossless projection, not independent
 extraction quality. Consolidation proposed zero shared lessons and performed
 no mutation.
@@ -120,8 +128,10 @@ invalid attempt.
    candidate generation plus cached on-demand passage embeddings and compare it
    against the frozen private source holdout.
 2. Create a separate advisory calibration set. Adjust the failure-warning gate
-   there, freeze it, then rerun these 10 untouched negatives once.
-3. Human-review the provisional experience state labels and collect paired
+   there, freeze it, then rerun these 10 untouched negatives once. The current
+   rerun reaches the false-warning boundary but still fails failure hit@3 and
+   advisory precision.
+3. Keep the completed two-axis outcome labels frozen and collect paired
    baseline-versus-layer answer/action judgments.
 4. Keep source recall explicit and experience recall experimental. Do not
    enable outcome-aware ranking or automatic skill promotion.
