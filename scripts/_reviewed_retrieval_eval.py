@@ -50,6 +50,8 @@ def _build(cases, db_path: Path, embed_fn, embed_id: str) -> None:
                 lesson=record.get("lesson", ""),
                 applicability=record.get("applicability", ""),
                 outcome_state=record["outcome_state"], confidence=0.8,
+                attempt_state=record.get("attempt_state", "unknown"),
+                resolution_state=record.get("resolution_state", "not_applicable"),
                 source_refs=record.get("source_refs") or [],
                 outcome_refs=record.get("outcome_refs") or [])
             _experience.index_experience(
@@ -108,7 +110,8 @@ def evaluate_experience_holdout(cases, *, db_path: Path, embed_id: str,
                 statuses=("validated",))
             latencies.append((time.perf_counter() - started) * 1000.0)
             lexical[case["id"]] = _lexical_hits(conn, case["query"], k=3)
-            if case.get("expected_state") == "failure" or case.get("expected_experience") is None:
+            attempt_state = case.get("expected_attempt_state", case.get("expected_state"))
+            if attempt_state == "failure" or case.get("expected_experience") is None:
                 if case.get("expected_experience") is None:
                     warning_probes += 1
                 warning = _experience.failure_advisory(
@@ -118,7 +121,7 @@ def evaluate_experience_holdout(cases, *, db_path: Path, embed_id: str,
                     advisory_total += 1
                     if case.get("expected_experience") is None:
                         false_warnings += 1
-                    if (case.get("expected_state") == "failure"
+                    if (attempt_state == "failure"
                             and warning.get("experience_id") == case.get("expected_experience")):
                         advisory_correct += 1
     finally:

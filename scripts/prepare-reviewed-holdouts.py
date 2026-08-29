@@ -30,15 +30,26 @@ def _jsonl(path: Path) -> list[dict]:
     return rows
 
 
-def _states(path: Path | None) -> dict[str, str]:
+def _state_bundle(path: Path | None) -> dict[str, dict[str, str]]:
     if path is None:
-        return {}
+        return {"states": {}, "attempt_states": {}, "resolution_states": {}}
     value = json.loads(path.read_text(encoding="utf-8"))
-    if isinstance(value, dict) and isinstance(value.get("states"), dict):
-        value = value["states"]
     if not isinstance(value, dict):
         raise ValueError("experience states must be a JSON object")
-    return {str(key): str(state) for key, state in value.items()}
+    if not isinstance(value.get("states"), dict):
+        return {
+            "states": {str(key): str(state) for key, state in value.items()},
+            "attempt_states": {},
+            "resolution_states": {},
+        }
+    result = {}
+    for key in ("states", "attempt_states", "resolution_states"):
+        mapping = value.get(key) or {}
+        if not isinstance(mapping, dict):
+            raise ValueError(f"experience {key} must be a JSON object")
+        result[key] = {str(case_id): str(state)
+                       for case_id, state in mapping.items()}
+    return result
 
 
 def _outside_repo(path: Path) -> None:
@@ -71,8 +82,11 @@ def main(argv=None) -> int:
         _outside_repo(args.output_dir)
         rows = _jsonl(args.reviews)
         source_cases = reviewed.prepare_source_cases(rows)
+        state_bundle = _state_bundle(args.experience_states)
         experience_cases = reviewed.prepare_experience_cases(
-            rows, states=_states(args.experience_states))
+            rows, states=state_bundle["states"],
+            attempt_states=state_bundle["attempt_states"],
+            resolution_states=state_bundle["resolution_states"])
         if args.include_source_negative_experience_probes:
             experience_cases.extend(
                 reviewed.prepare_experience_negative_probes(source_cases))

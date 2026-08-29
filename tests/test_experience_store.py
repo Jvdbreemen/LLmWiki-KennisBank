@@ -47,11 +47,19 @@ class ExperienceStoreContractTest(unittest.TestCase):
             legacy.execute(
                 "CREATE TABLE experiences (experience_id TEXT PRIMARY KEY, status TEXT, "
                 "outcome_state TEXT)")
+            legacy.execute(
+                "INSERT INTO experiences(experience_id, status, outcome_state) "
+                "VALUES ('legacy-failure', 'validated', 'failure')")
             legacy.commit()
             exp.ensure_schema(legacy)
             columns = {row[1] for row in legacy.execute("PRAGMA table_info(experiences)")}
             self.assertTrue({"exposed_refs_json", "procedure_refs_json", "skill_refs_json"}
                             <= columns)
+            self.assertTrue({"attempt_state", "resolution_state"} <= columns)
+            axes = legacy.execute(
+                "SELECT attempt_state, resolution_state FROM experiences "
+                "WHERE experience_id='legacy-failure'").fetchone()
+            self.assertEqual(axes, ("unknown", "not_applicable"))
         finally:
             legacy.close()
 

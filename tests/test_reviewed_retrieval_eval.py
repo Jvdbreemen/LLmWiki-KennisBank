@@ -56,6 +56,37 @@ class ReviewedRetrievalEvalTest(unittest.TestCase):
         self.assertNotIn("query", repr(report).lower())
         self.assertNotIn("bounded timeout", repr(report).lower())
 
+    def test_resolved_failed_attempt_counts_as_correct_advisory(self):
+        cases = [{
+            "id": "E-resolved", "query": "installer rollback failure",
+            "expected_experience": "resolved", "expected_state": "success",
+            "expected_attempt_state": "failure",
+            "expected_resolution_state": "fix_validated",
+            "records": [{
+                "experience_id": "resolved", "status": "validated",
+                "outcome_state": "success", "attempt_state": "failure",
+                "resolution_state": "fix_validated",
+                "situation": "installer rollback failure", "approach": "hide rollback",
+                "action": "show both errors", "observed_result": "fix works",
+                "lesson": "preserve both failures", "applicability": "installers",
+                "source_refs": ["raw#1"], "outcome_refs": ["out-1"],
+            }],
+        }]
+        vectors = {
+            "installer rollback failure  hide rollback show both errors preserve both failures installers": [1, 0],
+            "installer rollback failure": [1, 0],
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            report = live.evaluate_experience_holdout(
+                cases, db_path=Path(temp) / "experience.db",
+                embed_fn=lambda text: vectors[text], embed_id="fake:2",
+                advisory_min_cos=0.8)
+
+        self.assertEqual(report["hybrid"]["failure_hit@3"], 1.0)
+        self.assertEqual(report["advisories"], 1)
+        self.assertEqual(report["correct_advisories"], 1)
+        self.assertEqual(report["advisory_precision"], 1.0)
+
 
 if __name__ == "__main__":
     unittest.main()

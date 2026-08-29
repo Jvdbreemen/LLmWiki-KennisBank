@@ -50,3 +50,19 @@ leakage zero. One of ten abstention probes received a warning, meeting the 0.10
 boundary, but advisory precision is only 0.667 and one of three final failures
 was missed. Rollout remains rejected until this task supplies independent
 calibration and paired value evidence.
+
+## Protocol amendment before the next frozen rerun
+
+The two-axis review exposed a defect in that baseline: the advisory evaluator
+treated only a final `failure` as a failed approach. A repaired episode such as
+`failure -> fix_validated -> success` is exactly where recall can prevent a
+repeated dead end, so classifying its warning as incorrect erases the lesson.
+
+The implementation and evaluator now preserve `attempt_state`,
+`resolution_state`, and final `outcome_state` separately. Failure retrieval and
+advisory correctness use the attempt axis; final-state calibration continues to
+use `outcome_state`. Legacy records with no attempt label fall back only when
+their final state is failure. This semantic correction is committed and tested
+before further threshold selection or another frozen-holdout run. The 0.667
+failure/advisory figures above remain historical baseline evidence, not the
+target for development-set tuning.

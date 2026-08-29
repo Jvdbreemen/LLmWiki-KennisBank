@@ -104,6 +104,23 @@ seeded the projection, so it proves lossless projection, not independent
 extraction quality. Consolidation proposed zero shared lessons and performed
 no mutation.
 
+### Protocol correction before further calibration
+
+The recorded 0.667 failure hit@3 and advisory precision used final `failure` as
+the warning target. The completed two-axis review shows that this is the wrong
+unit: a failed attempt remains a valid dead-end warning when a later fix makes
+the overall episode successful. Otherwise the evaluator punishes the layer for
+returning its most actionable lessons.
+
+Before selecting any new threshold or rerunning the frozen holdout, the durable
+record and evaluator were therefore extended with separate `attempt_state` and
+`resolution_state` fields. Failure hit@3 and advisory correctness now use the
+attempt axis; outcome calibration still uses the final state. Existing records
+without an attempt label retain a narrow final-failure fallback. This is a
+protocol correction driven by the human label model, not a threshold selected
+on holdout scores. The table above remains the historical pre-correction
+baseline until the independent development set is labelled and frozen.
+
 ## Regression and missing value evidence
 
 With both routes off, 5,000 calls per gateway measured approximately 0.0008 ms

@@ -16,6 +16,9 @@ _STATUSES = {"candidate", "validated", "superseded", "retracted", "unknown"}
 _EVENT_TYPES = {"task_context", "attempt", "observation", "test_result",
                 "commit", "failure", "fix", "decision", "user_feedback"}
 _OUTCOME_STATES = {"success", "failure", "partial", "mixed", "unknown"}
+_ATTEMPT_STATES = _OUTCOME_STATES
+_RESOLUTION_STATES = {"not_applicable", "unresolved", "diagnosed",
+                      "fix_proposed", "fix_validated", "corrected_with_cost"}
 
 
 def connect(path=None):
@@ -58,6 +61,8 @@ def ensure_schema(conn) -> None:
         lesson TEXT NOT NULL,
         applicability TEXT NOT NULL,
         outcome_state TEXT NOT NULL,
+        attempt_state TEXT NOT NULL DEFAULT 'unknown',
+        resolution_state TEXT NOT NULL DEFAULT 'not_applicable',
         confidence REAL NOT NULL,
         source_refs_json TEXT NOT NULL,
         outcome_refs_json TEXT NOT NULL,
@@ -76,6 +81,14 @@ def ensure_schema(conn) -> None:
     for name in ("exposed_refs_json", "procedure_refs_json", "skill_refs_json"):
         if name not in columns:
             conn.execute(f"ALTER TABLE experiences ADD COLUMN {name} TEXT NOT NULL DEFAULT '[]'")
+    if "attempt_state" not in columns:
+        conn.execute("ALTER TABLE experiences ADD COLUMN attempt_state "
+                     "TEXT NOT NULL DEFAULT 'unknown'")
+    if "resolution_state" not in columns:
+        conn.execute("ALTER TABLE experiences ADD COLUMN resolution_state "
+                     "TEXT NOT NULL DEFAULT 'not_applicable'")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_experiences_attempt "
+                 "ON experiences(attempt_state)")
     conn.commit()
 
 
@@ -145,6 +158,8 @@ def save_experience(conn, *, experience_id: str, session_id: str, task_id: str,
                     observed_result: str, lesson: str, applicability: str,
                     outcome_state: str, confidence: float, source_refs=(),
                     outcome_refs=(), goal: str = "", action: str = "",
+                    attempt_state: str = "unknown",
+                    resolution_state: str = "not_applicable",
                     exposed_refs=(), procedure_refs=(), skill_refs=(),
                     attribution_limits: str = "", schema_version: str = "1",
                     extractor_version: str = "1") -> bool:
@@ -156,6 +171,10 @@ def save_experience(conn, *, experience_id: str, session_id: str, task_id: str,
     skill_refs = list(skill_refs or [])
     if outcome_state not in _OUTCOME_STATES:
         raise ValueError("invalid experience outcome state")
+    if attempt_state not in _ATTEMPT_STATES:
+        raise ValueError("invalid experience attempt state")
+    if resolution_state not in _RESOLUTION_STATES:
+        raise ValueError("invalid experience resolution state")
     if status == "validated":
         if not source_refs or not outcome_refs:
             raise ValueError("validated experience requires source and outcome evidence")
@@ -165,11 +184,13 @@ def save_experience(conn, *, experience_id: str, session_id: str, task_id: str,
             raise ValueError("unknown outcome cannot be validated")
     row = conn.execute("SELECT status, situation, goal, approach, action, observed_result, "
                        "lesson, applicability, outcome_state, confidence, source_refs_json, "
+                       "attempt_state, resolution_state, "
                        "outcome_refs_json, exposed_refs_json, procedure_refs_json, "
                        "skill_refs_json, attribution_limits, schema_version, extractor_version "
                        "FROM experiences WHERE experience_id=?", (experience_id,)).fetchone()
     values = (session_id, task_id, status, situation, goal, approach, action, observed_result,
               lesson, applicability, outcome_state, float(confidence), _json(source_refs),
+              attempt_state, resolution_state,
               _json(outcome_refs), _json(exposed_refs), _json(procedure_refs),
               _json(skill_refs), attribution_limits, schema_version, extractor_version)
     if row:
@@ -181,9 +202,10 @@ def save_experience(conn, *, experience_id: str, session_id: str, task_id: str,
     conn.execute(
         "INSERT INTO experiences(experience_id, session_id, task_id, status, situation, goal, "
         "approach, action, observed_result, lesson, applicability, outcome_state, confidence, "
-        "source_refs_json, outcome_refs_json, exposed_refs_json, procedure_refs_json, "
+        "source_refs_json, attempt_state, resolution_state, outcome_refs_json, "
+        "exposed_refs_json, procedure_refs_json, "
         "skill_refs_json, attribution_limits, schema_version, extractor_version) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (experience_id, *values))
     conn.commit()
     return True
@@ -192,7 +214,8 @@ def save_experience(conn, *, experience_id: str, session_id: str, task_id: str,
 def experience(conn, experience_id: str) -> dict | None:
     row = conn.execute("SELECT experience_id, session_id, task_id, status, situation, goal, "
                        "approach, action, observed_result, lesson, applicability, outcome_state, "
-                       "confidence, source_refs_json, outcome_refs_json, exposed_refs_json, "
+                       "confidence, source_refs_json, attempt_state, resolution_state, "
+                       "outcome_refs_json, exposed_refs_json, "
                        "procedure_refs_json, skill_refs_json, attribution_limits, "
                        "schema_version, extractor_version, superseded_by FROM experiences "
                        "WHERE experience_id=?", (experience_id,)).fetchone()
@@ -200,7 +223,8 @@ def experience(conn, experience_id: str) -> dict | None:
         return None
     keys = ("experience_id", "session_id", "task_id", "status", "situation", "goal",
             "approach", "action", "observed_result", "lesson", "applicability",
-            "outcome_state", "confidence", "source_refs", "outcome_refs",
+            "outcome_state", "confidence", "source_refs", "attempt_state",
+            "resolution_state", "outcome_refs",
             "exposed_refs", "procedure_refs", "skill_refs", "attribution_limits",
             "schema_version", "extractor_version", "superseded_by")
     result = dict(zip(keys, row))
@@ -273,7 +297,9 @@ def experience_hits(conn, *, query_vector, query_text: str = "", k: int = 8,
 def failure_advisory(conn, *, query_vector, query_text: str = "", min_score: float = 0.5):
     for item in experience_hits(conn, query_vector=query_vector, query_text=query_text,
                                 k=8, statuses=("validated",)):
-        if item["outcome_state"] != "failure":
+        attempt_state = item.get("attempt_state") or "unknown"
+        if attempt_state != "failure" and not (
+                attempt_state == "unknown" and item["outcome_state"] == "failure"):
             continue
         if float(item.get("cos") or 0.0) < min_score:
             continue

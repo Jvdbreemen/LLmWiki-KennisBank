@@ -68,7 +68,7 @@ def evaluate_experience(cases, retrieve, *, action_baseline=None,
             reuse_total += 1
             if expected in [hit.get("experience_id") for hit in validated]:
                 reuse_correct += 1
-        if case.get("expected_state") == "failure":
+        if case.get("expected_attempt_state", case.get("expected_state")) == "failure":
             failures.append(rows[-1])
             failure_total += 1
             if expected in rows[-1]["hits"]:

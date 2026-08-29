@@ -69,7 +69,32 @@ class ExperienceRecallContractTest(unittest.TestCase):
         self.assertIsNone(exp.failure_advisory(
             self.conn, query_vector=[0, 0, 1, 0], query_text="unrelated", min_score=0.8))
 
+    def test_failure_advisory_uses_failed_attempt_even_when_fix_succeeded(self):
+        exp.record_outcome(
+            self.conn, outcome_id="resolved-outcome", session_id="s", task_id="t",
+            state="success", evidence=[{"source_refs": ["raw#2"]}],
+            attribution_strength="reviewed")
+        exp.save_experience(
+            self.conn, experience_id="resolved-dead-end", session_id="s", task_id="t",
+            status="validated", situation="installer hid rollback failure",
+            approach="rethrow only the first error", action="combine both failures",
+            observed_result="the corrected installer exposes both causes",
+            lesson="do not hide rollback failures", applicability="client installers",
+            outcome_state="success", attempt_state="failure",
+            resolution_state="fix_validated", confidence=0.9,
+            source_refs=["raw#2"], outcome_refs=["resolved-outcome"])
+        exp.index_experience(self.conn, "resolved-dead-end", vector=[1.0, 0.0, 0.0, 0.0])
+
+        warning = exp.failure_advisory(
+            self.conn, query_vector=[1.0, 0.0, 0.0, 0.0],
+            query_text="rollback failure", min_score=0.8)
+
+        self.assertIsNotNone(warning)
+        self.assertEqual(warning["experience_id"], "resolved-dead-end")
+        self.assertEqual(warning["attempt_state"], "failure")
+        self.assertEqual(warning["outcome_state"], "success")
+        self.assertEqual(warning["resolution_state"], "fix_validated")
+
 
 if __name__ == "__main__":
     unittest.main()
-

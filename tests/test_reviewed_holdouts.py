@@ -51,6 +51,36 @@ class ReviewedHoldoutsTest(unittest.TestCase):
         self.assertNotIn("private answer", repr(result))
         self.assertNotIn("private point", repr(result))
 
+    def test_experience_promotion_preserves_attempt_and_resolution_axes(self):
+        row = _kept(
+            case_id="E-004", layer="experience_recall",
+            gold_verdict="validated_experience",
+            expected_source=None, expected_source_hash=None, expected_windows=None,
+            expected_experience={
+                "outcome": "the corrected installer exposes both failures",
+                "failed_approach": "rethrow only the first error",
+                "fix": "combine the installation and rollback errors",
+                "scope": "client installers",
+            },
+            evidence_sources=[{
+                "path": "01-raw/transcripts/install.jsonl",
+                "hash": "sha256:" + "f" * 64,
+                "windows": [{"start": 4, "end": 12}],
+            }],
+        )
+
+        case = reviewed.prepare_experience_cases(
+            [row], states={"E-004": "success"},
+            attempt_states={"E-004": "failure"},
+            resolution_states={"E-004": "fix_validated"})[0]
+
+        self.assertEqual(case["expected_state"], "success")
+        self.assertEqual(case["expected_attempt_state"], "failure")
+        self.assertEqual(case["expected_resolution_state"], "fix_validated")
+        self.assertEqual(case["records"][0]["outcome_state"], "success")
+        self.assertEqual(case["records"][0]["attempt_state"], "failure")
+        self.assertEqual(case["records"][0]["resolution_state"], "fix_validated")
+
     def test_source_negative_verdicts_have_no_source_coordinates(self):
         cases = reviewed.prepare_source_cases([
             _kept(case_id="S-002", gold_verdict="unknown",
@@ -232,7 +262,12 @@ class ReviewedHoldoutsTest(unittest.TestCase):
                 "\n".join(json.dumps(row) for row in (_kept(), experience)) + "\n",
                 encoding="utf-8")
             states = root / "states.json"
-            states.write_text(json.dumps({"E-001": "success"}), encoding="utf-8")
+            states.write_text(json.dumps({
+                "schema_version": 2,
+                "states": {"E-001": "success"},
+                "attempt_states": {"E-001": "failure"},
+                "resolution_states": {"E-001": "fix_validated"},
+            }), encoding="utf-8")
             output = root / "private-holdouts"
             result = subprocess.run(
                 [sys.executable, "scripts/prepare-reviewed-holdouts.py",
@@ -247,8 +282,13 @@ class ReviewedHoldoutsTest(unittest.TestCase):
             self.assertNotIn("Which source", result.stdout)
             self.assertEqual(len((output / "source-cases.jsonl").read_text(
                 encoding="utf-8").splitlines()), 1)
-            self.assertEqual(len((output / "experience-cases.jsonl").read_text(
-                encoding="utf-8").splitlines()), 1)
+            experience_rows = [json.loads(line) for line in
+                               (output / "experience-cases.jsonl").read_text(
+                                   encoding="utf-8").splitlines()]
+            self.assertEqual(len(experience_rows), 1)
+            self.assertEqual(experience_rows[0]["expected_attempt_state"], "failure")
+            self.assertEqual(experience_rows[0]["expected_resolution_state"],
+                             "fix_validated")
 
 
 if __name__ == "__main__":

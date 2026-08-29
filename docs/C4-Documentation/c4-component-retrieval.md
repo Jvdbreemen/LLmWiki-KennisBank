@@ -122,7 +122,7 @@ No retrieval-specific research report beyond the ADRs above was distinctly separ
 | `context-budget.py` | CLI | Analyzes context-window usage/cost. | |
 | `find-similar.py` | CLI | Finds semantically similar memories. | |
 | `kb-source-recall.py` | CLI (explicit only) | Retrieves hash- and offset-bound passages from the isolated raw-source projection. | Opt-in; fail-open; no normal-hook routing. |
-| `kb-experience-recall.py` | CLI (explicit/failure only) | Retrieves validated outcome-bound experiences or a labelled failure advisory. | Candidates/unknown records excluded. |
+| `kb-experience-recall.py` | CLI (explicit/failure only) | Retrieves validated outcome-bound experiences or a labelled failed-attempt advisory. | Candidates/unknown records excluded; repaired episodes keep separate attempt, resolution, and final-outcome states. |
 | `rebuild-experience.py` | CLI (offline) | Rebuilds experience records and optional local vector/FTS projection from append-only events/outcomes. | Atomic staging; `--incremental` and `--records-only`. |
 | `kb-projection-doctor.py` | CLI (read-only) | Reports projection schema, freshness, provenance, orphan, redaction, and lifecycle health. | Never mutates derived state. |
 | `kb-layer-eval.py` | CLI (offline) | Builds the preregistered source/experience evidence packet and gates. | Content-safe; no prompts in output. |

@@ -12,6 +12,9 @@ import re
 
 
 EXPERIENCE_STATES = frozenset(("success", "failure", "partial", "mixed", "unknown"))
+RESOLUTION_STATES = frozenset(("not_applicable", "unresolved", "diagnosed",
+                               "fix_proposed", "fix_validated",
+                               "corrected_with_cost"))
 SOURCE_VERDICTS = {"found": "source", "not_found": "not_found", "unknown": "unknown"}
 
 
@@ -110,7 +113,9 @@ def _first(expected: dict, *keys: str) -> str:
     return ""
 
 
-def prepare_experience_cases(rows, *, states: dict[str, str]) -> list[dict]:
+def prepare_experience_cases(rows, *, states: dict[str, str],
+                             attempt_states: dict[str, str] | None = None,
+                             resolution_states: dict[str, str] | None = None) -> list[dict]:
     """Map reviewed experience rows to ``_layer_eval_runner`` inputs.
 
     ``states`` is intentionally separate from the interactive prose review.  It
@@ -119,11 +124,22 @@ def prepare_experience_cases(rows, *, states: dict[str, str]) -> list[dict]:
     """
     result = []
     seen: set[str] = set()
+    attempt_states = attempt_states or {}
+    resolution_states = resolution_states or {}
     for row in _selected(rows, "experience_recall"):
         case_id = _unique(row.get("case_id"), seen)
         state = str(states.get(case_id) or row.get("expected_state") or "").lower()
         if state not in EXPERIENCE_STATES:
             raise ValueError(f"normalized experience state required for {case_id}")
+        attempt_state = str(attempt_states.get(case_id)
+                            or row.get("expected_attempt_state") or state).lower()
+        resolution_state = str(resolution_states.get(case_id)
+                               or row.get("expected_resolution_state")
+                               or "not_applicable").lower()
+        if attempt_state not in EXPERIENCE_STATES:
+            raise ValueError(f"normalized attempt state required for {case_id}")
+        if resolution_state not in RESOLUTION_STATES:
+            raise ValueError(f"normalized resolution state required for {case_id}")
         expected = row.get("expected_experience")
         if expected is None:
             if state != "unknown":
@@ -133,6 +149,8 @@ def prepare_experience_cases(rows, *, states: dict[str, str]) -> list[dict]:
                 "query": str(row.get("query") or "").strip(),
                 "expected_experience": None,
                 "expected_state": state,
+                "expected_attempt_state": attempt_state,
+                "expected_resolution_state": resolution_state,
                 "records": [],
                 "category": row.get("category"),
                 "language": row.get("language"),
@@ -162,6 +180,8 @@ def prepare_experience_cases(rows, *, states: dict[str, str]) -> list[dict]:
             "experience_id": experience_id,
             "status": "validated",
             "outcome_state": state,
+            "attempt_state": attempt_state,
+            "resolution_state": resolution_state,
             "situation": _text(expected),
             "approach": action,
             "action": action,
@@ -176,6 +196,8 @@ def prepare_experience_cases(rows, *, states: dict[str, str]) -> list[dict]:
             "query": str(row.get("query") or "").strip(),
             "expected_experience": experience_id,
             "expected_state": state,
+            "expected_attempt_state": attempt_state,
+            "expected_resolution_state": resolution_state,
             "records": [record],
             "category": row.get("category"),
             "language": row.get("language"),
