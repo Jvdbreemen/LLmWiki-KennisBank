@@ -213,7 +213,7 @@ recall and cannot pass a validation gate.
 ## Open Questions
 
 - [ ] Does source recall clear its absolute and baseline-relative retrieval gates on the frozen live-vault holdout?
-- [ ] Does experience recall improve retrieval of validated success and failure patterns without exceeding the false-warning gate?
+- [x] Does experience recall improve retrieval of validated success and failure patterns without exceeding the false-warning gate? **Partly resolved:** retrieval and action value improve, but the false-warning gate fails, so rollout is rejected.
 - [ ] Is either layer valuable enough to enable a fallback route, or should it remain explicit-only?
 - [ ] Is there enough longitudinal outcome evidence to test task improvement, or must outcome-aware ranking remain deferred?
 
@@ -228,6 +228,7 @@ recall and cannot pass a validation gate.
 * `docs/research/agent-memory-field-review-and-strategy.md`
 * `docs/research/l2-scene-retrieval-2026-08.md`
 * `docs/research/source-experience-evaluation-plan.md`
+* `docs/research/experience-paired-action-result-2026-08-30.md`
 * TASK-172, TASK-173, TASK-175, TASK-177, TASK-179, and TASK-211 through
   TASK-222.
 * Reflexion: https://arxiv.org/abs/2303.11366
@@ -237,4 +238,3 @@ recall and cannot pass a validation gate.
 * Memp: https://arxiv.org/abs/2508.06433
 * EverOS: https://github.com/EverMind-AI/EverOS/blob/main/docs/how-memory-works.md
 * Useful Memories Become Faulty: https://arxiv.org/abs/2605.12978
-

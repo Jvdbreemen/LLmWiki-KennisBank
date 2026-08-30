@@ -1,9 +1,10 @@
 ---
 id: TASK-224
 title: Calibrate experience advisories and run paired action evaluation
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-29 00:00'
+updated_date: '2026-08-30 00:00'
 labels:
   - experience-memory
   - evaluation
@@ -33,7 +34,7 @@ That holdout is now spent and may not be used for further tuning or reruns.
 - [x] #3 A human confirms or corrects all 60 provisional outcome-state labels
 - [ ] #4 The untouched holdout false-warning rate is at most 0.10 and advisory precision at least 0.90
 - [x] #5 Validated failure hit@3 remains at least 0.70 with evidence precision 1.00 and zero candidate leakage
-- [ ] #6 At least 60 paired action judgments report delta and confidence interval against the strongest baseline
+- [x] #6 At least 60 paired action judgments report delta and confidence interval against the strongest baseline
 - [x] #7 No threshold is accepted if the gain is explainable by lexical retrieval alone
 - [x] #8 Skill promotion and outcome-aware ranking remain disabled unless every gate passes and the owner approves
 
@@ -102,9 +103,9 @@ precision pass. Explicit-route latency was 99.0 ms p50 and 129.3 ms p95.
 
 The preregistered aggregate gate therefore fails. There will be no threshold
 tuning or rerun on this holdout. Experience recall remains experimental;
-outcome-aware ranking and skill promotion remain disabled. AC #6 is the only
-remaining value-evidence experiment, but it cannot override the failed safety
-gate for this rollout decision.
+outcome-aware ranking and skill promotion remain disabled. The downstream
+value experiment below cannot override the failed safety gate for this rollout
+decision.
 
 ## Paired-action protocol
 
@@ -116,5 +117,30 @@ experience hits. Arm order is deterministically balanced 30/30 and hidden
 until all owner judgments are recorded. The four-way review distinguishes
 only-A, only-B, both-correct, and neither-correct. The final aggregate reports
 experience-minus-baseline correctness delta and a paired 10,000-resample 95%
-bootstrap interval. No candidates have been generated or judged at the time
-this protocol is recorded.
+bootstrap interval.
+
+All 60 pairs were generated once and owner-reviewed while the arm mapping
+remained hidden. The experience arm produced 43 correct/actionable candidates,
+versus 19 for the strongest baseline: paired delta +0.40, with a deterministic
+10,000-resample 95% bootstrap interval from +0.20 to +0.5833. The A-arm balance
+was exactly 30 baseline and 30 experience. Human verdicts were 22 only-A, 22
+only-B, 9 both, and 7 neither. The preregistered value gate (n >= 60 and delta
+>= +0.10) passes.
+
+This establishes downstream action value for retrieved experience context. It
+does not authorize rollout: AC #4 remains visibly unmet because the separately
+frozen warning holdout measured a 0.20 false-warning rate against a maximum of
+0.10. The private report and review packets remain under the configured vault;
+the aggregate result is recorded in
+`docs/research/experience-paired-action-result-2026-08-30.md`.
+
+## Final summary
+
+The evaluation work is complete. Independent calibration showed a real hybrid
+retrieval gain, the one-shot holdout preserved 27 of 29 failed-approach warnings
+with perfect evidence precision, and the blinded downstream experiment showed
+a large action-correctness improvement. The same frozen holdout also produced
+two false warnings in ten unrelated probes. The evidence therefore supports
+continued research on experience context, but rejects this advisory design for
+rollout. No threshold was retuned, no spent holdout was rerun, and ranking and
+promotion remain disabled.

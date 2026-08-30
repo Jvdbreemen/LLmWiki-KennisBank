@@ -9,13 +9,14 @@ Policy: both routes remain opt-in; outcome-aware ranking remains disabled.
 | layer | measured result | decision |
 |---|---|---|
 | source recall | reviewed oracle is complete, but the full vector arm was not built; full-corpus lexical hit@5 is 0.66 and returns a hit for every negative probe | **hold; reject naive full-corpus pre-embedding as the next step** |
-| experience recall | final attempt-aware one-shot: hybrid hit@3 is 0.90 versus lexical 0.80, failure hit@3 and advisory precision are 0.931, but false warnings are 2 of 10 | **reject for rollout; retain as an experiment** |
+| experience recall | hybrid hit@3 is 0.90 versus lexical 0.80; blinded action correctness is 43/60 versus 19/60 baseline (delta +0.40, 95% CI +0.20 to +0.5833), but false warnings are 2 of 10 | **value proven, reject this advisory design for rollout** |
 | outcome-aware ranking | no longitudinal exposed/control evidence | **reject** |
 
 These decisions distinguish a useful mechanism from a justified product
-feature. Experience retrieval shows a real ten-point retrieval gain and passes
-its failure-recall and advisory-precision gates. It still fails the
-false-warning safety gate. Source grounding has a complete reviewed oracle,
+feature. Experience retrieval shows a real ten-point retrieval gain, passes
+its failure-recall and advisory-precision gates, and materially improves
+blinded action selection. It still fails the false-warning safety gate. Source
+grounding has a complete reviewed oracle,
 but the proposed full vector projection has not earned its storage and ingest
 cost.
 
@@ -37,7 +38,8 @@ The attempt axis preserves 29 failures, 3 mixed, 5 partial, and 23 successes;
 resolution records 23 validated fixes, 13 proposed fixes, 6 diagnoses, 2
 unresolved cases, 1 correction with cost, and 15 cases where recovery was not
 applicable. This avoids erasing a failed approach merely because its later fix
-succeeded. Paired answer/action claims remain unmeasured.
+succeeded. The subsequent 60-pair owner review measures action-selection value
+without exposing the hidden arm mapping during judgment.
 
 Private prompts, answers, source coordinates, and generated databases live
 under `06-claude/evaluations/source-experience-2026-08-27` in the configured
@@ -150,17 +152,35 @@ The private aggregate report is bound to SHA-256
 This holdout is spent: there will be no rerun or threshold tuning from its
 scores.
 
-## Regression and missing value evidence
+## Downstream action value
+
+The preregistered blinded comparison used all 60 positive experience cases.
+Both arms used local `qwen3.5:4b`, temperature zero, and identical top-four
+production wiki/memory context. The experience arm additionally received the
+actual top-three validated retrieval hits, including misses and imperfect
+ordering.
+
+Experience context produced 43/60 correct and actionable candidates versus
+19/60 for the strongest baseline. The paired delta is +0.40, with a
+deterministic 10,000-resample 95% bootstrap interval from +0.20 to +0.5833.
+The A/B presentation was balanced 30/30. This passes the preregistered value
+gate of n >= 60 and delta >= +0.10.
+
+The result proves downstream value worth preserving as a research path. It
+does not reverse the false-warning failure and does not authorize advisory
+rollout, ranking changes, or skill promotion. Aggregate details are in
+`docs/research/experience-paired-action-result-2026-08-30.md`.
+
+## Regression evidence
 
 With both routes off, 5,000 calls per gateway measured approximately 0.0008 ms
 p50 and p95 overhead above the no-op baseline. The normal wiki/memory path is
 therefore structurally unchanged by routing.
 
-No paired downstream answer or action labels have been collected yet. The gate
-now records their sample counts explicitly; absence produces `hold`, while an
-already measured safety failure still produces `reject`. No claim is made that
-either layer improves answer correctness, action selection, repeated-failure
-rate, or future task completion.
+No paired downstream source-answer labels have been collected yet. Source
+answer correctness therefore remains unproven. Experience action selection is
+now measured as described above, while an already measured safety failure still
+takes precedence over downstream value for rollout.
 
 The complete repository suite passed **1,833 tests with 3 skips in 627.92
 seconds** using Python 3.12 and a writable `--basetemp` outside the Git
@@ -176,7 +196,8 @@ invalid attempt.
 2. Do not tune or rerun the spent experience holdout. Any future advisory
    design must start with a new development set and a newly frozen holdout; the
    current rollout remains rejected on false-warning safety.
-3. Keep the completed two-axis outcome labels frozen and collect paired
-   baseline-versus-layer answer/action judgments.
+3. Keep the completed two-axis outcome labels and paired action judgments
+   frozen. Any follow-up safety design needs a new development set and newly
+   frozen holdout rather than reuse of these cases.
 4. Keep source recall explicit and experience recall experimental. Do not
    enable outcome-aware ranking or automatic skill promotion.

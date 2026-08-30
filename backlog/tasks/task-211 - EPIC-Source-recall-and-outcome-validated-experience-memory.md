@@ -5,7 +5,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-08-25 00:00'
-updated_date: '2026-08-29 00:00'
+updated_date: '2026-08-30 00:00'
 labels:
   - epic
   - memory
@@ -125,7 +125,7 @@ experience records can be collected before they influence retrieval.
 - [x] #4 Source recall is additive and gated; normal wiki/memory recall has no new latency or ranking regression when the source route is unused
 - [x] #5 Experience records preserve outcome evidence, provenance, uncertainty, and attribution limits; no unsupported lesson is promoted
 - [x] #6 Outcome telemetry is measured before it is used for ranking, memory promotion, noise marking, or skill evolution
-- [ ] #7 A paired evaluation reports source evidence quality, experience usefulness, repeated-failure rate, latency, false warnings, and regressions
+- [x] #7 A paired evaluation reports source evidence quality, experience usefulness, repeated-failure rate, latency, false warnings, and regressions
 - [x] #8 New skills and autonomous evolution remain owner-approved until their dedicated acceptance gates are met
 - [x] #9 Setup, doctor, rebuild, documentation, and all supported client surfaces describe and validate the new projections
 <!-- AC:END -->
@@ -155,6 +155,11 @@ not operationally justified. The final attempt-aware experience holdout was
 run once after independent development calibration: hybrid hit@3 is 0.90
 versus lexical 0.80, failure hit@3 and advisory precision are 0.931, but false
 warnings are 0.20. Experience recall is therefore **reject for rollout** and
-the holdout is spent. Outcome-aware ranking remains **rejected**. TASK-215 AC
-#7 and TASK-221 AC #5 remain explicitly open; TASK-224 still requires paired
-downstream action labels, not more optimistic implementation claims.
+the holdout is spent. The completed blinded action comparison then measured
+43/60 correct/actionable experience candidates versus 19/60 for the strongest
+baseline, delta +0.40 with 95% CI +0.20 to +0.5833. This proves downstream
+experience value but does not override the safety rejection. Outcome-aware
+ranking remains **rejected**. TASK-215 AC #7 and TASK-221 AC #5 remain
+explicitly open; TASK-223 owns the still-unproven sparse-first source-answer
+experiment. TASK-224 is complete with its false-warning criterion honestly
+unmet.

@@ -2,7 +2,8 @@
 
 Date: 2026-08-30
 Branch: `codex/source-recall-experience-evidence`
-Status: preregistered before candidate generation or human action review.
+Status: completed; protocol preregistered before candidate generation or human
+action review.
 
 ## Question
 
@@ -84,3 +85,17 @@ is local-only and usage telemetry is disabled.
 
 Implementation: `scripts/experience-action-review.py` and
 `scripts/_paired_action_eval.py`.
+
+## Completed aggregate result
+
+After all 60 judgments were recorded, the hidden mapping was revealed once by
+the scorer. Baseline correctness was 19/60 and experience correctness was
+43/60, for a paired delta of +0.40. The deterministic 10,000-resample 95%
+bootstrap interval is +0.20 to +0.5833. Arm A contained 30 baseline and 30
+experience candidates; verdicts were 22 only-A, 22 only-B, 9 both, and 7
+neither. The preregistered value gate passes.
+
+The aggregate result is documented in
+`docs/research/experience-paired-action-result-2026-08-30.md`. It establishes
+downstream value but does not reverse the already measured false-warning safety
+failure or authorize rollout.
