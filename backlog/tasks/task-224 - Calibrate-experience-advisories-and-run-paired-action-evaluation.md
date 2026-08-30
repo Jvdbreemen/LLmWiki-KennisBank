@@ -105,3 +105,16 @@ tuning or rerun on this holdout. Experience recall remains experimental;
 outcome-aware ranking and skill promotion remain disabled. AC #6 is the only
 remaining value-evidence experiment, but it cannot override the failed safety
 gate for this rollout decision.
+
+## Paired-action protocol
+
+The 60-case downstream protocol is preregistered in
+`docs/research/experience-paired-action-protocol-2026-08-30.md`. It compares the
+same local `qwen3.5:4b` and current top-four wiki/memory context in both arms;
+the experiment receives only the additional actual top-three validated
+experience hits. Arm order is deterministically balanced 30/30 and hidden
+until all owner judgments are recorded. The four-way review distinguishes
+only-A, only-B, both-correct, and neither-correct. The final aggregate reports
+experience-minus-baseline correctness delta and a paired 10,000-resample 95%
+bootstrap interval. No candidates have been generated or judged at the time
+this protocol is recorded.
