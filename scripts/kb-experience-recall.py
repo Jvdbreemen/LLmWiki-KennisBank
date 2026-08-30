@@ -28,6 +28,13 @@ def label_hits(hits: list[dict], mode: str) -> list[dict]:
     return labeled
 
 
+def failure_min_score(request: dict, experience) -> float:
+    """Resolve an explicit override or the development-calibrated default."""
+    if request.get("min_score") is not None:
+        return float(request["min_score"])
+    return float(experience.FAILURE_ADVISORY_MIN_COS)
+
+
 def run(request: dict, *, embed_fn=None, vault: Path | None = None) -> dict:
     request = dict(request or {})
     mode = str(request.get("mode") or "normal").lower()
@@ -58,7 +65,7 @@ def run(request: dict, *, embed_fn=None, vault: Path | None = None) -> dict:
             if mode == "failure":
                 warning = experience.failure_advisory(
                     conn, query_vector=query_vector, query_text=prompt,
-                    min_score=float(request.get("min_score", 0.5)))
+                    min_score=failure_min_score(request, experience))
                 hits = [warning] if warning else []
             else:
                 hits = experience.experience_hits(

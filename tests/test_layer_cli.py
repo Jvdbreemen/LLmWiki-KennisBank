@@ -99,6 +99,13 @@ class LayerCliContractTest(unittest.TestCase):
             "evidence_bound": True,
         })
 
+    def test_experience_gateway_uses_calibrated_default_but_allows_override(self):
+        import _experience as store
+
+        self.assertEqual(self.experience.failure_min_score({}, store), 0.50)
+        self.assertEqual(
+            self.experience.failure_min_score({"min_score": 0.61}, store), 0.61)
+
     def test_experience_gateway_executes_real_retrieval_before_labeling(self):
         import _experience as store
 

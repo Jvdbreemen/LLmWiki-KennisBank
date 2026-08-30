@@ -69,6 +69,13 @@ class ExperienceRecallContractTest(unittest.TestCase):
         self.assertIsNone(exp.failure_advisory(
             self.conn, query_vector=[0, 0, 1, 0], query_text="unrelated", min_score=0.8))
 
+    def test_failure_advisory_default_is_the_calibrated_constant(self):
+        import inspect
+
+        default = inspect.signature(exp.failure_advisory).parameters["min_score"].default
+        self.assertEqual(default, exp.FAILURE_ADVISORY_MIN_COS)
+        self.assertEqual(default, 0.50)
+
     def test_failure_advisory_uses_failed_attempt_even_when_fix_succeeded(self):
         exp.record_outcome(
             self.conn, outcome_id="resolved-outcome", session_id="s", task_id="t",

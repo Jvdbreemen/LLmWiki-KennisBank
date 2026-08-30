@@ -28,8 +28,8 @@ remain untouched until the final rerun.
 
 ## Acceptance Criteria
 
-- [ ] #1 A separate labelled development set contains failure matches and unrelated/no-warning probes
-- [ ] #2 Threshold and routing changes are selected using only the development set and committed before the holdout rerun
+- [x] #1 A separate labelled development set contains failure matches and unrelated/no-warning probes
+- [x] #2 Threshold and routing changes are selected using only the development set and committed before the holdout rerun
 - [x] #3 A human confirms or corrects all 60 provisional outcome-state labels
 - [ ] #4 The untouched holdout false-warning rate is at most 0.10 and advisory precision at least 0.90
 - [ ] #5 Validated failure hit@3 remains at least 0.70 with evidence precision 1.00 and zero candidate leakage
@@ -66,3 +66,24 @@ their final state is failure. This semantic correction is committed and tested
 before further threshold selection or another frozen-holdout run. The 0.667
 failure/advisory figures above remain historical baseline evidence, not the
 target for development-set tuning.
+
+## Independent development calibration
+
+The owner-reviewed development set contains 11 positive failed-approach cases
+and 10 factual no-warning probes over 21 unique sources. Its IDs, exact queries,
+and evidence sources are disjoint from the 60-case frozen source holdout. The
+private cases and per-query observations remain outside the repository.
+
+On `ollama:qwen3-embedding:4b`, the selected threshold is 0.50: positive recall
+10/11 (0.909), precision 10/11 (0.909), and one false warning in ten negatives
+(0.10). Pure lexical retrieval reaches 8/11 positive recall and returns a
+warning for all ten negatives, so the hybrid gain is 2/11 (18.2 percentage
+points) and is not explained by lexical matching. Threshold 0.45 violates the
+safety gates; 0.55 removes false warnings but drops positive recall to 7/11.
+
+The incumbent numeric default was already 0.50. It is now versioned as
+`FAILURE_ADVISORY_MIN_COS`, the gateway reads that constant, and
+`scripts/calibrate-experience-advisory.py` reproduces the private calibration
+without writing prompts to the repository. Aggregate evidence is recorded in
+`docs/research/experience-advisory-calibration-2026-08-30.md`. The frozen
+holdout has not been rerun after this selection.

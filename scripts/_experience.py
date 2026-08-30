@@ -20,6 +20,11 @@ _ATTEMPT_STATES = _OUTCOME_STATES
 _RESOLUTION_STATES = {"not_applicable", "unresolved", "diagnosed",
                       "fix_proposed", "fix_validated", "corrected_with_cost"}
 
+# Selected on the independent 21-case advisory development set (2026-08-30):
+# precision 0.909, false-warning rate 0.10, positive recall 0.909, and +0.182
+# recall over the lexical-only arm. Recalibrate before changing this value.
+FAILURE_ADVISORY_MIN_COS = 0.50
+
 
 def connect(path=None):
     p = str(path) if path is not None else str(Path.cwd() / "kb-experience.db")
@@ -294,7 +299,8 @@ def experience_hits(conn, *, query_vector, query_text: str = "", k: int = 8,
     return result
 
 
-def failure_advisory(conn, *, query_vector, query_text: str = "", min_score: float = 0.5):
+def failure_advisory(conn, *, query_vector, query_text: str = "",
+                     min_score: float = FAILURE_ADVISORY_MIN_COS):
     for item in experience_hits(conn, query_vector=query_vector, query_text=query_text,
                                 k=8, statuses=("validated",)):
         attempt_state = item.get("attempt_state") or "unknown"
