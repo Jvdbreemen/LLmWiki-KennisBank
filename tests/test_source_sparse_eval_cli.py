@@ -128,6 +128,43 @@ class SourceSparseEvalCliTest(unittest.TestCase):
         self.assertEqual(marker["failure_class"], "embedding_unavailable")
         self.assertNotIn("exception", marker)
 
+    def test_frozen_run_requires_matching_development_selection(self):
+        selection = {
+            "schema_version": 1,
+            "status": "complete",
+            "selection_policy": "independent_development_only",
+            "frozen_input_sha256": "sha256:frozen",
+            "source_db_sha256": "sha256:index",
+            "model_ids": {"document": "fake:model", "query": "fake:model"},
+            "selected_configuration": {
+                "candidate_docs": 50, "max_passages": 100,
+                "chunk_size": 2000, "overlap": 200, "k": 5,
+                "min_cos": 0.6,
+            },
+            "development_warm_latency": {"n": 30, "p95_ms": 1200.0},
+        }
+        path = self.root / "selection.json"
+        path.write_text(json.dumps(selection), encoding="utf-8")
+        loaded = self.module.load_selection(
+            path, frozen_sha256="sha256:frozen",
+            source_db_sha256="sha256:index", document_model_id="fake:model",
+            query_model_id="fake:model")
+        self.assertEqual(loaded["selected_configuration"]["min_cos"], 0.6)
+        self.assertEqual(loaded["development_warm_latency"]["p95_ms"], 1200.0)
+
+        for field, value in (("frozen_sha256", "sha256:other"),
+                             ("source_db_sha256", "sha256:other"),
+                             ("document_model_id", "fake:other")):
+            kwargs = {
+                "frozen_sha256": "sha256:frozen",
+                "source_db_sha256": "sha256:index",
+                "document_model_id": "fake:model",
+                "query_model_id": "fake:model",
+            }
+            kwargs[field] = value
+            with self.assertRaises(ValueError):
+                self.module.load_selection(path, **kwargs)
+
 
 if __name__ == "__main__":
     unittest.main()
