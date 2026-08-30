@@ -23,8 +23,8 @@ human-review the provisional success/failure/mixed/partial labels and compare
 correct action selection with and without retrieved experience.
 
 The current retrieval gain is not permission to tune the ten reviewed negative
-probes. They have already produced a measured 0.20 false-warning rate and must
-remain untouched until the final rerun.
+probes. The final one-shot run produced a measured 0.20 false-warning rate.
+That holdout is now spent and may not be used for further tuning or reruns.
 
 ## Acceptance Criteria
 
@@ -32,10 +32,10 @@ remain untouched until the final rerun.
 - [x] #2 Threshold and routing changes are selected using only the development set and committed before the holdout rerun
 - [x] #3 A human confirms or corrects all 60 provisional outcome-state labels
 - [ ] #4 The untouched holdout false-warning rate is at most 0.10 and advisory precision at least 0.90
-- [ ] #5 Validated failure hit@3 remains at least 0.70 with evidence precision 1.00 and zero candidate leakage
+- [x] #5 Validated failure hit@3 remains at least 0.70 with evidence precision 1.00 and zero candidate leakage
 - [ ] #6 At least 60 paired action judgments report delta and confidence interval against the strongest baseline
-- [ ] #7 No threshold is accepted if the gain is explainable by lexical retrieval alone
-- [ ] #8 Skill promotion and outcome-aware ranking remain disabled unless every gate passes and the owner approves
+- [x] #7 No threshold is accepted if the gain is explainable by lexical retrieval alone
+- [x] #8 Skill promotion and outcome-aware ranking remain disabled unless every gate passes and the owner approves
 
 ## Evidence baseline
 
@@ -51,7 +51,7 @@ boundary, but advisory precision is only 0.667 and one of three final failures
 was missed. Rollout remains rejected until this task supplies independent
 calibration and paired value evidence.
 
-## Protocol amendment before the next frozen rerun
+## Historical protocol amendment before the final frozen rerun
 
 The two-axis review exposed a defect in that baseline: the advisory evaluator
 treated only a final `failure` as a failed approach. A repaired episode such as
@@ -85,5 +85,23 @@ The incumbent numeric default was already 0.50. It is now versioned as
 `FAILURE_ADVISORY_MIN_COS`, the gateway reads that constant, and
 `scripts/calibrate-experience-advisory.py` reproduces the private calibration
 without writing prompts to the repository. Aggregate evidence is recorded in
-`docs/research/experience-advisory-calibration-2026-08-30.md`. The frozen
-holdout has not been rerun after this selection.
+`docs/research/experience-advisory-calibration-2026-08-30.md`.
+
+## Final frozen holdout — spent
+
+The threshold and evaluator were committed before scoring (`91ffea4` and
+`364034e`). The frozen 70-case set was then run exactly once with
+`ollama:qwen3-embedding:4b`; the private aggregate report records input SHA-256
+`0f5881ee6181fe8d9df94ea2779a1404ab71403dca61c7b29fccd443e36208be`.
+
+Hybrid hit@3 is 0.90 versus lexical 0.80, a ten-point gain. Failure-attempt
+hit@3 is 27/29 (0.931), evidence precision is 1.00, candidate leakage is zero,
+and advisory precision is 27/29 (0.931). However, two of ten unrelated probes
+received a warning, so false-warning rate is 0.20 and AC #4 fails despite the
+precision pass. Explicit-route latency was 99.0 ms p50 and 129.3 ms p95.
+
+The preregistered aggregate gate therefore fails. There will be no threshold
+tuning or rerun on this holdout. Experience recall remains experimental;
+outcome-aware ranking and skill promotion remain disabled. AC #6 is the only
+remaining value-evidence experiment, but it cannot override the failed safety
+gate for this rollout decision.

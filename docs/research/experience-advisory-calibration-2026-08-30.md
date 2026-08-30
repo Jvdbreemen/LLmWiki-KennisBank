@@ -2,7 +2,7 @@
 
 Date: 2026-08-30  
 Branch: `codex/source-recall-experience-evidence`  
-Status: development threshold selected; frozen holdout not rerun yet.
+Status: development threshold selected; frozen holdout spent; rollout rejected.
 
 ## Decision
 
@@ -55,7 +55,33 @@ independence, and writes only an aggregate report outside the repository.
 Usage telemetry is disabled for the run. The runner and threshold contracts
 have focused tests.
 
-The frozen reviewed holdout remains untouched after this selection. Its next
-run is one-shot: no further threshold or routing tuning may follow from those
-scores. A pass still does not satisfy the separate requirement for 60 paired
-baseline-versus-experience action judgments.
+The threshold selection was committed as `91ffea4`; the one-shot evaluator and
+its atomic spent-attempt lock were committed as `364034e`. Only then was the
+frozen reviewed holdout run.
+
+## Final one-shot holdout
+
+The private set contained 60 positive cases, 10 unrelated probes, and 29
+failure-attempt episodes. Its SHA-256 was
+`0f5881ee6181fe8d9df94ea2779a1404ab71403dca61c7b29fccd443e36208be`.
+
+| final metric | hybrid | lexical | gate |
+|---|---:|---:|---|
+| hit@1 | 0.817 | 0.750 | context |
+| hit@3 | 0.900 | 0.800 | hybrid must win: pass |
+| MRR | 0.858 | 0.775 | context |
+| failure-attempt hit@3 | 27/29 = 0.931 | 24/29 = 0.828 | >= 0.70: pass |
+| evidence precision | 1.00 | 1.00 | 1.00: pass |
+| candidate leakage | 0 | 0 | zero: pass |
+| advisory precision | 27/29 = 0.931 | n/a | >= 0.90: pass |
+| false-warning rate | **2/10 = 0.20** | 10/10 = 1.00 | <= 0.10: **fail** |
+
+Explicit-route latency was 99.0 ms p50 and 129.3 ms p95. The hybrid arm has
+real value over lexical retrieval, but it fails the preregistered abstention
+safety gate. The aggregate decision is therefore **reject for rollout**.
+
+This holdout is spent. Its cases, observations, database, and report remain
+private; the repository records aggregates only. No threshold or routing
+change may be selected from these scores, and this set may not be rerun. The
+separate requirement for 60 paired baseline-versus-experience action judgments
+remains open, but cannot reverse this rollout's failed safety gate.

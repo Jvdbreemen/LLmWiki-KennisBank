@@ -151,8 +151,10 @@ implementation evidence is documented in
 The reviewed packet is now in
 `docs/research/source-experience-evidence-packet-2026-08-29.md`. Source recall
 is **hold** because the full vector arm is unmeasured and naive pre-embedding is
-not operationally justified. Experience recall is **reject for rollout**
-because false warnings are 0.20 despite a real ten-point hit@3 gain.
-Outcome-aware ranking remains **rejected**. TASK-215 AC #7 and TASK-221 AC #5
-remain explicitly open; paired downstream labels and a separate advisory
-calibration set are required, not more optimistic implementation claims.
+not operationally justified. The final attempt-aware experience holdout was
+run once after independent development calibration: hybrid hit@3 is 0.90
+versus lexical 0.80, failure hit@3 and advisory precision are 0.931, but false
+warnings are 0.20. Experience recall is therefore **reject for rollout** and
+the holdout is spent. Outcome-aware ranking remains **rejected**. TASK-215 AC
+#7 and TASK-221 AC #5 remain explicitly open; TASK-224 still requires paired
+downstream action labels, not more optimistic implementation claims.

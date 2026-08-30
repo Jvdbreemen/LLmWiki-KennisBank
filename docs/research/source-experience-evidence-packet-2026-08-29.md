@@ -9,14 +9,15 @@ Policy: both routes remain opt-in; outcome-aware ranking remains disabled.
 | layer | measured result | decision |
 |---|---|---|
 | source recall | reviewed oracle is complete, but the full vector arm was not built; full-corpus lexical hit@5 is 0.66 and returns a hit for every negative probe | **hold; reject naive full-corpus pre-embedding as the next step** |
-| experience recall | hybrid hit@3 is 0.90 versus lexical 0.80; after two-axis human outcome review, false warnings are 1 of 10 but failure hit@3 and advisory precision are both 0.667 | **reject for rollout; retain as an experiment** |
+| experience recall | final attempt-aware one-shot: hybrid hit@3 is 0.90 versus lexical 0.80, failure hit@3 and advisory precision are 0.931, but false warnings are 2 of 10 | **reject for rollout; retain as an experiment** |
 | outcome-aware ranking | no longitudinal exposed/control evidence | **reject** |
 
 These decisions distinguish a useful mechanism from a justified product
-feature. Experience retrieval shows a real ten-point retrieval gain. It still
-fails its failure-recall and advisory-precision gates. Source grounding has a
-complete reviewed oracle, but the proposed full vector projection has not
-earned its storage and ingest cost.
+feature. Experience retrieval shows a real ten-point retrieval gain and passes
+its failure-recall and advisory-precision gates. It still fails the
+false-warning safety gate. Source grounding has a complete reviewed oracle,
+but the proposed full vector projection has not earned its storage and ingest
+cost.
 
 ## Reviewed datasets
 
@@ -70,7 +71,7 @@ It does not support embedding every raw chunk in advance. The current source
 vector arm and paired answer benchmark remain unmeasured, so source recall is a
 hold rather than a rollout approval.
 
-## Experience evidence
+## Experience evidence: historical pre-correction run
 
 The real SQLite FTS/vector projection used `ollama:qwen3-embedding:4b` over the
 60 reviewed records and 70 queries:
@@ -121,6 +122,34 @@ protocol correction driven by the human label model, not a threshold selected
 on holdout scores. The table above remains the historical pre-correction
 baseline until the independent development set is labelled and frozen.
 
+### Final attempt-aware one-shot holdout
+
+An independent 21-case development set selected the unchanged 0.50 cosine
+floor. The threshold and one-shot evaluator were committed before scoring.
+The frozen 70-case holdout was then run exactly once using the attempt axis for
+failed-approach recall and the final state only for outcome calibration.
+
+| metric | hybrid | lexical |
+|---|---:|---:|
+| hit@1 | 0.817 | 0.750 |
+| hit@3 | 0.900 | 0.800 |
+| MRR | 0.858 | 0.775 |
+| validated failure-attempt hit@3 | 0.931 | 0.828 |
+| evidence precision | 1.000 | 1.000 |
+| candidate leakage | 0 | 0 |
+| explicit-route p50 / p95 | 99.0 / 129.3 ms | not timed separately |
+
+The hybrid gain is real and not explained by lexical retrieval. The advisory
+route returned 29 warnings: 27 correct warnings for 29 failure attempts and 2
+incorrect warnings on the 10 unrelated probes. Advisory precision therefore
+passes at 0.931, but false-warning rate fails at 0.20 against the maximum 0.10.
+The aggregate rollout gate remains **reject**.
+
+The private aggregate report is bound to SHA-256
+`0f5881ee6181fe8d9df94ea2779a1404ab71403dca61c7b29fccd443e36208be`.
+This holdout is spent: there will be no rerun or threshold tuning from its
+scores.
+
 ## Regression and missing value evidence
 
 With both routes off, 5,000 calls per gateway measured approximately 0.0008 ms
@@ -144,10 +173,9 @@ invalid attempt.
 1. Do not build the naive full raw-source vector index. Prototype sparse-first
    candidate generation plus cached on-demand passage embeddings and compare it
    against the frozen private source holdout.
-2. Create a separate advisory calibration set. Adjust the failure-warning gate
-   there, freeze it, then rerun these 10 untouched negatives once. The current
-   rerun reaches the false-warning boundary but still fails failure hit@3 and
-   advisory precision.
+2. Do not tune or rerun the spent experience holdout. Any future advisory
+   design must start with a new development set and a newly frozen holdout; the
+   current rollout remains rejected on false-warning safety.
 3. Keep the completed two-axis outcome labels frozen and collect paired
    baseline-versus-layer answer/action judgments.
 4. Keep source recall explicit and experience recall experimental. Do not
