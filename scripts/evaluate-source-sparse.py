@@ -29,6 +29,43 @@ def private_path(path: Path) -> Path:
     raise ValueError("private source evaluation inputs and outputs must remain outside the repository")
 
 
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return "sha256:" + digest.hexdigest()
+
+
+def load_selection(path: Path, *, frozen_sha256: str, source_db_sha256: str,
+                   document_model_id: str, query_model_id: str) -> dict:
+    selection = json.loads(Path(path).read_text(encoding="utf-8"))
+    if (selection.get("schema_version") != 1
+            or selection.get("status") != "complete"
+            or selection.get("selection_policy") != "independent_development_only"):
+        raise ValueError("invalid sparse source development selection")
+    expected = {
+        "frozen_input_sha256": frozen_sha256,
+        "source_db_sha256": source_db_sha256,
+    }
+    for field, value in expected.items():
+        if selection.get(field) != value:
+            raise ValueError(f"sparse source selection {field} mismatch")
+    model_ids = selection.get("model_ids") or {}
+    if model_ids.get("document") != document_model_id:
+        raise ValueError("sparse source selection document model mismatch")
+    if model_ids.get("query") != query_model_id:
+        raise ValueError("sparse source selection query model mismatch")
+    configuration = selection.get("selected_configuration")
+    warm = selection.get("development_warm_latency")
+    required = {"candidate_docs", "max_passages", "chunk_size", "overlap", "k", "min_cos"}
+    if not isinstance(configuration, dict) or not required.issubset(configuration):
+        raise ValueError("sparse source selection lacks a complete configuration")
+    if not isinstance(warm, dict) or "p95_ms" not in warm:
+        raise ValueError("sparse source selection lacks development warm latency")
+    return selection
+
+
 def load_cases(path: Path, *, frozen: bool) -> list[dict]:
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
     if isinstance(payload, dict):
@@ -116,6 +153,8 @@ def build_report(*, input_sha256: str, model_id: str, measured: dict,
                  warm_latency: dict,
                  source_db_bytes: int, cache_db_bytes: int,
                  lexical_hit5: float, lexical_index_bytes: int,
+                 selection_sha256: str | None = None,
+                 source_db_sha256: str | None = None,
                  required_gain: float = 0.10,
                  minimum_specificity: float = 0.95,
                  maximum_warm_p95_ms: float = 2000.0) -> dict:
@@ -126,6 +165,8 @@ def build_report(*, input_sha256: str, model_id: str, measured: dict,
         "status": "complete",
         "holdout_policy": HOLDOUT_POLICY,
         "input_sha256": input_sha256,
+        "selection_sha256": selection_sha256,
+        "source_db_sha256": source_db_sha256,
         "model_id": model_id,
         "counts": dict(measured.get("counts") or {}),
         "configuration": dict(measured.get("configuration") or {}),
@@ -175,12 +216,8 @@ def main(argv=None) -> int:
     parser.add_argument("--source-db", type=Path, required=True)
     parser.add_argument("--cache-db", type=Path, required=True)
     parser.add_argument("--report", type=Path, required=True)
+    parser.add_argument("--selection-report", type=Path, required=True)
     parser.add_argument("--vault", type=Path)
-    parser.add_argument("--candidate-docs", type=int, default=50)
-    parser.add_argument("--max-passages", type=int, default=100)
-    parser.add_argument("--chunk-size", type=int, default=2000)
-    parser.add_argument("--overlap", type=int, default=200)
-    parser.add_argument("--min-cos", type=float, default=0.50)
     parser.add_argument("--lexical-hit5", type=float, default=0.66)
     parser.add_argument("--confirm-frozen-once", action="store_true")
     args = parser.parse_args(argv)
@@ -192,17 +229,24 @@ def main(argv=None) -> int:
         source_db = private_path(args.source_db)
         cache_db = private_path(args.cache_db)
         report_path = private_path(args.report)
+        selection_path = private_path(args.selection_report)
         vault = (args.vault or Path(os.environ.get("KENNISBANK_VAULT", "."))).resolve()
         if not source_db.is_file():
             raise ValueError(f"source FTS database does not exist: {source_db}")
         if cache_db.exists():
             raise ValueError(f"frozen source cache already exists: {cache_db}")
         cases = load_cases(cases_path, frozen=True)
-        input_sha256 = "sha256:" + hashlib.sha256(cases_path.read_bytes()).hexdigest()
+        input_sha256 = sha256_file(cases_path)
+        source_db_sha256 = sha256_file(source_db)
+        model_id, embed_documents, embed_queries = _embedding_functions()
+        selected = load_selection(
+            selection_path, frozen_sha256=input_sha256,
+            source_db_sha256=source_db_sha256,
+            document_model_id=model_id, query_model_id=model_id)
         claim_report(report_path, input_sha256=input_sha256)
 
         os.environ["KB_USAGE_DISABLE"] = "1"
-        model_id, embed_documents, embed_queries = _embedding_functions()
+        configuration = dict(selected["selected_configuration"])
         options = {
             "vault": vault,
             "source_db": source_db,
@@ -210,12 +254,9 @@ def main(argv=None) -> int:
             "embed_fn": embed_documents,
             "embed_query_fn": embed_queries,
             "model_id": model_id,
-            "candidate_docs": args.candidate_docs,
-            "max_passages": args.max_passages,
-            "chunk_size": args.chunk_size,
-            "overlap": args.overlap,
-            "k": 5,
-            "min_cos": args.min_cos,
+            "document_model_id": model_id,
+            "query_model_id": model_id,
+            **configuration,
         }
         measured = run_holdout_once(
             cases, evaluator=sparse.evaluate, options=options)
@@ -223,14 +264,13 @@ def main(argv=None) -> int:
             input_sha256=input_sha256,
             model_id=model_id,
             measured=measured,
-            # Until the development calibrator supplies its frozen warm report,
-            # retain the single-run value. The frozen CLI is not executed before
-            # that report exists; this fallback keeps direct library tests stable.
-            warm_latency=measured["latency_ms"],
+            warm_latency=selected["development_warm_latency"],
             source_db_bytes=source_db.stat().st_size,
             cache_db_bytes=cache_db.stat().st_size,
             lexical_hit5=args.lexical_hit5,
             lexical_index_bytes=source_db.stat().st_size,
+            selection_sha256=sha256_file(selection_path),
+            source_db_sha256=source_db_sha256,
         )
         temporary = report_path.with_name(report_path.name + ".tmp")
         temporary.write_text(
