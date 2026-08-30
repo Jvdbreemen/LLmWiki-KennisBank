@@ -71,6 +71,23 @@ def claim_report(path: Path, *, input_sha256: str) -> None:
         raise ValueError(f"source holdout report already exists: {target}") from exc
 
 
+def mark_failed(path: Path, *, failure_class: str) -> None:
+    """Retain a content-safe spent marker without exception or case text."""
+    target = Path(path)
+    marker = json.loads(target.read_text(encoding="utf-8"))
+    marker.update({"status": "failed", "failure_class": str(failure_class)})
+    temporary = target.with_name(target.name + ".tmp")
+    temporary.write_text(
+        json.dumps(marker, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8")
+    os.replace(temporary, target)
+
+
+def run_holdout_once(cases: list[dict], *, evaluator, options: dict) -> dict:
+    """Keep the one-shot call boundary explicit and independently testable."""
+    return evaluator(cases, **dict(options))
+
+
 def choose_decision(measured: dict, *, lexical_hit5: float,
                     required_gain: float, minimum_specificity: float,
                     maximum_warm_p95_ms: float) -> dict:
@@ -95,22 +112,25 @@ def choose_decision(measured: dict, *, lexical_hit5: float,
     }
 
 
-def build_report(*, input_sha256: str, model_id: str, cold: dict, warm: dict,
+def build_report(*, input_sha256: str, model_id: str, measured: dict,
+                 warm_latency: dict,
                  source_db_bytes: int, cache_db_bytes: int,
                  lexical_hit5: float, lexical_index_bytes: int,
                  required_gain: float = 0.10,
                  minimum_specificity: float = 0.95,
                  maximum_warm_p95_ms: float = 2000.0) -> dict:
+    decision_input = dict(measured)
+    decision_input["latency_ms"] = dict(warm_latency)
     return {
         "schema_version": SCHEMA_VERSION,
         "status": "complete",
         "holdout_policy": HOLDOUT_POLICY,
         "input_sha256": input_sha256,
         "model_id": model_id,
-        "counts": dict(warm.get("counts") or {}),
-        "configuration": dict(warm.get("configuration") or {}),
-        "cold": cold,
-        "warm": warm,
+        "counts": dict(measured.get("counts") or {}),
+        "configuration": dict(measured.get("configuration") or {}),
+        "measured": measured,
+        "development_warm_latency": dict(warm_latency),
         "costs": {
             "source_fts_bytes": int(source_db_bytes),
             "lexical_index_bytes": int(lexical_index_bytes),
@@ -119,7 +139,7 @@ def build_report(*, input_sha256: str, model_id: str, cold: dict, warm: dict,
         },
         "baseline": {"lexical_hit@5": float(lexical_hit5)},
         "decision": choose_decision(
-            warm, lexical_hit5=lexical_hit5, required_gain=required_gain,
+            decision_input, lexical_hit5=lexical_hit5, required_gain=required_gain,
             minimum_specificity=minimum_specificity,
             maximum_warm_p95_ms=maximum_warm_p95_ms),
     }
@@ -197,13 +217,16 @@ def main(argv=None) -> int:
             "k": 5,
             "min_cos": args.min_cos,
         }
-        cold = sparse.evaluate(cases, **options)
-        warm = sparse.evaluate(cases, **options)
+        measured = run_holdout_once(
+            cases, evaluator=sparse.evaluate, options=options)
         report = build_report(
             input_sha256=input_sha256,
             model_id=model_id,
-            cold=cold,
-            warm=warm,
+            measured=measured,
+            # Until the development calibrator supplies its frozen warm report,
+            # retain the single-run value. The frozen CLI is not executed before
+            # that report exists; this fallback keeps direct library tests stable.
+            warm_latency=measured["latency_ms"],
             source_db_bytes=source_db.stat().st_size,
             cache_db_bytes=cache_db.stat().st_size,
             lexical_hit5=args.lexical_hit5,
@@ -217,6 +240,11 @@ def main(argv=None) -> int:
         print(json.dumps(report, ensure_ascii=False, sort_keys=True))
         return 0
     except Exception as exc:
+        try:
+            if "report_path" in locals() and Path(report_path).exists():
+                mark_failed(report_path, failure_class=type(exc).__name__)
+        except Exception:
+            pass
         print(f"source sparse evaluation failed: {exc}", file=sys.stderr)
         return 1
 
