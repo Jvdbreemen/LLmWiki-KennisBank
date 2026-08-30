@@ -12,6 +12,7 @@ import sqlite3
 import sys
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
@@ -110,7 +111,7 @@ class SourceSparseEvalTest(unittest.TestCase):
         self.assertEqual(warm_hits[0]["passage_hash"], first_hits[0]["passage_hash"])
         self.assertEqual(warm_embedder.calls, [["grandchild pipe timeout"]])
 
-        with sqlite3.connect(self.cache_db) as conn:
+        with closing(sqlite3.connect(self.cache_db)) as conn:
             rows = conn.execute(
                 "SELECT model_id, content_hash, passage FROM passage_embeddings"
             ).fetchall()
@@ -124,7 +125,7 @@ class SourceSparseEvalTest(unittest.TestCase):
 
     def test_changed_source_content_gets_a_new_cache_identity(self):
         self._retrieve(CountingEmbedder())
-        with sqlite3.connect(self.cache_db) as conn:
+        with closing(sqlite3.connect(self.cache_db)) as conn:
             before = conn.execute(
                 "SELECT count(*) FROM passage_embeddings").fetchone()[0]
 
@@ -137,7 +138,7 @@ class SourceSparseEvalTest(unittest.TestCase):
         changed = CountingEmbedder()
         self._retrieve(changed)
         self.assertEqual(len(changed.calls), 2)
-        with sqlite3.connect(self.cache_db) as conn:
+        with closing(sqlite3.connect(self.cache_db)) as conn:
             after = conn.execute(
                 "SELECT count(*) FROM passage_embeddings").fetchone()[0]
         self.assertGreater(after, before)
@@ -189,7 +190,7 @@ class SourceSparseEvalTest(unittest.TestCase):
         self.assertEqual(report["passage_hit@5"], 1.0)
         self.assertEqual(report["no_hit_specificity"], 1.0)
         self.assertEqual(report["citation_precision"], 1.0)
-        self.assertIn("p95", report["latency_ms"])
+        self.assertIn("p95_ms", report["latency_ms"])
         self.assertNotIn("grandchild", json.dumps(report))
 
     def test_write_once_report_checks_before_running_builder(self):
