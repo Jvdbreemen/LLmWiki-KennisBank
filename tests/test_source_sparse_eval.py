@@ -129,7 +129,8 @@ class SourceSparseEvalTest(unittest.TestCase):
                 "SELECT count(*) FROM passage_embeddings").fetchone()[0]
 
         self.first.write_text(
-            self.first.read_text(encoding="utf-8") + " corrected",
+            self.first.read_text(encoding="utf-8").replace(
+                "rare grandchild", "rare corrected grandchild"),
             encoding="utf-8",
         )
         lexical.build_index(self.vault, self.source_db)
