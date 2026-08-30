@@ -1,7 +1,7 @@
 # Experience paired-action evaluation protocol
 
-Date: 2026-08-30  
-Branch: `codex/source-recall-experience-evidence`  
+Date: 2026-08-30
+Branch: `codex/source-recall-experience-evidence`
 Status: preregistered before candidate generation or human action review.
 
 ## Question
