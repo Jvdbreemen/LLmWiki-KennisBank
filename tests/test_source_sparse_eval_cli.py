@@ -89,14 +89,14 @@ class SourceSparseEvalCliTest(unittest.TestCase):
     def test_public_report_contains_aggregates_not_private_cases(self):
         report = self.module.build_report(
             input_sha256="sha256:abc", model_id="fake:model",
-            cold={"retrieval": {"hit@5": 0.8}, "latency_ms": {"p95_ms": 10}},
-            warm={
+            measured={
                 "retrieval": {"hit@5": 0.8}, "no_hit_specificity": 1.0,
-                "latency_ms": {"p95_ms": 8}, "citation_precision": 1.0,
+                "latency_ms": {"p95_ms": 10}, "citation_precision": 1.0,
                 "passage_hit@5": 0.78,
                 "counts": {"total": 60, "positive": 50, "negative": 10},
                 "configuration": {"candidate_docs": 50},
             },
+            warm_latency={"n": 20, "p50_ms": 6, "p95_ms": 8},
             source_db_bytes=1105334272, cache_db_bytes=2048,
             lexical_hit5=0.66, lexical_index_bytes=1105334272,
         )
@@ -105,6 +105,28 @@ class SourceSparseEvalCliTest(unittest.TestCase):
         self.assertNotIn("positive 1", rendered)
         self.assertNotIn("expected_source", rendered)
         self.assertEqual(report["costs"]["lexical_index_bytes"], 1105334272)
+
+    def test_frozen_holdout_calls_evaluator_once_for_all_cases(self):
+        cases = self._manifest()["cases"]
+        calls = []
+
+        def evaluator(received, **options):
+            calls.append([case["id"] for case in received])
+            return {"counts": {"total": len(received)}}
+
+        result = self.module.run_holdout_once(
+            cases, evaluator=evaluator, options={"private": True})
+        self.assertEqual(result["counts"]["total"], 60)
+        self.assertEqual(calls, [[case["id"] for case in cases]])
+
+    def test_failed_run_keeps_content_safe_spent_marker(self):
+        path = self.root / "report.json"
+        self.module.claim_report(path, input_sha256="sha256:abc")
+        self.module.mark_failed(path, failure_class="embedding_unavailable")
+        marker = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(marker["status"], "failed")
+        self.assertEqual(marker["failure_class"], "embedding_unavailable")
+        self.assertNotIn("exception", marker)
 
 
 if __name__ == "__main__":

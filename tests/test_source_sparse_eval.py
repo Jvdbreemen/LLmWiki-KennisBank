@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import sqlite3
 import sys
 import tempfile
@@ -98,7 +99,25 @@ class SourceSparseEvalTest(unittest.TestCase):
             "sha256:" + hashlib.sha256(hit["passage"].encode("utf-8")).hexdigest(),
         )
         self.assertEqual(hit["model_id"], "fake:model-a")
+        self.assertEqual(hit["document_model_id"], "fake:model-a")
+        self.assertEqual(hit["query_model_id"], "fake:model-a")
+        self.assertEqual(hit["offset_unit"], "unicode_codepoint_normalized_newlines")
         self.assertEqual(hit["retrieval_mode"], "sparse_first_vector_rerank")
+
+    def test_snapshot_hashes_original_bytes_but_offsets_slice_one_normalized_text(self):
+        path = self.first.parent / "crlf.md"
+        raw = "prefix\r\nrare grandchild pijp évidence\r\nsuffix".encode("utf-8")
+        path.write_bytes(raw)
+        snapshot = sparse.read_source_snapshot(path)
+        self.assertEqual(snapshot["source_hash"],
+                         "sha256:" + hashlib.sha256(raw).hexdigest())
+        self.assertNotIn("\r", snapshot["text"])
+        start = snapshot["text"].index("rare")
+        end = snapshot["text"].index("\n", start)
+        self.assertEqual(snapshot["text"][start:end],
+                         "rare grandchild pijp évidence")
+        self.assertEqual(snapshot["offset_unit"],
+                         "unicode_codepoint_normalized_newlines")
 
     def test_cache_is_content_addressed_model_stamped_and_query_private(self):
         first_embedder = CountingEmbedder()
@@ -112,16 +131,29 @@ class SourceSparseEvalTest(unittest.TestCase):
         self.assertEqual(warm_embedder.calls, [["grandchild pipe timeout"]])
 
         with closing(sqlite3.connect(self.cache_db)) as conn:
+            columns = {row[1] for row in conn.execute(
+                "PRAGMA table_info(passage_embeddings)").fetchall()}
             rows = conn.execute(
-                "SELECT model_id, content_hash, passage FROM passage_embeddings"
+                "SELECT model_id, content_hash, dimension, length(vector_blob) "
+                "FROM passage_embeddings"
             ).fetchall()
         self.assertTrue(rows)
         self.assertTrue(all(row[0] == "fake:model-a" for row in rows))
-        self.assertNotIn("grandchild pipe timeout", {row[2] for row in rows})
+        self.assertNotIn("passage", columns)
+        self.assertNotIn("vector_json", columns)
+        self.assertTrue(all(row[2] == 4 and row[3] == 16 for row in rows))
 
         other_model = CountingEmbedder()
         self._retrieve(other_model, model_id="fake:model-b")
         self.assertEqual(len(other_model.calls), 2)
+
+        query_only = CountingEmbedder()
+        documents = CountingEmbedder()
+        self._retrieve(
+            documents, embed_query_fn=query_only,
+            query_model_id="fake:query-prefix-b")
+        self.assertEqual(documents.calls, [])
+        self.assertEqual(query_only.calls, [["grandchild pipe timeout"]])
 
     def test_changed_source_content_gets_a_new_cache_identity(self):
         self._retrieve(CountingEmbedder())
@@ -150,6 +182,36 @@ class SourceSparseEvalTest(unittest.TestCase):
         after = hashlib.sha256(self.source_db.read_bytes()).hexdigest()
         self.assertEqual(before, after)
         self.assertEqual(len(embedder.calls[1]), 1)
+
+    def test_stale_fts_candidate_is_rejected_after_source_mutation(self):
+        self.first.write_text(
+            self.first.read_text(encoding="utf-8") + " changed after index",
+            encoding="utf-8")
+        self.assertEqual(self._retrieve(CountingEmbedder()), [])
+
+    def test_duplicate_passage_text_reuses_one_cache_row_with_two_provenances(self):
+        self.second.write_text(self.first.read_text(encoding="utf-8"), encoding="utf-8")
+        lexical.build_index(self.vault, self.source_db)
+        hits = self._retrieve(
+            CountingEmbedder(), candidate_docs=2, max_passages=2, k=2)
+        self.assertEqual(len({hit["source_path"] for hit in hits}), 2)
+        with closing(sqlite3.connect(self.cache_db)) as conn:
+            rows = conn.execute(
+                "SELECT count(*) FROM passage_embeddings").fetchone()[0]
+        self.assertEqual(rows, 1)
+
+    def test_invalid_vectors_leave_no_cache_rows(self):
+        class BadDocuments:
+            def __call__(self, texts):
+                return [[math.nan, 0.0, 0.0, 0.0] for _ in texts]
+
+        with self.assertRaises(ValueError):
+            self._retrieve(
+                BadDocuments(), embed_query_fn=CountingEmbedder())
+        with closing(sqlite3.connect(self.cache_db)) as conn:
+            rows = conn.execute(
+                "SELECT count(*) FROM passage_embeddings").fetchone()[0]
+        self.assertEqual(rows, 0)
 
     def test_no_hit_threshold_abstains(self):
         hits = self._retrieve(
@@ -190,6 +252,7 @@ class SourceSparseEvalTest(unittest.TestCase):
         self.assertEqual(report["passage_hit@5"], 1.0)
         self.assertEqual(report["no_hit_specificity"], 1.0)
         self.assertEqual(report["citation_precision"], 1.0)
+        self.assertEqual(report["provenance_precision"], 1.0)
         self.assertIn("p95_ms", report["latency_ms"])
         self.assertNotIn("grandchild", json.dumps(report))
 
