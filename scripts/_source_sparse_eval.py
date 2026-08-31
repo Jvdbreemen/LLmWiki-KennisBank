@@ -145,11 +145,11 @@ def _lexical_docs(source_db: Path, query: str, *, limit: int) -> list[dict]:
     try:
         try:
             rows = []
-            cursor = conn.execute(
+            matches = conn.execute(
                 "SELECT source_path, body, rank FROM source_fts "
                 "WHERE source_fts MATCH ? ORDER BY rank LIMIT ?",
                 (expression, int(limit)))
-            for lexical_rank, (source_path, body, bm25) in enumerate(cursor):
+            for lexical_rank, (source_path, body, bm25) in enumerate(matches):
                 rows.append({
                     "source_path": str(source_path),
                     "indexed_body_hash": _hash_text(str(body)),
