@@ -1,10 +1,10 @@
 ---
 id: TASK-215
 title: Add the gated source-recall API and groundcheck integration
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-25 00:00'
-updated_date: '2026-08-29 00:00'
+updated_date: '2026-08-31 00:00'
 labels:
   - source-recall
   - retrieval
@@ -46,7 +46,7 @@ make conflicts, missing sources, and low-confidence matches visible.
 - [x] #4 Verification uses the source-recall API and preserves the existing fail-open behaviour when the source index or model is unavailable
 - [x] #5 Source results are clearly labelled and cannot directly write or promote a memory
 - [x] #6 Missing, conflicting, superseded, and low-confidence source results are represented explicitly
-- [ ] #7 Golden fixtures from TASK-213 show measured source hit quality and citation correctness
+- [x] #7 Golden fixtures from TASK-213 show measured source hit quality and citation correctness
 - [x] #8 Tests cover route selection, source filters, no-hit behaviour, index failure, and regression of the current recall path
 <!-- AC:END -->
 
@@ -69,3 +69,11 @@ remains open: the full source vector projection is absent and therefore source
 API hit quality/citation correctness has not been measured. The 745 MiB corpus
 and 37,085 chunks in only the 28 expected documents make naive pre-embedding a
 redesign question, not a missing checkbox.
+
+TASK-223 subsequently measured the bounded sparse-first candidate on a separate
+owner-reviewed 30-case development set. Exact provenance remained valid, but
+the best point reached only hit@5 0.25, citation precision 0.40, specificity
+0.90, and warm p95 8.33 seconds; pure BM25 on the same cases reached hit@5
+0.75 at p95 50.4 ms. AC #7 is therefore complete as a measurement requirement,
+not as a quality approval. The sparse vector route is rejected and remains
+outside the source API's enabled paths.

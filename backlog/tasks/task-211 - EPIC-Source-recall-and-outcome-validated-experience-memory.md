@@ -2,10 +2,10 @@
 id: TASK-211
 title: >-
   EPIC: Source recall and outcome-validated experience memory
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-25 00:00'
-updated_date: '2026-08-30 00:00'
+updated_date: '2026-08-31 00:00'
 labels:
   - epic
   - memory
@@ -132,7 +132,7 @@ experience records can be collected before they influence retrieval.
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 TASK-212 through TASK-222 are Done or explicitly Blocked with evidence and owner
+- [x] #1 TASK-212 through TASK-222 are Done or explicitly Blocked with evidence and owner
 - [x] #2 A design/ADR and research note document the accepted and rejected prior-art patterns
 - [x] #3 Source recall is usable in explicit and verification modes without changing default recall
 - [x] #4 Experience recall is bounded, provenance-labelled, and disabled when evidence or evaluation gates are not met
@@ -159,7 +159,14 @@ the holdout is spent. The completed blinded action comparison then measured
 43/60 correct/actionable experience candidates versus 19/60 for the strongest
 baseline, delta +0.40 with 95% CI +0.20 to +0.5833. This proves downstream
 experience value but does not override the safety rejection. Outcome-aware
-ranking remains **rejected**. TASK-215 AC #7 and TASK-221 AC #5 remain
-explicitly open; TASK-223 owns the still-unproven sparse-first source-answer
-experiment. TASK-224 is complete with its false-warning criterion honestly
-unmet.
+ranking remains **rejected**. TASK-223 then evaluated 18 sparse-first source
+configurations on an independent owner-reviewed development set. The best
+point lost heavily to BM25 (hit@5 0.25 versus 0.75), missed no-hit specificity
+(0.90 versus 0.95 required), and missed warm latency (8.33 seconds versus 2
+seconds required). It was pre-rejected without spending the frozen holdout or
+collecting a downstream answer benchmark for an already disqualified route.
+TASK-215 and TASK-223 are complete with that negative result. TASK-221 is
+complete as a proposal-only path with existing-skill evolution rejected for
+this rollout; its AC #5 remains visibly unmet. TASK-224 is complete with its
+false-warning criterion honestly unmet. All child work is now closed with
+positive or negative evidence rather than implied approval.

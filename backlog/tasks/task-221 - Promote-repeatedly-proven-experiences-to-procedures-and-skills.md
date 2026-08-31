@@ -1,10 +1,10 @@
 ---
 id: TASK-221
 title: Promote repeatedly proven experiences to procedures and skills
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-25 00:00'
-updated_date: '2026-08-29 00:00'
+updated_date: '2026-08-31 00:00'
 labels:
   - experience-memory
   - procedures
@@ -55,8 +55,11 @@ failures, applicability conditions, and reasons for promotion or rejection.
 - Focused evidence: 6 promotion tests pass, including stale/retracted,
   conflicting, repeated, and insufficient-evidence cases.
 
-Existing skill evolution remains open under TASK-177: no skill mutation is
-authorized by this feature branch. TASK-220 now rejects experience rollout on
-a measured 0.20 false-warning rate, and consolidation found zero repeated
-lessons with sufficient support. AC #5 is therefore blocked by evidence and
-owner-gated dependencies rather than silently waived.
+Existing skill evolution remains parked under TASK-177: no skill mutation is
+authorized by this feature branch. TASK-220 rejects experience rollout on a
+measured 0.20 false-warning rate, and consolidation found zero repeated lessons
+with sufficient support. AC #5 therefore remains visibly unchecked. This task
+is Done as a proposal-path experiment with automatic new-skill promotion and
+existing-skill evolution both rejected for this rollout; implementing a
+mutation path despite failed upstream evidence would violate the task's own
+human and evaluation gates.
