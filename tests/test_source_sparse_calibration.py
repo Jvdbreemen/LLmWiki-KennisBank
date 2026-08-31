@@ -10,6 +10,7 @@ import tempfile
 import unittest
 from contextlib import closing
 from pathlib import Path
+from unittest import mock
 
 REPO = Path(__file__).resolve().parents[1]
 SCRIPTS = REPO / "scripts"
@@ -184,6 +185,61 @@ class SourceSparseCalibrationCliTest(unittest.TestCase):
                                             "negative": 10})
         self.assertNotIn("positive 1", rendered)
         self.assertNotIn("expected_source", rendered)
+
+    def test_query_embeddings_are_reused_across_measured_and_warm_runs(self):
+        calls = []
+
+        def embed(texts):
+            calls.append(list(texts))
+            return [[float(len(text))] for text in texts]
+
+        cached = self.cli.memoize_embeddings(embed)
+        self.assertEqual(cached(["alpha", "beta"]), [[5.0], [4.0]])
+        self.assertEqual(cached(["beta", "alpha", "gamma"]),
+                         [[4.0], [5.0], [5.0]])
+        self.assertEqual(calls, [["alpha", "beta"], ["gamma"]])
+
+    def test_trial_grid_uses_one_content_addressed_embedding_cache(self):
+        cache_dir = self.root / "cache"
+        cache_dir.mkdir()
+        query_calls = []
+        observed_cache_paths = []
+
+        def embed_queries(texts):
+            query_calls.append(list(texts))
+            return [[1.0] for _ in texts]
+
+        def fake_evaluate(cases, **options):
+            observed_cache_paths.append(options["cache_db"])
+            options["embed_query_fn"](["same query"])
+            options["cache_db"].write_bytes(b"shared-cache")
+            return {
+                "configuration": {
+                    "candidate_docs": options["candidate_docs"],
+                    "max_passages": options["max_passages"],
+                    "min_cos": options["min_cos"],
+                },
+                "retrieval": {"hit@5": 0.5},
+                "passage_hit@5": 0.5,
+                "citation_precision": 1.0,
+                "provenance_precision": 1.0,
+                "no_hit_specificity": 1.0,
+                "latency_ms": {"n": 1, "p95_ms": 100.0},
+            }
+
+        with mock.patch.object(self.cli.sparse, "evaluate", side_effect=fake_evaluate):
+            trials = self.cli.run_trial_grid(
+                [{}], cache_dir=cache_dir,
+                candidate_docs=[20, 50], max_passages=[40],
+                min_cos=[0.4, 0.7], base_options={
+                    "embed_query_fn": embed_queries,
+                })
+
+        self.assertEqual(len(trials), 4)
+        self.assertEqual(len(set(observed_cache_paths)), 1)
+        self.assertEqual(query_calls, [["same query"]])
+        self.assertEqual({row["cache_bytes"] for row in trials},
+                         {len(b"shared-cache")})
 
 
 if __name__ == "__main__":
