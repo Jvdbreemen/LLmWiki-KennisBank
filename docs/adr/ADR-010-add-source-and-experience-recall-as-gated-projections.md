@@ -212,9 +212,9 @@ recall and cannot pass a validation gate.
 
 ## Open Questions
 
-- [ ] Does source recall clear its absolute and baseline-relative retrieval gates on the frozen live-vault holdout?
+- [x] Does source recall clear its absolute and baseline-relative retrieval gates on the frozen live-vault holdout? **Resolved before holdout:** no sparse-first configuration cleared the independent development safety and latency constraints; the best point also lost hit@5 0.25 versus 0.75 to BM25. The candidate is rejected and the frozen holdout remains unspent.
 - [x] Does experience recall improve retrieval of validated success and failure patterns without exceeding the false-warning gate? **Partly resolved:** retrieval and action value improve, but the false-warning gate fails, so rollout is rejected.
-- [ ] Is either layer valuable enough to enable a fallback route, or should it remain explicit-only?
+- [x] Is either layer valuable enough to enable a fallback route, or should it remain explicit-only? **Resolved for these designs:** neither earns automatic fallback rollout. Source remains explicit evidence search; experience preserves proven downstream value as research evidence but fails advisory safety.
 - [ ] Is there enough longitudinal outcome evidence to test task improvement, or must outcome-aware ranking remain deferred?
 
 ## Related Decisions

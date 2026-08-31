@@ -8,7 +8,7 @@ Policy: both routes remain opt-in; outcome-aware ranking remains disabled.
 
 | layer | measured result | decision |
 |---|---|---|
-| source recall | reviewed oracle is complete, but the full vector arm was not built; full-corpus lexical hit@5 is 0.66 and returns a hit for every negative probe | **hold; reject naive full-corpus pre-embedding as the next step** |
+| source recall | independent dev: sparse-first hit@5 0.25 versus BM25 0.75; specificity 0.90; warm p95 8.33 s | **reject sparse-first vector reranking; retain labelled lexical evidence search only** |
 | experience recall | hybrid hit@3 is 0.90 versus lexical 0.80; blinded action correctness is 43/60 versus 19/60 baseline (delta +0.40, 95% CI +0.20 to +0.5833), but false warnings are 2 of 10 | **value proven, reject this advisory design for rollout** |
 | outcome-aware ranking | no longitudinal exposed/control evidence | **reject** |
 
@@ -69,9 +69,31 @@ storage, and rebuild obligation.
 Lexical candidate coverage rises to 0.76 at 20 documents, 0.84 at 50, and 0.88
 at 100. This supports a cheaper next experiment: FTS/BM25 candidate generation,
 then on-demand passage extraction and vector reranking with a persistent cache.
-It does not support embedding every raw chunk in advance. The current source
-vector arm and paired answer benchmark remain unmeasured, so source recall is a
-hold rather than a rollout approval.
+It does not support embedding every raw chunk in advance. The initial source
+vector arm and paired answer benchmark were still unmeasured at this
+checkpoint, so source recall remained a hold pending the bounded sparse-first
+experiment described below.
+
+### Independent sparse-first development result
+
+The owner subsequently reviewed a separate 30-case source development set: 20
+positives over unique documents and 10 hard negatives, with no id, normalized
+query, or expected-source overlap with the frozen 60-case holdout. Exact source
+hashes, reviewed windows, and FTS snapshots were validated before the run.
+
+All 18 preregistered sparse-first configurations failed. The best available
+point (`candidate_docs=100`, `max_passages=40`, `min_cos=0.70`) measured
+document hit@5 0.25, passage hit@5 0.15, citation precision 0.40, provenance
+precision 1.00, no-hit specificity 0.90, and warm p95 8.33 seconds. Its shared
+content-addressed cache was 33.9 MB. Pure BM25 on the identical dev cases
+measured hit@5 0.75 and p95 50.4 ms, although it returned a hit for every
+negative.
+
+This is a development pre-reject: the vector reranker loses 0.50 recall while
+still missing the abstention and latency gates. The frozen holdout remains
+unspent and the paired 50-case answer benchmark was not generated for a route
+already disqualified by three upstream gates. Details are in
+`docs/research/source-sparse-development-result-2026-08-31.md`.
 
 ## Experience evidence: historical pre-correction run
 
@@ -177,10 +199,12 @@ With both routes off, 5,000 calls per gateway measured approximately 0.0008 ms
 p50 and p95 overhead above the no-op baseline. The normal wiki/memory path is
 therefore structurally unchanged by routing.
 
-No paired downstream source-answer labels have been collected yet. Source
-answer correctness therefore remains unproven. Experience action selection is
-now measured as described above, while an already measured safety failure still
-takes precedence over downstream value for rollout.
+No paired downstream source-answer labels were collected. Source answer
+correctness therefore remains unproven by design: the sparse candidate failed
+independent development recall, abstention, and latency before it could spend
+the frozen holdout or justify a 50-case answer-generation review. Experience
+action selection is measured as described above, while an already measured
+safety failure still takes precedence over downstream value for rollout.
 
 The complete repository suite passed **1,833 tests with 3 skips in 627.92
 seconds** using Python 3.12 and a writable `--basetemp` outside the Git
@@ -190,9 +214,10 @@ invalid attempt.
 
 ## Recommended next work
 
-1. Do not build the naive full raw-source vector index. Prototype sparse-first
-   candidate generation plus cached on-demand passage embeddings and compare it
-   against the frozen private source holdout.
+1. Do not build the naive full raw-source vector index and do not run the
+   rejected sparse-first reranker on the frozen holdout. If source retrieval is
+   revisited, start with a new candidate-generation/ranking design and a new
+   independent development set; preserve the current frozen set.
 2. Do not tune or rerun the spent experience holdout. Any future advisory
    design must start with a new development set and a newly frozen holdout; the
    current rollout remains rejected on false-warning safety.
