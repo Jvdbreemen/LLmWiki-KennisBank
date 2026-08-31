@@ -208,6 +208,53 @@ def _cache_bytes(path: Path) -> int:
                if candidate.exists())
 
 
+def memoize_embeddings(embed_fn):
+    """Reuse exact query embeddings across configurations and warm runs."""
+    cache = {}
+
+    def cached(texts: list[str]) -> list[list[float]]:
+        keys = list(texts)
+        missing = [value for value in dict.fromkeys(keys) if value not in cache]
+        if missing:
+            vectors = embed_fn(missing)
+            if len(vectors) != len(missing):
+                raise RuntimeError("embedding backend returned an unexpected vector count")
+            cache.update(zip(missing, vectors))
+        return [cache[value] for value in keys]
+
+    return cached
+
+
+def run_trial_grid(cases: list[dict], *, cache_dir: Path,
+                   candidate_docs: list[int], max_passages: list[int],
+                   min_cos: list[float], base_options: dict) -> list[dict]:
+    """Evaluate a grid with one content cache and one exact query cache."""
+    shared_cache = Path(cache_dir) / "embeddings.db"
+    common = dict(base_options)
+    query_embedder = common.get("embed_query_fn")
+    if query_embedder is not None:
+        common["embed_query_fn"] = memoize_embeddings(query_embedder)
+    trials = []
+    grid = itertools.product(candidate_docs, max_passages, min_cos)
+    for candidate_count, passage_count, cosine_threshold in grid:
+        options = dict(common)
+        options.update({
+            "cache_db": shared_cache,
+            "candidate_docs": candidate_count,
+            "max_passages": passage_count,
+            "min_cos": cosine_threshold,
+        })
+        measured = sparse.evaluate(cases, **options)
+        warm = sparse.evaluate(cases, **options)
+        trial = dict(measured)
+        trial["warm_latency"] = dict(warm["latency_ms"])
+        trials.append(trial)
+    shared_bytes = _cache_bytes(shared_cache)
+    for trial in trials:
+        trial["cache_bytes"] = shared_bytes
+    return trials
+
+
 def _embedding_functions():
     import _embeddings
 
@@ -267,24 +314,17 @@ def main(argv=None) -> int:
         cache_dir.mkdir(parents=True, exist_ok=False)
         os.environ["KB_USAGE_DISABLE"] = "1"
         model_id, embed_documents, embed_queries = _embedding_functions()
-        trials = []
-        grid = itertools.product(args.candidate_docs, args.max_passages, args.min_cos)
-        for number, (candidate_docs, max_passages, min_cos) in enumerate(grid, start=1):
-            cache_db = cache_dir / f"trial-{number:02d}.db"
-            options = {
-                "vault": vault, "source_db": source_db, "cache_db": cache_db,
+        trials = run_trial_grid(
+            cases, cache_dir=cache_dir,
+            candidate_docs=args.candidate_docs,
+            max_passages=args.max_passages, min_cos=args.min_cos,
+            base_options={
+                "vault": vault, "source_db": source_db,
                 "embed_fn": embed_documents, "embed_query_fn": embed_queries,
                 "model_id": model_id, "document_model_id": model_id,
-                "query_model_id": model_id, "candidate_docs": candidate_docs,
-                "max_passages": max_passages, "chunk_size": args.chunk_size,
-                "overlap": args.overlap, "k": 5, "min_cos": min_cos,
-            }
-            measured = sparse.evaluate(cases, **options)
-            warm = sparse.evaluate(cases, **options)
-            trial = dict(measured)
-            trial["warm_latency"] = dict(warm["latency_ms"])
-            trial["cache_bytes"] = _cache_bytes(cache_db)
-            trials.append(trial)
+                "query_model_id": model_id, "chunk_size": args.chunk_size,
+                "overlap": args.overlap, "k": 5,
+            })
         selected = selection.select_configuration(trials)
         revision = subprocess.check_output(
             ["git", "rev-parse", "HEAD"], cwd=REPOSITORY, text=True).strip()
