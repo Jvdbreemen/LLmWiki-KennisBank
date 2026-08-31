@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import json
+import sqlite3
 import sys
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
@@ -91,6 +94,7 @@ class SourceSparseCalibrationCliTest(unittest.TestCase):
             cases.append({
                 "id": f"D-S-{number:03d}", "query": f"positive {number}",
                 "expected_source": f"01-raw/dev/{number}.md",
+                "expected_hash": "sha256:" + ("a" * 64),
                 "expected_windows": [{"start": 0, "end": 5}],
                 "review_status": "reviewed", "review_decision": "keep",
             })
@@ -113,6 +117,39 @@ class SourceSparseCalibrationCliTest(unittest.TestCase):
                         encoding="utf-8")
         with self.assertRaises(ValueError):
             self.cli.load_development_cases(path)
+
+    def test_development_loader_accepts_owner_review_jsonl_directly(self):
+        path = self.root / "source-dev-review.jsonl"
+        path.write_text(
+            "\n".join(json.dumps(case) for case in self._cases()) + "\n",
+            encoding="utf-8")
+        self.assertEqual(len(self.cli.load_development_cases(path)), 30)
+
+    def test_positive_cases_require_exact_hash_and_fresh_fts_snapshot(self):
+        vault = self.root / "vault"
+        source = vault / "01-raw" / "dev" / "one.md"
+        source.parent.mkdir(parents=True)
+        source.write_text("alpha reviewed passage", encoding="utf-8")
+        raw = source.read_bytes()
+        case = {
+            "id": "D-S-001", "query": "alpha",
+            "expected_source": "01-raw/dev/one.md",
+            "expected_hash": "sha256:" + hashlib.sha256(raw).hexdigest(),
+            "expected_windows": [{"start": 0, "end": 5}],
+        }
+        database = self.root / "source.db"
+        with closing(sqlite3.connect(database)) as conn:
+            conn.execute(
+                "CREATE VIRTUAL TABLE source_fts USING fts5(source_path UNINDEXED, body)")
+            conn.execute("INSERT INTO source_fts(source_path, body) VALUES (?, ?)",
+                         (case["expected_source"], source.read_text(encoding="utf-8")))
+            conn.commit()
+        self.cli.validate_case_provenance([case], vault=vault, source_db=database)
+
+        source.write_text("changed reviewed passage", encoding="utf-8")
+        case["expected_hash"] = "sha256:" + hashlib.sha256(source.read_bytes()).hexdigest()
+        with self.assertRaises(ValueError):
+            self.cli.validate_case_provenance([case], vault=vault, source_db=database)
 
     def test_report_binds_inputs_index_revision_models_and_selected_config(self):
         cases = self._cases()
