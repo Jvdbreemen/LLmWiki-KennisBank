@@ -8,6 +8,7 @@ import itertools
 import json
 import os
 import subprocess
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -41,7 +42,24 @@ def sha256_file(path: Path) -> str:
 
 
 def _load_cases(path: Path) -> list[dict]:
-    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    target = Path(path)
+    raw = target.read_text(encoding="utf-8")
+    if target.suffix.casefold() == ".jsonl":
+        cases = []
+        for line_number, line in enumerate(raw.splitlines(), start=1):
+            if not line.strip():
+                continue
+            try:
+                value = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    f"invalid source development JSONL line {line_number}") from exc
+            if not isinstance(value, dict):
+                raise ValueError(
+                    f"source development JSONL line {line_number} must be an object")
+            cases.append(value)
+        return cases
+    payload = json.loads(raw)
     if isinstance(payload, dict):
         if payload.get("schema_version") != 1:
             raise ValueError("unsupported source development schema")
@@ -70,6 +88,12 @@ def load_development_cases(path: Path) -> list[dict]:
         raise ValueError("source development set must contain exactly 20 positive and 10 negative cases")
     if any(not case.get("expected_windows") for case in positive):
         raise ValueError("positive source development cases require reviewed windows")
+    if any(not str(case.get("expected_hash") or "").startswith("sha256:")
+           or len(str(case.get("expected_hash"))) != 71 for case in positive):
+        raise ValueError("positive source development cases require exact sha256 hashes")
+    sources = [str(case.get("expected_source")) for case in positive]
+    if len(sources) != len(set(sources)):
+        raise ValueError("positive source development cases require unique source documents")
     return cases
 
 
@@ -78,6 +102,51 @@ def load_frozen_cases(path: Path) -> list[dict]:
     if not cases:
         raise ValueError("frozen source cases are empty")
     return cases
+
+
+def validate_case_provenance(cases: list[dict], *, vault: Path,
+                             source_db: Path) -> None:
+    """Fail before calibration when reviewed sources or the FTS snapshot drift."""
+    root = Path(vault).resolve()
+    uri = Path(source_db).resolve().as_uri() + "?mode=ro"
+    conn = sqlite3.connect(uri, uri=True)
+    try:
+        for case in cases:
+            source_path = case.get("expected_source")
+            if source_path is None:
+                continue
+            case_id = str(case.get("id") or "<unknown>")
+            path = (root / Path(str(source_path))).resolve()
+            try:
+                path.relative_to(root)
+            except ValueError as exc:
+                raise ValueError(f"source development path escapes vault: {case_id}") from exc
+            try:
+                snapshot = sparse.read_source_snapshot(path)
+            except (OSError, UnicodeError) as exc:
+                raise ValueError(f"source development file unavailable: {case_id}") from exc
+            if snapshot["source_hash"] != case.get("expected_hash"):
+                raise ValueError(f"source development hash drift: {case_id}")
+            text_length = len(snapshot["text"])
+            for window in case.get("expected_windows") or []:
+                try:
+                    start, end = int(window["start"]), int(window["end"])
+                except (KeyError, TypeError, ValueError) as exc:
+                    raise ValueError(
+                        f"source development window invalid: {case_id}") from exc
+                if start < 0 or end <= start or end > text_length:
+                    raise ValueError(f"source development window invalid: {case_id}")
+            row = conn.execute(
+                "SELECT body FROM source_fts WHERE source_path=?", (source_path,)
+            ).fetchone()
+            if row is None:
+                raise ValueError(f"source development document absent from FTS: {case_id}")
+            indexed_hash = "sha256:" + hashlib.sha256(
+                str(row[0]).encode("utf-8")).hexdigest()
+            if indexed_hash != snapshot["indexed_body_hash"]:
+                raise ValueError(f"source development FTS snapshot stale: {case_id}")
+    finally:
+        conn.close()
 
 
 def _counts(cases: list[dict]) -> dict:
@@ -192,6 +261,7 @@ def main(argv=None) -> int:
         selection.assert_independent_source_cases(cases, frozen)
         if not source_db.is_file():
             raise ValueError("source FTS database does not exist")
+        validate_case_provenance(cases, vault=vault, source_db=source_db)
         if report_path.exists():
             raise ValueError("source calibration report already exists")
         cache_dir.mkdir(parents=True, exist_ok=False)
