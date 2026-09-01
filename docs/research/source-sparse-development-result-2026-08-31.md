@@ -87,3 +87,7 @@ paths, and review windows remain outside the repository. The selection report
 hash is `44b6d1d46fa5e572a891b241406dd2174cdbeff59e4522813c31ac3e297956e5`;
 the same-dev/same-index lexical report hash is
 `a3abc32ba0faacd23a58bc2b5dbc70cbd868448bd1ae0e567afaef2363094460`.
+
+Final regression evidence: 1,886 repository tests passed with 3 skips in
+683.99 seconds on Python 3.12, using a writable basetemp outside the Git
+worktree.

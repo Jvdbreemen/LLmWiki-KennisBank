@@ -206,11 +206,13 @@ the frozen holdout or justify a 50-case answer-generation review. Experience
 action selection is measured as described above, while an already measured
 safety failure still takes precedence over downstream value for rollout.
 
-The complete repository suite passed **1,833 tests with 3 skips in 627.92
-seconds** using Python 3.12 and a writable `--basetemp` outside the Git
-worktree. An earlier Python 3.14 invocation stopped during collection because
-that interpreter lacked the Atlas `fastapi` dependency; no tests ran in that
-invalid attempt.
+The final complete repository suite passed **1,886 tests with 3 skips in
+683.99 seconds** using Python 3.12 and a writable `--basetemp` outside the Git
+worktree. An earlier run in this final verification cycle deliberately disabled
+usage telemetry globally and thereby invalidated 13 telemetry-write tests; it
+also exposed one real product-surface naming regression, which was fixed. The
+clean rerun used isolated test vaults with their intended telemetry contracts
+and had zero failures.
 
 ## Recommended next work
 
