@@ -15,9 +15,14 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _kbindex  # noqa: E402
+from _source_ref import APPROVED_ROOTS, resolve_source_ref  # noqa: E402
 
-APPROVED_ROOTS = ("01-raw/transcripts", "01-raw/sessies", "05-bronnen", "08-archive")
 TEXT_EXTENSIONS = {".md", ".markdown", ".txt", ".json", ".jsonl", ".csv", ".rst"}
+
+
+def hydrate_source_ref(vault: Path, ref: dict) -> dict:
+    """Use the canonical exact resolver; this path never performs retrieval."""
+    return resolve_source_ref(vault, ref)
 
 
 def connect(path=None):

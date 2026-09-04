@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
+sys.path.insert(0, str(SCRIPTS))
 
 
 def _source_ref_module():
@@ -53,6 +55,9 @@ class SourceRefContractTest(unittest.TestCase):
         result = module.resolve_source_ref(self.vault, first)
         self.assertEqual(result["status"], "valid")
         self.assertEqual(result["passage"], "café en bewijs")
+        source_recall = __import__("_source_recall")
+        self.assertEqual(
+            source_recall.hydrate_source_ref(self.vault, first), result)
 
     def test_mutated_source_is_stale_and_never_silently_retargeted(self):
         module, ref = self._ref()
@@ -78,6 +83,20 @@ class SourceRefContractTest(unittest.TestCase):
         _, ref = self._ref()
         self.source.unlink()
         self.assertEqual(module.resolve_source_ref(self.vault, ref)["status"], "missing")
+
+    def test_unreadable_source_has_an_explicit_state(self):
+        module, ref = self._ref()
+        self.source.unlink()
+        self.source.mkdir()
+        self.assertEqual(module.resolve_source_ref(self.vault, ref)["status"], "unreadable")
+
+    def test_legacy_string_becomes_unverified_candidate_not_a_source_ref(self):
+        module = _source_ref_module()
+        candidate = module.legacy_source_candidate("01-raw/transcripts/sessie.md")
+        self.assertEqual(candidate["evidence_state"], "unverified")
+        self.assertIsNone(candidate["source_ref"])
+        self.assertEqual(
+            candidate["legacy_source_path"], "01-raw/transcripts/sessie.md")
 
     def test_symlink_cannot_escape_an_approved_root(self):
         outside = self.vault.parent / "outside.md"
