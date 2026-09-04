@@ -10,6 +10,8 @@ from pathlib import Path
 import _experience
 import _experience_extract as extract
 
+PROJECTION_VERSION = "1"
+
 
 def experience_id_for(session_id: str, task_id: str) -> str:
     key = f"{session_id}\0{task_id}".encode("utf-8")
@@ -54,6 +56,90 @@ def _drop_experience_docs(conn) -> None:
             conn.execute("DELETE FROM doc_sources WHERE doc_id=?", (doc_id,))
         except sqlite3.Error:
             pass
+
+
+def rebuild_experience_projection(ledger, projection, *, embed_fn=None,
+                                  embed_id: str = "", derive_fn=None,
+                                  progress_fn=None) -> dict:
+    """Atomically rebuild a disposable projection from a canonical ledger."""
+    ledger = Path(ledger)
+    target = Path(projection)
+    if not ledger.is_file():
+        return {"status": "failed", "reason": "ledger missing",
+                "experiences": 0, "failed_embeddings": []}
+    target.parent.mkdir(parents=True, exist_ok=True)
+    stage = target.with_name(target.name + ".staging")
+    if stage.exists():
+        stage.unlink()
+    ledger_conn = stage_conn = None
+    derive = derive_fn or extract.derive_experience_values
+    try:
+        ledger_conn = _experience.connect(ledger)
+        tasks = _tasks(ledger_conn)
+        _emit(progress_fn, {"phase": "scan", "current": 0, "total": len(tasks)})
+        records = []
+        vectors = []
+        dimension = None
+        failed_embeddings = []
+        for current, (session_id, task_id) in enumerate(tasks, start=1):
+            experience_id = experience_id_for(session_id, task_id)
+            record = derive(ledger_conn, session_id, task_id, experience_id)
+            records.append(record)
+            vector = None
+            if embed_fn is not None:
+                body = " ".join((record.get("situation", ""), record.get("goal", ""),
+                                 record.get("approach", ""), record.get("action", ""),
+                                 record.get("lesson", ""), record.get("applicability", "")))
+                try:
+                    vector = embed_fn(body)
+                except Exception:
+                    vector = None
+                if vector is None or (dimension is not None and len(vector) != dimension):
+                    failed_embeddings.append(experience_id)
+                elif dimension is None:
+                    dimension = len(vector)
+            vectors.append(vector)
+            _emit(progress_fn, {"phase": "derive", "current": current,
+                                "total": len(tasks), "experience_id": experience_id})
+        if failed_embeddings:
+            return {"status": "failed", "reason": "embedding failure",
+                    "experiences": 0, "failed_embeddings": failed_embeddings}
+        stage_conn = _experience.connect(stage)
+        projection_embed_id = embed_id if dimension is not None else "lexical-only:1"
+        _experience.ensure_projection_schema(
+            stage_conn, dim=dimension or 1, embed_id=projection_embed_id)
+        _experience._kbindex.meta_set(stage_conn, "experience_projection_version",
+                                      PROJECTION_VERSION)
+        for record, vector in zip(records, vectors):
+            _experience.projection_upsert(stage_conn, record)
+            if vector is None:
+                _experience.index_experience_lexical(stage_conn, record["experience_id"])
+            else:
+                _experience.index_experience(
+                    stage_conn, record["experience_id"], vector=vector)
+        stage_conn.commit()
+        integrity = stage_conn.execute("PRAGMA integrity_check").fetchone()[0]
+        if integrity != "ok":
+            raise sqlite3.DatabaseError(f"projection integrity: {integrity}")
+        stage_conn.close()
+        stage_conn = None
+        os.replace(stage, target)
+        result = {"status": "ok", "experiences": len(records),
+                  "derived_experiences": len(records),
+                  "vector_status": "ok" if dimension is not None else "skipped",
+                  "failed_embeddings": [], "projection_version": PROJECTION_VERSION}
+        _emit(progress_fn, {"phase": "complete", **result})
+        return result
+    except Exception as exc:
+        return {"status": "failed", "reason": str(exc),
+                "experiences": 0, "failed_embeddings": []}
+    finally:
+        if ledger_conn is not None:
+            ledger_conn.close()
+        if stage_conn is not None:
+            stage_conn.close()
+        if stage.exists():
+            stage.unlink()
 
 
 def rebuild_experience_store(path, *, rebuild: bool = True, embed_fn=None,

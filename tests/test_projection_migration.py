@@ -54,6 +54,9 @@ class ProjectionMigrationContractTest(unittest.TestCase):
         self.assertTrue(first["mutated"])
         self.assertFalse(second["mutated"])
         self.assertTrue(first["backup_path"])
+        self.assertEqual(first["verified_counts"]["experience_events"], 1)
+        self.assertEqual(
+            Path(first["backup_path"]).read_bytes(), self.legacy.read_bytes())
 
     def test_interrupted_migration_preserves_previous_good_ledger(self):
         migration = _migration_module()

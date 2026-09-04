@@ -26,10 +26,152 @@ _RESOLUTION_STATES = {"not_applicable", "unresolved", "diagnosed",
 FAILURE_ADVISORY_MIN_COS = 0.50
 
 
+def ledger_path(vault: Path) -> Path:
+    return Path(vault) / ".claude" / "kb-experience-ledger.db"
+
+
+def projection_path(vault: Path) -> Path:
+    return Path(vault) / ".claude" / "kb-experience-index.db"
+
+
 def connect(path=None):
     p = str(path) if path is not None else str(Path.cwd() / "kb-experience.db")
     Path(p).parent.mkdir(parents=True, exist_ok=True)
     return sqlite3.connect(p)
+
+
+def ensure_ledger_schema(conn) -> None:
+    """Create canonical append-only tables without retrieval projections."""
+    conn.executescript("""
+    CREATE TABLE IF NOT EXISTS experience_events (
+        event_id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        task_id TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        observed_at TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        source_refs_json TEXT NOT NULL,
+        schema_version TEXT NOT NULL DEFAULT '1'
+    );
+    CREATE TABLE IF NOT EXISTS experience_outcomes (
+        outcome_id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        task_id TEXT NOT NULL,
+        state TEXT NOT NULL,
+        evidence_json TEXT NOT NULL,
+        attribution_strength TEXT NOT NULL,
+        observed_at TEXT NOT NULL DEFAULT ''
+    );
+    CREATE TABLE IF NOT EXISTS experience_reviews (
+        review_id TEXT PRIMARY KEY,
+        experience_id TEXT NOT NULL,
+        decision TEXT NOT NULL,
+        actor TEXT NOT NULL,
+        reviewed_at TEXT NOT NULL,
+        reason TEXT NOT NULL DEFAULT '',
+        content_hash TEXT NOT NULL,
+        schema_version TEXT NOT NULL DEFAULT '1',
+        idempotency_key TEXT NOT NULL UNIQUE
+    );
+    CREATE INDEX IF NOT EXISTS idx_experience_reviews_target
+        ON experience_reviews(experience_id, reviewed_at);
+    """)
+    conn.commit()
+
+
+def _ensure_experience_rows_schema(conn) -> None:
+    conn.executescript("""
+    CREATE TABLE IF NOT EXISTS experiences (
+        experience_id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        task_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        situation TEXT NOT NULL,
+        goal TEXT NOT NULL DEFAULT '',
+        approach TEXT NOT NULL,
+        action TEXT NOT NULL DEFAULT '',
+        observed_result TEXT NOT NULL,
+        lesson TEXT NOT NULL,
+        applicability TEXT NOT NULL,
+        outcome_state TEXT NOT NULL,
+        attempt_state TEXT NOT NULL DEFAULT 'unknown',
+        resolution_state TEXT NOT NULL DEFAULT 'not_applicable',
+        confidence REAL NOT NULL,
+        source_refs_json TEXT NOT NULL,
+        outcome_refs_json TEXT NOT NULL,
+        exposed_refs_json TEXT NOT NULL DEFAULT '[]',
+        procedure_refs_json TEXT NOT NULL DEFAULT '[]',
+        skill_refs_json TEXT NOT NULL DEFAULT '[]',
+        attribution_limits TEXT NOT NULL DEFAULT '',
+        schema_version TEXT NOT NULL DEFAULT '1',
+        extractor_version TEXT NOT NULL DEFAULT '1',
+        superseded_by TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_experiences_status ON experiences(status);
+    CREATE INDEX IF NOT EXISTS idx_experiences_outcome ON experiences(outcome_state);
+    CREATE INDEX IF NOT EXISTS idx_experiences_attempt ON experiences(attempt_state);
+    """)
+
+
+def ensure_projection_schema(conn, *, dim: int, embed_id: str) -> None:
+    """Create a disposable retrieval projection without canonical history."""
+    conn.enable_load_extension(True)
+    conn.load_extension(_kbindex.vec0_extension())
+    conn.enable_load_extension(False)
+    _kbindex.ensure_schema(conn, dim, embed_id)
+    _ensure_experience_rows_schema(conn)
+    conn.commit()
+
+
+def projection_upsert(conn, record: dict) -> None:
+    """Materialize one already-derived record into a disposable projection."""
+    fields = (
+        "experience_id", "session_id", "task_id", "status", "situation", "goal",
+        "approach", "action", "observed_result", "lesson", "applicability",
+        "outcome_state", "attempt_state", "resolution_state", "confidence",
+        "source_refs", "outcome_refs", "exposed_refs", "procedure_refs",
+        "skill_refs", "attribution_limits", "schema_version", "extractor_version",
+        "superseded_by",
+    )
+    defaults = {
+        "goal": "", "action": "", "attempt_state": "unknown",
+        "resolution_state": "not_applicable", "confidence": 0.0,
+        "source_refs": [], "outcome_refs": [], "exposed_refs": [],
+        "procedure_refs": [], "skill_refs": [], "attribution_limits": "",
+        "schema_version": "1", "extractor_version": "1", "superseded_by": None,
+    }
+    values = {field: record.get(field, defaults.get(field, "")) for field in fields}
+    for field in ("source_refs", "outcome_refs", "exposed_refs", "procedure_refs", "skill_refs"):
+        values[field] = _json(values[field])
+    conn.execute(
+        "INSERT OR REPLACE INTO experiences(experience_id, session_id, task_id, status, "
+        "situation, goal, approach, action, observed_result, lesson, applicability, "
+        "outcome_state, attempt_state, resolution_state, confidence, source_refs_json, "
+        "outcome_refs_json, exposed_refs_json, procedure_refs_json, skill_refs_json, "
+        "attribution_limits, schema_version, extractor_version, superseded_by) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        tuple(values[field] for field in fields))
+
+
+def index_experience_lexical(conn, experience_id: str) -> int:
+    """Index one projected experience for FTS without manufacturing a vector."""
+    record = experience(conn, experience_id)
+    if record is None:
+        raise KeyError(experience_id)
+    body = " ".join((record["situation"], record["goal"], record["approach"],
+                     record["action"], record["lesson"], record["applicability"]))
+    path = f"experience::{experience_id}"
+    doc_id = conn.execute(
+        "INSERT INTO docs(path, layer, status, hash, title, created) "
+        "VALUES (?,?,?,?,?,?)",
+        (path, "experience", record["status"], experience_id,
+         record["lesson"], "")).lastrowid
+    conn.execute("INSERT INTO fts_docs(rowid, body) VALUES (?, ?)", (doc_id, body))
+    for source in record["source_refs"]:
+        conn.execute("INSERT INTO doc_sources(doc_id, source) VALUES (?, ?)",
+                     (doc_id, json.dumps(source, sort_keys=True)
+                      if isinstance(source, dict) else str(source)))
+    return int(doc_id)
 
 
 def ensure_schema(conn) -> None:

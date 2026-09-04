@@ -29,7 +29,9 @@ def _events(conn, session_id: str, task_id: str) -> list[dict]:
     return result
 
 
-def derive_experience(conn, session_id: str, task_id: str, experience_id: str) -> dict:
+def derive_experience_values(conn, session_id: str, task_id: str,
+                             experience_id: str) -> dict:
+    """Derive values from a canonical ledger without writing a projection."""
     events = _events(conn, session_id, task_id)
     outcomes = conn.execute(
         "SELECT outcome_id, state, evidence_json FROM experience_outcomes "
@@ -71,6 +73,11 @@ def derive_experience(conn, session_id: str, task_id: str, experience_id: str) -
         "exposed_refs": exposed_refs, "procedure_refs": procedure_refs,
         "skill_refs": skill_refs,
     }
+    return values
+
+
+def derive_experience(conn, session_id: str, task_id: str, experience_id: str) -> dict:
+    values = derive_experience_values(conn, session_id, task_id, experience_id)
     try:
         created = _experience.save_experience(conn, **values)
     except ValueError:
