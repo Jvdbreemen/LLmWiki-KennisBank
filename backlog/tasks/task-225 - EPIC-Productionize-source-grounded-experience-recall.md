@@ -1,9 +1,10 @@
 ---
 id: TASK-225
 title: 'EPIC: Productionize source-grounded experience recall'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-09-04 00:00'
+updated_date: '2026-09-04 00:00'
 labels:
   - epic
   - experience-memory

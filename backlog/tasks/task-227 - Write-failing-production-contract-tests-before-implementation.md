@@ -1,9 +1,10 @@
 ---
 id: TASK-227
 title: Write failing production contract tests before implementation
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-09-04 00:00'
+updated_date: '2026-09-04 00:00'
 labels:
   - tests-first
   - contracts
