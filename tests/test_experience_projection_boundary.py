@@ -53,6 +53,13 @@ class ExperienceProjectionBoundaryContractTest(unittest.TestCase):
         self.assertFalse({"experience_events", "experience_outcomes", "experience_reviews"} & tables)
 
     def _ledger_with_one_task(self):
+        source_path = self.vault / "01-raw" / "transcripts" / "one.md"
+        source_path.parent.mkdir(parents=True, exist_ok=True)
+        source_path.write_text("retry with a bounded wait", encoding="utf-8")
+        source_ref = importlib.import_module("_source_ref").make_source_ref(
+            self.vault, "01-raw/transcripts/one.md", start=0,
+            end=len("retry with a bounded wait"), chunk_id="chunk-0",
+            captured_at="2026-09-04T00:00:00Z")
         ledger = self.experience.ledger_path(self.vault)
         ledger.parent.mkdir(parents=True, exist_ok=True)
         conn = self.experience.connect(ledger)
@@ -61,10 +68,19 @@ class ExperienceProjectionBoundaryContractTest(unittest.TestCase):
             conn, event_id="evt-1", session_id="s1", task_id="t1",
             event_type="attempt", observed_at="2026-09-04T00:00:00Z",
             payload={"situation": "retry", "approach": "bound it", "lesson": "bound retry"},
-            source_refs=["01-raw/transcripts/one.md"])
+            source_refs=[source_ref])
         self.experience.record_outcome(
             conn, outcome_id="out-1", session_id="s1", task_id="t1",
             state="success", evidence=["test"], attribution_strength="strong")
+        builder = _builder()
+        extract = importlib.import_module("_experience_extract")
+        experience_id = builder.experience_id_for("s1", "t1")
+        candidate = extract.derive_experience_values(conn, "s1", "t1", experience_id)
+        self.experience.record_review(
+            conn, review_id="review-1", experience_id=experience_id,
+            decision="accepted", actor="owner", reviewed_at="2026-09-04T00:01:00Z",
+            reason="owner verified source and outcome",
+            content_hash=self.experience.experience_content_hash(candidate))
         conn.close()
         return ledger
 
@@ -104,6 +120,37 @@ class ExperienceProjectionBoundaryContractTest(unittest.TestCase):
             derive_fn=lambda *_args: (_ for _ in ()).throw(RuntimeError("boom")))
         self.assertEqual(report["status"], "failed")
         self.assertEqual(projection.read_bytes(), before)
+
+    def test_unreviewed_candidate_is_reported_but_never_materialized(self):
+        source_path = self.vault / "01-raw" / "transcripts" / "candidate.md"
+        source_path.parent.mkdir(parents=True, exist_ok=True)
+        source_path.write_text("candidate evidence", encoding="utf-8")
+        source_ref = importlib.import_module("_source_ref").make_source_ref(
+            self.vault, "01-raw/transcripts/candidate.md", start=0,
+            end=len("candidate evidence"), chunk_id="chunk-0")
+        ledger = self.experience.ledger_path(self.vault)
+        conn = self.experience.connect(ledger)
+        self.experience.ensure_ledger_schema(conn)
+        self.experience.append_event(
+            conn, event_id="evt-candidate", session_id="s2", task_id="t2",
+            event_type="attempt", observed_at="2026-09-04T00:00:00Z",
+            payload={"lesson": "not reviewed"}, source_refs=[source_ref])
+        self.experience.record_outcome(
+            conn, outcome_id="out-candidate", session_id="s2", task_id="t2",
+            state="success", evidence=["test"], attribution_strength="strong")
+        conn.close()
+
+        projection = self.experience.projection_path(self.vault)
+        report = _builder().rebuild_experience_projection(ledger, projection)
+        conn = self.experience.connect(projection)
+        try:
+            count = conn.execute("SELECT COUNT(*) FROM experiences").fetchone()[0]
+        finally:
+            conn.close()
+
+        self.assertEqual(report["experiences"], 0)
+        self.assertEqual(count, 0)
+        self.assertEqual(report["skipped_candidates"][0]["review_state"], "unreviewed")
 
 
 if __name__ == "__main__":

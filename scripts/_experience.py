@@ -2,6 +2,7 @@
 """Append-only task experiences plus an evidence-gated retrieval projection."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sqlite3
@@ -19,6 +20,18 @@ _OUTCOME_STATES = {"success", "failure", "partial", "mixed", "unknown"}
 _ATTEMPT_STATES = _OUTCOME_STATES
 _RESOLUTION_STATES = {"not_applicable", "unresolved", "diagnosed",
                       "fix_proposed", "fix_validated", "corrected_with_cost"}
+_EVIDENCE_STATES = {"unverified", "verified", "stale", "missing", "contradictory", "redacted"}
+_REVIEW_STATES = {"unreviewed", "accepted", "rejected"}
+_REVIEW_DECISIONS = {"accepted", "rejected"}
+_NON_RETRIEVABLE_STATUSES = {"superseded", "retracted"}
+_EVIDENCE_PRIORITY = {
+    "verified": 0,
+    "unverified": 1,
+    "missing": 2,
+    "stale": 3,
+    "contradictory": 4,
+    "redacted": 5,
+}
 
 # Selected on the independent 21-case advisory development set (2026-08-30):
 # precision 0.909, false-warning rate 0.10, positive recall 0.909, and +0.182
@@ -105,6 +118,9 @@ def _ensure_experience_rows_schema(conn) -> None:
         attribution_limits TEXT NOT NULL DEFAULT '',
         schema_version TEXT NOT NULL DEFAULT '1',
         extractor_version TEXT NOT NULL DEFAULT '1',
+        evidence_state TEXT NOT NULL DEFAULT 'unverified',
+        review_state TEXT NOT NULL DEFAULT 'unreviewed',
+        content_hash TEXT NOT NULL DEFAULT '',
         superseded_by TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_experiences_status ON experiences(status);
@@ -131,7 +147,7 @@ def projection_upsert(conn, record: dict) -> None:
         "outcome_state", "attempt_state", "resolution_state", "confidence",
         "source_refs", "outcome_refs", "exposed_refs", "procedure_refs",
         "skill_refs", "attribution_limits", "schema_version", "extractor_version",
-        "superseded_by",
+        "evidence_state", "review_state", "content_hash", "superseded_by",
     )
     defaults = {
         "goal": "", "action": "", "attempt_state": "unknown",
@@ -139,6 +155,8 @@ def projection_upsert(conn, record: dict) -> None:
         "source_refs": [], "outcome_refs": [], "exposed_refs": [],
         "procedure_refs": [], "skill_refs": [], "attribution_limits": "",
         "schema_version": "1", "extractor_version": "1", "superseded_by": None,
+        "evidence_state": "unverified", "review_state": "unreviewed",
+        "content_hash": "",
     }
     values = {field: record.get(field, defaults.get(field, "")) for field in fields}
     for field in ("source_refs", "outcome_refs", "exposed_refs", "procedure_refs", "skill_refs"):
@@ -148,8 +166,9 @@ def projection_upsert(conn, record: dict) -> None:
         "situation, goal, approach, action, observed_result, lesson, applicability, "
         "outcome_state, attempt_state, resolution_state, confidence, source_refs_json, "
         "outcome_refs_json, exposed_refs_json, procedure_refs_json, skill_refs_json, "
-        "attribution_limits, schema_version, extractor_version, superseded_by) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "attribution_limits, schema_version, extractor_version, evidence_state, "
+        "review_state, content_hash, superseded_by) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         tuple(values[field] for field in fields))
 
 
@@ -219,10 +238,26 @@ def ensure_schema(conn) -> None:
         attribution_limits TEXT NOT NULL DEFAULT '',
         schema_version TEXT NOT NULL DEFAULT '1',
         extractor_version TEXT NOT NULL DEFAULT '1',
+        evidence_state TEXT NOT NULL DEFAULT 'unverified',
+        review_state TEXT NOT NULL DEFAULT 'unreviewed',
+        content_hash TEXT NOT NULL DEFAULT '',
         superseded_by TEXT
+    );
+    CREATE TABLE IF NOT EXISTS experience_reviews (
+        review_id TEXT PRIMARY KEY,
+        experience_id TEXT NOT NULL,
+        decision TEXT NOT NULL,
+        actor TEXT NOT NULL,
+        reviewed_at TEXT NOT NULL,
+        reason TEXT NOT NULL DEFAULT '',
+        content_hash TEXT NOT NULL,
+        schema_version TEXT NOT NULL DEFAULT '1',
+        idempotency_key TEXT NOT NULL UNIQUE
     );
     CREATE INDEX IF NOT EXISTS idx_experiences_status ON experiences(status);
     CREATE INDEX IF NOT EXISTS idx_experiences_outcome ON experiences(outcome_state);
+    CREATE INDEX IF NOT EXISTS idx_experience_reviews_target
+        ON experience_reviews(experience_id, reviewed_at);
     """)
     columns = {row[1] for row in conn.execute("PRAGMA table_info(experiences)")}
     for name in ("exposed_refs_json", "procedure_refs_json", "skill_refs_json"):
@@ -234,6 +269,15 @@ def ensure_schema(conn) -> None:
     if "resolution_state" not in columns:
         conn.execute("ALTER TABLE experiences ADD COLUMN resolution_state "
                      "TEXT NOT NULL DEFAULT 'not_applicable'")
+    if "evidence_state" not in columns:
+        conn.execute("ALTER TABLE experiences ADD COLUMN evidence_state "
+                     "TEXT NOT NULL DEFAULT 'unverified'")
+    if "review_state" not in columns:
+        conn.execute("ALTER TABLE experiences ADD COLUMN review_state "
+                     "TEXT NOT NULL DEFAULT 'unreviewed'")
+    if "content_hash" not in columns:
+        conn.execute("ALTER TABLE experiences ADD COLUMN content_hash "
+                     "TEXT NOT NULL DEFAULT ''")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_experiences_attempt "
                  "ON experiences(attempt_state)")
     conn.commit()
@@ -300,6 +344,169 @@ def outcome(conn, outcome_id: str) -> dict | None:
     return result
 
 
+_CONTENT_FIELDS = (
+    "experience_id", "session_id", "task_id", "situation", "goal", "approach",
+    "action", "observed_result", "lesson", "applicability", "outcome_state",
+    "attempt_state", "resolution_state", "source_refs", "outcome_refs",
+    "exposed_refs", "procedure_refs", "skill_refs", "attribution_limits",
+    "schema_version", "extractor_version",
+)
+
+
+def experience_content_hash(record: dict) -> str:
+    """Hash review-relevant content; lifecycle/confidence cannot preserve review."""
+    payload = {key: record.get(key, "") for key in _CONTENT_FIELDS}
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True,
+                         separators=(",", ":")).encode("utf-8")
+    return "sha256:" + hashlib.sha256(encoded).hexdigest()
+
+
+def record_review(conn, *, review_id: str, experience_id: str, decision: str,
+                  actor: str, reviewed_at: str, content_hash: str,
+                  reason: str = "", schema_version: str = "1",
+                  idempotency_key: str = "") -> bool:
+    """Append one immutable human review decision, idempotently."""
+    if decision not in _REVIEW_DECISIONS:
+        raise ValueError("invalid review decision")
+    required = {
+        "review_id": review_id, "experience_id": experience_id, "actor": actor,
+        "reviewed_at": reviewed_at, "reason": reason,
+        "schema_version": schema_version,
+    }
+    missing = [name for name, value in required.items() if not str(value or "").strip()]
+    if missing:
+        raise ValueError("review requires non-empty " + ", ".join(missing))
+    digest = str(content_hash or "")
+    if (not digest.startswith("sha256:") or len(digest) != 71
+            or any(char not in "0123456789abcdef" for char in digest[7:])):
+        raise ValueError("review requires a content hash")
+    key = str(idempotency_key or review_id).strip()
+    if not key:
+        raise ValueError("review requires an idempotency key")
+    values = (experience_id, decision, actor, reviewed_at, reason,
+              content_hash, schema_version, key)
+    row = conn.execute(
+        "SELECT experience_id, decision, actor, reviewed_at, reason, content_hash, "
+        "schema_version, idempotency_key FROM experience_reviews WHERE review_id=?",
+        (review_id,)).fetchone()
+    if row:
+        if row != values:
+            raise ValueError(f"review id already contains a different decision: {review_id}")
+        return False
+    idempotent = conn.execute(
+        "SELECT review_id, experience_id, decision, actor, reviewed_at, reason, "
+        "content_hash, schema_version, idempotency_key FROM experience_reviews "
+        "WHERE idempotency_key=?", (key,)).fetchone()
+    if idempotent:
+        if idempotent[1:] != values:
+            raise ValueError(f"idempotency key already contains a different review: {key}")
+        return False
+    conn.execute(
+        "INSERT INTO experience_reviews(review_id, experience_id, decision, actor, "
+        "reviewed_at, reason, content_hash, schema_version, idempotency_key) "
+        "VALUES (?,?,?,?,?,?,?,?,?)", (review_id, *values))
+    try:
+        state = decision if decision in _REVIEW_STATES else "unreviewed"
+        conn.execute(
+            "UPDATE experiences SET review_state=? WHERE experience_id=? AND content_hash=?",
+            (state, experience_id, content_hash))
+    except sqlite3.OperationalError:
+        pass
+    conn.commit()
+    return True
+
+
+def review_for_content(conn, experience_id: str, content_hash: str) -> dict | None:
+    row = conn.execute(
+        "SELECT review_id, decision, actor, reviewed_at, reason, content_hash, "
+        "schema_version, idempotency_key FROM experience_reviews "
+        "WHERE experience_id=? AND content_hash=? ORDER BY rowid DESC LIMIT 1",
+        (experience_id, content_hash)).fetchone()
+    if not row:
+        return None
+    keys = ("review_id", "decision", "actor", "reviewed_at", "reason",
+            "content_hash", "schema_version", "idempotency_key")
+    return dict(zip(keys, row))
+
+
+def _review_state(review: dict | None) -> str:
+    """Return a trusted state only for a complete append-only review record."""
+    if review is None:
+        return "unreviewed"
+    required = ("review_id", "actor", "reviewed_at", "reason", "content_hash",
+                "schema_version", "idempotency_key")
+    if any(not str(review.get(field) or "").strip() for field in required):
+        return "unreviewed"
+    decision = str(review.get("decision") or "")
+    return decision if decision in _REVIEW_DECISIONS else "unreviewed"
+
+
+def review_state_for_content(conn, experience_id: str, content_hash: str) -> str:
+    """Return the latest complete append-only review state for exact content."""
+    return _review_state(review_for_content(conn, experience_id, content_hash))
+
+
+def _combine_evidence_states(*states: str) -> str:
+    return max(states, key=lambda state: _EVIDENCE_PRIORITY[state])
+
+
+def validate_projection_record(ledger_conn, record: dict, *, vault: Path) -> dict:
+    """Derive trusted projection state from exact evidence plus human review."""
+    result = dict(record)
+    result["content_hash"] = experience_content_hash(result)
+    refs = list(result.get("source_refs") or [])
+    source_state = "missing" if not refs else "verified"
+    if refs:
+        from _source_ref import resolve_source_ref
+        states = []
+        for ref in refs:
+            if not isinstance(ref, dict):
+                states.append("unverified")
+            else:
+                states.append(resolve_source_ref(vault, ref).get("status", "invalid"))
+        if "redacted" in states:
+            source_state = "redacted"
+        elif "missing" in states or "unreadable" in states:
+            source_state = "missing"
+        elif "stale" in states or "invalid" in states:
+            source_state = "stale"
+        elif "unverified" in states:
+            source_state = "unverified"
+        elif all(state == "valid" for state in states):
+            source_state = "verified"
+    outcome_rows = [outcome(ledger_conn, ref)
+                    for ref in (result.get("outcome_refs") or [])]
+    if not outcome_rows or any(item is None for item in outcome_rows):
+        outcome_evidence_state = "missing"
+    elif any(item["session_id"] != result.get("session_id")
+             or item["task_id"] != result.get("task_id") for item in outcome_rows):
+        outcome_evidence_state = "contradictory"
+    elif result.get("outcome_state") == "mixed":
+        outcome_evidence_state = "contradictory"
+    elif result.get("outcome_state") == "unknown":
+        outcome_evidence_state = "unverified"
+    else:
+        outcome_evidence_state = "verified"
+    version_state = ("verified" if str(result.get("schema_version") or "").strip()
+                     and str(result.get("extractor_version") or "").strip()
+                     else "unverified")
+    evidence_state = _combine_evidence_states(
+        source_state, outcome_evidence_state, version_state)
+    review_state = review_state_for_content(
+        ledger_conn, str(result.get("experience_id") or ""), result["content_hash"])
+    result["evidence_state"] = evidence_state
+    result["review_state"] = review_state
+    lifecycle_status = str(record.get("status") or "candidate")
+    if lifecycle_status in _NON_RETRIEVABLE_STATUSES:
+        result["status"] = lifecycle_status
+    else:
+        result["status"] = (
+            "validated" if evidence_state == "verified" and review_state == "accepted"
+            else "candidate")
+    result["confidence"] = 0.8 if result["status"] == "validated" else 0.2
+    return result
+
+
 def save_experience(conn, *, experience_id: str, session_id: str, task_id: str,
                     status: str, situation: str, approach: str,
                     observed_result: str, lesson: str, applicability: str,
@@ -309,7 +516,10 @@ def save_experience(conn, *, experience_id: str, session_id: str, task_id: str,
                     resolution_state: str = "not_applicable",
                     exposed_refs=(), procedure_refs=(), skill_refs=(),
                     attribution_limits: str = "", schema_version: str = "1",
-                    extractor_version: str = "1") -> bool:
+                    extractor_version: str = "1",
+                    evidence_state: str = "unverified",
+                    review_state: str = "unreviewed",
+                    content_hash: str = "", vault: Path | None = None) -> bool:
     if status not in _STATUSES:
         raise ValueError("invalid experience status")
     source_refs, outcome_refs = list(source_refs or []), list(outcome_refs or [])
@@ -322,24 +532,51 @@ def save_experience(conn, *, experience_id: str, session_id: str, task_id: str,
         raise ValueError("invalid experience attempt state")
     if resolution_state not in _RESOLUTION_STATES:
         raise ValueError("invalid experience resolution state")
+    if evidence_state not in _EVIDENCE_STATES:
+        raise ValueError("invalid evidence state")
+    if review_state not in _REVIEW_STATES:
+        raise ValueError("invalid review state")
+    material = {
+        "experience_id": experience_id, "session_id": session_id, "task_id": task_id,
+        "situation": situation, "goal": goal, "approach": approach, "action": action,
+        "observed_result": observed_result, "lesson": lesson,
+        "applicability": applicability, "outcome_state": outcome_state,
+        "attempt_state": attempt_state, "resolution_state": resolution_state,
+        "source_refs": source_refs, "outcome_refs": outcome_refs,
+        "exposed_refs": exposed_refs, "procedure_refs": procedure_refs,
+        "skill_refs": skill_refs,
+        "attribution_limits": attribution_limits, "schema_version": schema_version,
+        "extractor_version": extractor_version,
+    }
+    expected_hash = experience_content_hash(material)
+    if content_hash and content_hash != expected_hash:
+        raise ValueError("experience content hash mismatch")
+    content_hash = expected_hash
     if status == "validated":
-        if not source_refs or not outcome_refs:
-            raise ValueError("validated experience requires source and outcome evidence")
-        if any(outcome(conn, ref) is None for ref in outcome_refs):
-            raise ValueError("validated experience refers to an unknown outcome")
-        if outcome_state == "unknown":
-            raise ValueError("unknown outcome cannot be validated")
+        if vault is None:
+            raise ValueError("validated experience requires exact vault validation")
+        checked = validate_projection_record(
+            conn, {**material, "status": "candidate", "confidence": confidence,
+                   "content_hash": content_hash}, vault=Path(vault))
+        if checked["status"] != "validated":
+            raise ValueError(
+                "validated experience requires verified evidence and accepted review "
+                f"(evidence={checked['evidence_state']}, review={checked['review_state']})")
+        evidence_state = checked["evidence_state"]
+        review_state = checked["review_state"]
     row = conn.execute("SELECT status, situation, goal, approach, action, observed_result, "
                        "lesson, applicability, outcome_state, confidence, source_refs_json, "
                        "attempt_state, resolution_state, "
                        "outcome_refs_json, exposed_refs_json, procedure_refs_json, "
-                       "skill_refs_json, attribution_limits, schema_version, extractor_version "
+                       "skill_refs_json, attribution_limits, schema_version, extractor_version, "
+                       "evidence_state, review_state, content_hash "
                        "FROM experiences WHERE experience_id=?", (experience_id,)).fetchone()
     values = (session_id, task_id, status, situation, goal, approach, action, observed_result,
               lesson, applicability, outcome_state, float(confidence), _json(source_refs),
               attempt_state, resolution_state,
               _json(outcome_refs), _json(exposed_refs), _json(procedure_refs),
-              _json(skill_refs), attribution_limits, schema_version, extractor_version)
+              _json(skill_refs), attribution_limits, schema_version, extractor_version,
+              evidence_state, review_state, content_hash)
     if row:
         # Event history remains immutable; a derived record can be re-derived,
         # but an accidental conflicting write must not silently overwrite it.
@@ -351,8 +588,9 @@ def save_experience(conn, *, experience_id: str, session_id: str, task_id: str,
         "approach, action, observed_result, lesson, applicability, outcome_state, confidence, "
         "source_refs_json, attempt_state, resolution_state, outcome_refs_json, "
         "exposed_refs_json, procedure_refs_json, "
-        "skill_refs_json, attribution_limits, schema_version, extractor_version) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "skill_refs_json, attribution_limits, schema_version, extractor_version, "
+        "evidence_state, review_state, content_hash) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (experience_id, *values))
     conn.commit()
     return True
@@ -364,7 +602,8 @@ def experience(conn, experience_id: str) -> dict | None:
                        "confidence, source_refs_json, attempt_state, resolution_state, "
                        "outcome_refs_json, exposed_refs_json, "
                        "procedure_refs_json, skill_refs_json, attribution_limits, "
-                       "schema_version, extractor_version, superseded_by FROM experiences "
+                       "schema_version, extractor_version, evidence_state, review_state, "
+                       "content_hash, superseded_by FROM experiences "
                        "WHERE experience_id=?", (experience_id,)).fetchone()
     if not row:
         return None
@@ -373,26 +612,37 @@ def experience(conn, experience_id: str) -> dict | None:
             "outcome_state", "confidence", "source_refs", "attempt_state",
             "resolution_state", "outcome_refs",
             "exposed_refs", "procedure_refs", "skill_refs", "attribution_limits",
-            "schema_version", "extractor_version", "superseded_by")
+            "schema_version", "extractor_version", "evidence_state", "review_state",
+            "content_hash", "superseded_by")
     result = dict(zip(keys, row))
     for key in ("source_refs", "outcome_refs", "exposed_refs", "procedure_refs", "skill_refs"):
         result[key] = json.loads(result[key] or "[]")
     return result
 
 
-def transition(conn, experience_id: str, status: str, *, superseded_by: str | None = None) -> bool:
+def transition(conn, experience_id: str, status: str, *,
+               superseded_by: str | None = None, vault: Path | None = None) -> bool:
     if status not in _STATUSES:
         raise ValueError("invalid experience status")
     current = experience(conn, experience_id)
     if current is None:
         raise KeyError(experience_id)
     if status == "validated":
-        if not current["source_refs"] or not current["outcome_refs"] or current["outcome_state"] == "unknown":
-            raise ValueError("experience lacks validation evidence")
-        if any(outcome(conn, ref) is None for ref in current["outcome_refs"]):
-            raise ValueError("experience lacks resolvable outcome evidence")
-    conn.execute("UPDATE experiences SET status=?, superseded_by=? WHERE experience_id=?",
-                 (status, superseded_by, experience_id))
+        if vault is None:
+            raise ValueError("validation transition requires a vault")
+        checked = validate_projection_record(conn, current, vault=Path(vault))
+        if checked["status"] != "validated":
+            raise ValueError(
+                "experience failed exact validation "
+                f"(evidence={checked['evidence_state']}, review={checked['review_state']})")
+        conn.execute(
+            "UPDATE experiences SET status=?, evidence_state=?, review_state=?, "
+            "content_hash=?, superseded_by=? WHERE experience_id=?",
+            (status, checked["evidence_state"], checked["review_state"],
+             checked["content_hash"], superseded_by, experience_id))
+    else:
+        conn.execute("UPDATE experiences SET status=?, superseded_by=? WHERE experience_id=?",
+                     (status, superseded_by, experience_id))
     try:
         conn.execute("UPDATE docs SET status=? WHERE path=?", (status, f"experience::{experience_id}"))
     except sqlite3.OperationalError:
@@ -415,11 +665,13 @@ def index_experience(conn, experience_id: str, *, vector) -> int:
         raise KeyError(experience_id)
     body = " ".join((record["situation"], record["goal"], record["approach"],
                       record["action"], record["lesson"], record["applicability"]))
+    sources = [ref.get("source_ref_id", "") if isinstance(ref, dict) else str(ref)
+               for ref in record["source_refs"]]
     return _kbindex.upsert(
         conn, path=f"experience::{experience_id}", layer="experience",
         status=record["status"], body=body, vector=vector,
         file_hash=experience_id, title=record["lesson"], created="",
-        sources=record["source_refs"])
+        sources=[source for source in sources if source])
 
 
 def experience_hits(conn, *, query_vector, query_text: str = "", k: int = 8,

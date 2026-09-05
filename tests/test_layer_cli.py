@@ -108,8 +108,16 @@ class LayerCliContractTest(unittest.TestCase):
 
     def test_experience_gateway_executes_real_retrieval_before_labeling(self):
         import _experience as store
+        import _source_ref
 
         db = self.vault / ".claude" / "kb-experience.db"
+        source = self.vault / "01-raw" / "transcripts" / "bounded.md"
+        source.parent.mkdir(parents=True)
+        passage = "use a bounded timeout"
+        source.write_text(passage, encoding="utf-8")
+        ref = _source_ref.make_source_ref(
+            self.vault, "01-raw/transcripts/bounded.md", start=0,
+            end=len(passage), chunk_id="bounded-timeout")
         conn = store.connect(db)
         self.addCleanup(conn.close)
         store.ensure_schema(conn)
@@ -119,11 +127,18 @@ class LayerCliContractTest(unittest.TestCase):
             attribution_strength="direct")
         store.save_experience(
             conn, experience_id="bounded-timeout", session_id="s", task_id="t",
-            status="validated", situation="child process can hang",
+            status="candidate", situation="child process can hang",
             approach="bound the timeout", observed_result="shutdown completed",
             lesson="use a bounded timeout", applicability="shutdown helpers",
-            outcome_state="success", confidence=0.9,
-            source_refs=["raw#1"], outcome_refs=["out-1"])
+            outcome_state="success", confidence=0.2,
+            source_refs=[ref], outcome_refs=["out-1"])
+        stored = store.experience(conn, "bounded-timeout")
+        store.record_review(
+            conn, review_id="review-bounded-timeout",
+            experience_id="bounded-timeout", decision="accepted", actor="test-owner",
+            reviewed_at="2026-09-05T10:00:00Z",
+            reason="reviewed exact CLI fixture", content_hash=stored["content_hash"])
+        store.transition(conn, "bounded-timeout", "validated", vault=self.vault)
         store.ensure_recall_schema(conn, dim=4, embed_id="fake:4")
         store.index_experience(conn, "bounded-timeout", vector=[1, 0, 0, 0])
         result = self.experience.run(

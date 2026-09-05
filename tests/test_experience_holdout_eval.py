@@ -3,12 +3,19 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "evaluate-experience-holdout.py"
+SCRIPTS = SCRIPT.parent
+if str(SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS))
+
+import _experience as experience  # noqa: E402
+import _source_ref as source_ref  # noqa: E402
 
 
 def load_runner():
@@ -92,8 +99,24 @@ class ExperienceHoldoutEvalTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "already exists"):
                 self.runner.require_fresh_database(path)
 
+    def test_review_contract_rejects_legacy_refs_and_implicit_review(self):
+        accepted = {
+            "decision": "accepted",
+            "actor": "test-human",
+            "reviewed_at": "2026-09-05T10:00:00Z",
+        }
+        with self.assertRaisesRegex(ValueError, "structured source refs"):
+            self.runner._review_contract({
+                "source_refs": ["01-raw/transcripts/old.md#0:10"],
+                "review": accepted,
+            })
+        with self.assertRaisesRegex(ValueError, "accepted human review"):
+            self.runner._review_contract({
+                "source_refs": [{"source_ref_id": "sr_test"}],
+            })
+
     def test_synthetic_seed_and_evaluation_smoke(self):
-        def record(experience_id, *, attempt_state, outcome_state, token):
+        def record(experience_id, *, attempt_state, outcome_state, token, ref):
             return {
                 "experience_id": experience_id,
                 "situation": token,
@@ -106,37 +129,15 @@ class ExperienceHoldoutEvalTest(unittest.TestCase):
                 "outcome_state": outcome_state,
                 "attempt_state": attempt_state,
                 "resolution_state": "fix_validated",
-                "source_refs": [f"raw#{experience_id}"],
+                "source_refs": [ref],
                 "outcome_refs": [f"out-{experience_id}"],
+                "review": {
+                    "decision": "accepted",
+                    "actor": "test-human",
+                    "reviewed_at": "2026-09-05T10:00:00Z",
+                    "reason": "reviewed synthetic fixture",
+                },
             }
-
-        cases = [
-            {
-                "id": "success",
-                "query": "bounded timeout",
-                "expected_experience": "good",
-                "expected_attempt_state": "success",
-                "records": [record(
-                    "good", attempt_state="success", outcome_state="success",
-                    token="bounded timeout")],
-            },
-            {
-                "id": "failure",
-                "query": "rollback failure",
-                "expected_experience": "bad",
-                "expected_attempt_state": "failure",
-                "records": [record(
-                    "bad", attempt_state="failure", outcome_state="success",
-                    token="rollback failure")],
-            },
-            {
-                "id": "negative",
-                "query": "orthogonal zebra",
-                "expected_experience": None,
-                "expected_attempt_state": "unknown",
-                "records": [],
-            },
-        ]
 
         def vector(text):
             if "rollback" in text:
@@ -146,9 +147,59 @@ class ExperienceHoldoutEvalTest(unittest.TestCase):
             return [1.0, 0.0, 0.0, 0.0]
 
         with tempfile.TemporaryDirectory() as temp:
-            database = Path(temp) / "synthetic.db"
+            vault = Path(temp)
+            source = vault / "01-raw" / "transcripts" / "holdout.md"
+            source.parent.mkdir(parents=True)
+            text = "bounded timeout\nrollback failure\n"
+            source.write_text(text, encoding="utf-8")
+
+            def ref(passage):
+                start = text.index(passage)
+                return source_ref.make_source_ref(
+                    vault, "01-raw/transcripts/holdout.md", start=start,
+                    end=start + len(passage), chunk_id=passage.replace(" ", "-"))
+
+            cases = [
+                {
+                    "id": "success",
+                    "query": "bounded timeout",
+                    "expected_experience": "good",
+                    "expected_attempt_state": "success",
+                    "records": [record(
+                        "good", attempt_state="success", outcome_state="success",
+                        token="bounded timeout", ref=ref("bounded timeout"))],
+                },
+                {
+                    "id": "failure",
+                    "query": "rollback failure",
+                    "expected_experience": "bad",
+                    "expected_attempt_state": "failure",
+                    "records": [record(
+                        "bad", attempt_state="failure", outcome_state="success",
+                        token="rollback failure", ref=ref("rollback failure"))],
+                },
+                {
+                    "id": "negative",
+                    "query": "orthogonal zebra",
+                    "expected_experience": None,
+                    "expected_attempt_state": "unknown",
+                    "records": [],
+                },
+            ]
+            database = vault / "synthetic.db"
             self.runner._seed(
-                cases, database, embed_doc=vector, embedding_id="fake:4")
+                cases, database, embed_doc=vector, embedding_id="fake:4",
+                vault=vault)
+            conn = experience.connect(database)
+            try:
+                stored = experience.experience(conn, "good")
+                review = experience.review_for_content(
+                    conn, "good", stored["content_hash"])
+            finally:
+                conn.close()
+            self.assertEqual(stored["evidence_state"], "verified")
+            self.assertEqual(stored["review_state"], "accepted")
+            self.assertEqual(review["actor"], "test-human")
             measured = self.runner._evaluate(
                 cases, database, embed_query=vector)
 

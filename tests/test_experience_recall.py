@@ -11,6 +11,7 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 import _experience as exp  # noqa: E402
+import _source_ref as source_ref  # noqa: E402
 
 
 class ExperienceRecallContractTest(unittest.TestCase):
@@ -21,11 +22,25 @@ class ExperienceRecallContractTest(unittest.TestCase):
         self.addCleanup(self.conn.close)
         exp.ensure_schema(self.conn)
         exp.ensure_recall_schema(self.conn, dim=4, embed_id="fake:4")
+        source = Path(self.tmp.name) / "01-raw" / "transcripts" / "recall.md"
+        source.parent.mkdir(parents=True)
+        text = "good evidence\nbad evidence\nresolved evidence\n"
+        source.write_text(text, encoding="utf-8")
+        self.source_refs = {}
+        for name, passage in (
+            ("good", "good evidence"),
+            ("bad", "bad evidence"),
+            ("resolved", "resolved evidence"),
+        ):
+            start = text.index(passage)
+            self.source_refs[name] = source_ref.make_source_ref(
+                Path(self.tmp.name), "01-raw/transcripts/recall.md",
+                start=start, end=start + len(passage), chunk_id=name)
         for eid, state, status, vector, lesson, refs in (
             ("good", "success", "validated", [1, 0, 0, 0],
-             "Use a bounded timeout", (["source#a"], ["out-good"])),
+             "Use a bounded timeout", ([self.source_refs["good"]], ["out-good"])),
             ("bad", "failure", "validated", [0, 1, 0, 0],
-             "Avoid graph-community scene priors", (["source#b"], ["out-bad"])),
+             "Avoid graph-community scene priors", ([self.source_refs["bad"]], ["out-bad"])),
             ("guess", "unknown", "candidate", [1, 0, 0, 0],
              "Retry everything", ([], [])),
         ):
@@ -34,13 +49,33 @@ class ExperienceRecallContractTest(unittest.TestCase):
                                    task_id="t", state=state,
                                    evidence=[{"kind": "test", "value": state}],
                                    attribution_strength="none")
-            exp.save_experience(
-                self.conn, experience_id=eid, session_id="s", task_id="t",
-                status=status, situation=lesson, approach=lesson,
-                observed_result=state, lesson=lesson, applicability="repo",
-                outcome_state=state, confidence=0.9 if status == "validated" else 0.2,
-                source_refs=refs[0], outcome_refs=refs[1])
+            self._save_fixture(eid=eid, state=state, status=status,
+                               lesson=lesson, source_refs=refs[0],
+                               outcome_refs=refs[1])
             exp.index_experience(self.conn, eid, vector=vector)
+
+    def _save_fixture(self, *, eid, state, status, lesson, source_refs,
+                      outcome_refs, attempt_state="unknown",
+                      resolution_state="not_applicable"):
+        exp.save_experience(
+            self.conn, experience_id=eid, session_id="s", task_id="t",
+            status="candidate", situation=lesson, approach=lesson,
+            observed_result=state, lesson=lesson, applicability="repo",
+            outcome_state=state, attempt_state=attempt_state,
+            resolution_state=resolution_state, confidence=0.2,
+            source_refs=source_refs, outcome_refs=outcome_refs)
+        if status != "validated":
+            return
+        self.assertTrue(all(
+            source_ref.resolve_source_ref(Path(self.tmp.name), ref)["fresh"]
+            for ref in source_refs))
+        record = exp.experience(self.conn, eid)
+        exp.record_review(
+            self.conn, review_id=f"review-{eid}", experience_id=eid,
+            decision="accepted", actor="test-human",
+            reviewed_at="2026-09-05T10:00:00Z",
+            reason="reviewed fixture", content_hash=record["content_hash"])
+        exp.transition(self.conn, eid, "validated", vault=Path(self.tmp.name))
 
     def test_default_recall_returns_validated_only(self):
         hits = exp.experience_hits(
@@ -79,17 +114,15 @@ class ExperienceRecallContractTest(unittest.TestCase):
     def test_failure_advisory_uses_failed_attempt_even_when_fix_succeeded(self):
         exp.record_outcome(
             self.conn, outcome_id="resolved-outcome", session_id="s", task_id="t",
-            state="success", evidence=[{"source_refs": ["raw#2"]}],
+            state="success",
+            evidence=[{"source_refs": [self.source_refs["resolved"]]}],
             attribution_strength="reviewed")
-        exp.save_experience(
-            self.conn, experience_id="resolved-dead-end", session_id="s", task_id="t",
-            status="validated", situation="installer hid rollback failure",
-            approach="rethrow only the first error", action="combine both failures",
-            observed_result="the corrected installer exposes both causes",
-            lesson="do not hide rollback failures", applicability="client installers",
-            outcome_state="success", attempt_state="failure",
-            resolution_state="fix_validated", confidence=0.9,
-            source_refs=["raw#2"], outcome_refs=["resolved-outcome"])
+        lesson = "do not hide rollback failures"
+        self._save_fixture(
+            eid="resolved-dead-end", state="success", status="validated",
+            lesson=lesson, source_refs=[self.source_refs["resolved"]],
+            outcome_refs=["resolved-outcome"], attempt_state="failure",
+            resolution_state="fix_validated")
         exp.index_experience(self.conn, "resolved-dead-end", vector=[1.0, 0.0, 0.0, 0.0])
 
         warning = exp.failure_advisory(

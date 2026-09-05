@@ -13,6 +13,7 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 import _experience as exp  # noqa: E402
+import _source_ref as source_ref_module  # noqa: E402
 
 
 class ExperienceStoreContractTest(unittest.TestCase):
@@ -20,6 +21,10 @@ class ExperienceStoreContractTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.db = Path(self.tmp.name) / "experience.db"
+        self.vault = Path(self.tmp.name) / "vault"
+        self.source = self.vault / "01-raw" / "transcripts" / "a.md"
+        self.source.parent.mkdir(parents=True)
+        self.source.write_text("bounded subprocess waits", encoding="utf-8")
         self.conn = exp.connect(self.db)
         self.addCleanup(self.conn.close)
         exp.ensure_schema(self.conn)
@@ -71,7 +76,7 @@ class ExperienceStoreContractTest(unittest.TestCase):
         self.assertEqual(row["state"], "unknown")
         self.assertEqual(row["evidence"], [])
 
-    def test_validated_experience_requires_source_and_outcome_evidence(self):
+    def test_validated_experience_requires_evidence_and_matching_human_review(self):
         common = dict(
             experience_id="exp-1", session_id="s1", task_id="t1",
             situation="child hung", approach="bound timeout",
@@ -85,9 +90,22 @@ class ExperienceStoreContractTest(unittest.TestCase):
                            task_id="t1", state="success",
                            evidence=[{"kind": "test", "value": "passed"}],
                            attribution_strength="none")
-        exp.save_experience(self.conn, status="validated",
-                            source_refs=["01-raw/a.md#0:20"],
-                            outcome_refs=["out-1"], **common)
+        with self.assertRaises(ValueError):
+            exp.save_experience(self.conn, status="validated",
+                                source_refs=["01-raw/a.md#0:20"],
+                                outcome_refs=["out-1"], **common)
+        source_ref = source_ref_module.make_source_ref(
+            self.vault, "01-raw/transcripts/a.md", start=0,
+            end=len("bounded subprocess waits"), chunk_id="chunk-0",
+            captured_at="2026-09-04T00:00:00Z")
+        exp.save_experience(self.conn, status="candidate",
+                            source_refs=[source_ref], outcome_refs=["out-1"], **common)
+        content_hash = exp.experience(self.conn, "exp-1")["content_hash"]
+        exp.record_review(
+            self.conn, review_id="review-1", experience_id="exp-1",
+            decision="accepted", actor="owner", reviewed_at="2026-09-04",
+            reason="owner verified source and outcome", content_hash=content_hash)
+        exp.transition(self.conn, "exp-1", "validated", vault=self.vault)
         self.assertEqual(exp.experience(self.conn, "exp-1")["status"], "validated")
 
     def test_experience_preserves_exposure_procedure_and_skill_links(self):

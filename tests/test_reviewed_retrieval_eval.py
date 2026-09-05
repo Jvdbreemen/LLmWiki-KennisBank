@@ -9,6 +9,7 @@ from pathlib import Path
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 import _reviewed_retrieval_eval as live  # noqa: E402
+import _source_ref  # noqa: E402
 
 
 class ReviewedRetrievalEvalTest(unittest.TestCase):
@@ -41,10 +42,26 @@ class ReviewedRetrievalEvalTest(unittest.TestCase):
             "unrelated weather": [0, 0, 1],
         }
         with tempfile.TemporaryDirectory() as temp:
-            db = Path(temp) / "experience.db"
+            vault = Path(temp)
+            source = vault / "01-raw" / "transcripts" / "eval.md"
+            source.parent.mkdir(parents=True)
+            text = "bounded timeout\nrestore scene prior\n"
+            source.write_text(text, encoding="utf-8")
+            for record, passage in ((cases[0]["records"][0], "bounded timeout"),
+                                    (cases[1]["records"][0], "restore scene prior")):
+                start = text.index(passage)
+                record["source_refs"] = [_source_ref.make_source_ref(
+                    vault, "01-raw/transcripts/eval.md", start=start,
+                    end=start + len(passage), chunk_id=record["experience_id"])]
+                record["review"] = {
+                    "decision": "accepted", "actor": "test-owner",
+                    "reviewed_at": "2026-09-05T10:00:00Z",
+                    "reason": "reviewed evaluation fixture",
+                }
+            db = vault / "experience.db"
             report = live.evaluate_experience_holdout(
                 cases, db_path=db, embed_fn=lambda text: vectors[text],
-                embed_id="fake:3", advisory_min_cos=0.8)
+                embed_id="fake:3", advisory_min_cos=0.8, vault=vault)
         self.assertEqual(report["hybrid"]["retrieval"]["hit@3"], 1.0)
         self.assertEqual(report["hybrid"]["failure_hit@3"], 1.0)
         self.assertEqual(report["hybrid"]["false_warning_rate"], 0.0)
@@ -77,10 +94,23 @@ class ReviewedRetrievalEvalTest(unittest.TestCase):
             "installer rollback failure": [1, 0],
         }
         with tempfile.TemporaryDirectory() as temp:
+            vault = Path(temp)
+            source = vault / "01-raw" / "transcripts" / "resolved.md"
+            source.parent.mkdir(parents=True)
+            passage = "installer rollback failure"
+            source.write_text(passage, encoding="utf-8")
+            cases[0]["records"][0]["source_refs"] = [_source_ref.make_source_ref(
+                vault, "01-raw/transcripts/resolved.md", start=0,
+                end=len(passage), chunk_id="resolved")]
+            cases[0]["records"][0]["review"] = {
+                "decision": "accepted", "actor": "test-owner",
+                "reviewed_at": "2026-09-05T10:00:00Z",
+                "reason": "reviewed evaluation fixture",
+            }
             report = live.evaluate_experience_holdout(
-                cases, db_path=Path(temp) / "experience.db",
+                cases, db_path=vault / "experience.db",
                 embed_fn=lambda text: vectors[text], embed_id="fake:2",
-                advisory_min_cos=0.8)
+                advisory_min_cos=0.8, vault=vault)
 
         self.assertEqual(report["hybrid"]["failure_hit@3"], 1.0)
         self.assertEqual(report["advisories"], 1)

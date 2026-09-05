@@ -81,9 +81,22 @@ def rebuild_experience_projection(ledger, projection, *, embed_fn=None,
         vectors = []
         dimension = None
         failed_embeddings = []
+        skipped_candidates = []
         for current, (session_id, task_id) in enumerate(tasks, start=1):
             experience_id = experience_id_for(session_id, task_id)
             record = derive(ledger_conn, session_id, task_id, experience_id)
+            record = _experience.validate_projection_record(
+                ledger_conn, record, vault=ledger.parent.parent)
+            if record["status"] != "validated":
+                skipped_candidates.append({
+                    "experience_id": experience_id,
+                    "evidence_state": record["evidence_state"],
+                    "review_state": record["review_state"],
+                })
+                _emit(progress_fn, {"phase": "derive", "current": current,
+                                    "total": len(tasks), "experience_id": experience_id,
+                                    "status": "candidate"})
+                continue
             records.append(record)
             vector = None
             if embed_fn is not None:
@@ -126,6 +139,7 @@ def rebuild_experience_projection(ledger, projection, *, embed_fn=None,
         os.replace(stage, target)
         result = {"status": "ok", "experiences": len(records),
                   "derived_experiences": len(records),
+                  "skipped_candidates": skipped_candidates,
                   "vector_status": "ok" if dimension is not None else "skipped",
                   "failed_embeddings": [], "projection_version": PROJECTION_VERSION}
         _emit(progress_fn, {"phase": "complete", **result})

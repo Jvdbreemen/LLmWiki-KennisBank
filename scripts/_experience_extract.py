@@ -59,20 +59,26 @@ def derive_experience_values(conn, session_id: str, task_id: str,
                      else outcomes[-1][1] if outcomes else "unknown")
     conflicting = {"success", "failure"} <= outcome_states
     outcome_refs = [row[0] for row in outcomes]
-    status = "validated" if refs and outcome_id and outcome_state != "unknown" else "candidate"
-    if conflicting:
-        status = "candidate"
+    # Extraction proposes; it never validates its own interpretation. Exact
+    # evidence verification and a content-hash-bound human review happen later.
+    status = "candidate"
     values = {
         "experience_id": experience_id, "session_id": session_id, "task_id": task_id,
         "status": status, "situation": latest.get("situation", ""),
         "goal": latest.get("goal", ""), "approach": latest.get("approach", ""),
         "action": latest.get("action", ""), "observed_result": latest.get("observed_result", ""),
         "lesson": latest.get("lesson", ""), "applicability": latest.get("applicability", ""),
-        "outcome_state": outcome_state, "confidence": 0.8 if status == "validated" else 0.2,
+        "outcome_state": outcome_state, "confidence": 0.2,
         "source_refs": refs, "outcome_refs": outcome_refs,
         "exposed_refs": exposed_refs, "procedure_refs": procedure_refs,
         "skill_refs": skill_refs,
+        "attempt_state": "unknown", "resolution_state": "not_applicable",
+        "attribution_limits": "", "schema_version": "1",
+        "extractor_version": "1",
+        "evidence_state": "contradictory" if conflicting else "unverified",
+        "review_state": "unreviewed",
     }
+    values["content_hash"] = _experience.experience_content_hash(values)
     return values
 
 

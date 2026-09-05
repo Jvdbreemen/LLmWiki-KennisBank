@@ -20,7 +20,7 @@ class ExperienceExtractTest(unittest.TestCase):
         self.addCleanup(self.conn.close)
         exp.ensure_schema(self.conn)
 
-    def test_successful_evidence_becomes_validated(self):
+    def test_successful_evidence_becomes_unreviewed_candidate(self):
         exp.append_event(self.conn, event_id="e1", session_id="s", task_id="t",
                          event_type="attempt", observed_at="now",
                          payload={"situation": "child hung", "approach": "bound timeout",
@@ -30,7 +30,9 @@ class ExperienceExtractTest(unittest.TestCase):
                            state="success", evidence=[{"kind": "test"}],
                            attribution_strength="none")
         result = extract.derive_experience(self.conn, "s", "t", "x1")
-        self.assertEqual(result["status"], "validated")
+        self.assertEqual(result["status"], "candidate")
+        self.assertEqual(result["evidence_state"], "unverified")
+        self.assertEqual(result["review_state"], "unreviewed")
         self.assertEqual(exp.experience(self.conn, "x1")["outcome_state"], "success")
 
     def test_unknown_or_missing_evidence_stays_candidate(self):
@@ -52,7 +54,7 @@ class ExperienceExtractTest(unittest.TestCase):
                            attribution_strength="none")
         first = extract.derive_experience(self.conn, "s", "t", "x3")
         second = extract.derive_experience(self.conn, "s", "t", "x3")
-        self.assertEqual(first["status"], "validated")
+        self.assertEqual(first["status"], "candidate")
         self.assertEqual(second["created"], False)
         self.assertEqual(second["outcome_state"], "failure")
 

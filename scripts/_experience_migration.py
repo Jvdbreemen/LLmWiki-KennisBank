@@ -6,8 +6,10 @@ import hashlib
 import os
 import shutil
 import sqlite3
+import sys
 from pathlib import Path
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _experience import ensure_ledger_schema, ledger_path
 
 
@@ -59,11 +61,11 @@ def preflight(vault: Path) -> dict:
 
 def _row_dicts(conn, table: str) -> list[dict]:
     try:
-        cursor = conn.execute(f'SELECT * FROM "{table}"')
+        result_set = conn.execute(f'SELECT * FROM "{table}"')
     except sqlite3.OperationalError:
         return []
-    columns = [item[0] for item in cursor.description]
-    return [dict(zip(columns, row)) for row in cursor.fetchall()]
+    columns = [item[0] for item in result_set.description]
+    return [dict(zip(columns, row)) for row in result_set.fetchall()]
 
 
 def _copy_canonical(legacy: sqlite3.Connection, stage: sqlite3.Connection) -> dict[str, int]:

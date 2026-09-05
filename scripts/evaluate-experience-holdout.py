@@ -101,6 +101,21 @@ def _private(path: Path) -> Path:
     raise ValueError("private holdout inputs and outputs must remain outside the repository")
 
 
+def _review_contract(record: dict) -> tuple[list[dict], dict]:
+    source_refs = list(record.get("source_refs") or [])
+    if (not source_refs
+            or any(not isinstance(ref, dict) or not ref.get("source_ref_id")
+                   for ref in source_refs)):
+        raise ValueError("reviewed record requires structured source refs")
+    review = record.get("review") or {}
+    if (review.get("decision") != "accepted"
+            or not str(review.get("actor") or "").strip()
+            or not str(review.get("reviewed_at") or "").strip()
+            or not str(review.get("reason") or "").strip()):
+        raise ValueError("reviewed record requires an explicit accepted human review")
+    return source_refs, review
+
+
 def _load_cases(path: Path) -> list[dict]:
     rows = []
     for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
@@ -132,6 +147,7 @@ def _load_cases(path: Path) -> list[dict]:
         if records[0].get("resolution_state") != case.get(
                 "expected_resolution_state"):
             raise ValueError("record resolution state differs from reviewed case")
+        _review_contract(records[0])
     return rows
 
 
@@ -140,9 +156,13 @@ def _body(record: dict) -> str:
         "situation", "goal", "approach", "action", "lesson", "applicability"))
 
 
-def _seed(cases: list[dict], database: Path, *, embed_doc, embedding_id: str) -> None:
+def _seed(cases: list[dict], database: Path, *, embed_doc, embedding_id: str,
+          vault: Path | None = None) -> None:
     import _experience as experience
+    import _source_ref as source_ref
+    from _vaultpath import vault_root
 
+    evidence_root = Path(vault) if vault is not None else vault_root()
     stage = database.with_name(database.name + ".staging")
     if stage.exists():
         stage.unlink()
@@ -155,18 +175,28 @@ def _seed(cases: list[dict], database: Path, *, embed_doc, embedding_id: str) ->
             if case.get("expected_experience") is None:
                 continue
             record = dict(case["records"][0])
+            source_refs, review = _review_contract(record)
+            invalid_refs = [
+                ref.get("source_ref_id") or "<missing-id>"
+                for ref in source_refs
+                if source_ref.resolve_source_ref(evidence_root, ref).get("status") != "valid"
+            ]
+            if invalid_refs:
+                raise ValueError(
+                    "reviewed record requires fresh exact source refs: "
+                    + ", ".join(invalid_refs))
             outcome_refs = list(record.get("outcome_refs") or [])
             if len(outcome_refs) != 1:
                 raise ValueError("reviewed record requires one outcome reference")
             experience.record_outcome(
                 conn, outcome_id=outcome_refs[0], session_id=case["id"],
                 task_id=case["id"], state=record["outcome_state"],
-                evidence=[{"source_refs": record.get("source_refs") or []}],
+                evidence=[{"source_refs": source_refs}],
                 attribution_strength="reviewed")
             experience.save_experience(
                 conn, experience_id=record["experience_id"],
                 session_id=case["id"], task_id=case["id"],
-                status="validated", situation=record.get("situation") or "",
+                status="candidate", situation=record.get("situation") or "",
                 goal=record.get("goal") or "", approach=record.get("approach") or "",
                 action=record.get("action") or "",
                 observed_result=record.get("observed_result") or "",
@@ -174,9 +204,21 @@ def _seed(cases: list[dict], database: Path, *, embed_doc, embedding_id: str) ->
                 applicability=record.get("applicability") or "",
                 outcome_state=record["outcome_state"],
                 attempt_state=record["attempt_state"],
-                resolution_state=record["resolution_state"], confidence=1.0,
-                source_refs=record.get("source_refs") or [],
+                resolution_state=record["resolution_state"], confidence=0.2,
+                source_refs=source_refs,
                 outcome_refs=outcome_refs)
+            stored = experience.experience(conn, record["experience_id"])
+            experience.record_review(
+                conn,
+                review_id=str(review.get("review_id") or f"holdout-review-{case['id']}"),
+                experience_id=record["experience_id"], decision="accepted",
+                actor=str(review["actor"]), reviewed_at=str(review["reviewed_at"]),
+                reason=str(review.get("reason") or ""),
+                content_hash=stored["content_hash"],
+                idempotency_key=str(
+                    review.get("idempotency_key") or f"holdout-review-{case['id']}"))
+            experience.transition(
+                conn, record["experience_id"], "validated", vault=evidence_root)
             vector = embed_doc(_body(record))
             if vector is None:
                 raise RuntimeError("document embedding failed")

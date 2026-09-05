@@ -16,7 +16,7 @@ def _body(record: dict) -> str:
                      record.get("lesson", ""), record.get("applicability", "")))
 
 
-def _build(cases, db_path: Path, embed_fn, embed_id: str) -> None:
+def _build(cases, db_path: Path, embed_fn, embed_id: str, *, vault: Path) -> None:
     target = Path(db_path)
     target.parent.mkdir(parents=True, exist_ok=True)
     stage = target.with_name(target.name + ".staging")
@@ -43,17 +43,35 @@ def _build(cases, db_path: Path, embed_fn, embed_id: str) -> None:
             _experience.save_experience(
                 conn, experience_id=record["experience_id"],
                 session_id="reviewed-holdout", task_id=record["experience_id"],
-                status=record["status"], situation=record.get("situation", ""),
+                status="candidate", situation=record.get("situation", ""),
                 goal=record.get("goal", ""), approach=record.get("approach", ""),
                 action=record.get("action", ""),
                 observed_result=record.get("observed_result", ""),
                 lesson=record.get("lesson", ""),
                 applicability=record.get("applicability", ""),
-                outcome_state=record["outcome_state"], confidence=0.8,
+                outcome_state=record["outcome_state"], confidence=0.2,
                 attempt_state=record.get("attempt_state", "unknown"),
                 resolution_state=record.get("resolution_state", "not_applicable"),
                 source_refs=record.get("source_refs") or [],
                 outcome_refs=record.get("outcome_refs") or [])
+            if record.get("status") == "validated":
+                review = dict(record.get("review") or {})
+                if (review.get("decision") != "accepted"
+                        or any(not str(review.get(field) or "").strip()
+                               for field in ("actor", "reviewed_at", "reason"))):
+                    raise ValueError(
+                        "validated evaluation record requires an accepted human review")
+                stored = _experience.experience(conn, record["experience_id"])
+                review_id = str(
+                    review.get("review_id") or f"eval-review-{record['experience_id']}")
+                _experience.record_review(
+                    conn, review_id=review_id,
+                    experience_id=record["experience_id"], decision="accepted",
+                    actor=str(review["actor"]), reviewed_at=str(review["reviewed_at"]),
+                    reason=str(review["reason"]), content_hash=stored["content_hash"],
+                    idempotency_key=str(review.get("idempotency_key") or review_id))
+                _experience.transition(
+                    conn, record["experience_id"], "validated", vault=vault)
             _experience.index_experience(
                 conn, record["experience_id"], vector=vector)
         conn.commit()
@@ -85,14 +103,16 @@ def _lexical_hits(conn, query: str, *, k: int = 3) -> list[dict]:
 def evaluate_experience_holdout(cases, *, db_path: Path, embed_id: str,
                                 embed_fn=None, embed_doc_fn=None,
                                 embed_query_fn=None,
-                                advisory_min_cos: float = 0.5) -> dict:
+                                advisory_min_cos: float = 0.5,
+                                vault: Path | None = None) -> dict:
     """Return aggregate hybrid/lexical metrics without prompts or passages."""
     cases = list(cases)
     embed_doc = embed_doc_fn or embed_fn
     embed_query = embed_query_fn or embed_fn
     if embed_doc is None or embed_query is None:
         raise ValueError("document and query embedding functions are required")
-    _build(cases, Path(db_path), embed_doc, embed_id)
+    _build(cases, Path(db_path), embed_doc, embed_id,
+           vault=Path(vault) if vault is not None else Path(db_path).parent)
     conn = _experience.connect(db_path)
     hybrid = {}
     lexical = {}

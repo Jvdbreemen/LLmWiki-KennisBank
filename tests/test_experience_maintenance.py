@@ -13,6 +13,7 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 import _experience as exp  # noqa: E402
+import _source_ref as source_ref  # noqa: E402
 
 
 def load_builder():
@@ -24,6 +25,15 @@ def load_builder():
 
 
 class ExperienceMaintenanceTest(unittest.TestCase):
+    @staticmethod
+    def _source(vault: Path, name: str, passage: str) -> dict:
+        relative = f"01-raw/transcripts/{name}.md"
+        path = vault / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(passage, encoding="utf-8")
+        return source_ref.make_source_ref(
+            vault, relative, start=0, end=len(passage), chunk_id=name)
+
     def test_lifecycle_report_surfaces_status_and_provenance_gaps(self):
         from _experience_maintenance import lifecycle_report
 
@@ -49,14 +59,16 @@ class ExperienceMaintenanceTest(unittest.TestCase):
     def test_full_rebuild_rederives_experiences_and_reports_progress(self):
         builder = load_builder()
         with tempfile.TemporaryDirectory() as directory:
-            db = Path(directory) / "kb-experience.db"
+            vault = Path(directory)
+            ref = self._source(vault, "s1", "child hangs; bound waits")
+            db = vault / "kb-experience.db"
             conn = exp.connect(db)
             exp.ensure_schema(conn)
             exp.append_event(conn, event_id="event-1", session_id="s1", task_id="t1",
                              event_type="attempt", observed_at="2026-08-26T10:00:00Z",
                              payload={"situation": "child hangs", "action": "bound timeout",
                                       "lesson": "bound waits"},
-                             source_refs=["01-raw/s1.md#0:10"])
+                             source_refs=[ref])
             exp.record_outcome(conn, outcome_id="out-1", session_id="s1", task_id="t1",
                                state="success", evidence=[{"kind": "test", "value": "pass"}],
                                attribution_strength="strong", observed_at="2026-08-26")
@@ -78,7 +90,7 @@ class ExperienceMaintenanceTest(unittest.TestCase):
                 event = conn.execute("SELECT payload_json FROM experience_events").fetchone()[0]
             finally:
                 conn.close()
-            self.assertEqual(rows, [("experience-ec6d822afdb17dbab473", "validated")])
+            self.assertEqual(rows, [("experience-ec6d822afdb17dbab473", "candidate")])
             self.assertEqual(json.loads(event)["lesson"], "bound waits")
 
     def test_failed_rebuild_keeps_previous_store(self):
@@ -104,13 +116,15 @@ class ExperienceMaintenanceTest(unittest.TestCase):
     def test_rebuild_can_materialize_the_local_vector_projection(self):
         builder = load_builder()
         with tempfile.TemporaryDirectory() as directory:
-            db = Path(directory) / "kb-experience.db"
+            vault = Path(directory)
+            ref = self._source(vault, "retry", "retry; bound retry")
+            db = vault / "kb-experience.db"
             conn = exp.connect(db)
             exp.ensure_schema(conn)
             exp.append_event(conn, event_id="event-1", session_id="s", task_id="t",
                              event_type="attempt", observed_at="2026-08-26T10:00:00Z",
                              payload={"situation": "retry", "action": "bound retry",
-                                      "lesson": "bound retry"}, source_refs=["raw#1"])
+                                      "lesson": "bound retry"}, source_refs=[ref])
             exp.record_outcome(conn, outcome_id="out-1", session_id="s", task_id="t",
                                state="success", evidence=[{"kind": "test"}],
                                attribution_strength="strong")
@@ -121,11 +135,16 @@ class ExperienceMaintenanceTest(unittest.TestCase):
             conn = exp.connect(db)
             try:
                 exp.ensure_recall_schema(conn, dim=4, embed_id="fake:4")
-                hits = exp.experience_hits(conn, query_vector=[1, 0, 0, 0],
-                                           query_text="bound retry")
+                default_hits = exp.experience_hits(
+                    conn, query_vector=[1, 0, 0, 0], query_text="bound retry")
+                diagnostic_hits = exp.experience_hits(
+                    conn, query_vector=[1, 0, 0, 0], query_text="bound retry",
+                    statuses=("candidate",))
             finally:
                 conn.close()
-            self.assertEqual([hit["status"] for hit in hits], ["validated"])
+            self.assertEqual(default_hits, [])
+            self.assertEqual(
+                [hit["status"] for hit in diagnostic_hits], ["candidate"])
 
 
 if __name__ == "__main__":
