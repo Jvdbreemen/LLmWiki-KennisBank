@@ -39,10 +39,12 @@ DEFAULTS = {
     # bewust afwijkend van de opt-in-conventie van auto_archive.
     "memory_capture": True,
     "memory_recall": True,
-    # Nieuwe source/experience projections are experimental until their paired
-    # holdout gates pass; keeping them off protects the existing hot path.
-    "source_recall": False,
-    "experience_recall": False,
+    # Deeper layers have separate write/build/read authority. A legacy broad
+    # toggle must never silently grant one of these capabilities.
+    "experience_capture": False,
+    "experience_projection": False,
+    "experience_explicit_recall": False,
+    "source_explicit_recall": False,
     # Retrieval-feedbackloop: passief en lokaal, dus default aan.
     "usage_telemetry": True,
     # Optionele LLM-laatste-redmiddel voor temporele recall (Laag 3): normaliseert
@@ -68,6 +70,13 @@ DEFAULTS = {
 }
 
 _TRUTHY = ("1", "true", "yes", "y", "on")
+_LEGACY_FLAGS = {
+    "source_recall": ("source_explicit_recall",),
+    "experience_recall": (
+        "experience_capture", "experience_projection",
+        "experience_explicit_recall",
+    ),
+}
 
 
 def settings_path() -> Path:
@@ -150,6 +159,16 @@ def migrate() -> bool:
             data = {}
     else:
         data = {}
+    for legacy, replacements in _LEGACY_FLAGS.items():
+        value = data.get(legacy, False)
+        enabled = (value.strip().lower() in _TRUTHY
+                   if isinstance(value, str) else bool(value))
+        if enabled:
+            print(
+                f"_settings: legacy {legacy}=true activeert niets meer; "
+                f"kies expliciet uit {', '.join(replacements)}.",
+                file=sys.stderr,
+            )
     missing = {k: v for k, v in DEFAULTS.items() if k not in data}
     if not missing:
         return False

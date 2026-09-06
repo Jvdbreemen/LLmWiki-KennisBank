@@ -15,7 +15,8 @@ The feature branch adds two explicitly gated projections beside the normal
 wiki/memory index. **Source recall** searches immutable raw-source passages for
 explicit reconstruction or verification and returns the source path, hash and
 character offsets. **Experience recall** searches validated outcome-bound
-records for prior approaches or failure advisories. Neither route is part of
+records for prior approaches. Automatic failure advisories are not a public
+mode. Neither route is part of
 normal prompt injection; both are opt-in, fail-open, and rebuildable from local
 vault evidence. A hit-rate improvement alone is not a release decision: the
 paired evaluation must also show downstream correctness and acceptable

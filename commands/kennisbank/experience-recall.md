@@ -55,3 +55,5 @@ printf '%s\n' '{"mode":"explicit","prompt":"<situatie>","k":3}' |
 
 De route is standaard uitgeschakeld. Een retrieval-hit-rate zonder downstream
 verbetering is geen reden om deze capability aan te zetten.
+`failure`, `advisory`, `automatic`, `fallback`, `ranking`, `promotion`, `hook`
+en `injection` zijn geen publieke modi en retourneren `policy_disabled`.

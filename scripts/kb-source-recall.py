@@ -61,7 +61,8 @@ def run(request: dict, *, vault: Path | None = None, **_ignored) -> dict:
     mode = str(request.get("mode") or "normal").lower()
     if mode == "normal":
         return {"status": "not_routed", "hits": []}
-    if mode == "fallback":
+    if mode in {"fallback", "automatic", "advisory", "ranking", "promotion",
+                "hook", "injection"}:
         return {"status": "policy_disabled", "hits": [], "mode": mode}
     if mode not in {"explicit", "verify", "reconstruct"}:
         return {"status": "not_routed", "hits": []}

@@ -28,8 +28,7 @@ class LayerCliContractTest(unittest.TestCase):
         self.vault = Path(self.tmp.name) / "vault"
         (self.vault / ".claude").mkdir(parents=True)
         (self.vault / "kennisbank-settings.json").write_text(
-            json.dumps({"source_recall": True, "source_explicit_recall": True,
-                        "experience_recall": True,
+            json.dumps({"source_explicit_recall": True,
                         "experience_explicit_recall": True}),
             encoding="utf-8")
         self.saved = os.environ.get("KENNISBANK_VAULT")

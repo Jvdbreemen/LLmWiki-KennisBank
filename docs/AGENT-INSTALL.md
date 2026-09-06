@@ -145,8 +145,11 @@ Then restart the agent client so hooks and MCP tools load.
 The source and experience projections are available to all supported CLI
 clients through the deployed scripts, namespaced commands, and MCP-compatible
 local vault boundary where applicable. They are not added to normal prompt
-injection: enable `source_recall` or `experience_recall` only after reviewing
-the evidence packet. Run `kb-projection-doctor.py` for a read-only health check;
+injection: enable `source_explicit_recall` or `experience_explicit_recall` only
+after reviewing the evidence packet. Experience capture and projection have
+their own independent, default-off flags. Legacy `source_recall` and
+`experience_recall` values grant no capability. Run `kb-projection-doctor.py`
+for a read-only health check;
 run the two rebuild commands off the interactive path. These paths preserve
 `KENNISBANK_VAULT` and have no implicit cloud fallback.
 

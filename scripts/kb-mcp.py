@@ -195,10 +195,17 @@ def recall_tool(query: str, k: int = 5, *, compact: bool = False) -> str:
 def source_recall_tool(query: str = "", mode: str = "explicit", k: int = 5,
                        source_ref: dict | None = None) -> str:
     """Explicit provenance-first source recall; never part of normal injection."""
+    mode = str(mode or "normal").lower()
+    if mode in {"fallback", "automatic", "advisory", "ranking", "promotion",
+                "hook", "injection"}:
+        return json.dumps({"status": "policy_disabled", "hits": [], "mode": mode})
     if source_recall is None:
         return '{"status": "unavailable", "hits": []}'
     try:
-        request = {"mode": mode, "prompt": query, "k": int(k)}
+        if source_ref is not None and len(json.dumps(source_ref)) > 16384:
+            return json.dumps({"status": "invalid", "hits": [], "mode": mode})
+        request = {"mode": mode, "prompt": str(query or "")[:4000],
+                   "k": min(max(int(k), 1), 20)}
         if source_ref is not None:
             request["source_ref"] = source_ref
         result = source_recall.run(request)
@@ -208,11 +215,18 @@ def source_recall_tool(query: str = "", mode: str = "explicit", k: int = 5,
 
 
 def experience_recall_tool(query: str, mode: str = "explicit", k: int = 5) -> str:
-    """Gated recall of validated experiences or failure advisories."""
+    """Gated explicit recall of reviewed experience lessons."""
+    mode = str(mode or "normal").lower()
+    if mode in {"failure", "advisory", "automatic", "fallback", "ranking",
+                "promotion", "hook", "injection"}:
+        return json.dumps({"status": "policy_disabled", "hits": [], "mode": mode})
     if experience_recall is None:
         return '{"status": "unavailable", "hits": []}'
     try:
-        result = experience_recall.run({"mode": mode, "prompt": query, "k": int(k)})
+        result = experience_recall.run({
+            "mode": mode, "prompt": str(query or "")[:4000],
+            "k": min(max(int(k), 1), 3),
+        })
         return json.dumps(result, ensure_ascii=False, sort_keys=True)
     except Exception:
         return '{"status": "unavailable", "hits": []}'
@@ -361,7 +375,7 @@ INSTRUCTIONS_TEXT = (
     "- Call `capture` whenever a reusable fact, preference, procedure or "
     "decision appears that you want back in a later session.\n"
     "- Call `source_recall` only for explicit source reconstruction or verification; "
-    "call `experience_recall` only for validated prior outcomes or failure prevention.\n"
+    "call `experience_recall` only when the user explicitly asks for validated prior lessons.\n"
     "- Call `what_did_i_do`, `timeline`, `weeklog` or `topic_timeline` for "
     "questions about what happened on a date, in a week, or around a topic.\n"
     "- `review_pending` lists unverified memories awaiting human review; "
@@ -398,9 +412,9 @@ def build_server():
         return source_recall_tool(query, mode=mode, k=k, source_ref=source_ref)
 
     @srv.tool(annotations=_ann(title="Recall validated experience", readOnlyHint=True, openWorldHint=False))
-    def experience_recall(query: str, mode: str = "explicit", k: int = 5) -> str:
-        """Retrieve validated outcome-bound experiences or a labelled failure
-        advisory. Candidates and unknown outcomes remain excluded."""
+    def experience_recall(query: str, mode: str = "explicit", k: int = 3) -> str:
+        """Explicitly retrieve at most three validated outcome-bound lessons.
+        Candidates, unknown outcomes, and automatic advisories remain excluded."""
         return experience_recall_tool(query, mode=mode, k=k)
 
     @srv.tool(annotations=_ann(title="Capture a memory", readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False))

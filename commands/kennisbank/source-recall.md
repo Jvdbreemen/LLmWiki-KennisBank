@@ -12,6 +12,8 @@ waarheid en mag geen memory automatisch promoveren.
 De technische gateway accepteert `explicit`, `verify` en `reconstruct`.
 `fallback` is bewust `policy_disabled` en kan normale recall niet beïnvloeden.
 De route blijft standaard uitgeschakeld via `source_explicit_recall`.
+`fallback`, `automatic`, `advisory`, `ranking`, `promotion`, `hook` en
+`injection` zijn geen publieke modi en retourneren `policy_disabled`.
 
 Een succesvolle response heeft de vorm:
 

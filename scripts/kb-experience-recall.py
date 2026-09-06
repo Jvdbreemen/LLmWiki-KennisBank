@@ -39,9 +39,7 @@ def label_hits(hits: list[dict], mode: str, route: str | None = None) -> list[di
 
 
 def _enabled(settings) -> bool:
-    # TASK-233 removes the temporary legacy-key bridge after settings migration.
-    legacy = settings.get("experience_recall", False)
-    return bool(settings.get("experience_explicit_recall", legacy))
+    return bool(settings.get("experience_explicit_recall", False))
 
 
 def _embedding(request: dict, embed_fn):
@@ -59,7 +57,8 @@ def _embedding(request: dict, embed_fn):
 def run(request: dict, *, embed_fn=None, vault: Path | None = None) -> dict:
     request = dict(request or {})
     mode = str(request.get("mode") or "normal").lower()
-    if mode == "failure":
+    if mode in {"failure", "advisory", "automatic", "fallback", "ranking",
+                "promotion", "hook", "injection"}:
         return {"status": "policy_disabled", "hits": [], "mode": mode}
     if mode != "explicit":
         return {"status": "not_routed", "hits": []}

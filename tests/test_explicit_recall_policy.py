@@ -5,6 +5,7 @@ import importlib
 import importlib.util
 import inspect
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -62,10 +63,48 @@ class ExplicitRecallPolicyContractTest(unittest.TestCase):
         gateway = (SCRIPTS / "kb-experience-recall.py").read_text(encoding="utf-8")
         self.assertIn("lexical_fallback", gateway)
 
+    def test_legacy_true_values_do_not_enable_new_gateway_semantics(self):
+        source = _load("source_gateway_legacy_policy", "kb-source-recall.py")
+        experience = _load("experience_gateway_legacy_policy", "kb-experience-recall.py")
+        previous = os.environ.get("KENNISBANK_VAULT")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "kennisbank-settings.json").write_text(json.dumps({
+                "source_recall": True,
+                "experience_recall": True,
+            }), encoding="utf-8")
+            os.environ["KENNISBANK_VAULT"] = tmp
+            try:
+                self.assertEqual(source.run(
+                    {"mode": "explicit", "prompt": "evidence"},
+                    vault=root)["status"], "disabled")
+                self.assertEqual(experience.run(
+                    {"mode": "explicit", "prompt": "lesson"},
+                    vault=root)["status"], "disabled")
+            finally:
+                if previous is None:
+                    os.environ.pop("KENNISBANK_VAULT", None)
+                else:
+                    os.environ["KENNISBANK_VAULT"] = previous
+
     def test_normal_retrieve_has_no_new_gateway_dependency(self):
         hot_path = (SCRIPTS / "kb-retrieve.py").read_text(encoding="utf-8")
         self.assertNotIn("kb-source-recall", hot_path)
         self.assertNotIn("kb-experience-recall", hot_path)
+
+    def test_public_command_docs_show_split_flags_and_disabled_modes(self):
+        settings = (ROOT / "commands" / "kennisbank" / "settings.md").read_text(
+            encoding="utf-8")
+        source = (ROOT / "commands" / "kennisbank" / "source-recall.md").read_text(
+            encoding="utf-8")
+        experience = (
+            ROOT / "commands" / "kennisbank" / "experience-recall.md").read_text(
+            encoding="utf-8")
+        for key in ("experience_capture", "experience_projection",
+                    "experience_explicit_recall", "source_explicit_recall"):
+            self.assertIn(key, settings)
+        self.assertIn("policy_disabled", source)
+        self.assertIn("policy_disabled", experience)
 
 
 if __name__ == "__main__":

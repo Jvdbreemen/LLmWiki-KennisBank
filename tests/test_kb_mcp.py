@@ -92,6 +92,52 @@ class KbMcpTest(unittest.TestCase):
         finally:
             self.m.source_recall, self.m.experience_recall = old_source, old_experience
 
+    def test_deeper_recall_tools_bound_arguments_and_disable_forbidden_modes(self):
+        captured = {}
+
+        class SourceGateway:
+            @staticmethod
+            def run(request):
+                captured["source"] = request
+                return {"status": "ok", "hits": []}
+
+        class ExperienceGateway:
+            @staticmethod
+            def run(request):
+                captured["experience"] = request
+                return {"status": "ok", "hits": []}
+
+        old_source, old_experience = self.m.source_recall, self.m.experience_recall
+        self.m.source_recall, self.m.experience_recall = SourceGateway, ExperienceGateway
+        try:
+            self.m.source_recall_tool("where", "explicit", 1000)
+            self.m.experience_recall_tool("lesson", "explicit", 1000)
+            self.assertEqual(captured["source"]["k"], 20)
+            self.assertEqual(captured["experience"]["k"], 3)
+
+            for mode in ("fallback", "automatic", "ranking", "promotion", "hook"):
+                result = json.loads(self.m.source_recall_tool("where", mode, 5))
+                self.assertEqual(result["status"], "policy_disabled")
+            for mode in ("failure", "advisory", "automatic", "ranking", "promotion", "hook"):
+                result = json.loads(self.m.experience_recall_tool("lesson", mode, 5))
+                self.assertEqual(result["status"], "policy_disabled")
+        finally:
+            self.m.source_recall, self.m.experience_recall = old_source, old_experience
+
+    def test_cli_gateways_and_mcp_adapters_share_policy_disabled_status(self):
+        source_cli = self.m.source_recall.run(
+            {"mode": "fallback", "prompt": "where"})
+        source_mcp = json.loads(self.m.source_recall_tool("where", "fallback"))
+        experience_cli = self.m.experience_recall.run(
+            {"mode": "failure", "prompt": "lesson"})
+        experience_mcp = json.loads(
+            self.m.experience_recall_tool("lesson", "failure"))
+
+        self.assertEqual(source_cli["status"], "policy_disabled")
+        self.assertEqual(source_mcp["status"], source_cli["status"])
+        self.assertEqual(experience_cli["status"], "policy_disabled")
+        self.assertEqual(experience_mcp["status"], experience_cli["status"])
+
     def test_build_server_registers_eight_annotated_tools(self):
         """Vervangt test_build_server_none_without_mcp, dat op 'MCPServer is None'
         aftakte en in BEIDE takken slaagde: die kon niets bewijzen.
