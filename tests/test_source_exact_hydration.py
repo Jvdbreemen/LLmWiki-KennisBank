@@ -65,6 +65,53 @@ class SourceExactHydrationContractTest(unittest.TestCase):
         self.assertEqual(result["status"], "policy_disabled")
         self.assertEqual(result["hits"], [])
 
+    def test_verify_exposes_stale_state_without_cached_passage(self):
+        source_ref = _load("source_ref_verify", "_source_ref.py")
+        source = self.vault / "01-raw" / "transcripts" / "one.md"
+        ref = source_ref.make_source_ref(
+            self.vault, "01-raw/transcripts/one.md", start=6, end=20,
+            chunk_id="chunk-0")
+        source.write_text("alpha changed source omega", encoding="utf-8")
+        gateway = _load("source_gateway_verify", "kb-source-recall.py")
+
+        result = gateway.run(
+            {"mode": "verify", "source_ref": ref},
+            embed_fn=lambda _text: (_ for _ in ()).throw(
+                AssertionError("verify must not call a model")),
+            vault=self.vault)
+
+        self.assertEqual(result["status"], "evidence_unavailable")
+        self.assertEqual(result["hits"][0]["source_state"], "stale")
+        self.assertNotIn("passage", result["hits"][0])
+
+    def test_explicit_search_is_lexical_best_effort_with_exact_provenance(self):
+        source_module = _load("source_lexical_search", "_source_recall.py")
+        source = self.vault / "01-raw" / "transcripts" / "one.md"
+        conn = source_module.connect(self.vault / ".claude" / "kb-source.db")
+        try:
+            source_module.ensure_schema(conn)
+            text = source.read_text(encoding="utf-8")
+            source_module.upsert_source(
+                conn, source_path="01-raw/transcripts/one.md",
+                source_hash=source_module.sha256_file(source),
+                chunks=source_module.chunk_text(text), metadata={})
+        finally:
+            conn.close()
+        gateway = _load("source_gateway_lexical", "kb-source-recall.py")
+
+        result = gateway.run(
+            {"mode": "explicit", "prompt": "exact evidence", "k": 3},
+            embed_fn=lambda _text: (_ for _ in ()).throw(
+                AssertionError("explicit FTS must not call a model")),
+            vault=self.vault)
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["hits"][0]["retrieval_route"], "lexical_fts")
+        self.assertTrue(result["hits"][0]["best_effort"])
+        self.assertTrue(result["hits"][0]["fresh"])
+        self.assertRegex(
+            result["hits"][0]["source_ref_id"], r"^sr_[0-9a-f]{64}$")
+
 
 if __name__ == "__main__":
     unittest.main()

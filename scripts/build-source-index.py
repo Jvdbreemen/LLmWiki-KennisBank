@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""Build the isolated, disposable raw-source projection."""
+"""Build the isolated, disposable lexical raw-source projection."""
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+import sqlite3
 import sys
+from contextlib import closing
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -17,7 +20,7 @@ APPROVED_ROOTS = source.APPROVED_ROOTS
 TEXT_EXTENSIONS = source.TEXT_EXTENSIONS
 DEFAULT_CHUNK_SIZE = 2000
 DEFAULT_OVERLAP = 200
-INDEX_VERSION = "source-index-v1"
+INDEX_VERSION = source.INDEX_VERSION
 
 
 def collect_sources(vault: Path) -> list[Path]:
@@ -31,29 +34,82 @@ def collect_sources(vault: Path) -> list[Path]:
     return sorted(set(paths), key=lambda path: path.as_posix())
 
 
-def _manifest(conn) -> dict[str, str]:
+def _digest(data: bytes) -> str:
+    return "sha256:" + hashlib.sha256(data).hexdigest()
+
+
+def sha256_file(path: Path) -> str:
+    return source.sha256_file(path)
+
+
+def _read_source(path: Path) -> tuple[str, str]:
+    """Read and hash the same bytes so projection provenance cannot drift."""
+    raw = path.read_bytes()
+    return raw.decode("utf-8"), _digest(raw)
+
+
+def chunk_text(text: str, *, size: int = DEFAULT_CHUNK_SIZE,
+               overlap: int = DEFAULT_OVERLAP) -> list[dict]:
+    return source.chunk_text(text, size=size, overlap=overlap)
+
+
+def _connect(path: Path) -> sqlite3.Connection:
+    return source.connect(path)
+
+
+def _ensure_schema(conn: sqlite3.Connection) -> None:
+    source.ensure_schema(conn)
+
+
+def _meta_set(conn: sqlite3.Connection, key: str, value: str) -> None:
+    conn.execute("INSERT OR REPLACE INTO source_meta(key, value) VALUES (?, ?)",
+                 (key, str(value)))
+
+
+def _meta_get(conn: sqlite3.Connection, key: str) -> str | None:
     try:
-        rows = conn.execute("SELECT source_path, source_hash FROM source_manifest").fetchall()
-    except Exception:
+        row = conn.execute("SELECT value FROM source_meta WHERE key=?", (key,)).fetchone()
+    except sqlite3.DatabaseError:
+        return None
+    return str(row[0]) if row else None
+
+
+def _manifest(conn: sqlite3.Connection) -> dict[str, str]:
+    try:
+        rows = conn.execute(
+            "SELECT source_path, source_hash FROM source_manifest"
+        ).fetchall()
+    except sqlite3.DatabaseError:
         return {}
     return {str(path): str(file_hash) for path, file_hash in rows}
 
 
-def _ensure_manifest(conn) -> None:
-    conn.execute("CREATE TABLE IF NOT EXISTS source_manifest ("
-                 "source_path TEXT PRIMARY KEY, source_hash TEXT NOT NULL)")
-
-
-def _read(path: Path) -> str:
-    return path.read_text(encoding="utf-8")
+def _is_current_projection(conn: sqlite3.Connection, *, manifest: dict[str, str],
+                           chunk_size: int, overlap: int) -> bool:
+    required = {"source_meta", "source_manifest", "source_chunks", "source_fts"}
+    try:
+        names = {row[0] for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type IN ('table', 'view')")}
+        healthy = conn.execute("PRAGMA quick_check").fetchone()[0] == "ok"
+    except (sqlite3.DatabaseError, TypeError):
+        return False
+    return (
+        healthy
+        and required.issubset(names)
+        and _manifest(conn) == manifest
+        and _meta_get(conn, "source_index_version") == INDEX_VERSION
+        and _meta_get(conn, "retrieval_backend") == "sqlite_fts5"
+        and _meta_get(conn, "chunk_size") == str(chunk_size)
+        and _meta_get(conn, "overlap") == str(overlap)
+    )
 
 
 def _redacted(path: Path, text: str) -> bool:
     if ".redacted." in path.name.lower() or path.name.lower().endswith(".redacted"):
         return True
     header = text[:4000].lower()
-    return "redacted:" in header and any(token in header for token in
-                                         ("redacted: true", "redacted: yes", "redacted: 1"))
+    return "redacted:" in header and any(
+        token in header for token in ("redacted: true", "redacted: yes", "redacted: 1"))
 
 
 _SOURCE_METADATA_KEYS = (
@@ -76,6 +132,14 @@ def _source_metadata(text: str, relative_path: str) -> dict:
     return metadata
 
 
+def _insert_source(conn: sqlite3.Connection, *, source_path: str,
+                   source_hash: str, chunks: list[dict], metadata: dict) -> int:
+    source.upsert_source(
+        conn, source_path=source_path, source_hash=source_hash,
+        chunks=chunks, metadata=metadata, commit=False)
+    return len(chunks)
+
+
 def _emit(progress_fn, event: dict) -> None:
     """Progress is diagnostic only; a broken reporter must not break a build."""
     if progress_fn is None:
@@ -86,134 +150,129 @@ def _emit(progress_fn, event: dict) -> None:
         pass
 
 
-def build_source_index(vault: Path, *, rebuild: bool = False, embed_fn=None,
-                       embed_id: str = "", chunk_size: int = DEFAULT_CHUNK_SIZE,
+def _remove_stage_files(stage: Path) -> None:
+    for path in (stage, Path(str(stage) + "-wal"), Path(str(stage) + "-shm")):
+        if path.exists():
+            path.unlink()
+
+
+def build_source_index(vault: Path, *, rebuild: bool = False,
+                       chunk_size: int = DEFAULT_CHUNK_SIZE,
                        overlap: int = DEFAULT_OVERLAP, progress_fn=None) -> dict:
+    """Build a deterministic FTS5 projection and atomically publish it."""
+    # Validate even for an empty corpus; build parameters are part of the stamp.
+    chunk_text("", size=chunk_size, overlap=overlap)
     vault = Path(vault)
     target = vault / ".claude" / "kb-source.db"
     target.parent.mkdir(parents=True, exist_ok=True)
+    stage = target.with_name(target.name + ".staging")
+    _remove_stage_files(stage)
     paths = collect_sources(vault)
-    _emit(progress_fn, {"phase": "scan", "current": 0, "total": len(paths),
-                        "sources": len(paths)})
-    manifest = {}
-    texts = {}
+    _emit(progress_fn, {
+        "phase": "scan", "current": 0, "total": len(paths), "sources": len(paths),
+    })
+
+    manifest: dict[str, str] = {}
+    source_files: dict[str, Path] = {}
     redacted_sources = []
     failed_sources = []
     for path in paths:
         rel = path.relative_to(vault).as_posix()
         try:
-            text = _read(path)
+            text, source_hash = _read_source(path)
         except (OSError, UnicodeError):
             failed_sources.append(rel)
             continue
         if _redacted(path, text):
             redacted_sources.append(rel)
             continue
-        texts[rel] = text
-        manifest[rel] = source.sha256_file(path)
-        _emit(progress_fn, {"phase": "scan", "current": len(texts),
-                            "total": len(paths), "source": rel})
-    paths = [vault / rel for rel in sorted(manifest)]
-    base_report = {"sources": len(paths), "indexed_chunks": 0,
-                   "unchanged_sources": 0, "failed_chunks": 0,
-                   "failed_sources": sorted(failed_sources),
-                   "redacted_sources": sorted(redacted_sources),
-                   "path": str(target), "index_version": INDEX_VERSION}
+        source_files[rel] = path
+        manifest[rel] = source_hash
+        _emit(progress_fn, {
+            "phase": "scan", "current": len(source_files),
+            "total": len(paths), "source": rel,
+        })
+
+    source_paths = sorted(manifest)
+    base_report = {
+        "sources": len(source_paths),
+        "indexed_chunks": 0,
+        "unchanged_sources": 0,
+        "failed_chunks": 0,
+        "failed_sources": sorted(failed_sources),
+        "redacted_sources": sorted(redacted_sources),
+        "path": str(target),
+        "index_version": INDEX_VERSION,
+        "retrieval_backend": "sqlite_fts5",
+    }
     if failed_sources:
-        _emit(progress_fn, {"phase": "complete", "sources": len(paths),
-                            "failed_sources": len(failed_sources), "status": "failed"})
+        _emit(progress_fn, {
+            "phase": "complete", "sources": len(source_paths),
+            "failed_sources": len(failed_sources), "status": "failed",
+        })
         return base_report
-    existing = {}
+
     if target.exists() and not rebuild:
-        conn = source.connect(target)
         try:
-            existing = _manifest(conn)
-            current_embed_id = source._kbindex.meta_get(conn, "embed_id")
-            current_version = source._kbindex.meta_get(conn, "source_index_version")
-        finally:
-            conn.close()
-        if (existing == manifest and current_embed_id == embed_id
-                and current_version == INDEX_VERSION):
-            base_report["unchanged_sources"] = len(paths)
-            _emit(progress_fn, {"phase": "complete", "sources": len(paths),
-                                "unchanged_sources": len(paths), "status": "unchanged"})
+            with closing(_connect(target)) as conn:
+                unchanged = _is_current_projection(
+                    conn, manifest=manifest, chunk_size=chunk_size, overlap=overlap)
+        except sqlite3.DatabaseError:
+            unchanged = False
+        if unchanged:
+            base_report["unchanged_sources"] = len(source_paths)
+            _emit(progress_fn, {
+                "phase": "complete", "sources": len(source_paths),
+                "unchanged_sources": len(source_paths), "status": "unchanged",
+            })
             return base_report
 
-    stage = target.with_name(target.name + ".staging")
-    if stage.exists():
-        stage.unlink()
     conn = None
-    indexed = unchanged = failed = 0
+    indexed = 0
     try:
-        # The first successful vector determines the schema dimension.  No
-        # production file is replaced until every vector and write succeeds.
-        dimension = None
-        conn = None
-        for path in paths:
-            rel = path.relative_to(vault).as_posix()
-            text = texts[rel]
-            chunks = source.chunk_text(text, size=chunk_size, overlap=overlap)
-            vectors = []
-            for chunk in chunks:
-                try:
-                    vector = embed_fn(chunk["text"]) if embed_fn else None
-                except Exception:
-                    vector = None
-                if vector is None:
-                    failed += 1
-                elif dimension is None:
-                    dimension = len(vector)
-                elif len(vector) != dimension:
-                    failed += 1
-                    vector = None
-                vectors.append(vector)
-            if any(vector is None for vector in vectors):
-                continue
-            if conn is None:
-                if dimension is None:
-                    continue
-                conn = source.connect(stage)
-                source.ensure_schema(conn, dimension, embed_id)
-                _ensure_manifest(conn)
-                source._kbindex.meta_set(conn, "source_index_version", INDEX_VERSION)
-            source.upsert_source(
-                conn, source_path=rel, source_hash=manifest[rel], chunks=chunks,
-                vectors=vectors, metadata=_source_metadata(text, rel))
-            conn.execute("INSERT OR REPLACE INTO source_manifest(source_path, source_hash) VALUES (?,?)",
-                         (rel, manifest[rel]))
-            conn.commit()
-            indexed += len(chunks)
-            _emit(progress_fn, {"phase": "index", "current": indexed,
-                                "total": sum(len(source.chunk_text(texts[item], size=chunk_size,
-                                                                     overlap=overlap))
-                                               for item in texts),
-                                "source": rel, "chunks": len(chunks)})
-        if failed:
-            base_report.update({"indexed_chunks": indexed, "unchanged_sources": unchanged,
-                                "failed_chunks": failed})
-            _emit(progress_fn, {"phase": "complete", "sources": len(paths),
-                                "indexed_chunks": indexed, "failed_chunks": failed,
-                                "status": "failed"})
-            return base_report
-        if conn is None:
-            # Empty corpora still produce no replacement: there is no useful
-            # vector dimension and therefore no valid searchable projection.
-            base_report["unchanged_sources"] = len(paths)
-            _emit(progress_fn, {"phase": "complete", "sources": len(paths),
-                                "unchanged_sources": len(paths), "status": "empty"})
-            return base_report
+        conn = _connect(stage)
+        _ensure_schema(conn)
+        _meta_set(conn, "source_index_version", INDEX_VERSION)
+        _meta_set(conn, "retrieval_backend", "sqlite_fts5")
+        _meta_set(conn, "chunk_size", str(chunk_size))
+        _meta_set(conn, "overlap", str(overlap))
+        conn.commit()
+        conn.execute("BEGIN")
+        for source_number, rel in enumerate(source_paths, start=1):
+            text, observed_hash = _read_source(source_files[rel])
+            if observed_hash != manifest[rel] or _redacted(source_files[rel], text):
+                raise RuntimeError(f"source changed during build: {rel}")
+            chunks = chunk_text(text, size=chunk_size, overlap=overlap)
+            indexed += _insert_source(
+                conn,
+                source_path=rel,
+                source_hash=manifest[rel],
+                chunks=chunks,
+                metadata=_source_metadata(text, rel),
+            )
+            _emit(progress_fn, {
+                "phase": "index", "current": source_number,
+                "total": len(source_paths), "indexed_chunks": indexed,
+                "source": rel, "chunks": len(chunks),
+            })
+        conn.commit()
+        conn.execute("INSERT INTO source_fts(source_fts) VALUES ('optimize')")
+        conn.commit()
+        if conn.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+            raise RuntimeError("staged source index failed integrity check")
         conn.close()
         conn = None
         os.replace(stage, target)
-        base_report.update({"indexed_chunks": indexed, "unchanged_sources": unchanged})
-        _emit(progress_fn, {"phase": "complete", "sources": len(paths),
-                            "indexed_chunks": indexed, "status": "ok"})
+        base_report["indexed_chunks"] = indexed
+        _emit(progress_fn, {
+            "phase": "complete", "sources": len(source_paths),
+            "indexed_chunks": indexed, "status": "ok",
+        })
         return base_report
     finally:
         if conn is not None:
             conn.close()
-        if stage.exists():
-            stage.unlink()
+        _remove_stage_files(stage)
 
 
 def main(argv=None) -> int:
@@ -225,20 +284,15 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     vault = args.vault or Path(os.environ.get("KENNISBANK_VAULT", "."))
     try:
-        import _embeddings as emb
-        _prov, _model, endpoint, _key = emb._resolve()
-        if not emb.endpoint_allowed(emb.provider(), endpoint):
-            return 2
         progress_fn = None
         if args.progress:
             progress_fn = lambda event: print(
                 json.dumps({"progress": event}, sort_keys=True),
                 file=sys.stderr, flush=True)
-        report = build_source_index(vault, rebuild=args.rebuild,
-                                    embed_fn=lambda text: emb.embed(text, kind="doc"),
-                                    embed_id=emb.embed_id(), progress_fn=progress_fn)
+        report = build_source_index(
+            vault, rebuild=args.rebuild, progress_fn=progress_fn)
         print(json.dumps(report, sort_keys=True))
-        return 0 if not report["failed_chunks"] else 1
+        return 0 if not report["failed_sources"] else 1
     except Exception as exc:
         print(f"source-index: failed safely: {exc}", file=sys.stderr)
         return 1

@@ -77,6 +77,18 @@ class KbMcpTest(unittest.TestCase):
         try:
             self.assertEqual(json.loads(self.m.source_recall_tool("where", "verify"))["mode"], "verify")
             self.assertEqual(json.loads(self.m.experience_recall_tool("what worked", "failure"))["mode"], "failure")
+            ref = {"source_ref_id": "sr_example"}
+            captured = {}
+
+            class CapturingGateway:
+                @staticmethod
+                def run(request):
+                    captured.update(request)
+                    return {"status": "ok", "mode": request["mode"], "hits": []}
+
+            self.m.source_recall = CapturingGateway
+            self.m.source_recall_tool(mode="reconstruct", source_ref=ref)
+            self.assertEqual(captured["source_ref"], ref)
         finally:
             self.m.source_recall, self.m.experience_recall = old_source, old_experience
 

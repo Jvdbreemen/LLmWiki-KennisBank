@@ -691,8 +691,10 @@ the exact source path, hash, and offsets. Experience recall is an outcome layer
 over typed append-only events: it returns only validated prior approaches or
 clearly labelled failure advisories, never a candidate or unknown lesson.
 
-Both projections are local, opt-in, fail-open, and disposable. Rebuild them
-with `rebuild-source-index.py` and `rebuild-experience.py`; use
+Both projections are local, opt-in, fail-open, and disposable. Source recall
+uses lexical FTS5/BM25 only; exact reconstruction resolves a structured
+SourceRef against the raw file and never uses embeddings. Rebuild them with
+`build-source-index.py` and `rebuild-experience.py`; use
 `kb-projection-doctor.py` for read-only freshness, provenance, orphan, and
 redaction diagnostics. The evidence gate is deliberately stricter than
 retrieval quality: without reviewed holdouts and a downstream correctness

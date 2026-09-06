@@ -61,18 +61,20 @@ class ProjectionDoctorTest(unittest.TestCase):
             source_file.write_text("original", encoding="utf-8")
             db = vault / ".claude" / "kb-source.db"
             conn = source.connect(db)
-            source.ensure_schema(conn, 4, "fake:4")
-            conn.execute("INSERT INTO source_manifest(source_path, source_hash) VALUES (?, ?)",
-                         ("05-bronnen/s.md", "sha256:old"))
+            source.ensure_schema(conn)
+            conn.execute(
+                "INSERT OR REPLACE INTO source_meta(key, value) VALUES (?, ?)",
+                ("retrieval_backend", "sqlite_fts5"))
             conn.commit()
             source.upsert_source(conn, source_path="05-bronnen/s.md",
                                  source_hash="sha256:old", chunks=[{
-                                     "index": 0, "start": 0, "end": 8, "text": "original"}],
-                                 vectors=[[1, 0, 0, 0]])
+                                     "index": 0, "start": 0, "end": 8,
+                                     "text": "original"}])
             conn.close()
             source_file.write_text("changed", encoding="utf-8")
             report = doctor.health(vault)["source"]
             self.assertEqual(report["status"], "ready")
+            self.assertEqual(report["retrieval_backend"], "sqlite_fts5")
             self.assertEqual(report["stale_sources"], ["05-bronnen/s.md"])
 
 

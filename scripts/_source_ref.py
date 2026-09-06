@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
+from collections import OrderedDict
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
 SCHEMA_VERSION = 1
@@ -20,6 +22,10 @@ APPROVED_ROOTS = (
     "08-archive",
 )
 REDACTION_STATES = {"clear", "redacted"}
+_SNAPSHOT_CACHE_MAX_BYTES = 256 * 1024 * 1024
+_snapshot_cache: OrderedDict[tuple, tuple[str, str, bool, int]] = OrderedDict()
+_snapshot_cache_bytes = 0
+_snapshot_lock = threading.RLock()
 
 
 def _sha256_bytes(value: bytes) -> str:
@@ -77,6 +83,43 @@ def _is_redacted(path: Path, text: str) -> bool:
     return "redacted:" in header and any(
         marker in header for marker in
         ("redacted: true", "redacted: yes", "redacted: 1"))
+
+
+def _signature(path: Path) -> tuple:
+    stat = path.stat()
+    return (
+        str(path), int(getattr(stat, "st_dev", 0)), int(getattr(stat, "st_ino", 0)),
+        int(stat.st_size), int(stat.st_mtime_ns), int(stat.st_ctime_ns),
+    )
+
+
+def _source_snapshot(path: Path) -> tuple[str, str, bool]:
+    """Read once, then reuse while filesystem identity and timestamps are stable."""
+    global _snapshot_cache_bytes
+    before = _signature(path)
+    with _snapshot_lock:
+        cached = _snapshot_cache.get(before)
+        if cached is not None:
+            _snapshot_cache.move_to_end(before)
+            return cached[0], cached[1], cached[2]
+    raw = path.read_bytes()
+    after = _signature(path)
+    if before != after:
+        raise OSError("source changed while being read")
+    text = raw.decode("utf-8")
+    snapshot = (text, _sha256_bytes(raw), _is_redacted(path, text))
+    weight = len(raw) + len(text)
+    if weight <= _SNAPSHOT_CACHE_MAX_BYTES:
+        with _snapshot_lock:
+            for key in [key for key in _snapshot_cache if key[0] == str(path)]:
+                _snapshot_cache_bytes -= _snapshot_cache.pop(key)[3]
+            while (_snapshot_cache and
+                   _snapshot_cache_bytes + weight > _SNAPSHOT_CACHE_MAX_BYTES):
+                _old_key, old = _snapshot_cache.popitem(last=False)
+                _snapshot_cache_bytes -= old[3]
+            _snapshot_cache[before] = (*snapshot, weight)
+            _snapshot_cache_bytes += weight
+    return snapshot
 
 
 def _identity_payload(ref: dict) -> dict:
@@ -165,17 +208,16 @@ def resolve_source_ref(vault: Path, ref: dict) -> dict:
     except (KeyError, TypeError, ValueError, OSError) as exc:
         return _invalid(str(exc))
     try:
-        raw = path.read_bytes()
-        text = raw.decode("utf-8")
+        text, observed_source_hash, redacted = _source_snapshot(path)
     except (UnicodeError, OSError) as exc:
         return {"status": "unreadable", "fresh": False,
                 "source_ref_id": ref.get("source_ref_id", ""),
                 "source_path": relative, "reason": type(exc).__name__}
 
-    if _is_redacted(path, text):
+    if redacted:
         return {"status": "redacted", "fresh": False,
                 "source_ref_id": ref["source_ref_id"], "source_path": relative}
-    if _sha256_bytes(raw) != ref.get("source_sha256"):
+    if observed_source_hash != ref.get("source_sha256"):
         return {"status": "stale", "fresh": False,
                 "source_ref_id": ref["source_ref_id"], "source_path": relative,
                 "reason": "source hash mismatch"}

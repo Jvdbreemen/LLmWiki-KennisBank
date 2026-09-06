@@ -242,6 +242,7 @@ class SetupDeployTest(unittest.TestCase):
         _tmp, vault = self.gedeelde_installatie()
         scripts = vault / ".claude" / "scripts"
         for name in ("build-source-index.py", "build-source-holdout.py",
+                     "benchmark-source-recall.py",
                      "kb-source-recall.py", "build-experience-index.py",
                      "rebuild-experience.py", "kb-experience-recall.py",
                      "kb-experience-proposal.py", "kb-layer-eval.py",

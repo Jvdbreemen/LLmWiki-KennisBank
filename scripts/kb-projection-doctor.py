@@ -29,7 +29,7 @@ def _table_names(conn):
 
 def _source_health(vault: Path) -> dict:
     path = vault / ".claude" / "kb-source.db"
-    required = {"docs", "source_chunks", "source_manifest", "doc_sources"}
+    required = {"source_meta", "source_chunks", "source_manifest", "source_fts"}
     if not path.is_file():
         return {"status": "missing", "rebuildable": True, "reason": "index absent"}
     try:
@@ -39,11 +39,14 @@ def _source_health(vault: Path) -> dict:
             conn.close()
             return {"status": "incomplete", "rebuildable": True,
                     "missing_tables": sorted(required - tables)}
-        doc_count = conn.execute("SELECT count(*) FROM docs WHERE layer='source'").fetchone()[0]
+        doc_count = conn.execute("SELECT count(*) FROM source_manifest").fetchone()[0]
         chunk_count = conn.execute("SELECT count(*) FROM source_chunks").fetchone()[0]
-        provenance_docs = conn.execute(
-            "SELECT count(*) FROM docs d WHERE d.layer='source' AND EXISTS "
-            "(SELECT 1 FROM doc_sources s WHERE s.doc_id=d.doc_id)").fetchone()[0]
+        provenance_chunks = conn.execute(
+            "SELECT count(*) FROM source_chunks WHERE source_path<>'' "
+            "AND source_hash LIKE 'sha256:%' AND start>=0 AND end>start "
+            "AND passage_hash LIKE 'sha256:%'").fetchone()[0]
+        backend_row = conn.execute(
+            "SELECT value FROM source_meta WHERE key='retrieval_backend'").fetchone()
         manifest = {str(row[0]): str(row[1]) for row in conn.execute(
             "SELECT source_path, source_hash FROM source_manifest")}
         conn.close()
@@ -64,8 +67,10 @@ def _source_health(vault: Path) -> dict:
                        if rel in current and current[rel] != digest)
         orphaned_chunks = sorted(set(manifest) - set(current) - redacted)
         return {"status": "ready", "rebuildable": True, "documents": doc_count,
-                "chunks": chunk_count, "provenance_documents": provenance_docs,
-                "provenance_coverage": (provenance_docs / doc_count if doc_count else 1.0),
+                "chunks": chunk_count, "provenance_chunks": provenance_chunks,
+                "provenance_coverage": (
+                    provenance_chunks / chunk_count if chunk_count else 1.0),
+                "retrieval_backend": backend_row[0] if backend_row else "unknown",
                 "stale_sources": stale, "orphaned_sources": orphaned_chunks,
                 "redacted_sources": sorted(redacted)}
     except Exception as exc:

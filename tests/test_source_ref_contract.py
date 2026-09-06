@@ -66,6 +66,17 @@ class SourceRefContractTest(unittest.TestCase):
         self.assertEqual(result["status"], "stale")
         self.assertNotIn("passage", result)
 
+    def test_warm_snapshot_cache_does_not_hide_a_same_length_rewrite(self):
+        module, ref = self._ref()
+        self.assertEqual(module.resolve_source_ref(self.vault, ref)["status"], "valid")
+        original = self.source.read_text(encoding="utf-8")
+        replacement = ("X" if original[0] != "X" else "Y") + original[1:]
+        self.assertEqual(len(replacement), len(original))
+        self.source.write_text(replacement, encoding="utf-8")
+        result = module.resolve_source_ref(self.vault, ref)
+        self.assertEqual(result["status"], "stale")
+        self.assertNotIn("passage", result)
+
     def test_traversal_absolute_path_and_unknown_schema_are_rejected(self):
         module = _source_ref_module()
         with self.assertRaises(ValueError):

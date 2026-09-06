@@ -192,12 +192,16 @@ def recall_tool(query: str, k: int = 5, *, compact: bool = False) -> str:
     return "KennisBank-treffers:\n" + "\n".join(lines)
 
 
-def source_recall_tool(query: str, mode: str = "explicit", k: int = 5) -> str:
+def source_recall_tool(query: str = "", mode: str = "explicit", k: int = 5,
+                       source_ref: dict | None = None) -> str:
     """Explicit provenance-first source recall; never part of normal injection."""
     if source_recall is None:
         return '{"status": "unavailable", "hits": []}'
     try:
-        result = source_recall.run({"mode": mode, "prompt": query, "k": int(k)})
+        request = {"mode": mode, "prompt": query, "k": int(k)}
+        if source_ref is not None:
+            request["source_ref"] = source_ref
+        result = source_recall.run(request)
         return json.dumps(result, ensure_ascii=False, sort_keys=True)
     except Exception:
         return '{"status": "unavailable", "hits": []}'
@@ -387,10 +391,11 @@ def build_server():
         return recall_tool(query, k=min(int(k), 3) if compact else k, compact=compact)
 
     @srv.tool(annotations=_ann(title="Recall source evidence", readOnlyHint=True, openWorldHint=False))
-    def source_recall(query: str, mode: str = "explicit", k: int = 5) -> str:
+    def source_recall(query: str = "", mode: str = "explicit", k: int = 5,
+                      source_ref: dict | None = None) -> str:
         """Retrieve hash- and offset-bound source passages for explicit
         reconstruction or verification. Never use this as normal injection."""
-        return source_recall_tool(query, mode=mode, k=k)
+        return source_recall_tool(query, mode=mode, k=k, source_ref=source_ref)
 
     @srv.tool(annotations=_ann(title="Recall validated experience", readOnlyHint=True, openWorldHint=False))
     def experience_recall(query: str, mode: str = "explicit", k: int = 5) -> str:

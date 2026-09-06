@@ -198,23 +198,19 @@ def select_passage(claim: str, chunks: list) -> str:
 
 
 def source_recall_passage(claim: str) -> dict:
-    """Optional reusable source-index adapter for verification only."""
+    """Optional lexical source-index adapter for explicit verification only."""
     try:
         import _settings
-        if not _settings.get("source_recall", False):
+        if not _settings.get("source_explicit_recall", False):
             return {}
         import _source_recall
-        qvec = emb.embed_query(claim)
-        if qvec is None:
-            return {}
         db = vault_root() / ".claude" / "kb-source.db"
         if not db.is_file():
             return {}
         conn = _source_recall.connect(db)
         try:
             hits = _source_recall.source_hits(
-                conn, query_vector=qvec, query_text=claim, k=1,
-                embed_id=emb.embed_id(), source_root=vault_root())
+                conn, query_text=claim, k=1, source_root=vault_root())
         finally:
             conn.close()
         return hits[0] if hits else {}

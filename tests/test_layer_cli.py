@@ -28,7 +28,8 @@ class LayerCliContractTest(unittest.TestCase):
         self.vault = Path(self.tmp.name) / "vault"
         (self.vault / ".claude").mkdir(parents=True)
         (self.vault / "kennisbank-settings.json").write_text(
-            json.dumps({"source_recall": True, "experience_recall": True}),
+            json.dumps({"source_recall": True, "source_explicit_recall": True,
+                        "experience_recall": True}),
             encoding="utf-8")
         self.saved = os.environ.get("KENNISBANK_VAULT")
         os.environ["KENNISBANK_VAULT"] = str(self.vault)
@@ -67,7 +68,7 @@ class LayerCliContractTest(unittest.TestCase):
         labeled = self.source.label_hits([hit], "verify")[0]
         self.assertEqual(labeled["retrieval_mode"], "verify")
         self.assertEqual(labeled["confidence"], {
-            "cosine": 0.81, "lexical_match": True, "fresh": True,
+            "basis": "bm25", "best_effort": True, "fresh": True,
         })
         self.assertEqual(
             self.source.result_flags([labeled], "verify"),
