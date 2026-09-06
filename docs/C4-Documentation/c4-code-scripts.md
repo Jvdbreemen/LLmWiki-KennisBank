@@ -479,8 +479,9 @@ These are invoked by the Claude Code harness on UserPromptSubmit (synchronously,
   - **Location**: [build-source-index.py](../../scripts/build-source-index.py)
 
 - **rebuild-experience.py** / **build-experience-index.py**
-  - Rebuild typed experience records from append-only events/outcomes and,
-    when configured, materialize the local vector/FTS projection.
+  - Rebuild the disposable experience projection from the separate append-only
+    ledger and materialize local vector/FTS retrieval, or a complete lexical
+    fallback when embeddings are unavailable.
   - **Location**: [rebuild-experience.py](../../scripts/rebuild-experience.py)
 
 

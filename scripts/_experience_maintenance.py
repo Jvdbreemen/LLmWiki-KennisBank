@@ -5,7 +5,9 @@ from collections import Counter
 from pathlib import PurePosixPath
 
 
-def _source_path(ref: str) -> str:
+def _source_path(ref) -> str:
+    if isinstance(ref, dict):
+        return str(ref.get("source_path") or "").strip().replace("\\", "/")
     return str(ref).split("#", 1)[0].strip().replace("\\", "/")
 
 
@@ -25,7 +27,8 @@ def lifecycle_report(records, *, existing_sources=(), redacted_sources=()) -> di
         limits = str(record.get("attribution_limits") or "").lower()
         if record.get("narrowed") or "narrow" in limits:
             narrowed.append(eid)
-        refs = [_source_path(str(ref)) for ref in (record.get("source_refs") or [])]
+        refs = [_source_path(ref) for ref in (record.get("source_refs") or [])]
+        refs = [ref for ref in refs if ref]
         if not refs:
             unresolved.append(eid)
             continue

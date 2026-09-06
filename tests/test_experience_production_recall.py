@@ -98,6 +98,17 @@ class ExperienceProductionRecallTest(unittest.TestCase):
 
         self.assertEqual(hits, [])
 
+    def test_retracted_and_superseded_records_never_enter_public_recall(self):
+        for eid, status in (("old", "retracted"), ("older", "superseded")):
+            self._index(self._record(
+                eid, task=eid, lesson="bounded timeout", source=eid,
+                status=status), [1, 0, 0])
+
+        hits = experience.experience_hits(
+            self.conn, query_vector=[1, 0, 0], query_text="bounded timeout")
+
+        self.assertEqual(hits, [])
+
     def test_results_are_capped_and_diversified_by_task_and_source(self):
         fixtures = (
             ("a", "same-task", "bounded timeout primary", "same", [1, 0, 0]),

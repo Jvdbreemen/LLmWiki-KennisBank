@@ -1,6 +1,7 @@
 # Source-recall and experience-memory upgrade note
 
-Status: feature branch only (`codex/source-recall-experience-evidence`)
+Status: superseded by production branch
+`codex/source-grounded-experience-production`.
 
 ## Migration impact
 
@@ -9,20 +10,24 @@ Status: feature branch only (`codex/source-recall-experience-evidence`)
 - Setup already deploys every `scripts/*.py` and `commands/**/*.md` file
   idempotently. The new operational entry points are `rebuild-experience.py`,
   `kb-projection-doctor.py`, and the namespaced rebuild/proposal commands.
-- `source_recall` and `experience_recall` remain `false` by default until the
-  paired evaluation gates pass.
+- `source_explicit_recall` and `experience_explicit_recall` remain `false` by
+  default until the paired evaluation gates pass. Legacy broad flags are
+  reported as forbidden by the doctor.
 - `kb-source.db` is disposable and rebuilds from approved raw-source roots.
-  `kb-experience.db` rebuilds its derived records from append-only event and
-  outcome tables. Neither database is a source of truth.
+  `kb-experience-ledger.db` retains canonical events, outcomes, and reviews;
+  `kb-experience-index.db` is disposable and rebuilds from that ledger. Only
+  the source and experience indexes are derived stores.
 
 ## Rollback and recovery
 
-Run the relevant builder with `--progress`. Both builders use a staging file
+Run the relevant builder with `--progress`. Both index builders use a staging file
 and atomically replace the target only after a complete successful build. A
 failed read, embedding, or schema operation therefore leaves the previous
-derived database in place. If a derived database is corrupt, move it aside or
-restore the latest vault backup and rebuild it; raw files and append-only
-experience evidence remain untouched.
+derived database in place. If a derived database is corrupt, preserve it for
+diagnosis and rebuild it; raw files and the append-only experience ledger remain
+untouched. The one-time mixed-store migration first creates a hash-named backup,
+copies canonical rows through a staged ledger, verifies counts and integrity,
+and leaves the legacy database intact for rollback.
 
 `kb-projection-doctor.py` is read-only. It reports stale source hashes,
 orphaned source references, redaction-affected experiences, unresolved
@@ -32,8 +37,8 @@ delete the evidence trail.
 
 ## Known limitations
 
-- The current live vault has no reviewed experience holdout and no deployed
-  experience event database, so the product-value gate is not yet passable.
+- The production feature remains disabled by default until the frozen value and
+  owner-canary gates are recorded.
 - The source smoke set is only a mechanical check; it is not a representative
   50-positive/10-negative evaluation and has no downstream answer-correctness
   labels.

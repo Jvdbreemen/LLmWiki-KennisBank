@@ -34,15 +34,18 @@ Architecturally this component sits between the transcript/session layer (upstre
 ### Outcome/experience projection
 
 The experience layer is a separate, optional projection rather than a second
-copy of raw memory. Typed append-only events and outcome records are the source
-of truth; `_experience_extract.py` derives candidate or validated experiences
+copy of raw memory. Typed append-only events, outcomes, and reviews in
+`kb-experience-ledger.db` are the retained source of truth;
+`_experience_extract.py` derives candidate or validated experiences
 only when source and outcome evidence resolve. `kb-experience-recall.py` exposes
 only explicitly requested, owner-accepted lessons with SourceRef ids and an
 honest hybrid or lexical-fallback label, while
-`rebuild-experience.py` can reconstruct the derived store after corruption or
-schema migration. Retraction and supersession close records but do not erase
-their audit trail. Missing or redacted sources are surfaced as lifecycle
-warnings and cannot silently become fresh evidence.
+`rebuild-experience.py` can reconstruct disposable `kb-experience-index.db`
+after corruption or schema migration. Retraction and supersession close records
+but do not erase their ledger audit trail. Source deletion, redaction, and hash
+changes are surfaced as lifecycle warnings and cannot silently become fresh
+evidence. There is intentionally no automatic retention deletion in v1: remove
+or archive canonical evidence only through an explicit future owner policy.
 
 ## Code Elements
 
@@ -90,7 +93,7 @@ From [c4-code-commands-skills.md](./c4-code-commands-skills.md):
 - `/kennisbank:autoreview` — Trap 2 of the review pipeline: bundles quarantined cases, dispatches parallel subagent adjudication, applies verdicts via `kb-autoreview.py apply`, reindexes
 - `/kennisbank:review` — memory system health check: quarantine counts, index consistency, stale entries
 - `/kennisbank:rebuild-memory` — full re-extraction of memory from archived transcripts (heavy, confirmation-gated)
-- `/kennisbank:rebuild-experience` — rebuild append-only event/outcome projections and local vectors, with staging and rollback-by-preservation
+- `/kennisbank:rebuild-experience` — atomically rebuild the disposable local projection from the append-only ledger, with lexical fallback and rollback-by-preservation
 
 ## Interfaces
 

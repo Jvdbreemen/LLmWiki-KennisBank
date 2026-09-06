@@ -47,13 +47,18 @@ class ExperienceMaintenanceTest(unittest.TestCase):
             {"experience_id": "narrowed", "status": "validated",
              "source_refs": ["01-raw/a.md#10:20"], "outcome_refs": ["o3"],
              "attribution_limits": "narrowed to shutdown helpers"},
+            {"experience_id": "superseded", "status": "superseded",
+             "source_refs": [{"source_path": "01-raw/a.md",
+                              "source_ref_id": "sr_a"}],
+             "outcome_refs": ["o4"]},
         ], existing_sources={"01-raw/a.md"},
             redacted_sources={"05-bronnen/redacted.md"})
         self.assertEqual(report["status_counts"]["validated"], 3)
         self.assertEqual(report["status_counts"]["retracted"], 1)
         self.assertEqual(report["orphan_experiences"], ["orphan"])
         self.assertEqual(report["redacted_experiences"], ["retracted"])
-        self.assertEqual(report["retracted_or_superseded"], ["retracted"])
+        self.assertEqual(report["retracted_or_superseded"],
+                         ["retracted", "superseded"])
         self.assertEqual(report["narrowed_experiences"], ["narrowed"])
 
     def test_full_rebuild_rederives_experiences_and_reports_progress(self):

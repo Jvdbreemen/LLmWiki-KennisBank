@@ -21,7 +21,7 @@ import os
 import sys
 from pathlib import Path
 
-VERSION = "0.36.0"
+VERSION = "0.38.0"
 STAMP_REL = ".claude/.kennisbank-schema-version"
 
 
@@ -100,12 +100,20 @@ def _m_prune_scene_layer(vault_root, ctx):
             pass
 
 
+def _m_split_experience_store(vault_root, ctx):
+    migration = _load_sibling("_experience_migration", "_experience_migration.py")
+    report = migration.migrate(Path(vault_root), dry_run=False)
+    if report.get("status") == "failed":
+        raise RuntimeError("experience store migration failed safely")
+
+
 # (versie, naam, apply_fn(vault_root, ctx)). Geordend; idempotent.
 MIGRATIONS = [
     ("0.9.0", "geheugen-dirs", _m_memory_dirs),
     ("0.9.0", "geheugen-hooks", _m_register_hooks),
     ("0.9.0", "geheugen-toggles", _m_memory_toggles),
     ("0.36.0", "scene-laag-opruimen", _m_prune_scene_layer),
+    ("0.38.0", "experience-store-splitsen", _m_split_experience_store),
 ]
 
 

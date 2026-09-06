@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""Rebuild the experience store and optional local vector projection."""
+"""Atomically rebuild the reviewed experience projection from its ledger."""
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import importlib.util
+import _experience  # noqa: E402
 
 
 def _builder():
@@ -20,38 +21,42 @@ def _builder():
     return module
 
 
+def _optional_embedding(records_only: bool):
+    if records_only:
+        return None, ""
+    try:
+        import _embeddings as emb
+        _provider, _model, endpoint, _key = emb._resolve()
+        if not emb.endpoint_allowed(emb.provider(), endpoint):
+            return None, ""
+        return (lambda text: emb.embed(text, kind="doc")), emb.embed_id()
+    except Exception:
+        return None, ""
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--vault", type=Path, default=None)
-    parser.add_argument("--db", type=Path, default=None)
+    parser.add_argument("--ledger", type=Path, default=None)
+    parser.add_argument("--projection", "--db", dest="projection", type=Path,
+                        default=None)
     parser.add_argument("--incremental", action="store_true",
-                        help="preserve existing derived records and add new tasks")
+                        help="deprecated: production projections always rebuild atomically")
     parser.add_argument("--records-only", action="store_true",
-                        help="rebuild durable records without embedding vectors")
+                        help="build a lexical-only projection without embeddings")
     parser.add_argument("--progress", action="store_true")
     args = parser.parse_args(argv)
-    vault = args.vault or Path(os.environ.get("KENNISBANK_VAULT", "."))
-    db = args.db or vault / ".claude" / "kb-experience.db"
-    embed_fn = None
-    embed_id = ""
-    if not args.records_only:
-        try:
-            import _embeddings as emb
-            _provider, _model, endpoint, _key = emb._resolve()
-            if not emb.endpoint_allowed(emb.provider(), endpoint):
-                raise RuntimeError("experience rebuild requires an allowed local embedding endpoint")
-            embed_fn = lambda text: emb.embed(text, kind="doc")
-            embed_id = emb.embed_id()
-        except Exception as exc:
-            print(json.dumps({"status": "failed", "reason": str(exc)}), file=sys.stderr)
-            return 1
+    root = args.vault or Path(os.environ.get("KENNISBANK_VAULT", "."))
+    ledger = args.ledger or _experience.ledger_path(root)
+    projection = args.projection or _experience.projection_path(root)
+    embed_fn, embed_id = _optional_embedding(args.records_only)
     progress_fn = None
     if args.progress:
-        progress_fn = lambda event: print(json.dumps({"progress": event}, sort_keys=True),
-                                          file=sys.stderr, flush=True)
-    builder = _builder()
-    result = builder.rebuild_experience_store(
-        db, rebuild=not args.incremental, embed_fn=embed_fn, embed_id=embed_id,
+        progress_fn = lambda event: print(
+            json.dumps({"progress": event}, sort_keys=True),
+            file=sys.stderr, flush=True)
+    result = _builder().rebuild_experience_projection(
+        ledger, projection, embed_fn=embed_fn, embed_id=embed_id,
         progress_fn=progress_fn)
     print(json.dumps(result, ensure_ascii=False, sort_keys=True))
     return 0 if result.get("status") == "ok" else 1

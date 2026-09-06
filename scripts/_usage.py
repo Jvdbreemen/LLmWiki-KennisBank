@@ -86,6 +86,17 @@ CREATE TABLE IF NOT EXISTS use_events (
 );
 CREATE INDEX IF NOT EXISTS idx_use_events_session_task
     ON use_events(session_id, task_id, ts);
+CREATE TABLE IF NOT EXISTS projection_metrics (
+    day TEXT NOT NULL,
+    layer TEXT NOT NULL,
+    route TEXT NOT NULL,
+    status TEXT NOT NULL,
+    calls INTEGER NOT NULL DEFAULT 0,
+    hits INTEGER NOT NULL DEFAULT 0,
+    latency_ms_total REAL NOT NULL DEFAULT 0,
+    latency_ms_max REAL NOT NULL DEFAULT 0,
+    PRIMARY KEY (day, layer, route, status)
+);
 """
 
 
@@ -201,6 +212,37 @@ def log_exposures(items, *, session_id: str = "", task_id: str = "",
         return count
     except Exception:
         return 0
+
+
+def log_projection_metric(*, layer: str, route: str, status: str, hits: int,
+                          latency_ms: float, today: str = "") -> bool:
+    """Store aggregate deeper-recall health without accepting content fields."""
+    if not enabled():
+        return False
+    safe_layer = str(layer).lower() if str(layer).lower() in {
+        "source", "experience"} else "other"
+    safe_route = str(route).lower() if str(route).lower() in {
+        "exact_ref", "lexical_fts", "hybrid", "lexical_fallback"} else "other"
+    safe_status = str(status).lower() if str(status).lower() in {
+        "ok", "no_hit", "evidence_unavailable", "invalid", "unavailable",
+        "disabled", "policy_disabled", "not_routed",
+    } else "other"
+    day = str(today or date.today().isoformat())[:10]
+    hit_count = min(max(int(hits), 0), 100)
+    latency = min(max(float(latency_ms), 0.0), 600000.0)
+    try:
+        with closing(_connect()) as conn, conn:
+            conn.execute(
+                "INSERT INTO projection_metrics(day, layer, route, status, calls, "
+                "hits, latency_ms_total, latency_ms_max) VALUES (?,?,?,?,1,?,?,?) "
+                "ON CONFLICT(day, layer, route, status) DO UPDATE SET "
+                "calls=calls+1, hits=hits+excluded.hits, "
+                "latency_ms_total=latency_ms_total+excluded.latency_ms_total, "
+                "latency_ms_max=max(latency_ms_max, excluded.latency_ms_max)",
+                (day, safe_layer, safe_route, safe_status, hit_count, latency, latency))
+        return True
+    except Exception:
+        return False
 
 
 def log_use_evidence(items, *, session_id: str = "", task_id: str = "",

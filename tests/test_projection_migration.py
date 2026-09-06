@@ -44,6 +44,12 @@ class ProjectionMigrationContractTest(unittest.TestCase):
         self.assertFalse(dry["mutated"])
         self.assertEqual(self.legacy.read_bytes(), before)
         self.assertFalse((self.vault / ".claude" / "kb-experience-ledger.db").exists())
+        self.assertEqual(report["legacy_files"][0]["bytes"], len(before))
+        self.assertEqual(report["counts"], report["legacy_tables"])
+        self.assertIn("legacy", report["schema_versions"])
+        self.assertGreaterEqual(report["disk_estimate_bytes"], len(before) * 2)
+        self.assertEqual(report["backup_target"], report["backup_path"])
+        self.assertIn("feature_flags", report)
 
     def test_real_migration_preserves_legacy_and_is_idempotent(self):
         migration = _migration_module()

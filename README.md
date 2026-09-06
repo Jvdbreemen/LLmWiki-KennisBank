@@ -821,7 +821,7 @@ The hooks are fail-open by design: an error means no injected context or a skipp
 | `/kennisbank:review` | optional topic | Walk the unverified-memory queue; the human decides approve/reject/skip per item |
 | `/kennisbank:rebuild-index` | none | Rebuild the hybrid search index from the vault markdown |
 | `/kennisbank:rebuild-source-index` | none | Rebuild the opt-in provenance-first raw-source projection |
-| `/kennisbank:rebuild-experience` | `--incremental` or `--records-only` | Rebuild outcome/experience records and the optional local vector projection |
+| `/kennisbank:rebuild-experience` | `--records-only` (lexical-only); `--incremental` is deprecated | Atomically rebuild the disposable local experience projection from the append-only ledger |
 | `/kennisbank:source-recall` | explicit/verify/reconstruct | Retrieve hash- and offset-bound source passages; never normal prompt injection |
 | `/kennisbank:experience-recall` | explicit | Retrieve up to three reviewed experiences; hybrid when compatible and labelled lexical fallback otherwise |
 | `/kennisbank:rebuild-memory` | none | Re-extract ALL memory from archived transcripts (heavy; semantic dedup makes it near-idempotent) |

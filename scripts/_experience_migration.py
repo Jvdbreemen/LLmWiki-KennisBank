@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import shutil
 import sqlite3
@@ -10,7 +11,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _experience import ensure_ledger_schema, ledger_path
+from _experience import ensure_ledger_schema, ledger_path, projection_path
 
 
 def _sha256(path: Path) -> str:
@@ -42,20 +43,72 @@ def _tables(path: Path) -> dict[str, int]:
             conn.close()
 
 
+def _schema_versions(path: Path) -> dict:
+    if not path.is_file():
+        return {}
+    conn = None
+    try:
+        conn = sqlite3.connect(path)
+        result = {"user_version": int(conn.execute("PRAGMA user_version").fetchone()[0])}
+        if "meta" in _tables(path):
+            for key, value in conn.execute(
+                    "SELECT key, value FROM meta WHERE key LIKE '%version%'"):
+                result[str(key)] = str(value)
+        return result
+    except sqlite3.DatabaseError:
+        return {"status": "unreadable"}
+    finally:
+        if conn is not None:
+            conn.close()
+
+
+def _feature_flags(root: Path) -> dict:
+    try:
+        data = json.loads((root / "kennisbank-settings.json").read_text(
+            encoding="utf-8"))
+        if not isinstance(data, dict):
+            data = {}
+    except (OSError, ValueError):
+        data = {}
+    keys = ("experience_capture", "experience_projection",
+            "experience_explicit_recall", "source_explicit_recall")
+    def enabled(value) -> bool:
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "on"}
+        return bool(value)
+    return {key: enabled(data.get(key, False)) for key in keys}
+
+
 def preflight(vault: Path) -> dict:
     root = Path(vault)
     legacy = root / ".claude" / "kb-experience.db"
     target = ledger_path(root)
     digest = _sha256(legacy) if legacy.is_file() else ""
     backup = legacy.with_name(f"{legacy.name}.backup-{digest[:12]}") if digest else None
+    legacy_bytes = legacy.stat().st_size if legacy.is_file() else 0
+    target_bytes = target.stat().st_size if target.is_file() else 0
+    projection = projection_path(root)
+    projection_bytes = projection.stat().st_size if projection.is_file() else 0
+    counts = _tables(legacy)
     return {
         "status": "ready" if legacy.is_file() else "no_legacy",
         "mutated": False,
         "legacy_exists": legacy.is_file(),
         "legacy_sha256": digest,
-        "legacy_tables": _tables(legacy),
+        "legacy_tables": counts,
+        "legacy_files": ([{"name": legacy.name, "bytes": legacy_bytes}]
+                         if legacy.is_file() else []),
+        "counts": counts,
+        "schema_versions": {
+            "legacy": _schema_versions(legacy),
+            "ledger": _schema_versions(target),
+            "projection": _schema_versions(projection),
+        },
+        "disk_estimate_bytes": legacy_bytes * 2 + target_bytes + projection_bytes,
+        "feature_flags": _feature_flags(root),
         "target_exists": target.is_file(),
         "backup_path": str(backup) if backup else "",
+        "backup_target": str(backup) if backup else "",
     }
 
 

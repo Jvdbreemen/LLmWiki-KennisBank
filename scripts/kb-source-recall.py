@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -56,7 +57,18 @@ def _exact_hit(source, root: Path, ref: dict, mode: str) -> dict:
     return label_hits([item], mode)[0]
 
 
+def _observe(route: str, status: str, hits: int, started: float) -> None:
+    try:
+        import _usage
+        _usage.log_projection_metric(
+            layer="source", route=route, status=status, hits=hits,
+            latency_ms=(time.perf_counter() - started) * 1000.0)
+    except Exception:
+        pass
+
+
 def run(request: dict, *, vault: Path | None = None, **_ignored) -> dict:
+    started = time.perf_counter()
     request = dict(request or {})
     mode = str(request.get("mode") or "normal").lower()
     if mode == "normal":
@@ -80,11 +92,13 @@ def run(request: dict, *, vault: Path | None = None, **_ignored) -> dict:
                         "reason": "structured source_ref is required"}
             hit = _exact_hit(source, root, ref, mode)
             available = hit.get("source_state") == "current"
-            return {
+            result = {
                 "status": "ok" if available else "evidence_unavailable",
                 "hits": [hit], "mode": mode,
                 "flags": result_flags([hit], mode),
             }
+            _observe("exact_ref", result["status"], len(result["hits"]), started)
+            return result
 
         prompt = str(request.get("prompt") or request.get("query") or "").strip()
         if not prompt:
@@ -105,16 +119,18 @@ def run(request: dict, *, vault: Path | None = None, **_ignored) -> dict:
             import _usage
             _usage.log_exposures(
                 [{"item_id": hit.get("source_ref_id", ""), "layer": "source",
-                  "rank": rank + 1, "source_id": hit.get("source_path", "")}
+                  "rank": rank + 1}
                  for rank, hit in enumerate(hits)],
                 session_id=str(request.get("session_id") or ""),
-                task_id=str(request.get("task_id") or ""), query=prompt,
+                task_id=str(request.get("task_id") or ""), query="",
                 ts=str(request.get("timestamp") or ""), retrieval_kind=mode)
         except Exception:
             pass
-        return {"status": "ok" if hits else "no_hit", "hits": hits,
-                "mode": mode, "flags": result_flags(hits, mode),
-                "best_effort": True, "retrieval_route": "lexical_fts"}
+        result = {"status": "ok" if hits else "no_hit", "hits": hits,
+                  "mode": mode, "flags": result_flags(hits, mode),
+                  "best_effort": True, "retrieval_route": "lexical_fts"}
+        _observe("lexical_fts", result["status"], len(hits), started)
+        return result
     except Exception:
         return {"status": "unavailable", "hits": [], "mode": mode}
 

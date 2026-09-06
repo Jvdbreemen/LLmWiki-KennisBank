@@ -124,7 +124,7 @@ No retrieval-specific research report beyond the ADRs above was distinctly separ
 | `find-similar.py` | CLI | Finds semantically similar memories. | |
 | `kb-source-recall.py` | CLI (explicit only) | Runs best-effort FTS5/BM25 evidence search or resolves an exact structured SourceRef. | Opt-in; fail-open; no embeddings, fallback, or normal-hook routing. |
 | `kb-experience-recall.py` | CLI (explicit only) | Retrieves validated outcome-bound lessons through compatible hybrid search or labelled lexical fallback. | Candidates, unverified/unaccepted records, and raw passages are excluded; repaired episodes retain separate attempt, resolution, and final-outcome states. |
-| `rebuild-experience.py` | CLI (offline) | Rebuilds experience records and optional local vector/FTS projection from append-only events/outcomes. | Atomic staging; `--incremental` and `--records-only`. |
+| `rebuild-experience.py` | CLI (offline) | Fully rebuilds `kb-experience-index.db` from canonical events, outcomes, and reviews in `kb-experience-ledger.db`. | Atomic staging; local hybrid retrieval with complete lexical fallback; `--records-only` forces lexical-only. |
 | `kb-projection-doctor.py` | CLI (read-only) | Reports projection schema, freshness, provenance, orphan, redaction, and lifecycle health. | Never mutates derived state. |
 | `kb-layer-eval.py` | CLI (offline) | Builds the preregistered source/experience evidence packet and gates. | Content-safe; no prompts in output. |
 

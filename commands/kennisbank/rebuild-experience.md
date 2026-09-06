@@ -1,16 +1,20 @@
 # /kennisbank:rebuild-experience
 
-Herbouwt de outcome/experience-laag uit de append-only `experience_events` en
-`experience_outcomes`. De afgeleide records en de lokale vector/FTS-projectie
-worden eerst in staging opgebouwd en pas na succes atomisch vervangen.
+Herbouwt de afgeleide experience-projectie uit het afzonderlijke, append-only
+`kb-experience-ledger.db`. De canonical events, outcomes en reviews blijven in
+het ledger staan; alleen `kb-experience-index.db` wordt in staging opgebouwd en
+na een volledige succesvolle bouw atomisch vervangen.
 
 ```bash
 python3 "$KENNISBANK_VAULT/.claude/scripts/rebuild-experience.py" --progress
 ```
 
-Gebruik `--incremental` om bestaande derived records te behouden en alleen
-nieuwe sessie/taken toe te voegen. Gebruik `--records-only` wanneer alleen de
-deterministische recordlaag nodig is en er geen lokale embedding-backend
-beschikbaar is. Bij een fout blijft de vorige database staan. De command wijzigt
-geen raw source, memory-bestand of skill; retracted/superseded records blijven
-zichtbaar als gesloten auditsporen.
+Gebruik `--records-only` om bewust een lokale lexical-only FTS-projectie te
+bouwen. Als Ollama of de embedding-backend tijdens een normale rebuild niet
+bereikbaar is, wordt dezelfde volledige lexical fallback gepubliceerd; er is
+geen hosted fallback. `--incremental` wordt alleen nog geaccepteerd als
+deprecated compatibiliteitsvlag en verandert de full-rebuild-semantiek niet.
+Bij elke andere fout blijft de vorige goede projectie staan. De command wijzigt
+geen ledger, raw source, memory-bestand of skill. Retracted en superseded records
+blijven als gesloten auditsporen in het ledger bewaard en worden niet als recall-
+resultaat gepubliceerd.
