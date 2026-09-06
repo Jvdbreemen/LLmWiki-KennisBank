@@ -66,6 +66,21 @@ class KbMcpTest(unittest.TestCase):
         self.emb.embed = lambda *a, **k: None
         self.assertIn("geen", self.m.recall_tool("iets").lower())
 
+    def test_missing_deeper_gateways_do_not_disable_ordinary_recall(self):
+        old_source, old_experience = self.m.source_recall, self.m.experience_recall
+        self.m.source_recall = None
+        self.m.experience_recall = None
+        try:
+            self.assertIn("Oude bug", self.m.recall_tool("token expiry bug"))
+            self.assertEqual(
+                json.loads(self.m.source_recall_tool("evidence"))["status"],
+                "unavailable")
+            self.assertEqual(
+                json.loads(self.m.experience_recall_tool("lesson"))["status"],
+                "unavailable")
+        finally:
+            self.m.source_recall, self.m.experience_recall = old_source, old_experience
+
     def test_deeper_recall_tools_delegate_to_the_gated_cli_routes(self):
         class Gateway:
             @staticmethod

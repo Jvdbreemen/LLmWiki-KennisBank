@@ -17,14 +17,14 @@ KennisBank's actual knowledge store — the vault markdown, `kb-index.db`, `kb-a
 - **Idempotent by construction.** Re-running install must never duplicate a hook, clobber a user's hand-edited config, or lose an existing timeout override.
 - **Fail-open, always.** A KennisBank hook must never be the reason an agent turn is blocked, denied, or slowed past its budget — this is the direct expression of "onzichtbaar, snel, uit de weg" (invisible, fast, out of the way) at the integration boundary.
 - **One MCP surface.** Whichever harness can speak MCP (Codex, OpenCode, Copilot) reaches the same ten tools through the same command, built from a single helper (`_mcp_server_argv`). The two new source/experience tools remain explicitly gated and opt-in.
-- **Provable, not just plausible.** Install success is asserted by running the actual protocol handshake (`initialize()` + `list_tools()`) against the six gated tool names, not by checking that a config file merely exists.
+- **Provable, not just plausible.** Install success is asserted by running the actual protocol handshake (`initialize()` + `list_tools()`) against the required tool names, then calling ordinary, source, and experience recall. A config file merely naming the server is not evidence.
 
 ## 3. Software Features
 
 - **Cross-harness installer CLI** (`setup.sh`, `install-agent-envs.py --install --validate`): one command deploys scripts, config, commands, skills, hooks, and MCP registration for a chosen agent set (`claude`, `codex`, `opencode`, `copilot`, or `all`).
 - **Per-harness config adapters**: Claude Code (hooks-only, no MCP), Codex CLI (`config.toml` + `hooks.json` + `AGENTS.md` + prompts), OpenCode (`opencode.json` + a generated Bun plugin + `AGENTS.md` + commands), GitHub Copilot CLI (`mcp-config.json` + `hooks/kennisbank.json` + `copilot-instructions.md` + `agents/kennisbank.agent.md`).
 - **Single hook manifest** (`_hooks_manifest.py`): one declarative list of hook events, scripts, matchers, and timeouts consumed by all three hook-writing paths (Claude, Codex, Copilot) plus `doctor.sh`.
-- **Local MCP server** (`kb-mcp.py`, stdio): exposes `recall`, `capture`, `review_pending`, `review_decide`, and four temporal-recall tools (`what_did_i_do`, `timeline`, `weeklog`, `topic_timeline`) to any MCP-capable harness.
+- **Local MCP server** (`kb-mcp.py`, stdio): exposes ordinary `recall`, explicit `experience_recall` and `source_recall`, capture/review, and four temporal-recall tools to any MCP-capable harness. Instructions teach experience-first retrieval and source evidence only on demand; neither deeper route is automatic.
 - **Fail-open hook runtime**: every generated hook command is constructed so a script error, missing dependency, or malformed payload degrades to a no-op rather than blocking or denying the agent turn.
 - **Idempotent, non-destructive mutation primitives**: marker-scoped managed blocks with automatic backup for freeform files (`AGENTS.md`, `copilot-instructions.md`), key-scoped JSON/TOML merges with equivalence checks for structured config — both leave unrelated user content untouched on every re-run.
 - **Runtime-proof validation**: `validate_mcp_runtime` performs a real MCP client handshake and requires the eight retrieval/temporal tool names to be present before an install is accepted as successful; `validate_files` checks the deployed vault script set and per-harness config; `validate_models` smoke-tests Ollama/OpenRouter.
@@ -50,6 +50,8 @@ Reached today by Codex CLI, OpenCode, and GitHub Copilot CLI, each pointed at th
 | Tool | Signature | Purpose |
 |---|---|---|
 | `recall` | `recall_tool(query: str, k: int = 5, *, compact: bool = False) -> str` (`kb-mcp.py:150`) | Search the vault (memory + wiki) and return relevant knowledge as text. Must be called before external search per the Copilot instructions block. |
+| `experience_recall` | `experience_recall_tool(query: str, mode: str = "explicit", k: int = 3) -> str` | For an explicit prior-experience question, retrieve at most three owner-accepted, source-grounded lessons first. |
+| `source_recall` | `source_recall_tool(query: str = "", mode: str = "explicit", k: int = 5, source_ref: dict \| None = None) -> str` | Retrieve exact or best-effort source evidence only on demand for verification or reconstruction. |
 | `capture` | `capture_tool(title: str, body: str, memory_type: str = "feit", importance: int = 3) -> str` (`:179`) | Write a new memory (pull-write) into the vault's memory layer. |
 | `review_pending` | `review_pending_tool(k: int = 10) -> str` (`:213`) | Read-only: list the unverified-memory review queue. |
 | `review_decide` | `review_decide_tool(stem: str, decision: str) -> str` (`:230`) | Apply one human review decision (`approve\|reject\|skip`) — must only be called after explicit user confirmation per item. |
@@ -60,7 +62,7 @@ Reached today by Codex CLI, OpenCode, and GitHub Copilot CLI, each pointed at th
 
 The four temporal tools share a dispatcher (`_activity_call`, `:258`) that guards against the activity module being unavailable, converts exceptions to warnings rather than raising, and — when `KENNISBANK_MCP_COMPACT_OUTPUT=1` is set in the client env (Copilot only, added in `_copilot.py:46`) — renders a short human-readable summary instead of raw JSON.
 
-**Acceptance test, not just presence.** `install-agent-envs.py:validate_mcp_runtime` (`:793`) is the only thing that counts an MCP registration as valid: it runs a real `initialize()` + `list_tools()` handshake and requires eight tool names exactly (`recall`, `source_recall`, `experience_recall`, `capture`, `what_did_i_do`, `timeline`, `weeklog`, `topic_timeline`) before install is accepted (contract rule C9). A config file naming the server is not sufficient on its own.
+**Acceptance test, not just presence.** `install-agent-envs.py:validate_mcp_runtime` is the only thing that counts an MCP registration as valid: it runs a real `initialize()` + `list_tools()` handshake, requires ordinary/source/experience/capture/temporal tool names, and dispatches call-smokes for ordinary, source, and experience recall. A config file naming the server is not sufficient on its own.
 
 ### 5.2 Hook contract (`scripts/_hooks_manifest.py`, consumed by three writers)
 
@@ -93,7 +95,7 @@ One declarative list (`HOOKS`, `_hooks_manifest.py:12-22`) is the single source 
 
 | Harness | Skills | Commands / prompts | Instructions | Hooks | MCP | Config home override |
 |---|---|---|---|---|---|---|
-| **Claude Code** | `~/.claude/skills/<name>/SKILL.md` | `~/.claude/commands/*.md` | `CLAUDE.md` in the vault | `~/.claude/settings.json` via `register-hooks.py`; `SessionStart`, `UserPromptSubmit`, `SessionEnd`, `PreToolUse`, `PreCompact` | not registered by this layer — Claude reaches KennisBank only through hooks | — |
+| **Claude Code** | `~/.claude/skills/<name>/SKILL.md` | `~/.claude/commands/*.md`, including namespaced source/experience commands | `CLAUDE.md` in the vault | `~/.claude/settings.json` via `register-hooks.py`; `SessionStart`, `UserPromptSubmit`, `SessionEnd`, `PreToolUse`, `PreCompact` | not registered by this layer; explicit deeper recall uses commands | — |
 | **Codex CLI** | `~/.agents/skills/<name>/SKILL.md` | `~/.codex/prompts/<name>.md`, invoked as `/prompts:<name>` | `~/.codex/AGENTS.md` managed block | `~/.codex/hooks.json`; `SessionStart`, `UserPromptSubmit`, `Stop`, `PreToolUse` (no `PreCompact`) | `~/.codex/config.toml`, `[mcp_servers.kennisbank]` | `CODEX_HOME` |
 | **OpenCode** | `~/.agents/skills/` (shared) | `~/.config/opencode/commands/<name>.md` — real slash commands | `~/.config/opencode/AGENTS.md` managed block | `~/.config/opencode/plugins/kennisbank.js`, driven by `session.idle` / `session.updated` (not the shared hook manifest — its own event model) | `~/.config/opencode/opencode.json`, `mcp.kennisbank` | `OPENCODE_CONFIG_DIR` |
 | **GitHub Copilot CLI** | `~/.agents/skills/` — shared, no separate install | exposed as slash commands from the shared skills | `~/.copilot/copilot-instructions.md` managed block, plus the opt-in repo-local `.github/copilot-instructions.md` | `~/.copilot/hooks/kennisbank.json`; `sessionStart`, `userPromptSubmitted`, `preToolUse`, `postToolUse`, `sessionEnd` | `~/.copilot/mcp-config.json`, `mcpServers.kennisbank` | `COPILOT_HOME` |
@@ -150,7 +152,7 @@ C4Component
         Component(copilotAdapter, "_copilot.py", "Python module + CLI", "Hermetic Copilot config adapter: detect/install/remove/probe/validate")
         Component(registerHooks, "register-hooks.py", "Python CLI", "Claude Code hook registration into ~/.claude/settings.json")
         Component(hooksManifest, "_hooks_manifest.py", "Python module", "Single source of truth: hook events, matchers, timeouts")
-        Component(mcpServer, "kb-mcp.py", "Python / MCP stdio server", "Exposes recall, capture, review_pending, review_decide, what_did_i_do, timeline, weeklog, topic_timeline")
+        Component(mcpServer, "kb-mcp.py", "Python / MCP stdio server", "Exposes ordinary, source, experience, capture, review, and temporal tools")
         Component(doctor, "doctor.sh", "Bash", "Read-only post-install health gate")
         Component(agentStatus, "agent-status.py", "Python CLI", "Per-harness status dashboard, reads on-disk config only")
         Component(copilotRuntime, "Copilot runtime adapters", "Python (kennisbank-copilot.py, kb-copilot-capture.py, import-copilot.py, quiet-hook.py)", "Launcher, fail-open capture, transcript import, output suppression")
@@ -187,7 +189,7 @@ C4Component
     Rel(codex, mcpServer, "MCP stdio: initialize + list_tools + tool calls")
     Rel(opencode, mcpServer, "MCP stdio: initialize + list_tools + tool calls")
     Rel(copilot, mcpServer, "MCP stdio: initialize + list_tools + tool calls")
-    Rel(installer, mcpServer, "validate_mcp_runtime: real handshake, 6 tools required")
+    Rel(installer, mcpServer, "validate_mcp_runtime: list tools and call ordinary/source/experience")
 
     Rel(mcpServer, ollama, "Embedding + generation calls")
     Rel(installer, ollama, "validate_models smoke test")

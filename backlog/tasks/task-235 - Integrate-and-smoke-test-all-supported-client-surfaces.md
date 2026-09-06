@@ -1,7 +1,7 @@
 ---
 id: TASK-235
 title: Integrate and smoke-test all supported client surfaces
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-04 00:00'
 labels:
@@ -24,14 +24,16 @@ must not lose normal KennisBank recall.
 
 ## Acceptance Criteria
 
-- [ ] #1 Claude Code, Codex, OpenCode, and Copilot receive the correct scripts, commands/instructions, flags, and local vault configuration where supported
-- [ ] #2 Each supported explicit source and experience surface is smoke-tested, not merely copied
-- [ ] #3 Tool descriptions teach experience-first retrieval and source-on-demand evidence without suggesting automatic advisories
-- [ ] #4 README variants, C4 diagrams, settings docs, command docs, upgrade note, and rollback note agree on shipped behavior
-- [ ] #5 Missing MCP SDK, Ollama, vector extension, or projection fails open without affecting ordinary recall
-- [ ] #6 Generated/deployed client artifacts have parity tests and no stale experimental route text
+- [x] #1 Claude Code, Codex, OpenCode, and Copilot receive the correct scripts, commands/instructions, flags, and local vault configuration where supported
+- [x] #2 Each supported explicit source and experience surface is smoke-tested, not merely copied
+- [x] #3 Tool descriptions teach experience-first retrieval and source-on-demand evidence without suggesting automatic advisories
+- [x] #4 README variants, C4 diagrams, settings docs, command docs, upgrade note, and rollback note agree on shipped behavior
+- [x] #5 Missing MCP SDK, Ollama, vector extension, or projection fails open without affecting ordinary recall
+- [x] #6 Generated/deployed client artifacts have parity tests and no stale experimental route text
 
 ## Evidence
 
 Record client-by-client artifact paths, discovery output, smoke results, and
 any explicitly unsupported surface.
+
+See `docs/research/projection-client-surface-evidence-2026-09-07.md`.

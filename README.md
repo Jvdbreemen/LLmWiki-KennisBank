@@ -682,7 +682,7 @@ so a component that never answers looks exactly like one with nothing to report.
 - **Write-time invalidation** (Mem0 pattern, local): a new fact reconciles against the most similar existing memories at write time: ADD, SUPERSEDE (the old fact is closed and linked), or NOOP. A deterministic temporal guard ensures an older fact can never invalidate a newer one, so bulk re-imports are safe.
 - Cross-memory maintenance: supersede pass, noise recheck, and cluster promotion (recurring themes get flagged as wiki candidates).
 
-### Experimental source and experience recall
+### Gated source and experience recall
 
 This branch keeps two deeper recall paths separate from ordinary memory
 injection. Source recall is a provenance-first RAG projection over approved raw
@@ -859,13 +859,16 @@ Upgrade and contribute are two halves of one loop: `contribute` sends your local
   .claude/
     scripts/       Python + shell tooling (incl. doctor.sh)
     kb-index.db    Hybrid vector + FTS index (refreshed incrementally each session)
-    kb-usage.db    Usage telemetry (survives rebuilds and model switches)
+    kb-usage.db    Aggregate usage telemetry (survives rebuilds and model switches)
+    kb-source.db   Disposable lexical source-evidence projection
+    kb-experience-ledger.db  Append-only canonical events, outcomes, and reviews
+    kb-experience-index.db   Disposable reviewed-experience projection
   graphify-out/    Knowledge graph output (optional)
 ```
 
 ## Background automation toggles
 
-Eleven background behaviours are individual toggles in `kennisbank-settings.json`, managed with `/kennisbank:settings`:
+Fifteen behaviours are individual toggles in `kennisbank-settings.json`, managed with `/kennisbank:settings`:
 
 | Toggle | Default | Controls |
 |--------|---------|----------|
@@ -875,6 +878,10 @@ Eleven background behaviours are individual toggles in `kennisbank-settings.json
 | `daily_graphify` | on | Update the knowledge graph once a day |
 | `memory_capture` | on | Extract and judge memories into `09-memory/` |
 | `memory_recall` | on | Inject memories into context via hooks |
+| `experience_capture` | off | Append typed experience events/outcomes without enabling retrieval |
+| `experience_projection` | off | Build the disposable reviewed-experience projection |
+| `experience_explicit_recall` | off | Explicitly retrieve up to three owner-accepted lessons; never automatic advisories |
+| `source_explicit_recall` | off | Retrieve source evidence on demand; never prompt injection |
 | `usage_telemetry` | on | Track which injected knowledge gets used |
 | `activity_llm_fallback` | off | Local-LLM fallback for exotic date phrasing in temporal recall |
 | `checkpoints` | off | Auto-save a work-state stub at context compaction (PreCompact) |
@@ -914,9 +921,10 @@ The vault is not Claude-Code-only. `scripts/kb-mcp.py` is a local **MCP server**
 Every tool carries MCP annotations, which is not cosmetic: a client derives from `readOnlyHint` whether a call needs confirmation and whether it may run in parallel, and defaults both to "no" when the hint is absent. The eight read-only retrieval/temporal tools are marked as such; `capture` is a non-destructive writer, `review_decide` a destructive one. The pull nudge travels on three carriers, because none of them reaches every client on its own: the `instructions` field of the protocol handshake, the `kennisbank://instructions` resource, and the managed block in `.github/copilot-instructions.md`.
 
 **The hard boundary: local only.** The MCP server binds nothing to the network
-(stdio transport); the vault never leaves your machine. Claude Code, Codex,
-GitHub Copilot CLI, OpenCode, and compatible local stdio clients can reach it
-directly. Agents that run *in the cloud* (hosted ChatGPT) cannot reach a local
+(stdio transport); the vault never leaves your machine. Setup connects Codex,
+GitHub Copilot CLI, and OpenCode directly; Claude Code uses the equivalent
+namespaced commands and hooks because setup does not register MCP there. Agents
+that run *in the cloud* (hosted ChatGPT) cannot reach a local
 stdio server, and the answer is **not** to tunnel your sovereign vault to the
 internet - it is the manual bridge below.
 
@@ -925,7 +933,8 @@ internet - it is the manual bridge below.
 `setup.sh --agents codex` installs:
 
 - `~/.agents/skills/<command>/SKILL.md`, including `sessiestart`, `sessielog`,
-  temporal commands, and the hand-authored KennisBank skills
+  temporal commands, `kennisbank-experience-recall`,
+  `kennisbank-source-recall`, and the hand-authored KennisBank skills
 - `~/.codex/prompts/*.md` aliases, invoked as `/prompts:sessielog`, `/prompts:sessiestart`, `/prompts:kennisbank-upgrade`, etc.
 - `~/.codex/AGENTS.md` with the active vault path
 - `~/.codex/hooks.json` with one SessionStart and one exit coordinator plus
@@ -964,7 +973,8 @@ KB_LLM_ENDPOINT = "http://localhost:11434"
 
 `setup.sh --agents opencode` installs:
 
-- `~/.config/opencode/commands/*.md`, invoked as `/sessielog`, `/sessiestart`, `/kennisbank-upgrade`, etc.
+- `~/.config/opencode/commands/*.md`, including
+  `/kennisbank-experience-recall` and `/kennisbank-source-recall`
 - `~/.agents/skills/{autoresearch,kennisbank-upgrade,kennisbank-contribute}/`
 - `~/.config/opencode/AGENTS.md` with the active vault path
 - `~/.config/opencode/opencode.json` MCP server `kennisbank`
@@ -982,13 +992,14 @@ KENNISBANK_VAULT="/absolute/path/to/vault" bash setup.sh --yes --agents copilot
 
 `setup.sh --agents copilot` installs, idempotently and login-free:
 
-- `~/.copilot/mcp-config.json` - MCP server `kennisbank` (`recall`, `capture`, and the temporal tools), registered by a key-scoped JSON merge and validated with a real initialize/list-tools handshake
+- `~/.copilot/mcp-config.json` - MCP server `kennisbank` (ordinary, source, experience, capture, review, and temporal tools), registered by a key-scoped JSON merge and validated with a real initialize/list-tools/call smoke
 - `~/.copilot/hooks/kennisbank.json` - one cross-platform SessionStart
   coordinator plus fail-open activity capture hooks
 - `~/.copilot/copilot-instructions.md` - a KennisBank managed instruction block
 - `~/.copilot/agents/kennisbank.agent.md` - a custom agent profile, selected with `copilot --agent kennisbank`
 - native slash-command skills at `~/.agents/skills/`, including
-  `/sessiestart`, `/sessielog`, `/weeklog`, and `/timeline` (list with
+  `/sessiestart`, `/sessielog`, `/weeklog`, `/timeline`,
+  `/kennisbank-experience-recall`, and `/kennisbank-source-recall` (list with
   `copilot skill list`)
 
 KennisBank coordinates startup behind one hook because Copilot has no hook

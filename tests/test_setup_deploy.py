@@ -249,6 +249,24 @@ class SetupDeployTest(unittest.TestCase):
                      "kb-projection-doctor.py"):
             self.assertTrue((scripts / name).is_file(), name)
 
+    def test_deployed_projection_gateways_smoke_fail_open(self):
+        _tmp, vault = self.gedeelde_installatie()
+        env = dict(os.environ)
+        env["KENNISBANK_VAULT"] = str(vault)
+        for script, prompt in (
+            ("kb-experience-recall.py", "what worked"),
+            ("kb-source-recall.py", "show evidence"),
+        ):
+            result = subprocess.run(
+                [sys.executable, str(vault / ".claude" / "scripts" / script)],
+                input=json.dumps({"mode": "explicit", "prompt": prompt, "k": 1}),
+                env=env, capture_output=True, text=True, timeout=20,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["status"], "disabled", script)
+            self.assertEqual(payload["hits"], [], script)
+
     def test_settings_file_bootstrapped_with_defaults(self):
         import json
         tmp, vault = self.gedeelde_installatie()  # run_setup gebruikt --yes (niet-interactief)

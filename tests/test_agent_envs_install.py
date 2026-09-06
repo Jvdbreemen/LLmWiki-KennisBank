@@ -70,6 +70,12 @@ class AgentEnvInstallTest(unittest.TestCase):
         self.assertTrue((codex / "prompts" / "weeklog.md").is_file())
         self.assertTrue((codex / "prompts" / "timeline.md").is_file())
         self.assertTrue((codex / "prompts" / "watdeedik.md").is_file())
+        self.assertTrue((codex / "prompts" / "kennisbank-source-recall.md").is_file())
+        self.assertTrue((codex / "prompts" / "kennisbank-experience-recall.md").is_file())
+        self.assertTrue((home / ".agents" / "skills" / "kennisbank-source-recall" /
+                         "SKILL.md").is_file())
+        self.assertTrue((home / ".agents" / "skills" / "kennisbank-experience-recall" /
+                         "SKILL.md").is_file())
         hooks = json.loads((codex / "hooks.json").read_text(encoding="utf-8"))
         session = json.dumps(hooks["hooks"]["SessionStart"])
         self.assertEqual(session.count("kb-session-start.py"), 1)
@@ -196,6 +202,8 @@ command = "other"
         self.assertTrue((cfg / "commands" / "weeklog.md").is_file())
         self.assertTrue((cfg / "commands" / "timeline.md").is_file())
         self.assertTrue((cfg / "commands" / "watdeedik.md").is_file())
+        self.assertTrue((cfg / "commands" / "kennisbank-source-recall.md").is_file())
+        self.assertTrue((cfg / "commands" / "kennisbank-experience-recall.md").is_file())
         self.assertTrue((cfg / "plugins" / "kennisbank.js").is_file())
         data = json.loads((cfg / "opencode.json").read_text(encoding="utf-8"))
         self.assertIn("kennisbank", data["mcp"])
@@ -211,8 +219,19 @@ command = "other"
         self.assertTrue(hooks_path.is_file())
         self.assertTrue((home / "copilot-instructions.md").is_file())
         self.assertTrue((home / "agents" / "kennisbank.agent.md").is_file())
+        instructions = (home / "copilot-instructions.md").read_text(encoding="utf-8")
+        profile = (home / "agents" / "kennisbank.agent.md").read_text(encoding="utf-8")
+        for text in (instructions, profile):
+            self.assertIn("experience_recall", text)
+            self.assertIn("source_recall", text)
+            self.assertIn("on demand", text)
+            self.assertIn("automatic advisory", text)
         self.assertTrue((self.tmp / ".agents" / "skills" / "autoresearch" / "SKILL.md").is_file())
         for command in ("sessielog", "sessiestart", "weeklog", "timeline"):
+            skill = self.tmp / ".agents" / "skills" / command / "SKILL.md"
+            self.assertTrue(skill.is_file(), command)
+            self.assertIn(f"name: {command}", skill.read_text(encoding="utf-8"))
+        for command in ("kennisbank-source-recall", "kennisbank-experience-recall"):
             skill = self.tmp / ".agents" / "skills" / command / "SKILL.md"
             self.assertTrue(skill.is_file(), command)
             self.assertIn(f"name: {command}", skill.read_text(encoding="utf-8"))
@@ -300,6 +319,41 @@ command = "other"
 
         self.assertEqual(errors, [])
         self.assertEqual(len(calls), 2)
+        wire_client = calls[1][calls[1].index("-c") + 1]
+        self.assertIn('session.call_tool("recall"', wire_client)
+        self.assertIn('session.call_tool(name, arguments)', wire_client)
+        self.assertIn('("experience_recall"', wire_client)
+        self.assertIn('("source_recall"', wire_client)
+
+    def test_projection_command_artifacts_have_cross_client_semantic_parity(self):
+        self.m.install_codex(REPO_ROOT, self.vault)
+        self.m.install_opencode(REPO_ROOT, self.vault)
+        self.m.install_copilot(REPO_ROOT, self.vault)
+        artifacts = {
+            "source": [
+                REPO_ROOT / "commands" / "kennisbank" / "source-recall.md",
+                self.tmp / ".codex" / "prompts" / "kennisbank-source-recall.md",
+                self.tmp / ".config" / "opencode" / "commands" /
+                "kennisbank-source-recall.md",
+                self.tmp / ".agents" / "skills" / "kennisbank-source-recall" /
+                "SKILL.md",
+            ],
+            "experience": [
+                REPO_ROOT / "commands" / "kennisbank" / "experience-recall.md",
+                self.tmp / ".codex" / "prompts" / "kennisbank-experience-recall.md",
+                self.tmp / ".config" / "opencode" / "commands" /
+                "kennisbank-experience-recall.md",
+                self.tmp / ".agents" / "skills" / "kennisbank-experience-recall" /
+                "SKILL.md",
+            ],
+        }
+        for layer, paths in artifacts.items():
+            source_body = paths[0].read_text(encoding="utf-8").rstrip()
+            for path in paths:
+                text = path.read_text(encoding="utf-8")
+                self.assertIn(source_body, text, f"{layer} semantics drifted in {path}")
+                self.assertIn("KENNISBANK_VAULT", text)
+                self.assertNotIn("failure advisories", text.lower())
 
 
 if __name__ == "__main__":

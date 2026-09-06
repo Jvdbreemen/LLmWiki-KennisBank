@@ -374,8 +374,9 @@ INSTRUCTIONS_TEXT = (
     "own earlier lessons, decisions and bug fixes may already be in there.\n"
     "- Call `capture` whenever a reusable fact, preference, procedure or "
     "decision appears that you want back in a later session.\n"
-    "- Call `source_recall` only for explicit source reconstruction or verification; "
-    "call `experience_recall` only when the user explicitly asks for validated prior lessons.\n"
+    "- For an explicit question about what worked before, call `experience_recall` "
+    "first. Call `source_recall` only on demand when the user needs underlying "
+    "evidence, reconstruction, or verification. Neither route is automatic.\n"
     "- Call `what_did_i_do`, `timeline`, `weeklog` or `topic_timeline` for "
     "questions about what happened on a date, in a week, or around a topic.\n"
     "- `review_pending` lists unverified memories awaiting human review; "
@@ -407,14 +408,16 @@ def build_server():
     @srv.tool(annotations=_ann(title="Recall source evidence", readOnlyHint=True, openWorldHint=False))
     def source_recall(query: str = "", mode: str = "explicit", k: int = 5,
                       source_ref: dict | None = None) -> str:
-        """Retrieve hash- and offset-bound source passages for explicit
-        reconstruction or verification. Never use this as normal injection."""
+        """On demand, retrieve hash- and offset-bound source passages for
+        explicit reconstruction or verification. Never automatic or normal injection."""
         return source_recall_tool(query, mode=mode, k=k, source_ref=source_ref)
 
     @srv.tool(annotations=_ann(title="Recall validated experience", readOnlyHint=True, openWorldHint=False))
     def experience_recall(query: str, mode: str = "explicit", k: int = 3) -> str:
-        """Explicitly retrieve at most three validated outcome-bound lessons.
-        Candidates, unknown outcomes, and automatic advisories remain excluded."""
+        """For explicit prior-experience questions, retrieve at most three
+        validated outcome-bound lessons first; use source_recall afterward only
+        when deeper evidence is requested. Candidates, unknown outcomes, and
+        automatic advisories remain excluded."""
         return experience_recall_tool(query, mode=mode, k=k)
 
     @srv.tool(annotations=_ann(title="Capture a memory", readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False))

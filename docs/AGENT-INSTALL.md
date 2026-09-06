@@ -31,7 +31,7 @@ Three rules that prevent the most common breakage:
    counts. Do not "fix" WARNs the user did not ask about.
 
 Prerequisites: `git`, Python 3.10+, and — for local embeddings and the memory
-judge — [Ollama](https://ollama.com) with `qwen3-embedding:8b`. Setup validates
+judge — [Ollama](https://ollama.com) with `qwen3-embedding:4b`. Setup validates
 models unless `--skip-model-check` is passed (CI/offline only).
 
 ## Platform matrix
@@ -41,7 +41,8 @@ models unless `--skip-model-check` is passed (CI/offline only).
 | Slash commands / skills | yes (`/sessielog`, …) | yes (`$sessielog` prompts + skills) | yes (personal skills) | yes | partial (skills/plugin, no hooks) |
 | Session start/exit coordinators | yes (hooks) | yes (hooks) | yes (hooks) | yes | no |
 | Prompt-time retrieval hook | yes | no (MCP pull) | no (MCP pull) | no (MCP pull) | no (MCP pull) |
-| Local MCP server (`recall`, temporal tools) | yes | yes | yes | yes | yes, via connector/plugin |
+| Explicit source/experience surface | namespaced commands | MCP + prompts/skills | MCP + skills | MCP + commands | MCP when manually connected |
+| Local MCP server (`recall`, temporal tools) | not registered by setup | yes | yes | yes | yes, via connector/plugin |
 | Install target | `--agents claude` | `--agents codex` | `--agents copilot` | `--agents opencode` | manual (see below) |
 
 ## Claude Code
@@ -59,7 +60,9 @@ What lands where:
   `env`. Existing non-KennisBank hooks are preserved; a hand-edited but invalid
   `settings.json` makes registration refuse rather than clobber.
 
-Restart Claude Code after install: hooks and MCP servers load at startup.
+Restart Claude Code after install so hooks and commands reload. Setup does not
+register the MCP server for Claude Code; use the namespaced source/experience
+commands there.
 
 Windows PowerShell example:
 
@@ -80,7 +83,10 @@ KENNISBANK_VAULT="/absolute/path/to/vault" bash setup.sh --yes --agents codex
 - One KennisBank SessionStart coordinator and one Stop coordinator are
   registered in the Codex hook config; both fail open.
 - The local stdio MCP server (`kb-mcp.py`) is registered with the same pinned
-  vault path; setup validates it with a real initialize/list-tools handshake.
+  vault path; setup validates it with a real initialize/list-tools/call smoke,
+  including ordinary, source, and experience recall.
+- Explicit workflows are installed as `$kennisbank-experience-recall` and
+  `$kennisbank-source-recall` skills plus matching compatibility prompts.
 
 ## GitHub Copilot CLI
 
@@ -100,6 +106,8 @@ KENNISBANK_VAULT="/absolute/path/to/vault" bash setup.sh --yes --agents copilot
   as slash commands. One sessionStart and one sessionEnd coordinator are
   registered; Copilot hooks are wrapped fail-open (a non-zero exit would be
   fail-closed in Copilot's preToolUse model).
+- The shared skills include `/kennisbank-experience-recall` and
+  `/kennisbank-source-recall`; the MCP tools implement the same semantics.
 
 ## OpenCode
 
@@ -107,7 +115,9 @@ KENNISBANK_VAULT="/absolute/path/to/vault" bash setup.sh --yes --agents copilot
 KENNISBANK_VAULT="/absolute/path/to/vault" bash setup.sh --yes --agents opencode
 ```
 
-Commands, skills, MCP config, `AGENTS.md` block, and the OpenCode plugin.
+Commands, skills, MCP config, `AGENTS.md` block, and the OpenCode plugin. The
+explicit commands are `/kennisbank-experience-recall` and
+`/kennisbank-source-recall`.
 
 ## Claude Cowork
 
@@ -143,12 +153,15 @@ Report the summary (PASS/WARN/FAIL). A healthy install ends with zero FAIL.
 Then restart the agent client so hooks and MCP tools load.
 
 The source and experience projections are available to all supported CLI
-clients through the deployed scripts, namespaced commands, and MCP-compatible
-local vault boundary where applicable. They are not added to normal prompt
-injection: enable `source_explicit_recall` or `experience_explicit_recall` only
-after reviewing the evidence packet. Experience capture and projection have
-their own independent, default-off flags. Legacy `source_recall` and
-`experience_recall` values grant no capability. Run `kb-projection-doctor.py`
+clients through the deployed scripts and namespaced commands, with the same MCP
+tools in Codex, OpenCode, and Copilot. For an explicit prior-lesson question,
+use experience recall first and request source evidence only on demand for
+verification or deeper support. They are not added to normal prompt injection:
+enable `source_explicit_recall` or `experience_explicit_recall` only after
+reviewing the evidence packet. `experience_capture` and
+`experience_projection` are independent and default off as well. Legacy
+`source_recall` and `experience_recall`
+values grant no capability. Run `kb-projection-doctor.py`
 for a read-only health check;
 run the two rebuild commands off the interactive path. These paths preserve
 `KENNISBANK_VAULT` and have no implicit cloud fallback.

@@ -172,6 +172,32 @@ class KbMcpWireTest(unittest.TestCase):
         self.assertTrue(content, f"leeg content-veld: {reply}")
         self.assertTrue(any(c.get("type") == "text" for c in content))
 
+    def test_deeper_tools_are_callable_and_fail_open_while_disabled(self):
+        self._handshake_legacy()
+        for name, arguments in (
+            ("source_recall", {"query": "show evidence", "mode": "explicit"}),
+            ("experience_recall", {"query": "what worked", "mode": "explicit"}),
+        ):
+            rid = self.client.send("tools/call", {"name": name, "arguments": arguments})
+            reply = self.client.read_result(rid)
+            self.assertNotIn("error", reply, f"{name} raised over MCP: {reply}")
+            content = reply["result"].get("content") or []
+            text = "\n".join(str(item.get("text") or "") for item in content)
+            payload = json.loads(text)
+            self.assertEqual(payload["status"], "disabled")
+            self.assertEqual(payload["hits"], [])
+
+    def test_deeper_tool_descriptions_teach_experience_then_source_on_demand(self):
+        self._handshake_legacy()
+        rid = self.client.send("tools/list", {})
+        tools = {tool["name"]: tool for tool in self.client.read_result(rid)["result"]["tools"]}
+        experience = tools["experience_recall"].get("description", "").lower()
+        source = tools["source_recall"].get("description", "").lower()
+        self.assertIn("first", experience)
+        self.assertIn("source_recall", experience)
+        self.assertIn("on demand", source)
+        self.assertIn("never automatic", source)
+
     def test_annotations_reach_the_wire(self):
         """De annotaties moeten in tools/list staan, niet alleen in onze code.
 

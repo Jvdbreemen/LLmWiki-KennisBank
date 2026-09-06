@@ -68,8 +68,10 @@ as bare custom slash commands. For example:
 /prompts:watdeedik
 ```
 
-Codex uses the installed skills for reusable workflows and the MCP tools
-`recall` and `capture` for live vault access. For temporal questions, use
+Codex uses the installed skills for reusable workflows and the MCP tools for
+live vault access. For an explicit prior-lesson question, use
+`experience_recall` first and `source_recall` only on demand for underlying
+evidence or reconstruction; neither route is automatic. For temporal questions, use
 `what_did_i_do`, `timeline`, `weeklog`, or `topic_timeline` before generic
 recall. Codex registers exactly one KennisBank SessionStart coordinator and one
 Stop/exit coordinator. No-change work emits no KennisBank detail; changed
@@ -78,7 +80,7 @@ silent. Codex may still render one generic row per lifecycle event because the
 client owns that UI. Setup migrates old start/exit entries while preserving
 unrelated hooks and KennisBank prompt/presearch behavior.
 Setup installs the Python MCP SDK and validates Codex MCP with a real
-initialize/list-tools handshake before it reports success.
+initialize/list-tools/call smoke before it reports success.
 
 Manual MCP shape:
 
@@ -175,7 +177,7 @@ any freeform file before editing.
 
 `setup.sh --agents copilot` registers the MCP server by a key-scoped JSON merge
 (login-free and idempotent, not `copilot mcp add`) and validates it with the same
-real initialize/list-tools handshake used for Codex/OpenCode. `copilot mcp list`
+real initialize/list-tools/call smoke used for Codex/OpenCode. `copilot mcp list`
 (login-free) then shows the server. MCP, skill, and instruction installation
 work **without** a GitHub login; only a live model turn
 needs `copilot` `/login`.
@@ -275,6 +277,9 @@ interpreter used by the configured command.
 The server exposes:
 
 - `recall(query, k)` for wiki/memory retrieval.
+- `experience_recall(query, mode, k)` first for explicit prior lessons.
+- `source_recall(query, mode, k, source_ref)` only on demand for source
+  verification or exact reconstruction; never as an automatic advisory.
 - `capture(title, body, memory_type, importance)` for unverified memory capture.
 - `what_did_i_do(date_or_period, topic, project, max_events)` for compact date
   or period recall.
