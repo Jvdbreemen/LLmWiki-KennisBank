@@ -129,12 +129,53 @@ def _ensure_experience_rows_schema(conn) -> None:
     """)
 
 
-def ensure_projection_schema(conn, *, dim: int, embed_id: str) -> None:
-    """Create a disposable retrieval projection without canonical history."""
+def _ensure_lexical_recall_schema(conn, *, embed_id: str = "") -> None:
+    """Create the projection tables that remain usable without sqlite-vec."""
+    conn.executescript("""
+    CREATE TABLE IF NOT EXISTS meta (
+        key TEXT PRIMARY KEY,
+        value TEXT
+    );
+    CREATE TABLE IF NOT EXISTS docs (
+        doc_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        path TEXT UNIQUE,
+        layer TEXT,
+        status TEXT,
+        hash TEXT,
+        title TEXT,
+        created TEXT
+    );
+    CREATE VIRTUAL TABLE IF NOT EXISTS fts_docs USING fts5(body);
+    CREATE TABLE IF NOT EXISTS doc_sources (
+        doc_id INTEGER NOT NULL,
+        source TEXT NOT NULL,
+        PRIMARY KEY (doc_id, source)
+    );
+    CREATE INDEX IF NOT EXISTS idx_doc_sources_source
+        ON doc_sources(source);
+    """)
+    if embed_id:
+        conn.execute(
+            "INSERT OR REPLACE INTO meta(key, value) VALUES ('embed_id', ?)",
+            (embed_id,))
+    conn.commit()
+
+
+def enable_recall_vectors(conn) -> None:
+    """Load sqlite-vec for an already-built compatible projection."""
     conn.enable_load_extension(True)
-    conn.load_extension(_kbindex.vec0_extension())
-    conn.enable_load_extension(False)
-    _kbindex.ensure_schema(conn, dim, embed_id)
+    try:
+        conn.load_extension(_kbindex.vec0_extension())
+    finally:
+        conn.enable_load_extension(False)
+
+
+def ensure_projection_schema(conn, *, dim: int | None, embed_id: str) -> None:
+    """Create a disposable lexical or hybrid projection, never canonical history."""
+    _ensure_lexical_recall_schema(conn, embed_id=embed_id)
+    if dim is not None and int(dim) > 0:
+        enable_recall_vectors(conn)
+        _kbindex.ensure_schema(conn, int(dim), embed_id)
     _ensure_experience_rows_schema(conn)
     conn.commit()
 
@@ -180,16 +221,25 @@ def index_experience_lexical(conn, experience_id: str) -> int:
     body = " ".join((record["situation"], record["goal"], record["approach"],
                      record["action"], record["lesson"], record["applicability"]))
     path = f"experience::{experience_id}"
-    doc_id = conn.execute(
-        "INSERT INTO docs(path, layer, status, hash, title, created) "
-        "VALUES (?,?,?,?,?,?)",
-        (path, "experience", record["status"], experience_id,
-         record["lesson"], "")).lastrowid
+    previous = conn.execute("SELECT doc_id FROM docs WHERE path=?", (path,)).fetchone()
+    if previous:
+        doc_id = int(previous[0])
+        conn.execute("DELETE FROM fts_docs WHERE rowid=?", (doc_id,))
+        conn.execute("DELETE FROM doc_sources WHERE doc_id=?", (doc_id,))
+        conn.execute(
+            "UPDATE docs SET layer=?, status=?, hash=?, title=?, created=? "
+            "WHERE doc_id=?", ("experience", record["status"], experience_id,
+                                record["lesson"], "", doc_id))
+    else:
+        doc_id = conn.execute(
+            "INSERT INTO docs(path, layer, status, hash, title, created) "
+            "VALUES (?,?,?,?,?,?)",
+            (path, "experience", record["status"], experience_id,
+             record["lesson"], "")).lastrowid
     conn.execute("INSERT INTO fts_docs(rowid, body) VALUES (?, ?)", (doc_id, body))
-    for source in record["source_refs"]:
+    for source_ref_id_value in _source_ref_ids(record):
         conn.execute("INSERT INTO doc_sources(doc_id, source) VALUES (?, ?)",
-                     (doc_id, json.dumps(source, sort_keys=True)
-                      if isinstance(source, dict) else str(source)))
+                     (doc_id, source_ref_id_value))
     return int(doc_id)
 
 
@@ -653,9 +703,7 @@ def transition(conn, experience_id: str, status: str, *,
 
 
 def ensure_recall_schema(conn, *, dim: int, embed_id: str) -> None:
-    conn.enable_load_extension(True)
-    conn.load_extension(_kbindex.vec0_extension())
-    conn.enable_load_extension(False)
+    enable_recall_vectors(conn)
     _kbindex.ensure_schema(conn, dim, embed_id)
 
 
@@ -674,10 +722,84 @@ def index_experience(conn, experience_id: str, *, vector) -> int:
         sources=[source for source in sources if source])
 
 
-def experience_hits(conn, *, query_vector, query_text: str = "", k: int = 8,
+def _source_ref_ids(record: dict) -> list[str]:
+    values = []
+    for ref in record.get("source_refs") or []:
+        if not isinstance(ref, dict):
+            return []
+        value = ref.get("source_ref_id", "")
+        if not value:
+            return []
+        if value and value not in values:
+            values.append(value)
+    return values
+
+
+def _production_eligible(record: dict) -> bool:
+    return bool(
+        record.get("status") == "validated"
+        and record.get("evidence_state") == "verified"
+        and record.get("review_state") == "accepted"
+        and _source_ref_ids(record)
+        and record.get("outcome_refs")
+    )
+
+
+def _decorate_recall_hit(record: dict, *, score: float, cos,
+                         fts: bool, doc_id: int, route: str) -> dict:
+    item = dict(record)
+    item.update({
+        "score": float(score), "cos": cos, "fts": bool(fts),
+        "doc_id": int(doc_id), "retrieval_route": route,
+        "source_ref_ids": _source_ref_ids(record),
+        "validation_stamp": {
+            "status": record.get("status"),
+            "evidence_state": record.get("evidence_state"),
+            "review_state": record.get("review_state"),
+            "content_hash": record.get("content_hash"),
+        },
+    })
+    return item
+
+
+def _diversify(hits: list[dict], k: int) -> list[dict]:
+    if k <= 0:
+        return []
+    selected = []
+    seen_tasks = set()
+    seen_sources = set()
+    for item in hits:
+        task_key = (item.get("session_id"), item.get("task_id"))
+        sources = set(item.get("source_ref_ids") or [])
+        if task_key in seen_tasks or sources & seen_sources:
+            continue
+        selected.append(item)
+        seen_tasks.add(task_key)
+        seen_sources.update(sources)
+        if len(selected) >= min(max(int(k), 0), 3):
+            break
+    return selected
+
+
+def vector_projection_compatible(conn, *, embed_id: str, query_dim: int) -> bool:
+    """Read-only compatibility check; a recall request must never rewrite meta."""
+    try:
+        tables = {row[0] for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type IN ('table','view')")}
+        return bool(
+            "vec_docs" in tables
+            and _kbindex.meta_get(conn, "embed_id") == str(embed_id)
+            and int(_kbindex.meta_get(conn, "dim") or 0) == int(query_dim)
+        )
+    except (sqlite3.Error, TypeError, ValueError):
+        return False
+
+
+def experience_hits(conn, *, query_vector, query_text: str = "", k: int = 3,
                     statuses=("validated",)) -> list[dict]:
+    pool = max(12, min(max(int(k), 1) * 4, 100))
     rows = _kbindex.search(conn, query_vector=query_vector, query_text=query_text,
-                           k=k, layers=("experience",), statuses=statuses,
+                           k=pool, layers=("experience",), statuses=statuses,
                            min_cos=0.2, fusion="rrf")
     result = []
     for row in rows:
@@ -687,10 +809,43 @@ def experience_hits(conn, *, query_vector, query_text: str = "", k: int = 8,
         item = experience(conn, experience_id)
         if item is None:
             continue
-        item.update({"score": row["score"], "cos": row["cos"], "fts": row["fts"],
-                     "doc_id": row["doc_id"]})
-        result.append(item)
-    return result
+        if tuple(statuses or ()) == ("validated",) and not _production_eligible(item):
+            continue
+        result.append(_decorate_recall_hit(
+            item, score=row["score"], cos=row["cos"], fts=row["fts"],
+            doc_id=row["doc_id"], route="hybrid"))
+    return _diversify(result, k)
+
+
+def experience_lexical_hits(conn, *, query_text: str, k: int = 3,
+                            statuses=("validated",)) -> list[dict]:
+    """Retrieve reviewed lessons through FTS without touching vector tables."""
+    expression = _kbindex.fts_expr(query_text)
+    if not expression or k <= 0 or not statuses:
+        return []
+    pool = max(12, min(max(int(k), 1) * 4, 100))
+    placeholders = ",".join("?" for _ in statuses)
+    try:
+        rows = conn.execute(
+            "SELECT d.doc_id, d.path, bm25(fts_docs) FROM fts_docs "
+            "JOIN docs d ON d.doc_id=fts_docs.rowid "
+            f"WHERE fts_docs MATCH ? AND d.layer='experience' "
+            f"AND d.status IN ({placeholders}) ORDER BY bm25(fts_docs) LIMIT ?",
+            (expression, *statuses, pool)).fetchall()
+    except sqlite3.Error:
+        return []
+    result = []
+    for rank, (doc_id, path, bm25_score) in enumerate(rows):
+        item = experience(conn, str(path).removeprefix("experience::"))
+        if item is None:
+            continue
+        if tuple(statuses or ()) == ("validated",) and not _production_eligible(item):
+            continue
+        result.append(_decorate_recall_hit(
+            item, score=1.0 / (60 + rank), cos=None, fts=True,
+            doc_id=doc_id, route="lexical_fallback"))
+        result[-1]["bm25"] = float(bm25_score)
+    return _diversify(result, k)
 
 
 def failure_advisory(conn, *, query_vector, query_text: str = "",

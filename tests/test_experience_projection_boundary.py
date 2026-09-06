@@ -152,6 +152,29 @@ class ExperienceProjectionBoundaryContractTest(unittest.TestCase):
         self.assertEqual(count, 0)
         self.assertEqual(report["skipped_candidates"][0]["review_state"], "unreviewed")
 
+    def test_embedding_failure_still_publishes_complete_lexical_projection(self):
+        ledger = self._ledger_with_one_task()
+        projection = self.experience.projection_path(self.vault)
+
+        report = _builder().rebuild_experience_projection(
+            ledger, projection,
+            embed_fn=lambda _text: (_ for _ in ()).throw(RuntimeError("offline")),
+            embed_id="fake:3")
+        conn = self.experience.connect(projection)
+        try:
+            hits = self.experience.experience_lexical_hits(
+                conn, query_text="bound retry", k=3)
+            tables = {row[0] for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'")}
+        finally:
+            conn.close()
+
+        self.assertEqual(report["status"], "ok")
+        self.assertEqual(report["vector_status"], "lexical_fallback")
+        self.assertEqual(len(report["failed_embeddings"]), 1)
+        self.assertEqual(len(hits), 1)
+        self.assertNotIn("vec_docs", tables)
+
 
 if __name__ == "__main__":
     unittest.main()

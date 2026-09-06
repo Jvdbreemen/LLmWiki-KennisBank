@@ -38,7 +38,7 @@ latency.
 - **Ad-hoc query interfaces** — `kb-search.py` (full-text + semantic search over memories), `kb-ask.py` (manual export/paste bridge for cloud agents), `kb-recall.py` (memory-only recall).
 - **Cross-model safety** — cache/index entries are validated against the active `embed_id` before use, preventing stale-model vector comparisons (`_kbindex.is_valid_for`, `_embeddings.embed_id`).
 - **Source recall gateway** — `kb-source-recall.py` routes only explicit lexical evidence search and exact verification/reconstruction requests, rejects automatic fallback, labels freshness/conflict/no-hit state, and never serves a stale passage as current evidence.
-- **Experience recall gateway** — `kb-experience-recall.py` routes only explicit or failure-prevention requests, excludes candidates and unknown outcomes, and labels validated experiences versus failure advisories.
+- **Experience recall gateway** — `kb-experience-recall.py` routes explicit requests only, returns at most three source/task-diversified and human-accepted lessons, uses compatible hybrid retrieval when available, and labels its FTS-only degradation as `lexical_fallback`.
 - **Evidence packet** — `kb-layer-eval.py` keeps six arms, source and experience gates, downstream deltas, latency summaries, and go/hold/reject decisions separate and content-safe.
 
 ## 4. Code Elements
@@ -122,7 +122,7 @@ No retrieval-specific research report beyond the ADRs above was distinctly separ
 | `context-budget.py` | CLI | Analyzes context-window usage/cost. | |
 | `find-similar.py` | CLI | Finds semantically similar memories. | |
 | `kb-source-recall.py` | CLI (explicit only) | Runs best-effort FTS5/BM25 evidence search or resolves an exact structured SourceRef. | Opt-in; fail-open; no embeddings, fallback, or normal-hook routing. |
-| `kb-experience-recall.py` | CLI (explicit/failure only) | Retrieves validated outcome-bound experiences or a labelled failed-attempt advisory. | Candidates/unknown records excluded; repaired episodes keep separate attempt, resolution, and final-outcome states. |
+| `kb-experience-recall.py` | CLI (explicit only) | Retrieves validated outcome-bound lessons through compatible hybrid search or labelled lexical fallback. | Candidates, unverified/unaccepted records, and raw passages are excluded; repaired episodes retain separate attempt, resolution, and final-outcome states. |
 | `rebuild-experience.py` | CLI (offline) | Rebuilds experience records and optional local vector/FTS projection from append-only events/outcomes. | Atomic staging; `--incremental` and `--records-only`. |
 | `kb-projection-doctor.py` | CLI (read-only) | Reports projection schema, freshness, provenance, orphan, redaction, and lifecycle health. | Never mutates derived state. |
 | `kb-layer-eval.py` | CLI (offline) | Builds the preregistered source/experience evidence packet and gates. | Content-safe; no prompts in output. |

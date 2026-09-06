@@ -29,7 +29,8 @@ class LayerCliContractTest(unittest.TestCase):
         (self.vault / ".claude").mkdir(parents=True)
         (self.vault / "kennisbank-settings.json").write_text(
             json.dumps({"source_recall": True, "source_explicit_recall": True,
-                        "experience_recall": True}),
+                        "experience_recall": True,
+                        "experience_explicit_recall": True}),
             encoding="utf-8")
         self.saved = os.environ.get("KENNISBANK_VAULT")
         os.environ["KENNISBANK_VAULT"] = str(self.vault)
@@ -84,34 +85,31 @@ class LayerCliContractTest(unittest.TestCase):
         self.assertIn(result["status"], {"unavailable", "not_routed"})
         self.assertEqual(result["hits"], [])
 
-    def test_experience_hit_contract_preserves_status_and_labels_advisory(self):
+    def test_experience_hit_contract_exposes_validation_without_raw_refs(self):
         hit = {
             "experience_id": "failure-1", "status": "validated",
             "outcome_state": "failure", "confidence": 0.8,
-            "cos": 0.77, "fts": True, "source_refs": ["raw#1"],
+            "cos": 0.77, "fts": True, "source_ref_ids": ["sr_1"],
             "outcome_refs": ["out-1"],
+            "validation_stamp": {"status": "validated",
+                                 "evidence_state": "verified",
+                                 "review_state": "accepted"},
         }
-        labeled = self.experience.label_hits([hit], "failure")[0]
-        self.assertEqual(labeled["status"], "validated")
-        self.assertEqual(labeled["recall_mode"], "failure")
-        self.assertEqual(labeled["evidence_kind"], "failure_advisory")
+        labeled = self.experience.label_hits([hit], "explicit")[0]
+        self.assertEqual(labeled["validation_stamp"]["status"], "validated")
+        self.assertEqual(labeled["recall_mode"], "explicit")
+        self.assertEqual(labeled["evidence_kind"], "validated_experience")
         self.assertEqual(labeled["confidence_metadata"], {
             "experience": 0.8, "cosine": 0.77, "lexical_match": True,
             "evidence_bound": True,
         })
-
-    def test_experience_gateway_uses_calibrated_default_but_allows_override(self):
-        import _experience as store
-
-        self.assertEqual(self.experience.failure_min_score({}, store), 0.50)
-        self.assertEqual(
-            self.experience.failure_min_score({"min_score": 0.61}, store), 0.61)
+        self.assertNotIn("source_refs", labeled)
 
     def test_experience_gateway_executes_real_retrieval_before_labeling(self):
         import _experience as store
         import _source_ref
 
-        db = self.vault / ".claude" / "kb-experience.db"
+        db = store.projection_path(self.vault)
         source = self.vault / "01-raw" / "transcripts" / "bounded.md"
         source.parent.mkdir(parents=True)
         passage = "use a bounded timeout"

@@ -688,8 +688,9 @@ This branch keeps two deeper recall paths separate from ordinary memory
 injection. Source recall is a provenance-first RAG projection over approved raw
 files: it is invoked explicitly for reconstruction or verification and returns
 the exact source path, hash, and offsets. Experience recall is an outcome layer
-over typed append-only events: it returns only validated prior approaches or
-clearly labelled failure advisories, never a candidate or unknown lesson.
+over typed append-only events: explicit recall returns only validated,
+evidence-verified and owner-accepted lessons, never a candidate, unknown lesson,
+or automatic failure advisory.
 
 Both projections are local, opt-in, fail-open, and disposable. Source recall
 uses lexical FTS5/BM25 only; exact reconstruction resolves a structured
@@ -822,7 +823,7 @@ The hooks are fail-open by design: an error means no injected context or a skipp
 | `/kennisbank:rebuild-source-index` | none | Rebuild the opt-in provenance-first raw-source projection |
 | `/kennisbank:rebuild-experience` | `--incremental` or `--records-only` | Rebuild outcome/experience records and the optional local vector projection |
 | `/kennisbank:source-recall` | explicit/verify/reconstruct | Retrieve hash- and offset-bound source passages; never normal prompt injection |
-| `/kennisbank:experience-recall` | explicit/failure | Retrieve validated experiences or labelled failure advisories |
+| `/kennisbank:experience-recall` | explicit | Retrieve up to three reviewed experiences; hybrid when compatible and labelled lexical fallback otherwise |
 | `/kennisbank:rebuild-memory` | none | Re-extract ALL memory from archived transcripts (heavy; semantic dedup makes it near-idempotent) |
 | `/kennisbank-upgrade` | optional `--dry-run` | Upgrade the deployed vault to the latest release tag |
 | `/kennisbank-contribute` | optional `--dry-run` | PR local tooling edits back upstream |

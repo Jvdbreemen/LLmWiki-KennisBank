@@ -63,6 +63,7 @@ class ReviewedRetrievalEvalTest(unittest.TestCase):
                 cases, db_path=db, embed_fn=lambda text: vectors[text],
                 embed_id="fake:3", advisory_min_cos=0.8, vault=vault)
         self.assertEqual(report["hybrid"]["retrieval"]["hit@3"], 1.0)
+        self.assertEqual(report["hybrid"]["evidence_precision"], 1.0)
         self.assertEqual(report["hybrid"]["failure_hit@3"], 1.0)
         self.assertEqual(report["hybrid"]["false_warning_rate"], 0.0)
         self.assertEqual(report["advisory_precision"], 1.0)

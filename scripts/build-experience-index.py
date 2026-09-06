@@ -114,13 +114,15 @@ def rebuild_experience_projection(ledger, projection, *, embed_fn=None,
             vectors.append(vector)
             _emit(progress_fn, {"phase": "derive", "current": current,
                                 "total": len(tasks), "experience_id": experience_id})
+        # Publish one honest lexical projection when the optional embedding
+        # backend is incomplete, rather than a partial hybrid index.
         if failed_embeddings:
-            return {"status": "failed", "reason": "embedding failure",
-                    "experiences": 0, "failed_embeddings": failed_embeddings}
+            dimension = None
+            vectors = [None for _record in records]
         stage_conn = _experience.connect(stage)
         projection_embed_id = embed_id if dimension is not None else "lexical-only:1"
         _experience.ensure_projection_schema(
-            stage_conn, dim=dimension or 1, embed_id=projection_embed_id)
+            stage_conn, dim=dimension, embed_id=projection_embed_id)
         _experience._kbindex.meta_set(stage_conn, "experience_projection_version",
                                       PROJECTION_VERSION)
         for record, vector in zip(records, vectors):
@@ -140,8 +142,9 @@ def rebuild_experience_projection(ledger, projection, *, embed_fn=None,
         result = {"status": "ok", "experiences": len(records),
                   "derived_experiences": len(records),
                   "skipped_candidates": skipped_candidates,
-                  "vector_status": "ok" if dimension is not None else "skipped",
-                  "failed_embeddings": [], "projection_version": PROJECTION_VERSION}
+                  "vector_status": "ok" if dimension is not None else "lexical_fallback",
+                  "failed_embeddings": failed_embeddings,
+                  "projection_version": PROJECTION_VERSION}
         _emit(progress_fn, {"phase": "complete", **result})
         return result
     except Exception as exc:

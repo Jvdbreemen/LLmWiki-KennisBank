@@ -37,7 +37,8 @@ The experience layer is a separate, optional projection rather than a second
 copy of raw memory. Typed append-only events and outcome records are the source
 of truth; `_experience_extract.py` derives candidate or validated experiences
 only when source and outcome evidence resolve. `kb-experience-recall.py` exposes
-validated records and failure advisories with their evidence labels, while
+only explicitly requested, owner-accepted lessons with SourceRef ids and an
+honest hybrid or lexical-fallback label, while
 `rebuild-experience.py` can reconstruct the derived store after corruption or
 schema migration. Retraction and supersession close records but do not erase
 their audit trail. Missing or redacted sources are surfaced as lifecycle
