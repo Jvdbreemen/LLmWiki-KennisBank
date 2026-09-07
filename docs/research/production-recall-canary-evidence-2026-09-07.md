@@ -11,13 +11,16 @@ Decision boundary: evidence packet only; no rollout or ADR acceptance
 **Hold.** The production mechanics, locked experience regression, source
 owner-canary, latency, failure recovery, privacy boundary, and normal-route
 isolation pass. The experience owner-canary has zero of the required twenty
-naturally occurring explicit recalls because the configured owner vault has no
-canonical experience ledger or projection. Copying the old evaluation database
+naturally occurring explicit recalls. The configured owner vault now has a
+canonical ledger and one source-grounded, unreviewed task candidate, but no
+approved projection. Copying the old evaluation database
 into production would not fix that: it contains curated projection rows rather
 than append-only events plus content-hash-bound owner reviews.
 
-All four feature flags remain off. No release or ADR transition is authorized
-by this packet.
+Shadow capture is enabled; projection and both explicit read flags remain off.
+No release or ADR transition is authorized by this packet. Full-suite evidence
+below is bound to `468acd1`; a later run has no recoverable final result and is
+not claimed as a current-HEAD pass.
 
 ## Evidence classes
 
@@ -202,7 +205,7 @@ projection or invoked embeddings.
 | #4 route latency budgets | pass | experience 129.338, source FTS 129.071, hydration 16.671 ms p95 |
 | #5 fail-open and previous-good recovery | pass | focused failure-injection suite green |
 | #6 ten source reconstructions before experience | pass | 10/10; experience canary not started |
-| #7 twenty natural experience reviews | **fail/incomplete** | 0/20; no canonical owner-vault experience data |
+| #7 twenty natural experience reviews | **fail/incomplete** | 0/20; canonical capture present, no owner-approved candidates |
 | #8 sanitized aggregate packet | pass | this packet plus privacy/canary contracts |
 | #9 full suite and all client smokes | pass | clean `468acd1`: 1991 passed, 4 skipped; client smokes included; unchanged Atlas 39/39 |
 
@@ -221,9 +224,8 @@ document belong in Git.
 
 ## Next evidence required
 
-1. Deploy the feature-branch tooling under controlled shadow capture and build
-   a canonical ledger from newly captured typed events and outcomes; do not
-   import curated eval projection rows as canonical history.
+1. Continue controlled shadow capture, now active, and source-grounded corpus
+   preparation. Do not import curated eval projection rows as canonical history.
 2. Let the owner review candidates against exact SourceRefs and outcome refs,
    then atomically build the disposable experience projection.
 3. Collect twenty naturally occurring, explicit experience recalls and record
@@ -231,3 +233,26 @@ document belong in Git.
 4. Keep the decision at hold if any safety rate fails. Only after the complete
    canary and current-HEAD full/client suites are green may TASK-237 present an
    accept/amend/reject choice to the owner.
+
+## Live corpus-preparation follow-up
+
+A read-only baseline found 33 events, 33 outcomes, and zero reviews. A private
+operator preflight resolved seven exact SourceRefs before any ledger write.
+One bounded task candidate and its observed outcome were then appended from
+archived raw evidence; all pre-existing events/outcomes and the review table
+were preserved. An immediate replay created no duplicate. The initial failure
+and subsequently validated repair remain separate fields; the existing mixed
+session outcome was not rewritten. Scope limitations remain in the candidate.
+
+The post-append fast doctor reported 34 events, 34 outcomes, zero reviews,
+quick integrity OK, absent projection, and both read routes disabled. Source
+inventory and deep integrity were explicitly not checked. Exact validation of
+this candidate succeeded, but its status remains candidate/unreviewed. Private
+source text, identifiers, preparation script, and pending review packet remain
+in the vault, outside Git. This retrospective corpus preparation contributes
+zero natural explicit-recall observations.
+
+The live canary report still shows source 10/10 and experience 0/20. Focused
+capture, review, extraction, and canary regressions passed: **30 passed in
+2.70s**. No production code, retrieval flags, owner decisions, or release state
+changed during this follow-up.

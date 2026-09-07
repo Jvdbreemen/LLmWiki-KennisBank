@@ -72,3 +72,15 @@ hashing the 16,318-file (~0.82 GiB) source corpus; this incomplete run is not
 reported as green. TASK-238 added an honest `--fast` mode: the same owner-vault
 routine check completed read-only in 546.8 ms while marking expensive inventory,
 source integrity, chunk, and exact-ref checks `not_checked`/null.
+
+Live corpus preparation (2026-09-07): shadow capture had accumulated 33 events
+and 33 outcomes. A private dry run verified seven exact raw-source references;
+one task-scoped candidate/outcome was appended without changing existing rows
+or adding a review. Replay produced no duplicate. Post-append quick integrity
+passed with 34 events, 34 outcomes, zero reviews, no projection, and read routes
+disabled. Focused capture/review/extraction/canary tests: 30 passed in 2.70s.
+The private pending-review packet awaits the owner's explicit decision. This
+is retrospective corpus preparation, not a natural recall: criterion #7 stays
+0/20. Criterion #9 evidence remains bound to 468acd1; the later full run's final
+result was not recovered and current-HEAD full-suite proof remains a release
+prerequisite. No main merge or release was performed.
