@@ -515,6 +515,8 @@ These are invoked by the Claude Code harness on UserPromptSubmit (synchronously,
 - **kb-projection-doctor.py**
   - Read-only source/experience health: schema, freshness, provenance gaps,
     orphan/redaction signals, lifecycle statuses, and route state.
+  - `--fast` is the bounded metadata/count mode; raw inventory, large source
+    integrity, and exact SourceRef checks are explicitly `not_checked`.
   - **Location**: [kb-projection-doctor.py](../../scripts/kb-projection-doctor.py)
 
 - **stale-check.py**

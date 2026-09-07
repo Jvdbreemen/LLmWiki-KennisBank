@@ -62,3 +62,13 @@ skips are existing platform/optional-capability skips, not failures. The suite
 includes the cross-client install, generated-artifact, MCP-wire, and setup
 smokes; the unchanged Atlas frontend had separately passed typecheck and 39/39
 tests earlier in this branch cycle.
+
+Owner-vault shadow activation: the capture cohort was deployed from clean
+feature commit `468acd1` after timestamped backup. Only
+`experience_capture=true`; projection and both explicit read flags remain off.
+Disabled and enabled-invalid smokes created no ledger, so no synthetic case was
+counted. A default projection doctor was stopped after five minutes while
+hashing the 16,318-file (~0.82 GiB) source corpus; this incomplete run is not
+reported as green. TASK-238 added an honest `--fast` mode: the same owner-vault
+routine check completed read-only in 546.8 ms while marking expensive inventory,
+source integrity, chunk, and exact-ref checks `not_checked`/null.

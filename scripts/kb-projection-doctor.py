@@ -78,7 +78,8 @@ def _source_inventory(vault: Path):
     return current, redacted
 
 
-def _source_health(vault: Path, *, deep_integrity: bool = False) -> dict:
+def _source_health(vault: Path, *, deep_integrity: bool = False,
+                   fast: bool = False) -> dict:
     path = vault / ".claude" / "kb-source.db"
     required = {"source_meta", "source_chunks", "source_manifest", "source_fts"}
     if not path.is_file():
@@ -92,6 +93,26 @@ def _source_health(vault: Path, *, deep_integrity: bool = False) -> dict:
                     "missing_tables": sorted(required - tables),
                     "integrity": _integrity(conn, deep=deep_integrity)}
         doc_count = conn.execute("SELECT count(*) FROM source_manifest").fetchone()[0]
+        backend = _meta(conn, "retrieval_backend")
+        version = _meta(conn, "source_index_version", _meta(conn, "index_version"))
+        vector_tables = sorted(name for name in tables
+                               if "vec" in name.lower() or "vector" in name.lower())
+        if fast:
+            # quick_check and count(*) over the passage table both walk a
+            # multi-gigabyte source projection. Fast mode is intentionally a
+            # bounded metadata/schema check and labels those scans as skipped.
+            return {
+                "status": "present", "rebuildable": True,
+                "integrity": None, "integrity_mode": "not_checked",
+                "schema_version": version, "documents": doc_count,
+                "chunks": None, "provenance_chunks": None,
+                "provenance_coverage": None,
+                "retrieval_backend": backend,
+                "forbidden_vector_tables": vector_tables,
+                "inventory_check": "not_checked",
+                "stale_sources": None, "orphaned_sources": None,
+                "missing_sources": None, "redacted_sources": None,
+            }
         chunk_count = conn.execute("SELECT count(*) FROM source_chunks").fetchone()[0]
         provenance_chunks = conn.execute(
             "SELECT count(*) FROM source_chunks WHERE source_path<>'' "
@@ -100,15 +121,7 @@ def _source_health(vault: Path, *, deep_integrity: bool = False) -> dict:
         manifest = {str(row[0]): str(row[1]) for row in conn.execute(
             "SELECT source_path, source_hash FROM source_manifest")}
         integrity = _integrity(conn, deep=deep_integrity)
-        backend = _meta(conn, "retrieval_backend")
-        version = _meta(conn, "source_index_version", _meta(conn, "index_version"))
-        vector_tables = sorted(name for name in tables
-                               if "vec" in name.lower() or "vector" in name.lower())
-        current, redacted = _source_inventory(vault)
-        stale = sorted(rel for rel, digest in manifest.items()
-                       if rel in current and current[rel] != digest)
-        missing = sorted(set(manifest) - set(current) - redacted)
-        return {
+        common = {
             "status": "ready" if integrity == "ok" else "unreadable",
             "rebuildable": True, "integrity": integrity,
             "integrity_mode": "deep" if deep_integrity else "quick",
@@ -116,10 +129,17 @@ def _source_health(vault: Path, *, deep_integrity: bool = False) -> dict:
             "chunks": chunk_count, "provenance_chunks": provenance_chunks,
             "provenance_coverage": (
                 provenance_chunks / chunk_count if chunk_count else 1.0),
-            "retrieval_backend": backend, "stale_sources": stale,
+            "retrieval_backend": backend,
+            "forbidden_vector_tables": vector_tables,
+        }
+        current, redacted = _source_inventory(vault)
+        stale = sorted(rel for rel, digest in manifest.items()
+                       if rel in current and current[rel] != digest)
+        missing = sorted(set(manifest) - set(current) - redacted)
+        return {
+            **common, "inventory_check": "checked", "stale_sources": stale,
             "orphaned_sources": missing, "missing_sources": missing,
             "redacted_sources": sorted(redacted),
-            "forbidden_vector_tables": vector_tables,
         }
     except Exception as exc:
         return {"status": "unreadable", "rebuildable": True,
@@ -164,7 +184,8 @@ def _ledger_health(vault: Path, *, deep_integrity: bool = False) -> dict:
 
 
 def _projection_health(vault: Path, *, live_embed_id: str = "",
-                       deep_integrity: bool = False) -> dict:
+                       deep_integrity: bool = False,
+                       fast: bool = False) -> dict:
     path = experience.projection_path(vault)
     required = {"experiences", "docs", "fts_docs", "meta"}
     if not path.is_file():
@@ -181,9 +202,14 @@ def _projection_health(vault: Path, *, live_embed_id: str = "",
         rows = [experience.experience(conn, str(row[0])) for row in conn.execute(
             "SELECT experience_id FROM experiences ORDER BY experience_id")]
         rows = [row for row in rows if row is not None]
-        current, redacted = _source_inventory(vault)
-        lifecycle = maintenance.lifecycle_report(
-            rows, existing_sources=set(current), redacted_sources=redacted)
+        if fast:
+            lifecycle = maintenance.lifecycle_report(rows)
+            lifecycle["orphan_experiences"] = None
+            lifecycle["redacted_experiences"] = None
+        else:
+            current, redacted = _source_inventory(vault)
+            lifecycle = maintenance.lifecycle_report(
+                rows, existing_sources=set(current), redacted_sources=redacted)
         integrity = _integrity(conn, deep=deep_integrity)
         embed_id = _meta(conn, "embed_id", "")
         if embed_id.startswith("lexical-only"):
@@ -202,11 +228,12 @@ def _projection_health(vault: Path, *, live_embed_id: str = "",
         review_counts = Counter(str(row.get("review_state") or "unknown")
                                 for row in rows)
         resolved_counts = Counter()
-        for row in rows:
-            for ref in row.get("source_refs") or []:
-                if isinstance(ref, dict) and ref.get("source_ref_id"):
-                    resolved = source_ref.resolve_source_ref(vault, ref)
-                    resolved_counts[str(resolved.get("status") or "invalid")] += 1
+        if not fast:
+            for row in rows:
+                for ref in row.get("source_refs") or []:
+                    if isinstance(ref, dict) and ref.get("source_ref_id"):
+                        resolved = source_ref.resolve_source_ref(vault, ref)
+                        resolved_counts[str(resolved.get("status") or "invalid")] += 1
         lifecycle.update({
             "status": "ready" if integrity == "ok" else "unreadable",
             "rebuildable": True, "integrity": integrity,
@@ -217,10 +244,11 @@ def _projection_health(vault: Path, *, live_embed_id: str = "",
             "evidence_state_counts": dict(sorted(evidence_counts.items())),
             "resolved_source_ref_counts": dict(sorted(resolved_counts.items())),
             "review_state_counts": dict(sorted(review_counts.items())),
-            "stale_count": int(resolved_counts.get("stale", 0)),
-            "missing_count": int(resolved_counts.get("missing", 0)),
-            "redacted_count": int(resolved_counts.get("redacted", 0)),
-            "invalid_ref_count": int(resolved_counts.get("invalid", 0)),
+            "source_ref_check": "not_checked" if fast else "checked",
+            "stale_count": None if fast else int(resolved_counts.get("stale", 0)),
+            "missing_count": None if fast else int(resolved_counts.get("missing", 0)),
+            "redacted_count": None if fast else int(resolved_counts.get("redacted", 0)),
+            "invalid_ref_count": None if fast else int(resolved_counts.get("invalid", 0)),
             "contradictory_count": int(evidence_counts.get("contradictory", 0)),
         })
         return lifecycle
@@ -247,7 +275,8 @@ def _enabled(value) -> bool:
     return bool(value)
 
 
-def health(vault, *, live_embed_id: str = "", deep_integrity: bool = False) -> dict:
+def health(vault, *, live_embed_id: str = "", deep_integrity: bool = False,
+           fast: bool = False) -> dict:
     vault = Path(vault)
     settings = _settings(vault)
     forbidden = sorted(key for key in (
@@ -255,9 +284,11 @@ def health(vault, *, live_embed_id: str = "", deep_integrity: bool = False) -> d
         "experience_failure_advisory") if _enabled(settings.get(key, False)))
     ledger = _ledger_health(vault, deep_integrity=deep_integrity)
     projection = _projection_health(
-        vault, live_embed_id=live_embed_id, deep_integrity=deep_integrity)
+        vault, live_embed_id=live_embed_id, deep_integrity=deep_integrity,
+        fast=fast)
     return {
         "schema_version": 2,
+        "inventory_check": "not_checked" if fast else "checked",
         "routes": {
             "source": "enabled" if _enabled(settings.get(
                 "source_explicit_recall", False)) else "disabled",
@@ -265,7 +296,8 @@ def health(vault, *, live_embed_id: str = "", deep_integrity: bool = False) -> d
                 "experience_explicit_recall", False)) else "disabled",
         },
         "forbidden_flags": forbidden,
-        "source": _source_health(vault, deep_integrity=deep_integrity),
+        "source": _source_health(
+            vault, deep_integrity=deep_integrity, fast=fast),
         "experience": {"ledger": ledger, "projection": projection},
         "mutated": False,
     }
@@ -282,7 +314,8 @@ def main(argv=None) -> int:
     except Exception:
         pass
     print(json.dumps(health(vault, live_embed_id=live_embed_id,
-                            deep_integrity="--deep" in argv),
+                            deep_integrity="--deep" in argv,
+                            fast="--fast" in argv),
                      ensure_ascii=False, sort_keys=True))
     return 0
 

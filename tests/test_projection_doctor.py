@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 if str(SCRIPTS) not in sys.path:
@@ -17,6 +18,59 @@ import _source_ref as source_ref  # noqa: E402
 
 
 class ProjectionDoctorTest(unittest.TestCase):
+    def test_fast_health_never_touches_raw_inventory_and_labels_unknowns(self):
+        spec = importlib.util.spec_from_file_location(
+            "kb_projection_doctor_fast", SCRIPTS / "kb-projection-doctor.py")
+        doctor = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(doctor)
+
+        with tempfile.TemporaryDirectory() as directory:
+            vault = Path(directory)
+            (vault / ".claude").mkdir()
+            (vault / "kennisbank-settings.json").write_text(
+                json.dumps({"source_explicit_recall": False,
+                            "experience_explicit_recall": False}),
+                encoding="utf-8")
+            ledger = exp.ledger_path(vault)
+            conn = exp.connect(ledger)
+            exp.ensure_ledger_schema(conn)
+            conn.close()
+            projection = exp.projection_path(vault)
+            conn = exp.connect(projection)
+            exp.ensure_projection_schema(conn, dim=None, embed_id="lexical-only:1")
+            conn.execute(
+                "INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)",
+                ("experience_projection_version", "1"))
+            conn.commit()
+            conn.close()
+            import _source_recall as source
+            source_db = vault / ".claude" / "kb-source.db"
+            conn = source.connect(source_db)
+            source.ensure_schema(conn)
+            conn.execute(
+                "INSERT INTO source_manifest(source_path, source_hash) VALUES (?, ?)",
+                ("05-bronnen/example.md", "sha256:example"))
+            conn.commit()
+            conn.close()
+
+            with mock.patch.object(
+                    doctor, "_source_inventory",
+                    side_effect=AssertionError("raw inventory must stay cold")):
+                report = doctor.health(vault, fast=True)
+
+            self.assertEqual(report["inventory_check"], "not_checked")
+            self.assertEqual(report["source"]["status"], "present")
+            self.assertEqual(report["source"]["documents"], 1)
+            self.assertIsNone(report["source"]["integrity"])
+            self.assertEqual(report["source"]["integrity_mode"], "not_checked")
+            self.assertIsNone(report["source"]["chunks"])
+            experience = report["experience"]["projection"]
+            self.assertEqual(experience["status"], "ready")
+            self.assertEqual(experience["source_ref_check"], "not_checked")
+            self.assertIsNone(experience["stale_count"])
+            self.assertIsNone(experience["orphan_experiences"])
+            self.assertEqual(report["experience"]["ledger"]["events"], 0)
+
     def test_health_is_read_only_and_reports_split_stores_and_flags(self):
         spec = importlib.util.spec_from_file_location(
             "kb_projection_doctor", SCRIPTS / "kb-projection-doctor.py")

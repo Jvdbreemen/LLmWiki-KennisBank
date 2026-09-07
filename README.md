@@ -702,6 +702,10 @@ append-only `kb-experience-ledger.db`; use
 redaction diagnostics. The evidence gate is deliberately stricter than
 retrieval quality: without reviewed holdouts and a downstream correctness
 improvement, the result remains `hold` and the toggles stay off.
+For a bounded routine check, use `kb-projection-doctor.py --fast`: it checks
+schemas, flags, metadata, and experience counts but labels source inventory,
+large-index integrity, and exact SourceRef freshness as `not_checked`. Run the
+unflagged command off the hot path when those full hash checks are required.
 
 ### Retrieval (the hooks layer)
 - **Every prompt, every project**: a UserPromptSubmit hook embeds your prompt and injects the top-matching wiki articles and memories as context. A PreToolUse hook checks the vault before Claude searches the web.

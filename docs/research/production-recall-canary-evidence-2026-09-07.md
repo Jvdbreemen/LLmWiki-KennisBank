@@ -149,6 +149,41 @@ The recorder deliberately treats a zero-case harmful rate as unmeasured and
 failed, not as a vacuous safety pass. Eval prompts and retrospective replays are
 labelled non-natural and cannot satisfy the twenty-case gate.
 
+### Owner-vault shadow-capture activation
+
+After the capture repair and complete suite passed, the owner vault was checked
+before mutation. It had no canonical experience ledger or projection and did
+not yet contain the production capture/review scripts. A narrow shadow cohort
+was deployed with a timestamped local backup of the prior settings and
+session-end coordinator. All ten copied script hashes matched clean feature
+commit `468acd1`; the existing coordinator received only the fail-open
+post-capture outcome job rather than a wholesale client reinstall.
+
+The resulting live flag state is intentionally asymmetric:
+
+| Capability | State |
+| --- | --- |
+| experience capture | enabled |
+| experience projection build | disabled |
+| explicit experience recall | disabled |
+| explicit source recall | disabled |
+
+A pre-enable invocation returned `disabled`. After enabling capture, an empty
+invalid event returned exit 2 with a bounded validation reason. Neither smoke
+created a ledger. All deployed modules compiled, and no synthetic event was
+inserted. Future session-end outcomes can now accumulate prospectively; useful
+candidate content must still be source-grounded explicitly and owner-reviewed.
+
+A default doctor run was stopped after more than five minutes while hashing the
+full 16,318-file, approximately 0.82 GiB raw-source inventory. It made no
+mutation and is not counted as a pass. This exposes a scale-cost in the doctor
+path, not a capture or recall failure. The added `--fast` mode then completed
+read-only in 546.8 ms. It reported the source store present with 16,286 manifest
+documents, both experience stores absent, both read routes disabled, and
+`mutated=false`; expensive inventory, source integrity, chunk, and exact-ref
+fields were explicitly `not_checked`/null. Exact full/deep checks remain an
+off-hot-path operation.
+
 ## Normal-route compatibility and overhead
 
 With both explicit-recall flags off, 5,000 calls per gateway returned the exact

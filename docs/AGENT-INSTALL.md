@@ -165,6 +165,10 @@ values grant no capability. Run `kb-projection-doctor.py`
 for a read-only health check;
 run the two rebuild commands off the interactive path. These paths preserve
 `KENNISBANK_VAULT` and have no implicit cloud fallback.
+On a large vault, use `kb-projection-doctor.py --fast` for bounded routine
+health. It reports skipped source inventory, large-index integrity, and exact
+SourceRef validation as `not_checked`/null; use the unflagged or `--deep`
+variant off the hot path when exact freshness is required.
 
 During an approved shadow-capture phase, source-grounded natural candidates can
 be appended with `kb-experience-capture.py`; see

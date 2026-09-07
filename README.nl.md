@@ -737,6 +737,10 @@ melden had.
   orphan-, redaction- en lifecycle-signalen. De twee projecties zijn lokaal,
   opt-in, fail-open en atomisch herbouwbaar; zonder beoordeelde holdout en
   downstream-verbetering blijft de evaluatie `hold`.
+  Gebruik `kb-projection-doctor.py --fast` voor een begrensde routinecheck:
+  schema's, flags, metadata en experience-counts worden gecontroleerd, terwijl
+  source-inventory, grote-index-integriteit en exacte SourceRef-freshness
+  eerlijk `not_checked` blijven. Draai de volledige variant buiten het hot path.
 
 ### Meting (de vertrouwenslaag)
 - `kb-eval.py`: recall@1/3/5 en MRR tegen je persoonlijke evalset van vragen. Draai het vóór en na elke retrieval-wijziging; een daling is een regressie, geen mening.

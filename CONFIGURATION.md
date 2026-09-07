@@ -603,6 +603,12 @@ previous derived database. The doctor is read-only. Raw source deletion or
 redaction therefore produces a stale/orphan/lifecycle signal and requires an
 operator decision; it does not erase audit history automatically.
 
+For routine monitoring, `kb-projection-doctor.py --fast` avoids raw-file and
+multi-gigabyte source-index scans. Its source inventory, source integrity, and
+exact SourceRef fields are deliberately `not_checked`/null, not zero. Use the
+unflagged doctor for exact freshness and `--deep` for the full SQLite integrity
+check; both belong off the interactive path on a large vault.
+
 All four supported client integrations (Claude Code, Codex, OpenCode, and
 Copilot) receive the same configured `KENNISBANK_VAULT` boundary and local
 MCP/command paths where supported. The retrieval layers do not create a cloud

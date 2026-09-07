@@ -82,6 +82,16 @@ class ProjectionClientDocsTest(unittest.TestCase):
         self.assertIn("does not build", guide)
         self.assertIn("kb-experience-index.db", guide)
 
+    def test_projection_doctor_docs_distinguish_fast_from_exact_inventory(self):
+        paths = (
+            ROOT / "README.md", ROOT / "README.nl.md",
+            ROOT / "CONFIGURATION.md", ROOT / "docs" / "AGENT-INSTALL.md",
+        )
+        for path in paths:
+            text = path.read_text(encoding="utf-8")
+            self.assertIn("kb-projection-doctor.py --fast", text, str(path))
+            self.assertIn("not_checked", text, str(path))
+
 
 if __name__ == "__main__":
     unittest.main()
