@@ -79,25 +79,33 @@ _LEGACY_FLAGS = {
 }
 
 
-def settings_path() -> Path:
-    return vault_root() / FILENAME
+def settings_path(vault: Path | None = None) -> Path:
+    """Return the settings file for *vault* or the configured active vault.
+
+    Library callers that already resolved an explicit vault must be able to
+    evaluate policy in that same vault. Falling back to the process-global
+    environment in that case can grant or deny a write using another vault's
+    settings.
+    """
+    root = Path(vault) if vault is not None else vault_root()
+    return root / FILENAME
 
 
-def _load() -> dict:
+def _load(vault: Path | None = None) -> dict:
     try:
-        data = json.loads(settings_path().read_text(encoding="utf-8"))
+        data = json.loads(settings_path(vault).read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else {}
     except (OSError, ValueError):
         return {}
 
 
-def get(key: str, default: bool) -> bool:
+def get(key: str, default: bool, *, vault: Path | None = None) -> bool:
     """Lees een toggle. Ontbrekend bestand/key of parse-fout -> default.
 
     De docs nodigen uit om het JSON-bestand met de hand te bewerken. Een
     string-waarde (bv. "false") wordt daarom via _TRUTHY genormaliseerd, zodat
     "false"/"0"/"no" niet per ongeluk truthy is (bool("false") == True)."""
-    val = _load().get(key, default)
+    val = _load(vault).get(key, default)
     if isinstance(val, str):
         return val.strip().lower() in _TRUTHY
     return bool(val)

@@ -52,7 +52,9 @@ def derive_experience_values(conn, session_id: str, task_id: str,
         latest.update({key: str(value) for key, value in payload.items()
                        if value is not None and key in {
                            "situation", "goal", "approach", "action",
-                           "observed_result", "lesson", "applicability"}})
+                           "observed_result", "lesson", "applicability",
+                           "attempt_state", "resolution_state",
+                           "attribution_limits"}})
     outcome_id = outcomes[-1][0] if outcomes else ""
     outcome_states = {row[1] for row in outcomes}
     outcome_state = ("mixed" if {"success", "failure"} <= outcome_states
@@ -72,8 +74,14 @@ def derive_experience_values(conn, session_id: str, task_id: str,
         "source_refs": refs, "outcome_refs": outcome_refs,
         "exposed_refs": exposed_refs, "procedure_refs": procedure_refs,
         "skill_refs": skill_refs,
-        "attempt_state": "unknown", "resolution_state": "not_applicable",
-        "attribution_limits": "", "schema_version": "1",
+        "attempt_state": (latest.get("attempt_state", "unknown")
+                          if latest.get("attempt_state", "unknown")
+                          in _experience._ATTEMPT_STATES else "unknown"),
+        "resolution_state": (latest.get("resolution_state", "not_applicable")
+                             if latest.get("resolution_state", "not_applicable")
+                             in _experience._RESOLUTION_STATES else "not_applicable"),
+        "attribution_limits": latest.get("attribution_limits", ""),
+        "schema_version": "1",
         "extractor_version": "1",
         "evidence_state": "contradictory" if conflicting else "unverified",
         "review_state": "unreviewed",

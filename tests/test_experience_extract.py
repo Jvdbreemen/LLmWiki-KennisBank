@@ -73,6 +73,26 @@ class ExperienceExtractTest(unittest.TestCase):
         self.assertEqual(result["outcome_state"], "mixed")
         self.assertEqual(result["status"], "candidate")
 
+    def test_attempt_resolution_and_attribution_are_preserved_separately(self):
+        exp.append_event(
+            self.conn, event_id="typed", session_id="s", task_id="t",
+            event_type="fix", observed_at="now",
+            payload={"lesson": "bound retries", "attempt_state": "failure",
+                     "resolution_state": "fix_validated",
+                     "attribution_limits": "single task observation"},
+            source_refs=["raw.md#1:2"])
+        exp.record_outcome(
+            self.conn, outcome_id="typed-outcome", session_id="s", task_id="t",
+            state="success", evidence=["tests passed"],
+            attribution_strength="correlated")
+
+        result = extract.derive_experience_values(self.conn, "s", "t", "typed-exp")
+
+        self.assertEqual(result["attempt_state"], "failure")
+        self.assertEqual(result["resolution_state"], "fix_validated")
+        self.assertEqual(result["outcome_state"], "success")
+        self.assertEqual(result["attribution_limits"], "single task observation")
+
     def test_dead_end_survival_report_counts_failure_events_retained_as_lessons(self):
         events = [
             {"event_type": "failure", "source_refs": ["raw#1"],

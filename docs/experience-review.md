@@ -1,5 +1,8 @@
 # Experience candidate review
 
+For new natural candidates, first use the source-first workflow in
+[Source-grounded experience capture](experience-capture.md).
+
 Experience extraction only creates candidates. A candidate becomes eligible for
 the disposable retrieval projection after two independent checks:
 

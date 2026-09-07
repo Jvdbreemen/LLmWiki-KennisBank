@@ -73,6 +73,15 @@ class ProjectionClientDocsTest(unittest.TestCase):
         self.assertIn("list_tools", c4)
         self.assertTrue("source" in c4 and "experience" in c4 and "call" in c4)
 
+    def test_capture_guide_keeps_source_first_and_projection_separate(self):
+        guide = (ROOT / "docs" / "experience-capture.md").read_text(
+            encoding="utf-8")
+        for phrase in ("experience_capture", "source_ranges",
+                       "kb-experience-capture.py", "kb-experience-ledger.db"):
+            self.assertIn(phrase, guide)
+        self.assertIn("does not build", guide)
+        self.assertIn("kb-experience-index.db", guide)
+
 
 if __name__ == "__main__":
     unittest.main()

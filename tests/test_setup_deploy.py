@@ -247,6 +247,7 @@ class SetupDeployTest(unittest.TestCase):
                      "kb-source-recall.py", "build-experience-index.py",
                      "rebuild-experience.py", "kb-experience-recall.py",
                      "kb-experience-proposal.py", "kb-layer-eval.py",
+                     "kb-experience-capture.py",
                      "kb-projection-doctor.py", "kb-projection-canary.py",
                      "_projection_canary.py"):
             self.assertTrue((scripts / name).is_file(), name)

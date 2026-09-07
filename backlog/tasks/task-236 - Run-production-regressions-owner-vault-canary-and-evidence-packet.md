@@ -46,3 +46,12 @@ Current aggregate packet:
 canary passes 10/10. Experience remains a documented hold at 0/20 naturally
 occurring explicit reviews; no eval projection was promoted into the canonical
 owner ledger.
+
+Shadow-capture audit (2026-09-07): the session outcome recorder was found to
+target the retired mixed store and ignore the new capture flag. It now appends
+idempotent events/outcomes to the canonical ledger under same-vault policy.
+The new source-first capture CLI creates exact SourceRefs before append and
+cannot write the projection. A synthetic capture/outcome/review/rebuild proof
+passed, as did 236 focused regressions (one existing Windows symlink skip) and
+a real temporary setup deployment. This is mechanism evidence only; criterion
+#7 remains 0/20 and no production-value claim was upgraded.

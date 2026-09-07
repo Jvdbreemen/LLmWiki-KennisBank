@@ -166,6 +166,11 @@ for a read-only health check;
 run the two rebuild commands off the interactive path. These paths preserve
 `KENNISBANK_VAULT` and have no implicit cloud fallback.
 
+During an approved shadow-capture phase, source-grounded natural candidates can
+be appended with `kb-experience-capture.py`; see
+`docs/experience-capture.md`. Capture writes only the canonical private ledger
+and cannot build a projection, enable recall, or approve its own lesson.
+
 ## Upgrade
 
 Deployed vaults upgrade with the `kennisbank-upgrade` skill

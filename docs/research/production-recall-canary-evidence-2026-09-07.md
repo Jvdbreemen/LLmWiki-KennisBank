@@ -59,6 +59,32 @@ and canary contracts together:
 57 passed in 10.85s
 ```
 
+The subsequent shadow-capture audit found that `kb-outcome.py` still wrote to
+the retired mixed store and did not enforce `experience_capture`. That means
+the earlier mechanics were insufficient for a real canary even though the
+retrieval-side tests passed. The repair is test-first and deliberately does
+not count as a natural canary case:
+
+- session outcomes now obey the capture flag of the same explicitly resolved
+  vault and append an idempotent observation plus outcome to the canonical
+  ledger;
+- `kb-experience-capture.py` accepts private JSON on stdin, creates exact
+  structured SourceRefs from approved vault-relative ranges, rejects
+  ungrounded or content-leaking shapes before writing, and returns only opaque
+  ids and counts;
+- extraction now preserves attempt, resolution, and final outcome as separate
+  states instead of defaulting the first two away;
+- a synthetic closed-gate proof completed capture -> success outcome -> exact
+  content-hash owner review -> atomic lexical rebuild with one
+  `validated/verified/accepted` record and zero candidate leakage;
+- 236 source/experience/projection/outcome/policy regressions passed, with one
+  existing Windows symlink fixture skipped; deployment of the new capture
+  script through a temporary real setup passed in 68.63 seconds.
+
+This closes the mechanism needed to start prospective shadow capture. It does
+not manufacture the required twenty naturally occurring recalls, and it does
+not justify turning on a flag in the owner vault by itself.
+
 The privacy boundary separately passed 17 tests. They reject tracked private
 eval sets, content-bearing canary fields, query/path telemetry, changed reuse of
 an idempotency key, and reports containing per-case identifiers.
@@ -129,7 +155,7 @@ projection or invoked embeddings.
 | #6 ten source reconstructions before experience | pass | 10/10; experience canary not started |
 | #7 twenty natural experience reviews | **fail/incomplete** | 0/20; no canonical owner-vault experience data |
 | #8 sanitized aggregate packet | pass | this packet plus privacy/canary contracts |
-| #9 full suite and all client smokes | pending | final current-HEAD runs recorded after completion |
+| #9 full suite and all client smokes | pending | focused/client smokes pass; isolated current-HEAD full suite still required |
 
 ## Reproduction boundary
 
@@ -146,8 +172,9 @@ document belong in Git.
 
 ## Next evidence required
 
-1. Build a canonical ledger from newly captured typed events and outcomes; do
-   not import curated eval projection rows as canonical history.
+1. Deploy the feature-branch tooling under controlled shadow capture and build
+   a canonical ledger from newly captured typed events and outcomes; do not
+   import curated eval projection rows as canonical history.
 2. Let the owner review candidates against exact SourceRefs and outcome refs,
    then atomically build the disposable experience projection.
 3. Collect twenty naturally occurring, explicit experience recalls and record
