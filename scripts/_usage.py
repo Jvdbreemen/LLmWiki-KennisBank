@@ -219,17 +219,24 @@ def log_projection_metric(*, layer: str, route: str, status: str, hits: int,
     """Store aggregate deeper-recall health without accepting content fields."""
     if not enabled():
         return False
+    import _projection_metrics
+    metric = _projection_metrics.sanitize_metric({
+        "route": route, "status": status, "latency_ms": latency_ms,
+        "count": hits,
+    })
     safe_layer = str(layer).lower() if str(layer).lower() in {
         "source", "experience"} else "other"
-    safe_route = str(route).lower() if str(route).lower() in {
+    safe_route = str(metric.get("route") or "").lower() if str(
+        metric.get("route") or "").lower() in {
         "exact_ref", "lexical_fts", "hybrid", "lexical_fallback"} else "other"
-    safe_status = str(status).lower() if str(status).lower() in {
+    safe_status = str(metric.get("status") or "").lower() if str(
+        metric.get("status") or "").lower() in {
         "ok", "no_hit", "evidence_unavailable", "invalid", "unavailable",
         "disabled", "policy_disabled", "not_routed",
     } else "other"
     day = str(today or date.today().isoformat())[:10]
-    hit_count = min(max(int(hits), 0), 100)
-    latency = min(max(float(latency_ms), 0.0), 600000.0)
+    hit_count = min(max(int(metric.get("count", 0)), 0), 100)
+    latency = min(max(float(metric.get("latency_ms", 0.0)), 0.0), 600000.0)
     try:
         with closing(_connect()) as conn, conn:
             conn.execute(

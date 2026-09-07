@@ -725,7 +725,7 @@ melden had.
 - Hybride index (`kb-index.db`): semantische vectoren (sqlite-vec) gefuseerd met FTS5-trefwoordzoeken, zodat exacte termen worden gevonden zelfs wanneer embeddings ze missen.
 - Rangschikking: relevantie x recentheid (halveringstijd per geheugentype) x belang, plus een gebruiksboost voor documenten die recent nuttig bleken.
 - **Graaf-buur-uitbreiding**: de meest-gerefereerde wikilink-buur van je treffers lift mee als één extra vermelding, wat losse treffers omzet in een samenhangende kennisbuurt.
-- **Gated bron- en ervaringsrecall**: `rebuild-source-index.py` bouwt
+- **Gated bron- en ervaringsrecall**: `build-source-index.py` bouwt
   een provenance-first bronprojectie voor expliciete reconstructie/verificatie;
   `source_recall` blijft buiten normale promptinjectie. `rebuild-experience.py`
   bouwt `kb-experience-index.db` atomisch uit events, uitkomsten en reviews in

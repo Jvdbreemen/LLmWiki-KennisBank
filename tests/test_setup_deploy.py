@@ -235,7 +235,8 @@ class SetupDeployTest(unittest.TestCase):
         commands = tmp / ".claude" / "commands" / "kennisbank"
         for name in ("rebuild-source-index.md", "rebuild-experience.md",
                      "source-recall.md", "experience-recall.md",
-                     "experience-proposal.md", "layer-eval.md"):
+                     "experience-proposal.md", "layer-eval.md",
+                     "projection-canary.md"):
             self.assertTrue((commands / name).is_file(), name)
 
     def test_new_projection_scripts_are_deployed(self):
@@ -246,7 +247,8 @@ class SetupDeployTest(unittest.TestCase):
                      "kb-source-recall.py", "build-experience-index.py",
                      "rebuild-experience.py", "kb-experience-recall.py",
                      "kb-experience-proposal.py", "kb-layer-eval.py",
-                     "kb-projection-doctor.py"):
+                     "kb-projection-doctor.py", "kb-projection-canary.py",
+                     "_projection_canary.py"):
             self.assertTrue((scripts / name).is_file(), name)
 
     def test_deployed_projection_gateways_smoke_fail_open(self):

@@ -694,8 +694,10 @@ or automatic failure advisory.
 
 Both projections are local, opt-in, fail-open, and disposable. Source recall
 uses lexical FTS5/BM25 only; exact reconstruction resolves a structured
-SourceRef against the raw file and never uses embeddings. Rebuild them with
-`build-source-index.py` and `rebuild-experience.py`; use
+SourceRef against the raw file and never uses embeddings. Build the source
+projection with `build-source-index.py`. `rebuild-experience.py` atomically
+builds `kb-experience-index.db` from events, outcomes, and reviews in the
+append-only `kb-experience-ledger.db`; use
 `kb-projection-doctor.py` for read-only freshness, provenance, orphan, and
 redaction diagnostics. The evidence gate is deliberately stricter than
 retrieval quality: without reviewed holdouts and a downstream correctness
