@@ -34,7 +34,7 @@ owner vault.
 - [x] #6 At least ten exact source reconstructions are owner-checked before experience canary begins
 - [ ] #7 At least twenty naturally occurring explicit experience recalls are reviewed; >= 70% useful, <= 5% harmful, and 100% evidence-correct
 - [x] #8 Aggregate report contains no private prompts/passages and distinguishes prior evidence, regression evidence, and new canary evidence
-- [ ] #9 Full repository suite and every supported client smoke are green
+- [x] #9 Full repository suite and every supported client smoke are green
 
 ## Evidence
 
@@ -55,3 +55,10 @@ cannot write the projection. A synthetic capture/outcome/review/rebuild proof
 passed, as did 236 focused regressions (one existing Windows symlink skip) and
 a real temporary setup deployment. This is mechanism evidence only; criterion
 #7 remains 0/20 and no production-value claim was upgraded.
+
+Static current-commit proof: commit `468acd1` ran the complete Python repository
+suite in isolation with `1991 passed, 4 skipped` in 857.54 seconds. The four
+skips are existing platform/optional-capability skips, not failures. The suite
+includes the cross-client install, generated-artifact, MCP-wire, and setup
+smokes; the unchanged Atlas frontend had separately passed typecheck and 39/39
+tests earlier in this branch cycle.

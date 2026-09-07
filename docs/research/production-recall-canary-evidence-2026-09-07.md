@@ -98,6 +98,20 @@ Failure injection proves:
   lexical fallback rather than a partial vector index;
 - normal recall and disabled routes remain fail-open.
 
+The definitive complete Python repository suite ran alone on clean commit
+`468acd1`, with no concurrent client or frontend jobs:
+
+```text
+1991 passed, 4 skipped in 857.54s (0:14:17)
+```
+
+The four skips are existing platform or optional-capability skips. There were
+no failures or timeout reports. This current-commit run includes cross-client
+install/generated-artifact, MCP-wire, setup, and recovery smokes. The unchanged
+Atlas frontend had separately passed TypeScript compilation and all 39 tests in
+this branch cycle. The npm install reported six pre-existing audit findings
+(three moderate, three high); no automatic dependency mutation was performed.
+
 ### New owner-vault canary evidence
 
 Ten deterministic positive cases were selected from the existing frozen,
@@ -155,7 +169,7 @@ projection or invoked embeddings.
 | #6 ten source reconstructions before experience | pass | 10/10; experience canary not started |
 | #7 twenty natural experience reviews | **fail/incomplete** | 0/20; no canonical owner-vault experience data |
 | #8 sanitized aggregate packet | pass | this packet plus privacy/canary contracts |
-| #9 full suite and all client smokes | pending | focused/client smokes pass; isolated current-HEAD full suite still required |
+| #9 full suite and all client smokes | pass | clean `468acd1`: 1991 passed, 4 skipped; client smokes included; unchanged Atlas 39/39 |
 
 ## Reproduction boundary
 
