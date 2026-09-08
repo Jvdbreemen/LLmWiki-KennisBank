@@ -59,3 +59,14 @@ It remains in the configured vault's production-canary run directory. The
 repaired tree still needs its own clean-commit full-suite pass; focused checks
 do not silently replace that gate. Owner experience canary remains 0/20, and
 no release or ADR acceptance is implied.
+
+### Completed clean-commit recheck
+
+Commit `cf3062787a446908898055744ae4fc5302a3fb7b` subsequently completed the
+entire Python suite: **2,026 passed, four existing skips, no failures or errors
+in 604.39 seconds**. JUnit records 2,030 tests and 604.362 seconds; SHA-256:
+`b14f65b07d7f9dea59784c78c214e94ef2b4aa69ee6c1bf8a0a21f8a227482a3`.
+The full suite includes the four supported clients' install/setup/artifact and
+MCP-wire tests. Separate Atlas frontend typechecking and all **39 tests** passed.
+TASK-239, TASK-240 and TASK-241 are complete on that tested runtime. Subsequent
+runtime changes still require their own full-suite proof before release.

@@ -1,10 +1,10 @@
 ---
 id: TASK-241
 title: Use bounded canonical projection health in the setup doctor
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-08 05:41'
-updated_date: '2026-09-08 05:54'
+updated_date: '2026-09-08 17:11'
 labels:
   - bug
   - production
@@ -26,7 +26,7 @@ The supported setup doctor still reads retired recall flags and the mixed experi
 - [x] #1 Tests first reproduce incorrect routes, split-store reporting and the missing bounded mode at the actual shell entrypoint
 - [x] #2 The setup doctor uses the explicit source and experience routes and separately reports canonical ledger and derived projection
 - [x] #3 Routine setup uses --fast, reports unknown checks as not checked, and warns on forbidden flags or unhealthy stores without printing private content
-- [ ] #4 Focused shell and doctor tests plus the full suite pass; sanitized evidence records the former failure and the limits
+- [x] #4 Focused shell and doctor tests plus the full suite pass; sanitized evidence records the former failure and the limits
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -41,4 +41,12 @@ The supported setup doctor still reads retired recall flags and the mixed experi
 Red before implementation: 4 failed, 1 passed in 2.54s, including the actual Bash entrypoint section missing --fast/--shell-summary. Canonical CLI now renders content-free source, ledger and projection rows; setup removes retired flag/schema checks and calls bounded summary mode. Focused doctor/observability/discovery run: 15 passed in 4.48s; Git Bash syntax validation passes. Real fast owner-vault summary completed read-only: 16286 source documents present but integrity/inventory not checked; ledger 42 events/42 outcomes/1 review; projection 1 record; both explicit read routes disabled. Full-suite AC4 remains open.
 
 Final focused set after cleanup review: 34 passed in 5.26s; independent unittest discovery retained all 17 measurement tests (0.423s). Shell mode is forced fast even alongside --deep. Source presence is not promoted to PASS, unavailable checks remain explicit, and raw reasons are never rendered.
+
+Clean cf3062787a446908898055744ae4fc5302a3fb7b full repository run: 2026 passed, 4 existing skips, zero errors/failures in 604.39s. The complete suite includes shell doctor and cross-client setup smokes. Atlas typecheck and 39/39 frontend tests separately passed. Live deployment remains a separate operational gate.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Supported setup now uses the canonical bounded projection doctor and reports explicit routes, append-only ledger and derived projection separately. Unknown source checks remain unknown; private diagnostic text is not rendered. Actual Git Bash red/green entrypoint tests and clean full-suite evidence are recorded.
+<!-- SECTION:FINAL_SUMMARY:END -->

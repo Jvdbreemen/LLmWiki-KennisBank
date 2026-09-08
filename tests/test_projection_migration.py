@@ -6,6 +6,7 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
 
@@ -76,6 +77,81 @@ class ProjectionMigrationContractTest(unittest.TestCase):
             self.vault, dry_run=False, before_swap=fail_before_swap)
         self.assertEqual(report["status"], "failed")
         self.assertEqual(ledger.read_bytes(), b"previous-good-ledger")
+
+    def _canonical_ledger(self):
+        migration = _migration_module()
+        ledger = self.vault / ".claude" / "kb-experience-ledger.db"
+        conn = sqlite3.connect(ledger)
+        migration.ensure_ledger_schema(conn)
+        conn.execute(
+            "INSERT INTO experience_events VALUES (?,?,?,?,?,?,?,?)",
+            ("owner-event", "session", "task", "observation", "2026-09-08",
+             '{"bounded":"owner-approved"}', "[]", "1"))
+        conn.commit()
+        conn.close()
+        return ledger
+
+    def test_existing_canonical_ledger_requires_review_and_is_never_replaced(self):
+        migration = _migration_module()
+        ledger = self._canonical_ledger()
+        before = ledger.read_bytes()
+        report = migration.migrate(self.vault)
+        self.assertEqual(report["status"], "failed")
+        self.assertFalse(report["mutated"])
+        self.assertEqual(report["reason"], "existing_ledger_requires_review")
+        self.assertEqual(ledger.read_bytes(), before)
+
+    def test_dry_run_exposes_existing_target_conflict_without_changes(self):
+        migration = _migration_module()
+        ledger = self._canonical_ledger()
+        before = {p.name: p.read_bytes() for p in ledger.parent.iterdir()}
+        report = migration.migrate(self.vault, dry_run=True)
+        self.assertEqual(report["status"], "conflict")
+        self.assertTrue(report["existing_ledger_requires_review"])
+        self.assertFalse(report["mutated"])
+        self.assertEqual(before, {p.name: p.read_bytes() for p in ledger.parent.iterdir()})
+
+    def test_unsupported_no_clobber_publish_fails_without_replace_fallback(self):
+        migration = _migration_module()
+        with mock.patch.object(migration.os, "link", side_effect=OSError("unsupported")):
+            with mock.patch.object(migration.os, "replace") as replace:
+                report = migration.migrate(self.vault)
+        self.assertEqual(report["status"], "failed")
+        self.assertFalse(report["mutated"])
+        replace.assert_not_called()
+        self.assertFalse((self.vault / ".claude" / "kb-experience-ledger.db").exists())
+        self.assertEqual(list((self.vault / ".claude").glob("*.staging")), [])
+
+    def test_concurrent_first_capture_cannot_be_overwritten_at_publication(self):
+        migration = _migration_module()
+        captured = {}
+
+        def capture_before_publication():
+            ledger = self._canonical_ledger()
+            captured["bytes"] = ledger.read_bytes()
+
+        report = migration.migrate(self.vault, before_swap=capture_before_publication)
+        ledger = self.vault / ".claude" / "kb-experience-ledger.db"
+        self.assertEqual(report["status"], "failed")
+        self.assertFalse(report["mutated"])
+        self.assertEqual(ledger.read_bytes(), captured["bytes"])
+
+    def test_interrupted_new_target_publishes_nothing_and_leaves_foreign_stage(self):
+        migration = _migration_module()
+        foreign_stage = self.vault / ".claude" / "kb-experience-ledger.db.staging"
+        foreign_stage.write_bytes(b"another operation owns this")
+        reached = []
+
+        def fail_before_publication():
+            reached.append(True)
+            raise RuntimeError("injected interruption")
+
+        report = migration.migrate(self.vault, before_swap=fail_before_publication)
+        self.assertEqual(reached, [True])
+        self.assertEqual(report["status"], "failed")
+        self.assertFalse((self.vault / ".claude" / "kb-experience-ledger.db").exists())
+        self.assertEqual(foreign_stage.read_bytes(), b"another operation owns this")
+        self.assertEqual(list((self.vault / ".claude").glob("*.staging")), [foreign_stage])
 
 
 if __name__ == "__main__":

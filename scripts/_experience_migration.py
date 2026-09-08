@@ -8,6 +8,7 @@ import os
 import shutil
 import sqlite3
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -90,8 +91,11 @@ def preflight(vault: Path) -> dict:
     projection = projection_path(root)
     projection_bytes = projection.stat().st_size if projection.is_file() else 0
     counts = _tables(legacy)
+    target_review = bool(digest and target.exists()
+                         and not _current_for_legacy(target, digest))
     return {
-        "status": "ready" if legacy.is_file() else "no_legacy",
+        "status": "conflict" if target_review else (
+            "ready" if legacy.is_file() else "no_legacy"),
         "mutated": False,
         "legacy_exists": legacy.is_file(),
         "legacy_sha256": digest,
@@ -107,6 +111,7 @@ def preflight(vault: Path) -> dict:
         "disk_estimate_bytes": legacy_bytes * 2 + target_bytes + projection_bytes,
         "feature_flags": _feature_flags(root),
         "target_exists": target.is_file(),
+        "existing_ledger_requires_review": target_review,
         "backup_path": str(backup) if backup else "",
         "backup_target": str(backup) if backup else "",
     }
@@ -192,16 +197,25 @@ def migrate(vault: Path, *, dry_run: bool = False, before_swap=None) -> dict:
     if _current_for_legacy(target, legacy_sha):
         report.update({"status": "current", "mutated": False})
         return report
+    if target.exists():
+        # A live canonical ledger is authoritative. Do not invent a merge or
+        # replace its owner reviews with rows from the retired mixed store.
+        report.update({"status": "failed", "mutated": False,
+                       "reason": "existing_ledger_requires_review"})
+        return report
 
     backup = Path(report["backup_path"])
-    stage = target.with_name(target.name + ".staging")
+    stage = None
+    published = False
     try:
         if not backup.exists():
             shutil.copy2(legacy, backup)
         if _sha256(backup) != legacy_sha:
             raise OSError("legacy backup hash mismatch")
-        if stage.exists():
-            stage.unlink()
+        descriptor, stage_name = tempfile.mkstemp(
+            prefix=target.name + ".", suffix=".staging", dir=target.parent)
+        os.close(descriptor)
+        stage = Path(stage_name)
         legacy_conn = sqlite3.connect(legacy)
         stage_conn = sqlite3.connect(stage)
         try:
@@ -230,14 +244,24 @@ def migrate(vault: Path, *, dry_run: bool = False, before_swap=None) -> dict:
             stage_conn.close()
         if before_swap is not None:
             before_swap()
-        os.replace(stage, target)
+        # Atomic no-clobber publication on the same filesystem. A first
+        # capture can create the ledger after the earlier exists() check;
+        # os.replace would silently discard that new canonical data. If hard
+        # links are unsupported, fail safely instead of falling back to replace.
+        os.link(stage, target)
+        published = True
         report.update({"status": "ok", "mutated": True,
                        "target_tables": _tables(target),
                        "verified_counts": expected_counts})
         return report
     except Exception as exc:
-        if stage.exists():
-            stage.unlink()
-        report.update({"status": "failed", "mutated": False,
+        report.update({"status": "failed", "mutated": published,
                        "reason": type(exc).__name__})
         return report
+    finally:
+        # Only this operation's unique stage is ours to remove.
+        if stage is not None:
+            try:
+                stage.unlink(missing_ok=True)
+            except OSError:
+                report["staging_cleanup_pending"] = True

@@ -4,7 +4,7 @@ title: 'Run production regressions, owner-vault canary, and evidence packet'
 status: In Progress
 assignee: []
 created_date: '2026-09-04 00:00'
-updated_date: '2026-09-08 05:54'
+updated_date: '2026-09-08 17:18'
 labels:
   - evaluation
   - canary
@@ -97,4 +97,8 @@ prerequisite. No main merge or release was performed.
 2026-09-08 shadow projection: owner explicitly accepted one bounded lesson; all seven SourceRefs revalidated and review bound to unchanged content hash. New gated CLI returned disabled before opt-in, then built one lexical record and excluded 40 unreviewed candidates. Ledger snapshot 41 events/41 outcomes/1 review; both read routes remain disabled. This is mechanism/corpus proof, not natural recall; canary remains 0/20. Details: docs/research/projection-build-capability-evidence-2026-09-08.md.
 
 Clean 8c323a0 full suite completed: 2018 passed, 4 skipped, 1 failed in 636.13s; JUnit persisted and hashed. Sole failure was TASK-209 test discovery, now repaired with TestCase methods and verified under both runners. During deployment preflight, TASK-241 also reproduced and repaired the actual shell doctor using retired flags/schema and unbounded inventory. AC9 remains unchecked until a new clean-commit full run passes. No new natural experience recall is claimed.
+
+Current runtime commit cf3062787a446908898055744ae4fc5302a3fb7b is fully verified: 2026 Python tests passed, 4 existing skips, no failures/errors in 604.39s, including every supported client setup/install/generated-artifact/MCP smoke. Atlas typecheck and 39 frontend tests also passed. AC9 now checked for this exact runtime; owner-vault deployment and natural-use AC1/AC7 remain separate gates.
+
+The full green cf30627 runtime remains valid historical proof, but TASK-242 adds a canonical-ledger no-clobber migration repair found in final deployment preflight. Reopening AC9 for that amended runtime; no live deployment has occurred and the owner vault has no legacy mixed DB to migrate.
 <!-- SECTION:NOTES:END -->
