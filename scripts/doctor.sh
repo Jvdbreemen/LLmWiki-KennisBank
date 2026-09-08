@@ -735,88 +735,22 @@ except Exception:
   esac
 fi
 
-# 13e. Experimental source/experience projections. These are opt-in and
-# derived; doctor reports disabled routes as INFO and never builds or deletes
-# an index while checking it.
+# 13e. Canonical source and split experience health, bounded for routine setup.
+# Deep source inventory and exact-ref checks remain an explicit operator action.
 if command -v python3 >/dev/null 2>&1; then
-  PROJECTION_STATUS="$(python3 -c '
-import os, sqlite3, sys
-root = sys.argv[1]
-sys.path.insert(0, sys.argv[2])
-try:
-    import _settings
-    source_on = _settings.get("source_recall", False)
-    experience_on = _settings.get("experience_recall", False)
-except Exception:
-    source_on = experience_on = False
-for name, enabled, tables in (("source", source_on, {"docs", "source_chunks"}),
-                              ("experience", experience_on, {"experiences", "experience_events"})):
-    path = os.path.join(root, ".claude", "kb-" + name + (".db"))
-    if not enabled:
-        print(name + " disabled")
-        continue
-    if not os.path.isfile(path):
-        print(name + " missing")
-        continue
-    try:
-        conn = sqlite3.connect("file:" + path.replace("\\", "/") + "?mode=ro", uri=True)
-        found = {row[0] for row in conn.execute("select name from sqlite_master where type=\"table\"")}
-        conn.close()
-        print(name + (" ready" if tables <= found else " incomplete"))
-    except Exception:
-        print(name + " unreadable")
-' "$VAULT" "$SCRIPTS_DIR" 2>/dev/null | tr -d '\\r')"
-  while IFS=' ' read -r projection state; do
-    case "$state" in
-      disabled) report_info "$projection recall" "experimental route disabled (opt-in)" ;;
-      ready) report_pass "$projection recall" "derived projection schema is readable" ;;
-      missing) report_warn "$projection recall" "enabled but derived index is missing; run its offline rebuild" ;;
-      *) report_warn "$projection recall" "derived projection is $state; rebuild before enabling use" ;;
-    esac
-  done <<PROJECTIONEOF
-$PROJECTION_STATUS
-PROJECTIONEOF
-
-  # Read-only deep health report. Unlike the projection status above this also
-  # checks source freshness/provenance and experience lifecycle hazards. It is
-  # deliberately advisory: a missing derived projection is recoverable from
-  # the vault and must never block an agent prompt.
-  PROJECTION_HEALTH="$(python3 "$SCRIPTS_DIR/kb-projection-doctor.py" --vault "$VAULT" 2>/dev/null)"
-  if [ -z "$PROJECTION_HEALTH" ]; then
-    report_warn "projection health" "deep health report unavailable; run kb-projection-doctor.py manually"
-  else
-    while IFS='|' read -r projection route state detail; do
-      case "$state" in
-        ready) report_pass "$projection projection health" "$route; $detail" ;;
-        missing)
-          if [ "$route" = "disabled" ]; then
-            report_info "$projection projection health" "disabled; rebuild remains available"
-          else
-            report_warn "$projection projection health" "$route; missing derived store; rebuild remains available"
-          fi
-          ;;
-        *) report_warn "$projection projection health" "$route; state=$state; $detail" ;;
+  if PROJECTION_HEALTH="$(python3 "$SCRIPTS_DIR/kb-projection-doctor.py" --vault "$VAULT" --fast --shell-summary 2>/dev/null)" && [ -n "$PROJECTION_HEALTH" ]; then
+    while IFS='|' read -r severity label detail; do
+      case "$severity" in
+        pass) report_pass "$label" "$detail" ;;
+        info) report_info "$label" "$detail" ;;
+        warn) report_warn "$label" "$detail" ;;
+        *) report_warn "projection health" "unexpected summary; run kb-projection-doctor.py manually" ;;
       esac
     done <<HEALTHEOF
-$(python3 - "$PROJECTION_HEALTH" <<'PYEOF'
-import json, sys
-data = json.loads(sys.argv[1])
-for name in ("source", "experience"):
-    item = data.get(name, {})
-    if name == "source":
-        detail = "coverage={:.3f}; stale={}; orphaned={}".format(
-            float(item.get("provenance_coverage", 0.0)),
-            len(item.get("stale_sources", [])), len(item.get("orphaned_sources", [])))
-    else:
-        detail = "records={}; events={}; orphaned={}; redacted={}".format(
-            item.get("records", 0), item.get("events", 0),
-            len(item.get("orphan_experiences", [])),
-            len(item.get("redacted_experiences", [])))
-    print("{}|{}|{}|{}".format(name, data.get("routes", {}).get(name, "disabled"),
-                                item.get("status", "unavailable"), detail))
-PYEOF
-)
+$PROJECTION_HEALTH
 HEALTHEOF
+  else
+    report_warn "projection health" "bounded health report unavailable; run kb-projection-doctor.py --fast manually"
   fi
 fi
 

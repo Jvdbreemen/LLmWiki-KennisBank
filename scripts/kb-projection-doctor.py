@@ -303,6 +303,62 @@ def health(vault, *, live_embed_id: str = "", deep_integrity: bool = False,
     }
 
 
+def shell_summary(report: dict) -> list[str]:
+    """Content-free rows for doctor.sh; skipped work must never become PASS."""
+    if report.get("schema_version") != 2:
+        return ["warn|projection health|unsupported report schema"]
+    rows = []
+    routes = report.get("routes", {})
+    for name in ("source", "experience"):
+        route = "enabled" if routes.get(name) == "enabled" else "disabled"
+        rows.append(f"info|{name} recall|{route}; explicit opt-in only")
+    if report.get("forbidden_flags"):
+        rows.append("warn|projection policy|retired automatic recall flags are enabled")
+
+    def count(item, key):
+        value = item.get(key)
+        return str(value) if type(value) is int and value >= 0 else "unknown"
+
+    def state(item):
+        value = item.get("status")
+        return value if value in {"ready", "present", "missing", "incomplete",
+                                  "unreadable"} else "unknown"
+
+    source_health = report.get("source", {})
+    source_state = state(source_health)
+    source_bad = any(source_health.get(key) for key in (
+        "forbidden_vector_tables", "stale_sources", "missing_sources", "redacted_sources"))
+    if source_bad or source_state not in {"ready", "present", "missing"}:
+        severity = "warn"
+    elif source_state == "missing":
+        severity = "warn" if routes.get("source") == "enabled" else "info"
+    elif source_state == "ready" and source_health.get("integrity") == "ok":
+        severity = "pass"
+    else:
+        severity = "info"
+    rows.append(f"{severity}|source projection|state={source_state}; "
+                f"documents={count(source_health, 'documents')}; "
+                "fast setup check; source integrity and inventory not checked")
+
+    stores = report.get("experience", {})
+    for name in ("ledger", "projection"):
+        item = stores.get(name, {})
+        current = state(item)
+        integrity = "ok" if item.get("integrity") == "ok" else "not verified"
+        healthy = current == "ready" and integrity == "ok"
+        if name == "projection" and (item.get("model_compatibility") == "mismatch"
+                                      or item.get("contradictory_count")):
+            healthy = False
+        severity = "pass" if healthy else "warn"
+        if current == "missing" and routes.get("experience") != "enabled":
+            severity = "info"
+        detail = (f"events={count(item, 'events')}; outcomes={count(item, 'outcomes')}; "
+                  f"reviews={count(item, 'reviews')}" if name == "ledger" else
+                  f"records={count(item, 'records')}; exact source refs not checked")
+        rows.append(f"{severity}|experience {name}|state={current}; integrity={integrity}; {detail}")
+    return rows
+
+
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     vault = Path(argv[argv.index("--vault") + 1]) if "--vault" in argv else Path(
@@ -313,10 +369,14 @@ def main(argv=None) -> int:
         live_embed_id = _embeddings.embed_id()
     except Exception:
         pass
-    print(json.dumps(health(vault, live_embed_id=live_embed_id,
-                            deep_integrity="--deep" in argv,
-                            fast="--fast" in argv),
-                     ensure_ascii=False, sort_keys=True))
+    shell = "--shell-summary" in argv
+    report = health(vault, live_embed_id=live_embed_id,
+                    deep_integrity="--deep" in argv and not shell,
+                    fast="--fast" in argv or shell)
+    if shell:
+        print("\n".join(shell_summary(report)))
+    else:
+        print(json.dumps(report, ensure_ascii=False, sort_keys=True))
     return 0
 
 

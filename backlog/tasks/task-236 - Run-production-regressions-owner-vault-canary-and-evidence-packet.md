@@ -4,7 +4,7 @@ title: 'Run production regressions, owner-vault canary, and evidence packet'
 status: In Progress
 assignee: []
 created_date: '2026-09-04 00:00'
-updated_date: '2026-09-08 05:13'
+updated_date: '2026-09-08 05:54'
 labels:
   - evaluation
   - canary
@@ -95,4 +95,6 @@ prerequisite. No main merge or release was performed.
 2026-09-08: reopening current-HEAD full-suite proof explicitly; prior 468acd1 evidence remains historical. New projection capability bypass must be repaired before production acceptance.
 
 2026-09-08 shadow projection: owner explicitly accepted one bounded lesson; all seven SourceRefs revalidated and review bound to unchanged content hash. New gated CLI returned disabled before opt-in, then built one lexical record and excluded 40 unreviewed candidates. Ledger snapshot 41 events/41 outcomes/1 review; both read routes remain disabled. This is mechanism/corpus proof, not natural recall; canary remains 0/20. Details: docs/research/projection-build-capability-evidence-2026-09-08.md.
+
+Clean 8c323a0 full suite completed: 2018 passed, 4 skipped, 1 failed in 636.13s; JUnit persisted and hashed. Sole failure was TASK-209 test discovery, now repaired with TestCase methods and verified under both runners. During deployment preflight, TASK-241 also reproduced and repaired the actual shell doctor using retired flags/schema and unbounded inventory. AC9 remains unchecked until a new clean-commit full run passes. No new natural experience recall is claimed.
 <!-- SECTION:NOTES:END -->

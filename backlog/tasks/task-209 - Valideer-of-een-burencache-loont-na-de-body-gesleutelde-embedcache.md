@@ -4,7 +4,7 @@ title: 'Valideer of een burencache loont, na de body-gesleutelde embedcache'
 status: In Progress
 assignee: []
 created_date: '2026-08-23 10:41'
-updated_date: '2026-09-08 05:25'
+updated_date: '2026-09-08 05:51'
 labels:
   - performance
   - agent-geheugen
@@ -48,4 +48,6 @@ Besluit expliciet ook de uitkomst 'geen cache bouwen'. Dat is een geldig resulta
 
 <!-- SECTION:NOTES:BEGIN -->
 Integrated read-only snapshot/compare/index-image benchmark support; 17 tests passed in 0.93s. A bounded real-index probe made 1222 KNN queries in 40.003s over a 4712-memory snapshot but did not complete. Legacy file hashes are incomparable, not evidence of 4712 body edits. Zero natural post-body-cache sweep runs proved; do not close AC1 or claim matched speedup. See docs/research/task-209-neighbour-measurement-preflight-2026-09-08.md.
+
+Full-suite run on clean 8c323a0: 2018 passed, 4 skipped, 1 failed in 636.13s. The sole failure was the repository test-discovery meta-guard: the new 17 measurements were module-level pytest functions. Converted them to unittest.TestCase without adding an allowlist exception; isolated temp vaults, closed SQLite connections and retained all 17 checks. Focused pytest including the discovery guard: 20 passed in 3.19s. Independent unittest discover: all 17 found and passed in 0.420s. Runtime benchmark behavior and the zero proven natural-sweep count are unchanged.
 <!-- SECTION:NOTES:END -->
