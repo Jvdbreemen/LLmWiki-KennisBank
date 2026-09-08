@@ -231,8 +231,9 @@ def verify_grounded(body: str, chunks: list, stamp: str = "", *,
         passage, route = exact[:PASSAGE_BUDGET], "stamp"
     else:
         passage, route = select_passage(body, chunks), "windows"
-    if source_recall_fn is None:
-        source_recall_fn = source_recall_passage
+    # Routine verification must remain limited to the supplied transcript.
+    # Enabling an explicit read capability does not authorize automatic source
+    # fallback. Only a caller that deliberately supplies a callback may use it.
     if not passage and source_recall_fn is not None:
         try:
             source_hit = source_recall_fn(body) or {}

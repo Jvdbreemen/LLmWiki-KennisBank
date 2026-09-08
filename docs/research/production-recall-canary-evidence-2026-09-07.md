@@ -12,12 +12,13 @@ Decision boundary: evidence packet only; no rollout or ADR acceptance
 owner-canary, latency, failure recovery, privacy boundary, and normal-route
 isolation pass. The experience owner-canary has zero of the required twenty
 naturally occurring explicit recalls. The configured owner vault now has a
-canonical ledger and one source-grounded, unreviewed task candidate, but no
-approved projection. Copying the old evaluation database
+canonical ledger and, after explicit owner review on 2026-09-08, one accepted
+source-grounded task experience in a lexical shadow projection. Copying the old evaluation database
 into production would not fix that: it contains curated projection rows rather
 than append-only events plus content-hash-bound owner reviews.
 
-Shadow capture is enabled; projection and both explicit read flags remain off.
+Shadow capture and projection building are enabled; both explicit read flags
+remain off. The dated snapshots below preserve their original observations.
 No release or ADR transition is authorized by this packet. Full-suite evidence
 below is bound to `468acd1`; a later run has no recoverable final result and is
 not claimed as a current-HEAD pass.
@@ -205,7 +206,7 @@ projection or invoked embeddings.
 | #4 route latency budgets | pass | experience 129.338, source FTS 129.071, hydration 16.671 ms p95 |
 | #5 fail-open and previous-good recovery | pass | focused failure-injection suite green |
 | #6 ten source reconstructions before experience | pass | 10/10; experience canary not started |
-| #7 twenty natural experience reviews | **fail/incomplete** | 0/20; canonical capture present, no owner-approved candidates |
+| #7 twenty natural experience reviews | **fail/incomplete** | 0/20; one approved corpus experience is not a natural recall |
 | #8 sanitized aggregate packet | pass | this packet plus privacy/canary contracts |
 | #9 full suite and all client smokes | pass | clean `468acd1`: 1991 passed, 4 skipped; client smokes included; unchanged Atlas 39/39 |
 
@@ -256,3 +257,17 @@ The live canary report still shows source 10/10 and experience 0/20. Focused
 capture, review, extraction, and canary regressions passed: **30 passed in
 2.70s**. No production code, retrieval flags, owner decisions, or release state
 changed during this follow-up.
+
+## Follow-up 2026-09-08
+
+One bounded candidate received explicit owner acceptance bound to its unchanged
+content hash. Seven exact refs were revalidated; the shadow projection contains
+that one record and excludes forty unreviewed candidates. Details and the
+test-first build-capability repair are in
+`projection-build-capability-evidence-2026-09-08.md` (TASK-239).
+
+A separate adversarial check found that default grounded verification could
+implicitly search sources when the explicit source flag was enabled. This is
+repaired with red/green promotion-isolation evidence under TASK-240 in
+`explicit-source-verification-boundary-2026-09-08.md`. Neither repair advances
+the 0/20 natural experience canary. Current full-suite proof remains open.

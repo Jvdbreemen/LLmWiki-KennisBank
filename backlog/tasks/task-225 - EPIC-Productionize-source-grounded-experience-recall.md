@@ -4,7 +4,7 @@ title: 'EPIC: Productionize source-grounded experience recall'
 status: In Progress
 assignee: []
 created_date: '2026-09-04 00:00'
-updated_date: '2026-09-04 00:00'
+updated_date: '2026-09-08 05:13'
 labels:
   - epic
   - experience-memory
@@ -20,6 +20,7 @@ ordinal: 176400
 
 ## Description
 
+<!-- SECTION:DESCRIPTION:BEGIN -->
 Turn the successful part of the source/experience experiment into a bounded
 production feature. Ship explicit, validated experience recall followed by
 on-demand exact source hydration. Retain explicit lexical source search, but do
@@ -30,6 +31,7 @@ The executable design is
 `docs/superpowers/plans/2026-09-04-source-grounded-experience-production.md`.
 ADR-010 remains Proposed until every production gate passes and the owner
 explicitly accepts or amends it.
+<!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
 
@@ -47,3 +49,9 @@ explicitly accepts or amends it.
 - [ ] #1 Every child task contains focused test evidence and the full suite is green
 - [ ] #2 The owner-vault canary meets the preregistered quality and safety gates
 - [ ] #3 Release occurs through the normal reviewed release workflow from this feature branch
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+2026-09-08 execution: repair projection authority under TASK-239 with test-first evidence; process TASK-209 and TASK-210 in disjoint parallel work; rebuild only owner-reviewed shadow corpus; obtain current full/client/rollback proof; collect prospective explicit-use reviews without recycling spent holdouts; request owner ADR/release decision only after all prerequisite gates pass.
+<!-- SECTION:PLAN:END -->

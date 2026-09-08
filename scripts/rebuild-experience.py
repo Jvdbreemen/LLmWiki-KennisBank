@@ -11,6 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _experience  # noqa: E402
+import _settings  # noqa: E402
 
 
 def _builder():
@@ -46,7 +47,21 @@ def main(argv=None) -> int:
                         help="build a lexical-only projection without embeddings")
     parser.add_argument("--progress", action="store_true")
     args = parser.parse_args(argv)
-    root = args.vault or Path(os.environ.get("KENNISBANK_VAULT", "."))
+    configured = str(args.vault or os.environ.get("KENNISBANK_VAULT") or "").strip()
+    if not configured:
+        print(json.dumps({"status": "invalid", "mutated": False,
+                          "reason": "--vault or KENNISBANK_VAULT is required"},
+                         sort_keys=True))
+        return 2
+    root = Path(configured).expanduser().resolve()
+    # Build authority belongs to the selected vault, not to ambient settings
+    # or a custom output path. Refuse before loading embeddings or a builder.
+    if not _settings.get("experience_projection", False, vault=root):
+        print(json.dumps({"status": "disabled", "mutated": False,
+                          "experiences": 0,
+                          "reason": "experience_projection is disabled"},
+                         sort_keys=True))
+        return 0
     ledger = args.ledger or _experience.ledger_path(root)
     projection = args.projection or _experience.projection_path(root)
     embed_fn, embed_id = _optional_embedding(args.records_only)

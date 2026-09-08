@@ -1,20 +1,25 @@
 # /kennisbank:rebuild-experience
 
-Herbouwt de afgeleide experience-projectie uit het afzonderlijke, append-only
-`kb-experience-ledger.db`. De canonical events, outcomes en reviews blijven in
-het ledger staan; alleen `kb-experience-index.db` wordt in staging opgebouwd en
-na een volledige succesvolle bouw atomisch vervangen.
+Rebuild the derived experience projection from the separate append-only
+`kb-experience-ledger.db`. Canonical events, outcomes and reviews remain in the
+ledger; only `kb-experience-index.db` is built in staging and atomically replaced
+after a complete successful build.
+
+The selected vault must explicitly enable `experience_projection`. A missing,
+false or unreadable setting returns `disabled` without loading an embedding
+backend or touching either database. `--vault` selects the authority boundary;
+otherwise `KENNISBANK_VAULT` is required. Custom database paths do not bypass
+this check. This build capability does not enable either explicit recall route.
 
 ```bash
 python3 "$KENNISBANK_VAULT/.claude/scripts/rebuild-experience.py" --progress
 ```
 
-Gebruik `--records-only` om bewust een lokale lexical-only FTS-projectie te
-bouwen. Als Ollama of de embedding-backend tijdens een normale rebuild niet
-bereikbaar is, wordt dezelfde volledige lexical fallback gepubliceerd; er is
-geen hosted fallback. `--incremental` wordt alleen nog geaccepteerd als
-deprecated compatibiliteitsvlag en verandert de full-rebuild-semantiek niet.
-Bij elke andere fout blijft de vorige goede projectie staan. De command wijzigt
-geen ledger, raw source, memory-bestand of skill. Retracted en superseded records
-blijven als gesloten auditsporen in het ledger bewaard en worden niet als recall-
-resultaat gepubliceerd.
+Use `--records-only` for a local lexical-only FTS projection. If Ollama or the
+embedding backend is unavailable during an ordinary rebuild, the same complete
+lexical fallback is published; there is no hosted fallback. `--incremental` is
+accepted only as a deprecated compatibility flag and does not change full-rebuild
+semantics. Other failures preserve the previous good projection. This command
+does not modify the ledger, raw sources, memory files or skills. Retracted and
+superseded records remain in the ledger audit trail and are not published as
+recall results.

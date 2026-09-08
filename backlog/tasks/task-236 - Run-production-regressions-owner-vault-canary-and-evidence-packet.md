@@ -1,9 +1,10 @@
 ---
 id: TASK-236
-title: Run production regressions, owner-vault canary, and evidence packet
+title: 'Run production regressions, owner-vault canary, and evidence packet'
 status: In Progress
 assignee: []
 created_date: '2026-09-04 00:00'
+updated_date: '2026-09-08 05:13'
 labels:
   - evaluation
   - canary
@@ -18,23 +19,12 @@ ordinal: 177500
 
 ## Description
 
+<!-- SECTION:DESCRIPTION:BEGIN -->
 Prove implementation integrity and practical explicit-use value without
 recycling spent holdouts as fresh science. Run locked regressions, full tests,
 performance/privacy/failure checks, then stage the flags through shadow capture,
 shadow projection, source canary, and experience canary in the configured
 owner vault.
-
-## Acceptance Criteria
-
-- [ ] #1 Provenance is 100% on all shown canary passages and candidate leakage is zero
-- [x] #2 Locked experience regression reaches hit@3 >= 0.85 and evidence precision 1.00 with no tuning on those cases
-- [x] #3 Normal recall remains byte/shape compatible with <= 1 ms extra p95 overhead
-- [x] #4 Warm experience p95 <= 250 ms, source FTS p95 <= 250 ms, and exact hydration p95 <= 50 ms
-- [x] #5 Failure injection proves fail-open behavior and previous-good-index recovery
-- [x] #6 At least ten exact source reconstructions are owner-checked before experience canary begins
-- [ ] #7 At least twenty naturally occurring explicit experience recalls are reviewed; >= 70% useful, <= 5% harmful, and 100% evidence-correct
-- [x] #8 Aggregate report contains no private prompts/passages and distinguishes prior evidence, regression evidence, and new canary evidence
-- [x] #9 Full repository suite and every supported client smoke are green
 
 ## Evidence
 
@@ -84,3 +74,25 @@ is retrospective corpus preparation, not a natural recall: criterion #7 stays
 0/20. Criterion #9 evidence remains bound to 468acd1; the later full run's final
 result was not recovered and current-HEAD full-suite proof remains a release
 prerequisite. No main merge or release was performed.
+<!-- SECTION:DESCRIPTION:END -->
+
+## Acceptance Criteria
+<!-- AC:BEGIN -->
+- [ ] #1 #1 Provenance is 100% on all shown canary passages and candidate leakage is zero
+- [x] #2 #2 Locked experience regression reaches hit@3 >= 0.85 and evidence precision 1.00 with no tuning on those cases
+- [x] #3 #3 Normal recall remains byte/shape compatible with <= 1 ms extra p95 overhead
+- [x] #4 #4 Warm experience p95 <= 250 ms, source FTS p95 <= 250 ms, and exact hydration p95 <= 50 ms
+- [x] #5 #5 Failure injection proves fail-open behavior and previous-good-index recovery
+- [x] #6 #6 At least ten exact source reconstructions are owner-checked before experience canary begins
+- [ ] #7 #7 At least twenty naturally occurring explicit experience recalls are reviewed; >= 70% useful, <= 5% harmful, and 100% evidence-correct
+- [x] #8 #8 Aggregate report contains no private prompts/passages and distinguishes prior evidence, regression evidence, and new canary evidence
+- [ ] #9 #9 Full repository suite and every supported client smoke are green
+<!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-09-08: reopening current-HEAD full-suite proof explicitly; prior 468acd1 evidence remains historical. New projection capability bypass must be repaired before production acceptance.
+
+2026-09-08 shadow projection: owner explicitly accepted one bounded lesson; all seven SourceRefs revalidated and review bound to unchanged content hash. New gated CLI returned disabled before opt-in, then built one lexical record and excluded 40 unreviewed candidates. Ledger snapshot 41 events/41 outcomes/1 review; both read routes remain disabled. This is mechanism/corpus proof, not natural recall; canary remains 0/20. Details: docs/research/projection-build-capability-evidence-2026-09-08.md.
+<!-- SECTION:NOTES:END -->
