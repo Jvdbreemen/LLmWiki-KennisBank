@@ -1,9 +1,10 @@
 ---
 id: TASK-209
 title: 'Valideer of een burencache loont, na de body-gesleutelde embedcache'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-08-23 10:41'
+updated_date: '2026-09-08 05:25'
 labels:
   - performance
   - agent-geheugen
@@ -33,3 +34,18 @@ Besluit expliciet ook de uitkomst 'geen cache bouwen'. Dat is een geldig resulta
 - [ ] #3 Beslissing vastgelegd met cijfers: incrementeel bijwerken, cachen, of niets doen
 - [ ] #4 Als er gecacht wordt: de invalidatieregel is opgeschreven en dekt het geval dat een nieuwe memory de buren van bestaande memories verandert
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Inspect post-PR-158 sweep archives, index/cache schemas, and neighbour_map paths read-only; identify real run IDs and available text_hash evidence without treating repeated snapshots as sweeps.
+2. Start with failing tests for a task-specific read-only collector/benchmark. Keep changes limited to TASK-209, task209 measurement code/tests, and sanitized docs/research/task-209-*.md.
+3. Measure existing local neighbour calculation off the hot path with no model calls or writes to vault memories, settings, indexes, or caches. Report bounded samples and full measurements distinctly.
+4. Record counts, timings, provenance limitations, and a numeric cache/incremental/no-change decision. If AC1 cannot be established, provide safe prospective support and leave the missing requirements open.
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Integrated read-only snapshot/compare/index-image benchmark support; 17 tests passed in 0.93s. A bounded real-index probe made 1222 KNN queries in 40.003s over a 4712-memory snapshot but did not complete. Legacy file hashes are incomparable, not evidence of 4712 body edits. Zero natural post-body-cache sweep runs proved; do not close AC1 or claim matched speedup. See docs/research/task-209-neighbour-measurement-preflight-2026-09-08.md.
+<!-- SECTION:NOTES:END -->
