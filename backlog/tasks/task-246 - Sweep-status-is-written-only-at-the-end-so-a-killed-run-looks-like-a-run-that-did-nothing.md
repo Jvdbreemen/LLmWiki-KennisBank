@@ -3,10 +3,10 @@ id: TASK-246
 title: >-
   Sweep status is written only at the end, so a killed run looks like a run that
   did nothing
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-09 18:02'
-updated_date: '2026-09-09 18:20'
+updated_date: '2026-09-09 23:09'
 labels: []
 dependencies: []
 priority: high
@@ -28,11 +28,11 @@ Fix direction: write a partial heartbeat after each transcript, marked so a read
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A heartbeat is written after every processed transcript, not only on the terminal paths
-- [ ] #2 The status distinguishes a run that is still going or was interrupted from a finished run
-- [ ] #3 The partial write does not run the rot corpus scan and carries the previous rot counts forward
-- [ ] #4 The status file is written atomically, so an interrupted write cannot leave truncated JSON
-- [ ] #5 A regression test kills a sweep mid-loop and asserts the status reflects the transcripts already done
+- [x] #1 A heartbeat is written after every processed transcript, not only on the terminal paths
+- [x] #2 The status distinguishes a run that is still going or was interrupted from a finished run
+- [x] #3 The partial write does not run the rot corpus scan and carries the previous rot counts forward
+- [x] #4 The status file is written atomically, so an interrupted write cannot leave truncated JSON
+- [x] #5 A regression test kills a sweep mid-loop and asserts the status reflects the transcripts already done
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -44,3 +44,13 @@ Implementation: _write_heartbeat gained a partial flag. Partial writes carry the
 
 Falsified against the pre-fix implementation: 5 of the 6 new tests fail there. The sixth (the end of a run does count the rot) passes both ways by design, as the guard against turning every write into a partial one.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Fixed in commit a29877a, installed into the Kluis vault, and proved in production: the very next sweep run wrote processed 1, written 42, dup 35, pending_left 7 while it was still going, where the old code would have shown the previous run's zeros. It then stamped running false on a clean finish and released its lock.
+
+Falsified: five of the six tests in tests/test_sweep_heartbeat.py fail against the pre-fix implementation. The sixth, that the end of a run does count the rot, passes both ways by design and guards against turning every write into a partial one.
+
+Full suite 2057 passed, 8 failed; all eight reproduce without these changes.
+<!-- SECTION:FINAL_SUMMARY:END -->

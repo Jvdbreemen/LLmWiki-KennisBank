@@ -3,10 +3,10 @@ id: TASK-247
 title: >-
   A hard kill leaves the sweep lock behind, and the next sweep skips itself for
   up to an hour
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-09 18:36'
-updated_date: '2026-09-09 19:15'
+updated_date: '2026-09-09 23:09'
 labels: []
 dependencies: []
 priority: medium
@@ -30,9 +30,9 @@ Not investigated: what kills the worker. On 2026-09-09 the lock timestamp (19:51
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 An orphaned lock whose named PID does not exist is released on the next acquire attempt, without waiting out STALE_SEC
-- [ ] #2 A lock whose PID does exist keeps its current time-based treatment, so PID reuse cannot free a live lock
-- [ ] #3 A test covers both directions: a dead PID releases, a live PID does not
+- [x] #1 An orphaned lock whose named PID does not exist is released on the next acquire attempt, without waiting out STALE_SEC
+- [x] #2 A lock whose PID does exist keeps its current time-based treatment, so PID reuse cannot free a live lock
+- [x] #3 A test covers both directions: a dead PID releases, a live PID does not
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -62,3 +62,13 @@ One test ordering detail worth recording. The core test first asserted is_orphan
 
 Not covered: what kills the worker in the first place. On 2026-09-09 the sweep's own wrapper was killed for low memory while the python child kept running, which is a separate matter from the lock.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Fixed in commit 316d79a and installed into the Kluis vault. Smoke-tested against the real vault in both directions: a fresh lock naming a dead PID reads is_stale False, is_orphaned True, is_free True and sweep-launch._lock_alive False; the same lock naming this live process reads is_orphaned False and _lock_alive True. The smoke lock was removed again.
+
+Ten tests in tests/test_sweepstate.py::VerweesdeLockTest; nine fail against the pre-fix implementation and the two carrying the claim fail on behaviour, not on a missing attribute.
+
+One addition beyond the plan: acquire_lock re-reads the token and removes only the lock it just judged. That race predates the change but was unreachable while an orphan took an hour to surface; an immediate probe puts two acquirers inside the window. Falsified separately by removing only the guard's two lines.
+<!-- SECTION:FINAL_SUMMARY:END -->
