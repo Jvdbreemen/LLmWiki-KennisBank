@@ -34,8 +34,11 @@ import _sweepstate  # noqa: E402
 
 
 def _lock_alive() -> bool:
+    # is_free en niet is_stale (TASK-247): een lock van een proces dat er niet
+    # meer is, hield deze gate tot een uur lang dicht met "er draait al een
+    # sweep". De tijdlease blijft de reden voor alles wat onzeker is.
     lock = _sweepstate.lock_path()
-    return lock.exists() and not _sweepstate.is_stale(lock)
+    return lock.exists() and not _sweepstate.is_free(lock)
 
 
 def _spawn_detached(script: str, *args) -> None:

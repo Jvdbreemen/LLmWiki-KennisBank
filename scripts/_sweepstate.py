@@ -13,6 +13,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import socket
 import sys
 import threading
 import time
@@ -76,11 +77,137 @@ def is_stale(lock: Path) -> bool:
         return True
 
 
+#: De machine waar dit proces op draait. Zit in het token zodat de PID-probe
+#: alleen oordeelt over een PID op zijn EIGEN machine: op een vault die gedeeld
+#: wordt (netwerkschijf, sync-map) zegt PID 30968 van een andere machine hier
+#: niets, en zou "bestaat niet" een levende lock stelen.
+_HOST = socket.gethostname()
+
+
 def _new_token() -> str:
-    """Een token dat dit proces identificeert. PID alleen volstaat niet: PIDs
-    worden hergebruikt, en na een reboot kan een vreemd proces het nummer van de
-    vorige houder dragen."""
-    return f"{os.getpid()}:{os.urandom(8).hex()}"
+    """Een token dat dit proces identificeert: host, pid en willekeur.
+
+    PID alleen volstaat niet: PIDs worden hergebruikt, en na een reboot kan een
+    vreemd proces het nummer van de vorige houder dragen. De willekeur maakt het
+    token uniek; de host en de pid maken het CONTROLEERBAAR (TASK-247).
+    """
+    return f"{_HOST}:{os.getpid()}:{os.urandom(8).hex()}"
+
+
+def _owner(token: "str | None") -> "tuple[str, int] | None":
+    """(host, pid) uit een token, of None als het token dat niet prijsgeeft.
+
+    None bij het oude tweedelige formaat (pid:willekeur) en bij alles wat niet
+    parseert. Dat is de veilige kant: geen eigenaar bekend betekent geen
+    PID-oordeel, en dan blijft alleen de tijdlease over -- precies het gedrag van
+    voor TASK-247.
+    """
+    if not token:
+        return None
+    deel = token.split(":")
+    if len(deel) < 3:
+        return None
+    try:
+        return deel[0], int(deel[1])
+    except ValueError:
+        return None
+
+
+def _pid_alive_windows(pid: int) -> "bool | None":
+    """Leeft dit PID? None als we het niet kunnen vaststellen.
+
+    NIET via os.kill(pid, 0). Op Windows vertaalt CPython elk signaal behalve
+    CTRL_C_EVENT en CTRL_BREAK_EVENT naar TerminateProcess, dus de gebruikelijke
+    POSIX-probe DOODT hier het proces dat hij zou moeten bevragen.
+    """
+    try:
+        import ctypes
+        from ctypes import wintypes
+    except Exception:
+        return None
+    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+    ERROR_ACCESS_DENIED = 5
+    ERROR_INVALID_PARAMETER = 87
+    STILL_ACTIVE = 259
+    try:
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        # restype expliciet: een HANDLE is pointer-groot en de ctypes-default
+        # (c_int) kapt hem op 64-bit af tot een onbruikbare waarde.
+        k32.OpenProcess.restype = wintypes.HANDLE
+        k32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+        k32.GetExitCodeProcess.argtypes = (wintypes.HANDLE,
+                                           ctypes.POINTER(wintypes.DWORD))
+        k32.CloseHandle.argtypes = (wintypes.HANDLE,)
+        handle = k32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if not handle:
+            err = ctypes.get_last_error()
+            if err == ERROR_INVALID_PARAMETER:
+                return False              # dit PID bestaat niet
+            if err == ERROR_ACCESS_DENIED:
+                return True               # bestaat wel, maar niet van ons
+            return None
+        try:
+            code = wintypes.DWORD()
+            if not k32.GetExitCodeProcess(handle, ctypes.byref(code)):
+                return None
+            # Een proces dat toevallig met 259 eindigt leest als levend. Die
+            # Windows-wrat valt naar "leeft", en dus naar de lock respecteren.
+            return code.value == STILL_ACTIVE
+        finally:
+            k32.CloseHandle(handle)
+    except Exception:
+        return None
+
+
+def _pid_alive(pid: int) -> "bool | None":
+    """True/False als we het zeker weten, None als we het niet kunnen bepalen."""
+    if pid <= 0:
+        return None
+    if os.name == "nt":
+        return _pid_alive_windows(pid)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True                       # bestaat, van een andere gebruiker
+    except OSError:
+        return None
+    return True
+
+
+def is_orphaned(lock: Path) -> bool:
+    """True als het token een houder noemt die aantoonbaar niet meer bestaat.
+
+    De tijdlease is bewust NIET op PID gebaseerd: een PID kan hergebruikt zijn,
+    dus "dit PID bestaat" bewijst niet dat de sweep leeft. De omkering kent die
+    beperking niet. Bestaat het PID niet, dan is de houder dood, punt. Daarom
+    staat deze check NAAST is_stale en niet in de plaats ervan.
+
+    Alles wat onzeker is valt naar False: een onbekende host, een oud token, een
+    probe die niets kan vaststellen. Onzekerheid betekent de lock respecteren.
+
+    Gemeten aanleiding: twee weeslocks in twee dagen. 2026-09-08 noemde een lock
+    PID 17192, 2026-09-09 om 19:51 PID 30968; geen van beide bestond nog, en de
+    lease liep tot een uur na dato door. Beide zijn met de hand weggehaald om de
+    sweep uberhaupt te laten starten.
+    """
+    eig = _owner(_read_token(lock))
+    if eig is None:
+        return False
+    host, pid = eig
+    if host != _HOST:
+        return False
+    return _pid_alive(pid) is False
+
+
+def is_free(lock: Path) -> bool:
+    """True als deze lock geen draaiende sweep meer voorstelt.
+
+    Een van beide redenen volstaat: de lease is verlopen (tijd) of de houder is
+    aantoonbaar weg (pid). Dit is wat elke aanroeper eigenlijk wil weten.
+    """
+    return is_stale(lock) or is_orphaned(lock)
 
 
 def _read_token(lock: Path) -> "str | None":
@@ -123,9 +250,10 @@ def acquire_lock(vault=None, token: "str | None" = None) -> "str | None":
     """Neem de lock atomair. Geeft het token terug, of None als een ander hem heeft.
 
     1. O_CREAT|O_EXCL direct -- slaagt als de lock nog niet bestaat.
-    2. Bij FileExistsError: is hij stale?
-       - Nee  -> er draait een sweep; None.
-       - Ja   -> opruimen en een keer opnieuw proberen.
+    2. Bij FileExistsError: stelt hij nog een draaiende sweep voor?
+       - Ja  -> er draait een sweep; None.
+       - Nee -> opruimen en een keer opnieuw proberen. Vrij is de lease verlopen
+                OF de houder aantoonbaar weg (is_free).
     """
     lock = lock_path(vault)
     tok = token or _new_token()
@@ -139,10 +267,21 @@ def acquire_lock(vault=None, token: "str | None" = None) -> "str | None":
                 os.close(fd)
             return tok
         except FileExistsError:
-            if poging == 2 or not is_stale(lock):
+            gezien = _read_token(lock)
+            if poging == 2 or not is_free(lock):
+                return None
+            # Ruim ALLEEN het slot op dat we net beoordeeld hebben. Zien twee
+            # verwervers dezelfde wees, dan ruimen ze allebei op en nemen ze
+            # allebei: de tweede gooit het VERSE slot van de eerste weg. Die race
+            # zat er al, maar een wees werd pas na een uur zichtbaar en werd in
+            # de praktijk nooit door twee processen tegelijk gezien. Met de
+            # PID-probe is hij meteen zichtbaar, dus wordt hij ook echt gelopen.
+            if gezien is not None and _read_token(lock) != gezien:
                 return None
             try:
                 lock.unlink()
+            except FileNotFoundError:
+                pass                    # al weg; poging 2 mag hem gewoon nemen
             except OSError:
                 return None
         except OSError:

@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A sweep lock left behind by a hard kill is reclaimed at once instead of an
+  hour later.** `sweep_lock()` releases through a context manager, so an
+  exception or an interrupt frees it, but a hard kill never runs `__exit__` and
+  only the 3600-second lease then frees the file. Two orphaned locks in two days
+  in one vault, each naming a PID that no longer existed, each removed by hand to
+  get a sweep started at all; the visible symptom was `sweep-launch.py` refusing
+  to spawn with "er draait al een sweep". The lease stays time-based on purpose,
+  because a PID can be reused and "this PID exists" does not prove the sweep is
+  alive. The reverse carries no such caveat: if the named PID does not exist, the
+  holder is dead. That check now runs alongside the lease, never instead of it.
+  The lock token gains a host (`host:pid:random`) so the probe only ever judges a
+  PID on its own machine, which keeps a vault on a shared or synced drive safe;
+  an old two-part token, an unknown host, or a probe that cannot answer all fall
+  back to the lease alone. On Windows the probe goes through `OpenProcess`, not
+  `os.kill(pid, 0)` — CPython translates every signal there except `CTRL_C_EVENT`
+  and `CTRL_BREAK_EVENT` into `TerminateProcess`, so the obvious probe would kill
+  the process it is asking about. Reclaiming a lock now also re-reads the token
+  and removes only the one it just judged: two acquirers seeing the same orphan
+  would otherwise both clear it and both take it, the second discarding the
+  first's fresh lock. That race predates this change, but an orphan used to
+  become visible only after an hour and was never realistically seen by two
+  processes at once; a probe that answers immediately makes it reachable.
+
 - **The sweep status no longer reports zero after a run that was killed.**
   `memory-sweep-status.json` was written only on the sweep's terminal paths, so
   a run interrupted mid-loop left the previous status in place and every counter
