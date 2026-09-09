@@ -70,3 +70,22 @@ The full suite includes the four supported clients' install/setup/artifact and
 MCP-wire tests. Separate Atlas frontend typechecking and all **39 tests** passed.
 TASK-239, TASK-240 and TASK-241 are complete on that tested runtime. Subsequent
 runtime changes still require their own full-suite proof before release.
+
+### Namespace regression follow-up (2026-09-09)
+
+Live setup exposed four false missing-command warnings. Section 7 searched
+root-level files, while setup installs the four source/experience commands under
+`kennisbank/`. A real Git Bash section regression first failed (1 failed,
+7 passed in 3.23 seconds). The corrected file paths and colon-form command labels
+then passed all eight section/summary tests in 2.36 seconds. The regression also
+removes the namespaced files while leaving root-level decoys: these must warn,
+not pass. Existing root-level wiki command detection is retained.
+
+This follow-up still requires a new full-suite run and supported live setup
+verification. It does not waive the six existing wiki provenance failures or
+establish practical recall benefit. Cache migration was not started while
+regular memory maintenance was reported active.
+
+The combined projection-doctor, migration and Copilot-doctor regression run
+completed with **19 passed in 97.95 seconds**. No live vault was changed by
+these fixture-based tests.

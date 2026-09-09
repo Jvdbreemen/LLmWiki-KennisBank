@@ -131,6 +131,40 @@ report_warn() { printf '[WARN] %s: %s\\n' "$1" "$2"; }
         self.assertIn("[WARN] projection health:", output)
         self.assertNotIn("[PASS]", output)
 
+    def test_commands_use_installed_namespace_not_root_decoys(self):
+        if BASH is None:
+            self.skipTest("Git Bash is unavailable")
+        names = ("rebuild-source-index", "rebuild-experience", "source-recall",
+                 "experience-recall")
+        content = (SCRIPTS / "doctor.sh").read_text(encoding="utf-8")
+        block = "# 7." + content.split("# 7.", 1)[1].split("# 8.", 1)[0]
+        with tempfile.TemporaryDirectory(prefix="kb-command-space-") as directory:
+            commands = Path(directory) / "commands with spaces"
+            namespace = commands / "kennisbank"
+            namespace.mkdir(parents=True)
+            (commands / "wiki.md").touch()
+            for name in names:
+                (commands / (name + ".md")).touch()
+                (namespace / (name + ".md")).touch()
+            runner = Path(directory) / "commands.sh"
+            runner.write_text(
+                'COMMANDS_DIR="$TEST_COMMANDS"\n'
+                'report_pass() { echo "PASS:$1"; }\n'
+                'report_warn() { echo "WARN:$1"; }\n' + block,
+                encoding="utf-8")
+            for installed in (True, False):
+                if not installed:
+                    for name in names:
+                        (namespace / (name + ".md")).unlink()
+                result = run_bounded(
+                    [BASH, _posix(runner)], cwd=str(ROOT), timeout=20,
+                    env={**os.environ, "TEST_COMMANDS": _posix(commands)})
+                self.assertFalse(result.timed_out, result.output)
+                self.assertIn("PASS:command /wiki", result.output)
+                for name in names:
+                    status = "PASS" if installed else "WARN"
+                    self.assertIn(f"{status}:command /kennisbank:{name}", result.output)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -40,3 +40,12 @@ Full-suite proof for the amended runtime remains pending at this checkpoint.
 This is upgrade/data-preservation evidence, not a new natural experience recall.
 The natural canary remains a separate owner-reviewed gate; no private source
 content or identifiers are included here.
+
+## Completed full-suite verification
+
+Verified on 2026-09-09: clean commit
+`12c690ca679b23920a8437cd18e187b84fde62b8` completed with **2,031 passed,
+four skips, zero failures or errors**. JUnit records 2,035 tests and 708.772
+seconds. The private report SHA-256 is
+`1700722884391b5426e9b5ecee1bd57759fd9c26dfb977b924761d5e1cca9f33`.
+TASK-242 is complete; later runtime amendments need their own full-suite run.

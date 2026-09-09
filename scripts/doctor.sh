@@ -176,16 +176,17 @@ else
 fi
 
 # 7. Slash commands installed.
-COMMAND_FILES="sessielog wiki intake stale sessiestart import reconcile uitdaag brug weeklog timeline watdeedik rebuild-source-index rebuild-experience source-recall experience-recall"
+COMMAND_FILES="sessielog wiki intake stale sessiestart import reconcile uitdaag brug weeklog timeline watdeedik kennisbank/rebuild-source-index kennisbank/rebuild-experience kennisbank/source-recall kennisbank/experience-recall"
 if [ ! -d "$COMMANDS_DIR" ]; then
   report_warn "commands dir" "$COMMANDS_DIR not found (user may have opted out)"
 else
   for cmd in $COMMAND_FILES; do
     cmd_path="$COMMANDS_DIR/$cmd.md"
+    cmd_label="${cmd//\//:}"
     if [ -f "$cmd_path" ]; then
-      report_pass "command /$cmd" "$cmd_path"
+      report_pass "command /$cmd_label" "$cmd_path"
     else
-      report_warn "command /$cmd" "missing $cmd_path"
+      report_warn "command /$cmd_label" "missing $cmd_path"
     fi
   done
 fi
