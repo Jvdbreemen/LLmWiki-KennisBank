@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The sweep status no longer reports zero after a run that was killed.**
+  `memory-sweep-status.json` was written only on the sweep's terminal paths, so
+  a run interrupted mid-loop left the previous status in place and every counter
+  reading zero. Measured in one vault on 2026-09-09: the `.swept` watermark held
+  418 stems and 170 memory files had been written in the preceding 36 hours,
+  while the status reported `processed: 0`. Two runs that had done real work
+  were read as failures on that evidence, and `memory-notify.py` repeated the
+  same zeros at every session start. A partial heartbeat now lands after each
+  transcript, carrying `running: true` and a current `pending_left`; the
+  terminal paths stamp `running: false`. The partial write skips the rot corpus
+  scan (thousands of files, and its answer does not depend on the transcript
+  that just finished) and carries the previous counts forward, so what
+  `memory-notify.py` reports is unchanged. Every write now goes through a
+  temporary file and `os.replace`, because a partial write lands during the run
+  and a kill during an in-place write would leave unparseable JSON.
+
 ## [0.37.0] - 2026-08-19
 
 The top of the ranking belongs to relevance again. The reranker had been
