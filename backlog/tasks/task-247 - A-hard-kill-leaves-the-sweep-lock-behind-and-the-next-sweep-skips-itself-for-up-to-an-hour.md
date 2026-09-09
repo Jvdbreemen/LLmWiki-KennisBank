@@ -6,7 +6,7 @@ title: >-
 status: Done
 assignee: []
 created_date: '2026-09-09 18:36'
-updated_date: '2026-09-09 23:09'
+updated_date: '2026-09-09 23:38'
 labels: []
 dependencies: []
 priority: medium
@@ -71,4 +71,10 @@ Fixed in commit 316d79a and installed into the Kluis vault. Smoke-tested against
 Ten tests in tests/test_sweepstate.py::VerweesdeLockTest; nine fail against the pre-fix implementation and the two carrying the claim fail on behaviour, not on a missing attribute.
 
 One addition beyond the plan: acquire_lock re-reads the token and removes only the lock it just judged. That race predates the change but was unreachable while an orphan took an hour to surface; an immediate probe puts two acquirers inside the window. Falsified separately by removing only the guard's two lines.
+
+Follow-up in commit 3952af7, and a correction to the first attempt. 316d79a added its own Windows liveness probe; _common.pid_alive already existed and its docstring records that TASK-183 ended two divergent copies of exactly that. index-launch.py had solved this whole problem already, PID_GRACE_SEC included, and the sweep lock was simply the one that had not caught up. The probe is now the canonical one plus that grace.
+
+The first test fixture was also flaky and nearly shipped. It spawned a real process to obtain a dead PID; Windows reuses PID numbers, and the same just-terminated PID measured False in one run and True in another, so the core test failed and passed with no code change. The probe is covered by test_common.py, so these tests inject it and assert the policy instead. Deterministic over five consecutive runs, 2.2 s against 15.
+
+Verified read-only against the live sweep in the vault: its own lock reads is_stale False, is_orphaned False, is_free False.
 <!-- SECTION:FINAL_SUMMARY:END -->
