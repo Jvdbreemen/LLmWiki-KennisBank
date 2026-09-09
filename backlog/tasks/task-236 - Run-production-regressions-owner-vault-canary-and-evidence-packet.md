@@ -4,7 +4,7 @@ title: 'Run production regressions, owner-vault canary, and evidence packet'
 status: In Progress
 assignee: []
 created_date: '2026-09-04 00:00'
-updated_date: '2026-09-08 17:18'
+updated_date: '2026-09-09 06:12'
 labels:
   - evaluation
   - canary
@@ -86,8 +86,14 @@ prerequisite. No main merge or release was performed.
 - [x] #6 #6 At least ten exact source reconstructions are owner-checked before experience canary begins
 - [ ] #7 #7 At least twenty naturally occurring explicit experience recalls are reviewed; >= 70% useful, <= 5% harmful, and 100% evidence-correct
 - [x] #8 #8 Aggregate report contains no private prompts/passages and distinguishes prior evidence, regression evidence, and new canary evidence
-- [ ] #9 #9 Full repository suite and every supported client smoke are green
+- [x] #9 #9 Full repository suite and every supported client smoke are green
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+Pilot handoff: finish clean-commit regression and supported setup checks before read-route activation; snapshot capability flags and canonical-store state, exercise flag-only rollback, then enable explicit routes only. Owner asks genuine work questions and independently reviews usefulness, harm and exact evidence. Record misses as well as hits under the existing canary contract; no synthetic prompts or retrospective replays count. Keep source provenance blockers visible and require explicit owner release acceptance.
+<!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
 
@@ -101,4 +107,6 @@ Clean 8c323a0 full suite completed: 2018 passed, 4 skipped, 1 failed in 636.13s;
 Current runtime commit cf3062787a446908898055744ae4fc5302a3fb7b is fully verified: 2026 Python tests passed, 4 existing skips, no failures/errors in 604.39s, including every supported client setup/install/generated-artifact/MCP smoke. Atlas typecheck and 39 frontend tests also passed. AC9 now checked for this exact runtime; owner-vault deployment and natural-use AC1/AC7 remain separate gates.
 
 The full green cf30627 runtime remains valid historical proof, but TASK-242 adds a canonical-ledger no-clobber migration repair found in final deployment preflight. Reopening AC9 for that amended runtime; no live deployment has occurred and the owner vault has no legacy mixed DB to migrate.
+
+Runtime b74a008 full repository suite completed 2026-09-09: 2032 passed, 4 existing skips, zero errors/failures in 825.12s. JUnit SHA256 374cc3eef18b0146bead9aed14fdbf26097c11a0714f5c32b034679e27c20459. Full suite includes supported-client fixtures; separate prior Atlas typecheck and 39 tests remain historical evidence for unchanged frontend. Only docs/backlog edited during run, no runtime/tests delta. Local memory-sweep was concurrently active, so total duration is not an isolated performance benchmark. Actual owner deployment and natural pilot gates remain incomplete.
 <!-- SECTION:NOTES:END -->

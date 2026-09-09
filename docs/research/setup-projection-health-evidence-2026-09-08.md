@@ -89,3 +89,15 @@ regular memory maintenance was reported active.
 The combined projection-doctor, migration and Copilot-doctor regression run
 completed with **19 passed in 97.95 seconds**. No live vault was changed by
 these fixture-based tests.
+
+### Full runtime verification completed (2026-09-09)
+
+Runtime commit `b74a008` completed the full repository suite: **2,032 passed,
+four existing skips, zero errors or failures in 825.12 seconds**. JUnit records
+2,036 tests and 825.094 seconds; SHA-256:
+`374cc3eef18b0146bead9aed14fdbf26097c11a0714f5c32b034679e27c20459`.
+The process exited zero. Only documentation/backlog edits occurred during the
+run; runtime and test files remained identical to the starting commit.
+Regular owner-vault maintenance was active concurrently, so this duration is
+not an isolated latency benchmark. Supported client fixture checks passed;
+actual owner-vault setup verification and natural-use pilot remain separate.

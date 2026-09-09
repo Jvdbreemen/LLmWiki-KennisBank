@@ -1,10 +1,10 @@
 ---
 id: TASK-241
 title: Use bounded canonical projection health in the setup doctor
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-08 05:41'
-updated_date: '2026-09-08 17:43'
+updated_date: '2026-09-09 06:12'
 labels:
   - bug
   - production
@@ -26,7 +26,7 @@ The supported setup doctor still reads retired recall flags and the mixed experi
 - [x] #1 Tests first reproduce incorrect routes, split-store reporting and the missing bounded mode at the actual shell entrypoint
 - [x] #2 The setup doctor uses the explicit source and experience routes and separately reports canonical ledger and derived projection
 - [x] #3 Routine setup uses --fast, reports unknown checks as not checked, and warns on forbidden flags or unhealthy stores without printing private content
-- [ ] #4 Focused shell and doctor tests plus the full suite pass; sanitized evidence records the former failure and the limits
+- [x] #4 Focused shell and doctor tests plus the full suite pass; sanitized evidence records the former failure and the limits
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -45,16 +45,18 @@ Final focused set after cleanup review: 34 passed in 5.26s; independent unittest
 Clean cf3062787a446908898055744ae4fc5302a3fb7b full repository run: 2026 passed, 4 existing skips, zero errors/failures in 604.39s. The complete suite includes shell doctor and cross-client setup smokes. Atlas typecheck and 39/39 frontend tests separately passed. Live deployment remains a separate operational gate.
 
 Live supported setup exposed four false missing-command warnings: doctor checks the new source/experience commands at the root, although setup correctly installed the documented kennisbank/ namespace. Reopening the final integration gate for an entrypoint regression test and scoped path fix. Canonical bounded projection health itself passed. Overall live doctor also fails on six pre-existing wiki provenance problems; those claims will not be invented or waived.
-<!-- SECTION:NOTES:END -->
 
-2026-09-09: Namespace follow-up implemented test-first. Real Bash regression:
-1 failed / 7 passed before repair; 8 passed after repair. Combined projection,
-migration and Copilot doctor tests: 19 passed in 97.95s. Root-level decoys cannot
-satisfy missing namespaced commands. Full-suite and live setup recheck remain
-open; evidence appended to setup-projection-health-evidence-2026-09-08.md.
+Clean-start runtime b74a008 full suite completed: 2032 passed, 4 existing skips, zero failures/errors in 825.12 seconds; JUnit 2036 tests, 825.094 seconds, SHA256 374cc3eef18b0146bead9aed14fdbf26097c11a0714f5c32b034679e27c20459. Only documentation/backlog changed during execution; scripts/tests remain identical. Supported live setup recheck stays under TASK-236.
+<!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
 Supported setup now uses the canonical bounded projection doctor and reports explicit routes, append-only ledger and derived projection separately. Unknown source checks remain unknown; private diagnostic text is not rendered. Actual Git Bash red/green entrypoint tests and clean full-suite evidence are recorded.
 <!-- SECTION:FINAL_SUMMARY:END -->
+
+2026-09-09: Namespace follow-up implemented test-first. Real Bash regression:
+1 failed / 7 passed before repair; 8 passed after repair. Combined projection,
+migration and Copilot doctor tests: 19 passed in 97.95s. Root-level decoys cannot
+satisfy missing namespaced commands. Full-suite and live setup recheck remain
+open; evidence appended to setup-projection-health-evidence-2026-09-08.md.
