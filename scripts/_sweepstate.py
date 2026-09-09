@@ -20,7 +20,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _common import outside_window  # noqa: E402
+from _common import outside_window, pid_alive  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402
 
 WATERMARK = ".swept"
@@ -52,6 +52,13 @@ LEASE_REFRESH_SEC = 30
 #: verloopt het slot alsnog, en is het ergste geval weer een vertraging in plaats
 #: van een blokkade.
 LEASE_MAX_SEC = 4 * STALE_SEC
+
+#: Een dood PID maakt een lock pas vrij als hij OOK ouder is dan dit. De probe
+#: valt bij twijfel naar "dood" en leest een Windows-zombie als levend zolang er
+#: een handle openstaat, dus zonder ondergrens zou een probe die zich vergist een
+#: levende lock meteen vrijgeven. index-launch.py kent dezelfde constante om
+#: dezelfde reden. Vijf seconden tegen de 3600 van de lease: de winst blijft.
+PID_GRACE_SEC = 5.0
 
 
 def lock_path(vault=None) -> Path:
@@ -113,69 +120,6 @@ def _owner(token: "str | None") -> "tuple[str, int] | None":
         return None
 
 
-def _pid_alive_windows(pid: int) -> "bool | None":
-    """Leeft dit PID? None als we het niet kunnen vaststellen.
-
-    NIET via os.kill(pid, 0). Op Windows vertaalt CPython elk signaal behalve
-    CTRL_C_EVENT en CTRL_BREAK_EVENT naar TerminateProcess, dus de gebruikelijke
-    POSIX-probe DOODT hier het proces dat hij zou moeten bevragen.
-    """
-    try:
-        import ctypes
-        from ctypes import wintypes
-    except Exception:
-        return None
-    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-    ERROR_ACCESS_DENIED = 5
-    ERROR_INVALID_PARAMETER = 87
-    STILL_ACTIVE = 259
-    try:
-        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
-        # restype expliciet: een HANDLE is pointer-groot en de ctypes-default
-        # (c_int) kapt hem op 64-bit af tot een onbruikbare waarde.
-        k32.OpenProcess.restype = wintypes.HANDLE
-        k32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
-        k32.GetExitCodeProcess.argtypes = (wintypes.HANDLE,
-                                           ctypes.POINTER(wintypes.DWORD))
-        k32.CloseHandle.argtypes = (wintypes.HANDLE,)
-        handle = k32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
-        if not handle:
-            err = ctypes.get_last_error()
-            if err == ERROR_INVALID_PARAMETER:
-                return False              # dit PID bestaat niet
-            if err == ERROR_ACCESS_DENIED:
-                return True               # bestaat wel, maar niet van ons
-            return None
-        try:
-            code = wintypes.DWORD()
-            if not k32.GetExitCodeProcess(handle, ctypes.byref(code)):
-                return None
-            # Een proces dat toevallig met 259 eindigt leest als levend. Die
-            # Windows-wrat valt naar "leeft", en dus naar de lock respecteren.
-            return code.value == STILL_ACTIVE
-        finally:
-            k32.CloseHandle(handle)
-    except Exception:
-        return None
-
-
-def _pid_alive(pid: int) -> "bool | None":
-    """True/False als we het zeker weten, None als we het niet kunnen bepalen."""
-    if pid <= 0:
-        return None
-    if os.name == "nt":
-        return _pid_alive_windows(pid)
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True                       # bestaat, van een andere gebruiker
-    except OSError:
-        return None
-    return True
-
-
 def is_orphaned(lock: Path) -> bool:
     """True als het token een houder noemt die aantoonbaar niet meer bestaat.
 
@@ -185,7 +129,15 @@ def is_orphaned(lock: Path) -> bool:
     staat deze check NAAST is_stale en niet in de plaats ervan.
 
     Alles wat onzeker is valt naar False: een onbekende host, een oud token, een
-    probe die niets kan vaststellen. Onzekerheid betekent de lock respecteren.
+    lock die niet te stat-en is. Onzekerheid betekent de lock respecteren.
+
+    De probe is `_common.pid_alive` -- de canonieke, want TASK-183 heeft juist
+    twee uiteengelopen kopieen opgeruimd. Die geeft geen "weet ik niet" terug
+    maar valt bij twijfel naar dood, en op Windows leest hij een zombie als
+    levend zolang er nog een handle op openstaat. Vandaar PID_GRACE_SEC: een
+    dood PID maakt de lock pas vrij als hij OOK ouder is dan de grace. Dat
+    dempt een probe die zich vergist en de klokafwijking die is_stale
+    symmetrisch maakt, en 5 seconden in plaats van 3600 laat de winst intact.
 
     Gemeten aanleiding: twee weeslocks in twee dagen. 2026-09-08 noemde een lock
     PID 17192, 2026-09-09 om 19:51 PID 30968; geen van beide bestond nog, en de
@@ -196,9 +148,13 @@ def is_orphaned(lock: Path) -> bool:
     if eig is None:
         return False
     host, pid = eig
-    if host != _HOST:
+    if host != _HOST or pid_alive(pid):
         return False
-    return _pid_alive(pid) is False
+    try:
+        age = time.time() - lock.stat().st_mtime
+    except OSError:
+        return False
+    return outside_window(age, PID_GRACE_SEC)
 
 
 def is_free(lock: Path) -> bool:

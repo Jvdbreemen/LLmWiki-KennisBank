@@ -21,11 +21,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   holder is dead. That check now runs alongside the lease, never instead of it.
   The lock token gains a host (`host:pid:random`) so the probe only ever judges a
   PID on its own machine, which keeps a vault on a shared or synced drive safe;
-  an old two-part token, an unknown host, or a probe that cannot answer all fall
-  back to the lease alone. On Windows the probe goes through `OpenProcess`, not
-  `os.kill(pid, 0)` — CPython translates every signal there except `CTRL_C_EVENT`
-  and `CTRL_BREAK_EVENT` into `TerminateProcess`, so the obvious probe would kill
-  the process it is asking about. Reclaiming a lock now also re-reads the token
+  an old two-part token, an unknown host, or a lock that cannot be stat-ed all
+  fall back to the lease alone. The probe is the canonical `_common.pid_alive`,
+  not a new one: TASK-183 ended two divergent copies of it and a third would
+  undo that. It answers "dead" when it cannot tell and reads a Windows zombie as
+  alive while any handle to it remains, so a dead PID frees a lock only once the
+  lock is also older than `PID_GRACE_SEC` (5 s, the same guard and the same
+  reason as `index-launch.py`) — five seconds against the lease's 3600 keeps the
+  gain. Reclaiming a lock now also re-reads the token
   and removes only the one it just judged: two acquirers seeing the same orphan
   would otherwise both clear it and both take it, the second discarding the
   first's fresh lock. That race predates this change, but an orphan used to

@@ -1,10 +1,10 @@
 """Tests voor scripts/_sweepstate.py - watermark + transcript-reader."""
 from __future__ import annotations
 
+import gc
 import json
 import os
 import socket
-import subprocess
 import sys
 import tempfile
 import time
@@ -237,6 +237,10 @@ class VerweesdeLockTest(unittest.TestCase):
     starten, want de lease liep pas na 3600 s af.
     """
 
+    #: Staat voor een houder die er niet meer is. Het getal zelf doet niets; de
+    #: geinjecteerde probe bepaalt of hij leeft.
+    DOOD_PID = 424242
+
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="kb-orphan-"))
         (self.tmp / ".claude").mkdir(parents=True)
@@ -246,43 +250,82 @@ class VerweesdeLockTest(unittest.TestCase):
         import shutil
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def _dood_pid(self) -> int:
-        """Een PID dat gegarandeerd niet meer draait: zelf starten en uitlopen."""
-        proc = subprocess.Popen([sys.executable, "-c", "pass"])
-        proc.wait()
-        return proc.pid
+    def _probe(self, *levend: int) -> None:
+        """Laat de probe precies deze PIDs levend noemen.
 
-    def _leg_lock(self, token: str) -> None:
-        """Een VERSE lock met dit token; de tijdlease is dus niet verlopen."""
+        Een ECHT dood PID is geen reproduceerbare fixture. Windows hergebruikt
+        PID-nummers, en OpenProcess opent een afgelopen proces zolang er nog een
+        handle op staat. Gemeten op 2026-09-10: hetzelfde zojuist beeindigde PID
+        las in de ene run False en even later in een andere True, en een test die
+        erop bouwde faalde en slaagde afwisselend zonder codewijziging.
+
+        De probe zelf hoort niet bij deze module -- het is `_common.pid_alive`,
+        gedekt in test_common.py. Wat hier getoetst wordt is het BELEID eromheen:
+        wanneer telt een dode houder als wees, en wanneer juist niet.
+        """
+        echt = ss.pid_alive
+        ss.pid_alive = lambda pid: pid in levend
+        self.addCleanup(lambda: setattr(ss, "pid_alive", echt))
+
+    def _leg_lock(self, token: str, leeftijd: float = 6.0) -> None:
+        """Een lock met dit token, standaard net voorbij PID_GRACE_SEC.
+
+        De leeftijd blijft ver binnen STALE_SEC, dus wat deze tests aantonen is
+        altijd het PID-pad en nooit de tijdlease. De kerntests bevestigen dat met
+        een assertie op is_stale.
+        """
         self.lock.write_text(token, encoding="utf-8")
+        if leeftijd:
+            toen = time.time() - leeftijd
+            os.utime(self.lock, (toen, toen))
+
+    def _mijn(self, pid: int) -> str:
+        return f"{socket.gethostname()}:{pid}:deadbeefdeadbeef"
 
     # -- de twee richtingen -------------------------------------------------
 
     def test_een_lock_van_een_verdwenen_proces_is_meteen_over_te_nemen(self):
         """De kernclaim. Voor TASK-247 wachtte dit STALE_SEC uit."""
-        self._leg_lock(f"{socket.gethostname()}:{self._dood_pid()}:deadbeefdeadbeef")
-        self.assertFalse(ss.is_stale(self.lock), "opzet: de lease is nog vers")
-        # Alleen de gedrags-assertie. Een is_orphaned-aanroep hierboven zou deze
-        # test tegen de oude implementatie op een ontbrekende functie laten
-        # falen in plaats van op wat er misging, en eronder kijkt hij naar het
-        # verkeerde bestand: acquire_lock heeft het token dan al vervangen door
-        # dat van dit levende proces.
+        self._probe()
+        self._leg_lock(self._mijn(self.DOOD_PID))
+        self.assertFalse(ss.is_stale(self.lock),
+                         "opzet: de lease is nog lang niet verlopen")
+        # Alleen de gedrags-assertie. is_orphaned hierboven laat deze test tegen
+        # de oude implementatie falen op een ontbrekende functie in plaats van op
+        # het defect, en eronder kijkt hij naar het verkeerde bestand:
+        # acquire_lock heeft het token dan al vervangen door dat van dit proces.
         self.assertIsNotNone(ss.acquire_lock(self.tmp),
                              "een dode houder mag niemand ophouden")
 
     def test_is_orphaned_herkent_een_verdwenen_houder(self):
         """Dezelfde claim een laag lager, zonder de lock over te nemen."""
-        self._leg_lock(f"{socket.gethostname()}:{self._dood_pid()}:deadbeefdeadbeef")
+        self._probe()
+        self._leg_lock(self._mijn(self.DOOD_PID))
+        self.assertFalse(ss.is_stale(self.lock), "opzet: niet via de tijdlease")
         self.assertTrue(ss.is_orphaned(self.lock))
 
     def test_een_lock_van_een_levend_proces_blijft_liggen(self):
         """De tegenwaarborg: PID-hergebruik mag geen levende lock vrijgeven."""
-        self._leg_lock(f"{socket.gethostname()}:{os.getpid()}:deadbeefdeadbeef")
+        self._probe(os.getpid())
+        self._leg_lock(self._mijn(os.getpid()))
         self.assertIsNone(ss.acquire_lock(self.tmp),
                           "single-flight geldt zolang de houder leeft")
         self.assertFalse(ss.is_orphaned(self.lock))
 
     # -- alles wat onzeker is, respecteert de lock --------------------------
+
+    def test_een_kersverse_lock_wordt_niet_op_de_pid_afgeschreven(self):
+        """De grace.
+
+        De probe geeft geen "weet ik niet" terug maar valt bij twijfel naar dood,
+        en op Windows leest hij een zombie als levend zolang er een handle op
+        staat. Zonder ondergrens geeft een probe die zich vergist een levende
+        lock meteen vrij. Onder PID_GRACE_SEC telt daarom alleen de tijd.
+        """
+        self._probe()
+        self._leg_lock(self._mijn(self.DOOD_PID), leeftijd=0)
+        self.assertFalse(ss.is_orphaned(self.lock))
+        self.assertIsNone(ss.acquire_lock(self.tmp))
 
     def test_een_oud_tweedelig_token_krijgt_geen_pid_oordeel(self):
         """Zonder host in het token weet je niet over welke machine je oordeelt.
@@ -290,7 +333,8 @@ class VerweesdeLockTest(unittest.TestCase):
         Het paar met de eerste test is wat telt: hetzelfde dode PID wordt in het
         nieuwe formaat wel overgenomen en in het oude niet.
         """
-        self._leg_lock(f"{self._dood_pid()}:deadbeefdeadbeef")
+        self._probe()
+        self._leg_lock(f"{self.DOOD_PID}:deadbeefdeadbeef")
         self.assertIsNone(ss.acquire_lock(self.tmp))
         self.assertFalse(ss.is_orphaned(self.lock))
 
@@ -300,12 +344,25 @@ class VerweesdeLockTest(unittest.TestCase):
         Zonder deze grens steelt de ene machine het slot van een sweep die op de
         andere gewoon draait, puur omdat dat nummer hier vrij is.
         """
-        self._leg_lock(f"eenanderemachine:{self._dood_pid()}:deadbeefdeadbeef")
+        self._probe()
+        self._leg_lock(f"eenanderemachine:{self.DOOD_PID}:deadbeefdeadbeef")
         self.assertIsNone(ss.acquire_lock(self.tmp))
         self.assertFalse(ss.is_orphaned(self.lock))
 
     def test_een_onleesbaar_token_krijgt_geen_oordeel(self):
+        self._probe()
         self._leg_lock("rommel")
+        self.assertIsNone(ss.acquire_lock(self.tmp))
+        self.assertFalse(ss.is_orphaned(self.lock))
+
+    def test_een_leeg_token_krijgt_geen_oordeel(self):
+        """acquire_lock schrijft het token NA het aanmaken met O_EXCL.
+
+        Tussen die twee stappen is het bestand leeg. Dat als dode houder lezen
+        geeft het slot aan de verwerver die de race juist verloor.
+        """
+        self._probe()
+        self._leg_lock("")
         self.assertIsNone(ss.acquire_lock(self.tmp))
         self.assertFalse(ss.is_orphaned(self.lock))
 
@@ -316,7 +373,8 @@ class VerweesdeLockTest(unittest.TestCase):
         tweede mag dat verse slot niet alsnog weggooien. Hier gesimuleerd door
         het bestand te vervangen op het moment dat het oordeel valt.
         """
-        self._leg_lock(f"{socket.gethostname()}:{self._dood_pid()}:deadbeefdeadbeef")
+        self._probe()
+        self._leg_lock(self._mijn(self.DOOD_PID))
         echte_is_free = ss.is_free
 
         def is_free_maar_een_ander_was_sneller(lock):
@@ -334,18 +392,7 @@ class VerweesdeLockTest(unittest.TestCase):
                          "eenanderewinnaar:1:beef",
                          "het verse slot van de winnaar staat er nog")
 
-    # -- de probe zelf ------------------------------------------------------
-
-    def test_de_probe_bevraagt_het_proces_en_doodt_het_niet(self):
-        """os.kill(pid, 0) is op Windows geen probe maar een executie.
-
-        CPython vertaalt daar elk signaal behalve CTRL_C_EVENT en
-        CTRL_BREAK_EVENT naar TerminateProcess. Deze test bevraagt het eigen
-        proces: met die implementatie zou de testrunner hier sterven in plaats
-        van te falen.
-        """
-        self.assertIs(ss._pid_alive(os.getpid()), True)
-        self.assertIs(ss._pid_alive(self._dood_pid()), False)
+    # -- het token ----------------------------------------------------------
 
     def test_het_token_noemt_host_en_pid(self):
         host, pid = ss._owner(ss._new_token())
@@ -365,10 +412,12 @@ class VerweesdeLockTest(unittest.TestCase):
         bewaard = os.environ.get("KENNISBANK_VAULT")
         os.environ["KENNISBANK_VAULT"] = str(self.tmp)
         try:
-            self._leg_lock(f"{socket.gethostname()}:{self._dood_pid()}:beef")
+            self._probe()
+            self._leg_lock(self._mijn(self.DOOD_PID))
             self.assertFalse(launch._lock_alive(),
                              "een dode houder is geen draaiende sweep")
-            self._leg_lock(f"{socket.gethostname()}:{os.getpid()}:beef")
+            self._probe(os.getpid())
+            self._leg_lock(self._mijn(os.getpid()))
             self.assertTrue(launch._lock_alive(),
                             "een levende houder houdt de gate dicht")
         finally:
@@ -376,4 +425,3 @@ class VerweesdeLockTest(unittest.TestCase):
                 os.environ.pop("KENNISBANK_VAULT", None)
             else:
                 os.environ["KENNISBANK_VAULT"] = bewaard
-
