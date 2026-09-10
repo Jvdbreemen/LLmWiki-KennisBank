@@ -39,6 +39,23 @@ values, and non-finite scores. Scoring text contains only bounded content
 fields with explicit field boundaries; source references, paths, confidence,
 review state, and acceptance metadata are excluded.
 
+### Supplemental diversity probe
+
+Because the six-group development split was concentrated in two raw sessions,
+an additional private probe was authored before further threshold work. It has
+24 cases across four new lesson groups and four separate raw sessions, covering
+secret-management scope, URL-import job architecture, Home Assistant recorder
+recovery, and OTGW hardware-support documentation. Exact raw spans resolved
+successfully for all four records. This probe is intentionally **not** merged
+into the preregistered split, is not used to choose a release policy, and does
+not open or inspect the sealed holdout. Its labels remain auto-authored
+development judgments, not owner reviews.
+
+Private artifact: `task245-supplemental-development-2026-09-10/`.
+Supplemental input SHA-256 values are recorded privately for the cases,
+records, provenance, and each score aggregate; the cases hash is
+`804060fd51ad3525846d1edd5e8b03a3e0f2aae596f2e7cb8b5d8c5d1c266324`.
+
 ## Applicability results
 
 Thresholds were selected on the development split only. A missing or malformed
@@ -73,6 +90,21 @@ Increasing the local judge from qwen3.5:4b to qwen3.5:9b did not improve the
 decision: its best development point was 100.0% hit@3 with only 22.2% negative
 specificity, no point reached 90% specificity, and judge p95 rose to 3,428.2
 ms. This rules out simply putting a larger judge on the recall hot path.
+
+The supplemental diversity probe reproduced the core failure mode:
+
+| Supplemental arm | Best hit@3 | Best negative specificity >=90% | Timing |
+|---|---:|---:|---:|
+| lexical overlap | 100.0% (0.0% specificity) | 8.3% / 100.0% | dependency-free |
+| qwen3-embedding:4b cosine | 100.0% (0.0% specificity) | 58.3% / 91.7% | embedding p95 109.8 ms |
+| qwen3.5:4b local judge | 100.0% (0.0% specificity) | no point | judge p95 1,529.0 ms |
+
+The broader probe therefore increases confidence that the problem is not merely
+the original topic mix: ranking can recover relevant candidates, but the
+system still lacks a safe answerability boundary. It does not change the
+release decision or justify a model switch. The BGE reranker was not rerun in
+this probe because its previously cached local model directory was absent; no
+result is claimed for that arm.
 
 Private artifacts:
 
@@ -146,12 +178,24 @@ The final repeat used harness SHA-256
 ## Implementation and test evidence
 
 The feature branch adds a dependency-free applicability runner, strict judge
-output validation, pure development-only threshold helpers, local experimental
-BGE and qwen judge drivers, and a read-only phase profiler. Focused tests pass:
+output validation, pure development-only threshold helpers, a private
+source-grounded supplemental fixture builder, local experimental BGE and qwen
+judge drivers, and a read-only phase profiler. Focused tests pass:
 
 ```text
-37 passed
+46 passed, 1 subtests passed
 ```
+
+The repository-owned suite (`pytest tests`) also passes in full:
+
+```text
+2022 passed, 4 skipped, 235 subtests passed
+```
+
+A root-level `pytest` collection was additionally attempted but cannot collect
+14 `atlas/sidecar` modules because `fastapi` is not installed in the current
+Python runtime. That environment limitation is separate from the repository
+suite and did not produce a test failure in the changed TASK-245 surface.
 
 The profiler's regression tests include a deliberate injected telemetry write;
 that test must be detected as integrity failure. A previous real run also
