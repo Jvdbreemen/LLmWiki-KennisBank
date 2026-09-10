@@ -106,6 +106,15 @@ release decision or justify a model switch. The BGE reranker was not rerun in
 this probe because its previously cached local model directory was absent; no
 result is claimed for that arm.
 
+As a final exploratory check, the original 36 cases and supplemental 24 cases
+were rescored together against all 10 records (60 cases, 10 records). The
+qwen3-embedding:4b arm reached 63.3% hit@3 at 93.3% negative specificity at
+threshold 0.58; lexical overlap reached only 50.0% / 90.0% at its best point
+meeting the specificity floor. This is stronger evidence that the larger,
+source-diverse denominator exposes the trade-off rather than hiding it, but it
+still falls well short of the 85% recall gate. The combined run is exploratory
+only and did not alter the frozen policy inputs.
+
 Private artifacts:
 
 - `task245-applicability-lexical-2026-09-10/aggregate.json`
