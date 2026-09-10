@@ -150,7 +150,7 @@ output validation, pure development-only threshold helpers, local experimental
 BGE and qwen judge drivers, and a read-only phase profiler. Focused tests pass:
 
 ```text
-23 passed
+37 passed
 ```
 
 The profiler's regression tests include a deliberate injected telemetry write;
