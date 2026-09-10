@@ -48,8 +48,10 @@ model response is a failure, never a correct abstention.
 |---|---:|---:|---|
 | Lexical overlap | 61.1% / 61.1% | 38.9% / 94.4% | rejected |
 | qwen3-embedding:4b cosine | 77.8% / 72.2% | 38.9% / 94.4% | rejected |
+| qwen3-embedding:0.6b cosine | 72.2% / 66.7% | 33.3% / 94.4% | rejected |
 | BGE reranker v2 m3, local CUDA | 83.3% / 77.8% | 72.2% / 94.4% | rejected |
 | qwen3.5:4b local answerability judge | 83.3% / 5.6% | no point | rejected |
+| qwen3.5:9b local answerability judge | 100.0% / 22.2% | no point | rejected |
 
 The lexical arm's looser 94.4% positive result is not a contradiction: its
 best recall point shows 17/18 positives but also exposes every negative. This
@@ -61,12 +63,25 @@ The local judge completed 36/36 cases with no parse failures, but took p95
 strict binary point. It is therefore neither a safe hot-path gate nor a useful
 abstention policy on this fixture set.
 
+The cheaper qwen3-embedding:0.6b arm was also measured with the same frozen
+development protocol. It did not improve either quality gate and had a query /
+document embedding p95 of 128.6 ms in that run. No embedding-model switch is
+therefore justified; the production projection remains bound to
+`ollama:qwen3-embedding:4b` and its dimension-compatible index.
+
+Increasing the local judge from qwen3.5:4b to qwen3.5:9b did not improve the
+decision: its best development point was 100.0% hit@3 with only 22.2% negative
+specificity, no point reached 90% specificity, and judge p95 rose to 3,428.2
+ms. This rules out simply putting a larger judge on the recall hot path.
+
 Private artifacts:
 
 - `task245-applicability-lexical-2026-09-10/aggregate.json`
 - `task245-applicability-cosine-2026-09-10/aggregate.json`
+- `task245-applicability-cosine-qwen06-2026-09-10/aggregate.json`
 - `task245-applicability-bge-2026-09-10/aggregate.json`
 - `task245-applicability-judge-2026-09-10/aggregate.json`
+- `task245-applicability-judge-qwen9b-2026-09-10/aggregate.json`
 
 The BGE score map was generated with the locally cached
 `BAAI/bge-reranker-v2-m3` safetensors model, whose private model-file hash is
