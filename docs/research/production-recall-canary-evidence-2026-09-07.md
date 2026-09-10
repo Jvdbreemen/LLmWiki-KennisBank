@@ -8,6 +8,14 @@ Decision boundary: evidence packet only; no rollout or ADR acceptance
 
 ## Current decision
 
+Update 2026-09-09: the [independent automated evaluation](automated-experience-regression-evidence-2026-09-09.md)
+now supersedes the current-acceptance interpretation of the historical locked
+retrieval and latency results below. It found mixed-provenance coverage gaps,
+0/10 correct negative abstentions and an under-load latency failure. TASK-236
+AC2/AC4 are reopened; TASK-245 tracks fixes. The dated measurements below are
+preserved, not retroactively changed. The automated evaluation required no new
+owner labels and is complete; it did not manufacture natural-use observations.
+
 **Hold.** The production mechanics, locked experience regression, source
 owner-canary, latency, failure recovery, privacy boundary, and normal-route
 isolation pass. The experience owner-canary has zero of the required twenty

@@ -79,9 +79,9 @@ prerequisite. No main merge or release was performed.
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [ ] #1 #1 Provenance is 100% on all shown canary passages and candidate leakage is zero
-- [x] #2 #2 Locked experience regression reaches hit@3 >= 0.85 and evidence precision 1.00 with no tuning on those cases
+- [ ] #2 #2 Locked experience regression reaches hit@3 >= 0.85 and evidence precision 1.00 with no tuning on those cases
 - [x] #3 #3 Normal recall remains byte/shape compatible with <= 1 ms extra p95 overhead
-- [x] #4 #4 Warm experience p95 <= 250 ms, source FTS p95 <= 250 ms, and exact hydration p95 <= 50 ms
+- [ ] #4 #4 Warm experience p95 <= 250 ms, source FTS p95 <= 250 ms, and exact hydration p95 <= 50 ms
 - [x] #5 #5 Failure injection proves fail-open behavior and previous-good-index recovery
 - [x] #6 #6 At least ten exact source reconstructions are owner-checked before experience canary begins
 - [ ] #7 #7 At least twenty naturally occurring explicit experience recalls are reviewed; >= 70% useful, <= 5% harmful, and 100% evidence-correct
@@ -98,6 +98,17 @@ Pilot handoff: finish clean-commit regression and supported setup checks before 
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
+2026-09-09 independent automated evaluation (TASK-244): reopening AC2 and AC4
+for current production acceptance. Historical results below remain valid for
+their original runs, but the actual current-gateway replay reached only 42/60
+on the full corpus (13 mixed wiki/raw bundles excluded) and first-run hybrid
+p95 was 515 ms under load. Three diagnostic repeats met 250 ms without changing
+rankings, which does not erase the first failure. Negative no-hit specificity
+was 0/10. Exact source verification and policy controls passed. See
+`docs/research/automated-experience-regression-evidence-2026-09-09.md` and TASK-245.
+This autonomous evaluation is complete without new owner labels; AC7 is a
+separate unmeasured natural-use claim, not filled by this replay.
+
 2026-09-08: reopening current-HEAD full-suite proof explicitly; prior 468acd1 evidence remains historical. New projection capability bypass must be repaired before production acceptance.
 
 2026-09-08 shadow projection: owner explicitly accepted one bounded lesson; all seven SourceRefs revalidated and review bound to unchanged content hash. New gated CLI returned disabled before opt-in, then built one lexical record and excluded 40 unreviewed candidates. Ledger snapshot 41 events/41 outcomes/1 review; both read routes remain disabled. This is mechanism/corpus proof, not natural recall; canary remains 0/20. Details: docs/research/projection-build-capability-evidence-2026-09-08.md.

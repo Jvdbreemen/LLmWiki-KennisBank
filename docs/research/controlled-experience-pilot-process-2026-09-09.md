@@ -3,6 +3,22 @@
 Status: preparation, not activation or release approval. Tracking: TASK-236;
 release authority and rollback: TASK-237.
 
+## Autonomous evaluation is the current workflow
+
+The owner requested that evaluation be performed without additional case-by-case
+review. TASK-244 completed that request with a protocol-frozen automated replay,
+source verification, safety controls and a rescore of existing blinded labels.
+See [the measured findings](automated-experience-regression-evidence-2026-09-09.md).
+TASK-245 addresses the concrete engineering failures; do not ask the owner for
+another label quota to investigate or verify those fixes.
+
+The natural-use process below describes a separate type of evidence, if it is
+later collected. It is not the procedure for completing the autonomous
+engineering evaluation. Do not relabel automated judgments as natural owner
+observations or claim that the existing natural-use gate has passed. Release
+approval remains a separate decision; failing technical gates must first be
+resolved with reproducible evidence.
+
 ## Entry conditions
 
 1. Bind the complete regression report to the runtime commit being installed.
