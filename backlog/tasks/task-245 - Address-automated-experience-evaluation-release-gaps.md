@@ -64,3 +64,6 @@ explicitly not a replacement for the preregistered split or a holdout result.
 Since no applicability policy cleared both gates and concurrent real embedding
 plus gateway latency exceeded the target, production read flags remain
 unchanged and no third automatic memory route is wired.
+The combined exploratory 60-case/10-record run reached only 63.3% hit@3 at
+93.3% negative specificity for qwen3-embedding:4b, so it strengthens the
+diagnosis but does not change the release decision.
