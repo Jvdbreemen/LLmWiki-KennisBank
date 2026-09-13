@@ -4,7 +4,7 @@ title: "Add source and experience recall as separately gated projections"
 status: "Proposed"
 date: "2026-08-25"
 binding: false
-gate: "TASK-220"
+gate: "TASK-236"
 documents_shipped: false
 verified_in: []
 supersedes: []
@@ -32,8 +32,10 @@ context_scope: "selective"
 
 ## Status
 
-Proposed, 2026-08-25. This record is deliberately not Accepted: TASK-220 must
-produce the evidence packet and the owner must explicitly accept it first.
+Proposed, 2026-08-25; production scope narrowed 2026-09-04. This record is
+deliberately not Accepted. TASK-220 produced mixed evidence and rejected the
+broad rollout. The narrowed candidate must pass TASK-236, after which the owner
+must explicitly accept, amend, or reject it in TASK-237.
 
 ## Status History
 
@@ -43,6 +45,11 @@ status_history:
     status: Proposed
     changed_by: Codex
     reason: Owner requested test-first implementation and evidence before either layer can enter a main release
+    changed_via: adr-kit
+  - date: 2026-09-04
+    status: Proposed
+    changed_by: Codex
+    reason: Experiment evidence narrowed the candidate to explicit reviewed experience recall with source-on-demand evidence
     changed_via: adr-kit
 ```
 
@@ -110,6 +117,49 @@ other. They may reuse the local SQLite/sqlite-vec implementation, but not a
 unified score or hosted dependency. Default hot-path routing stays disabled
 until the evaluation packet passes.
 
+### Production scope amendment, 2026-09-04
+
+TASK-220, TASK-223, and TASK-224 resolved the broad proposal with mixed
+evidence. Retrieved experience context improved blinded action selection from
+19/60 to 43/60 (paired delta +0.40; 95% bootstrap interval +0.20 to +0.5833),
+but automatic failure advisories produced two false warnings in ten unrelated
+probes. Sparse-first source vector reranking reached hit@5 0.25 versus 0.75 for
+BM25, no-hit specificity 0.90, and warm p95 8.33 seconds. The broad automatic
+rollout therefore remains rejected.
+
+The v1 production candidate is narrowed to:
+
+* explicit recall over reviewed, outcome-bound, evidence-verified experiences;
+* exact SourceRef hydration on demand after an experience is retrieved;
+* labelled explicit FTS/BM25 search when the source is not already known;
+* physically separate canonical experience ledger and rebuildable search
+  projection;
+* normal wiki/memory recall unchanged and unaware of both new read routes.
+
+V1 does not expose automatic failure advisory, automatic source fallback,
+source vectors, cross-layer ranking, outcome boosts, autonomous promotion, or
+hook injection. These are not dormant rollout knobs: public contracts must
+reject them. Reintroducing any one requires a fresh decision and an unspent
+evaluation set appropriate to that behavior.
+
+Storage is source-first while retrieval is experience-first. An experience
+result contains structured SourceRef identifiers rather than raw passages. A
+second explicit source call validates and hydrates the exact path, source hash,
+half-open offsets, offset unit, and passage hash. A changed, missing, redacted,
+or contradictory source is reported as such and cannot silently remain trusted.
+
+Automatic extraction creates candidates only. Production validation requires
+verified source and outcome references, separate attempt/resolution/final
+outcome states, no unresolved contradiction, version stamps, and an explicit
+human acceptance tied to the reviewed content hash.
+
+The operational design adopts rebuildable projections, centralized validity
+filters, explicit bounded tools, migration/doctor support, and temporal status
+from comparable systems including Supamem. It rejects a mixed-authority
+collection, immediate trust in agent-written memories, and pre-embedding all
+raw sources because those patterns conflict with KennisBank's measured evidence
+and local source-of-truth model.
+
 ### Confirmation
 
 Implementation and value are verified in this order:
@@ -137,6 +187,10 @@ Implementation and value are verified in this order:
 * Keep normal recall unchanged while experimental routes are disabled.
 * Run extraction and consolidation off the prompt hot path.
 * Pre-register and enforce minimum sample sizes and reject thresholds.
+* Require an exact, structured SourceRef and explicit human review for every
+  production-retrievable experience.
+* Keep canonical experience events/outcomes/reviews separate from rebuildable
+  retrieval projections.
 
 ### Must Not
 
@@ -146,12 +200,19 @@ Implementation and value are verified in this order:
 * Enable autonomous deletion, skill creation, or outcome-based ranking here.
 * Send raw source or experience data to a hosted service by default.
 * Claim downstream task improvement from retrieval-only measurements.
+* Expose automatic advisory, source fallback, source vectors, cross-layer
+  ranking, outcome boosts, or automatic promotion through v1 feature flags.
+* Use the spent experiment holdouts to tune thresholds or make a fresh
+  independent product claim.
 
 ### Exceptions
 
 Explicit diagnostic commands may query candidate or unknown experiences when
 their status is included in the response. They remain excluded from normal
 recall and cannot pass a validation gate.
+
+The diagnostic exception is local CLI-only in v1. MCP and ordinary client
+instructions expose only reviewed production records.
 
 ### Verification
 
@@ -161,8 +222,17 @@ recall and cannot pass a validation gate.
 * `tests/test_experience_store.py`
 * `tests/test_experience_recall.py`
 * `tests/test_layer_eval.py`
+* `tests/test_source_ref_contract.py`
+* `tests/test_source_exact_hydration.py`
+* `tests/test_experience_validation_policy.py`
+* `tests/test_experience_projection_boundary.py`
+* `tests/test_explicit_recall_policy.py`
+* `tests/test_projection_migration.py`
+* `tests/test_projection_privacy.py`
 * `docs/research/source-experience-evaluation-plan.md`
-* TASK-220 evidence report and the full repository test suite
+* `docs/superpowers/plans/2026-09-04-source-grounded-experience-production.md`
+* TASK-220/TASK-223/TASK-224 evidence, TASK-236 production evidence, and the
+  full repository test suite
 
 ## Consequences
 
@@ -212,10 +282,11 @@ recall and cannot pass a validation gate.
 
 ## Open Questions
 
-- [ ] Does source recall clear its absolute and baseline-relative retrieval gates on the frozen live-vault holdout?
-- [ ] Does experience recall improve retrieval of validated success and failure patterns without exceeding the false-warning gate?
-- [ ] Is either layer valuable enough to enable a fallback route, or should it remain explicit-only?
+- [x] Does source recall clear its absolute and baseline-relative retrieval gates on the frozen live-vault holdout? **Resolved before holdout:** no sparse-first configuration cleared the independent development safety and latency constraints; the best point also lost hit@5 0.25 versus 0.75 to BM25. The candidate is rejected and the frozen holdout remains unspent.
+- [x] Does experience recall improve retrieval of validated success and failure patterns without exceeding the false-warning gate? **Partly resolved:** retrieval and action value improve, but the false-warning gate fails, so rollout is rejected.
+- [x] Is either layer valuable enough to enable a fallback route, or should it remain explicit-only? **Resolved for these designs:** neither earns automatic fallback rollout. Source remains explicit evidence search; experience preserves proven downstream value as research evidence but fails advisory safety.
 - [ ] Is there enough longitudinal outcome evidence to test task improvement, or must outcome-aware ranking remain deferred?
+- [ ] Does the narrowed production implementation pass TASK-236 provenance, review-safety, latency, migration, privacy, client, and owner-vault canary gates without tuning on spent holdouts?
 
 ## Related Decisions
 
@@ -228,13 +299,16 @@ recall and cannot pass a validation gate.
 * `docs/research/agent-memory-field-review-and-strategy.md`
 * `docs/research/l2-scene-retrieval-2026-08.md`
 * `docs/research/source-experience-evaluation-plan.md`
+* `docs/research/experience-paired-action-result-2026-08-30.md`
+* `docs/research/source-sparse-development-result-2026-08-31.md`
+* `docs/superpowers/plans/2026-09-04-source-grounded-experience-production.md`
 * TASK-172, TASK-173, TASK-175, TASK-177, TASK-179, and TASK-211 through
-  TASK-222.
+  TASK-237.
 * Reflexion: https://arxiv.org/abs/2303.11366
 * ExpeL: https://arxiv.org/abs/2308.10144
 * ProjectMem: https://arxiv.org/abs/2606.12329
 * SWE-Exp: https://arxiv.org/abs/2507.23361
 * Memp: https://arxiv.org/abs/2508.06433
 * EverOS: https://github.com/EverMind-AI/EverOS/blob/main/docs/how-memory-works.md
+* Supamem: https://github.com/dzmitrys-dev/supamem/
 * Useful Memories Become Faulty: https://arxiv.org/abs/2605.12978
-

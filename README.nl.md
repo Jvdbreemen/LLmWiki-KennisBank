@@ -152,7 +152,7 @@ zodat een aanroeper die enkel vraagt "is er rot?" geen JSON hoeft te parsen.
 
 **Architectuurdocumentatie die benoemt wat ze aantrof.** Een volledige C4-set
 onder `docs/C4-Documentation/` — vier niveaus, een OpenAPI-specificatie voor de
-13 routes van de Atlas-sidecar, en een toolcontract voor de 8 MCP-tools. De
+13 routes van de Atlas-sidecar, en een toolcontract voor de 10 MCP-tools. De
 containers beschrijven wat er echt draait in plaats van een geïdealiseerde
 topologie, en de drift die de pass vond staat er als drift in: ADR-0001 nog
 Accepted op `qwen3-embedding:8b` terwijl het onderzoek `:4b` aanbeveelt,
@@ -725,6 +725,22 @@ melden had.
 - Hybride index (`kb-index.db`): semantische vectoren (sqlite-vec) gefuseerd met FTS5-trefwoordzoeken, zodat exacte termen worden gevonden zelfs wanneer embeddings ze missen.
 - Rangschikking: relevantie x recentheid (halveringstijd per geheugentype) x belang, plus een gebruiksboost voor documenten die recent nuttig bleken.
 - **Graaf-buur-uitbreiding**: de meest-gerefereerde wikilink-buur van je treffers lift mee als één extra vermelding, wat losse treffers omzet in een samenhangende kennisbuurt.
+- **Gated bron- en ervaringsrecall**: `build-source-index.py` bouwt
+  een provenance-first bronprojectie voor expliciete reconstructie/verificatie;
+  `source_recall` blijft buiten normale promptinjectie. `rebuild-experience.py`
+  bouwt `kb-experience-index.db` atomisch uit events, uitkomsten en reviews in
+  het append-only `kb-experience-ledger.db`; `--records-only` forceert de
+  lexical-only fallback. `experience_recall` geeft uitsluitend maximaal drie
+  gevalideerde, owner-accepted lessen terug. Automatische advisories bestaan
+  niet als productroute.
+- `kb-projection-doctor.py` rapporteert read-only freshness, provenance,
+  orphan-, redaction- en lifecycle-signalen. De twee projecties zijn lokaal,
+  opt-in, fail-open en atomisch herbouwbaar; zonder beoordeelde holdout en
+  downstream-verbetering blijft de evaluatie `hold`.
+  Gebruik `kb-projection-doctor.py --fast` voor een begrensde routinecheck:
+  schema's, flags, metadata en experience-counts worden gecontroleerd, terwijl
+  source-inventory, grote-index-integriteit en exacte SourceRef-freshness
+  eerlijk `not_checked` blijven. Draai de volledige variant buiten het hot path.
 
 ### Meting (de vertrouwenslaag)
 - `kb-eval.py`: recall@1/3/5 en MRR tegen je persoonlijke evalset van vragen. Draai het vóór en na elke retrieval-wijziging; een daling is een regressie, geen mening.
@@ -840,6 +856,10 @@ De hooks zijn fail-open van opzet: een fout betekent geen geïnjecteerde context
 | `/kennisbank:settings` | geen | Toont en schakelt de achtergrond-automatiek-toggles |
 | `/kennisbank:review` | optioneel onderwerp | Loop de unverified-memory-wachtrij door; de mens beslist approve/reject/skip per item |
 | `/kennisbank:rebuild-index` | geen | Herbouwt de hybride zoekindex uit de kluis-markdown |
+| `/kennisbank:rebuild-source-index` | geen | Herbouwt de opt-in provenance-first bronprojectie |
+| `/kennisbank:rebuild-experience` | `--records-only`; `--incremental` is deprecated | Herbouwt de disposable experience-projectie atomisch uit het append-only ledger |
+| `/kennisbank:source-recall` | expliciet/verify/reconstruct | Haalt bronpassages op met hash en offsets |
+| `/kennisbank:experience-recall` | expliciet | Haalt maximaal drie reviewed, source-grounded ervaringen op |
 | `/kennisbank:rebuild-memory` | geen | Her-extraheert ALLE geheugen uit gearchiveerde transcripts (zwaar; semantische dedup maakt het bijna-idempotent) |
 | `/kennisbank-upgrade` | optioneel `--dry-run` | Upgradet de gedeployde kluis naar de nieuwste release-tag |
 | `/kennisbank-contribute` | optioneel `--dry-run` | PR't lokale tooling-wijzigingen terug upstream |
@@ -875,13 +895,16 @@ Upgrade en contribute zijn twee helften van één lus: `contribute` stuurt je lo
   .claude/
     scripts/       Python + shell tooling (incl. doctor.sh)
     kb-index.db    Hybrid vector + FTS index (refreshed incrementally each session)
-    kb-usage.db    Usage telemetry (survives rebuilds and model switches)
+    kb-usage.db    Geaggregeerde gebruikstelemetrie
+    kb-source.db   Disposable lexical bronbewijsprojectie
+    kb-experience-ledger.db  Append-only events, uitkomsten en reviews
+    kb-experience-index.db   Disposable reviewed-experience-projectie
   graphify-out/    Knowledge graph output (optional)
 ```
 
 ## Achtergrond-automatiek-toggles
 
-Elf achtergrondgedragingen zijn individuele toggles in `kennisbank-settings.json`, beheerd met `/kennisbank:settings`:
+Vijftien gedragingen zijn individuele toggles in `kennisbank-settings.json`, beheerd met `/kennisbank:settings`:
 
 | Toggle | Standaard | Regelt |
 |--------|---------|----------|
@@ -891,6 +914,10 @@ Elf achtergrondgedragingen zijn individuele toggles in `kennisbank-settings.json
 | `daily_graphify` | aan | Werk de kennisgraaf eens per dag bij |
 | `memory_capture` | aan | Extraheer en beoordeel herinneringen naar `09-memory/` |
 | `memory_recall` | aan | Injecteer herinneringen in context via hooks |
+| `experience_capture` | uit | Leg typed experience-events en outcomes append-only vast zonder recall te activeren |
+| `experience_projection` | uit | Bouw de disposable reviewed-experience-projectie |
+| `experience_explicit_recall` | uit | Haal expliciet maximaal drie owner-accepted lessen op; nooit automatische advisories |
+| `source_explicit_recall` | uit | Haal bronbewijs alleen on demand op; nooit promptinjectie |
 | `usage_telemetry` | aan | Volg welke geïnjecteerde kennis wordt gebruikt |
 | `activity_llm_fallback` | uit | Lokale-LLM-terugval voor exotische datumformuleringen in temporele recall |
 | `checkpoints` | uit | Schrijf bij context-compaction (PreCompact) automatisch een werkstand-stub |
@@ -925,14 +952,15 @@ lokale LibreOffice-/ImageMagick-tooling vereisen, zoals LiteParse rapporteert.
 
 ## KennisBank gebruiken vanuit andere agents (Codex, OpenCode, Copilot, ChatGPT)
 
-De kluis is niet alleen voor Claude Code. `scripts/kb-mcp.py` is een lokale **MCP-server** die negen primitieven blootstelt: acht tools - `recall` (zoek geheugen + wiki), `capture` (sla een nieuwe herinnering op), `review_pending` en `review_decide` (de menselijke reviewwachtrij), en de temporele set `what_did_i_do`, `timeline`, `weeklog`, `topic_timeline` - plus een `instructions`-resource (een duwtje om te trekken vóór je extern zoekt). MCP is het ene protocol dat elke moderne agent al spreekt, dus elke client die **op deze machine** draait kan de kluis gebruiken.
+De kluis is niet alleen voor Claude Code. `scripts/kb-mcp.py` is een lokale **MCP-server** die elf primitieven blootstelt: tien tools - `recall` (zoek geheugen + wiki), `source_recall` en `experience_recall` (expliciete, gated diepe recall), `capture` (sla een nieuwe herinnering op), `review_pending` en `review_decide` (de menselijke reviewwachtrij), en de temporele set `what_did_i_do`, `timeline`, `weeklog`, `topic_timeline` - plus een `instructions`-resource (een duwtje om te trekken vóór je extern zoekt). MCP is het ene protocol dat elke moderne agent al spreekt, dus elke client die **op deze machine** draait kan de kluis gebruiken.
 
-Elke tool draagt MCP-annotaties, en dat is niet cosmetisch: een client leidt uit `readOnlyHint` af of een aanroep bevestiging nodig heeft en of hij parallel mag draaien, en zet beide op "nee" als de hint ontbreekt. De zes read-only retrieval-tools zijn als zodanig gemarkeerd; `capture` is een niet-destructieve schrijver, `review_decide` een destructieve. Het pull-duwtje reist via drie dragers, omdat geen enkele op zichzelf elke client bereikt: het `instructions`-veld van de protocol-handshake, de `kennisbank://instructions`-resource, en de managed block in `.github/copilot-instructions.md`.
+Elke tool draagt MCP-annotaties, en dat is niet cosmetisch: een client leidt uit `readOnlyHint` af of een aanroep bevestiging nodig heeft en of hij parallel mag draaien, en zet beide op "nee" als de hint ontbreekt. De acht read-only retrieval/temporal-tools zijn als zodanig gemarkeerd; `capture` is een niet-destructieve schrijver, `review_decide` een destructieve. Het pull-duwtje reist via drie dragers, omdat geen enkele op zichzelf elke client bereikt: het `instructions`-veld van de protocol-handshake, de `kennisbank://instructions`-resource, en de managed block in `.github/copilot-instructions.md`.
 
 **De harde grens: alleen lokaal.** De MCP-server bindt niets aan het netwerk
-(stdio-transport); de kluis verlaat nooit je machine. Claude Code, Codex,
-GitHub Copilot CLI, OpenCode en compatibele lokale stdio-clients bereiken hem
-direct. Agents die *in de cloud* draaien (gehoste ChatGPT) kunnen geen lokale
+(stdio-transport); de kluis verlaat nooit je machine. Setup koppelt Codex,
+GitHub Copilot CLI en OpenCode rechtstreeks; Claude Code gebruikt de equivalente
+namespaced commands en hooks omdat setup daar geen MCP registreert. Agents die
+*in de cloud* draaien (gehoste ChatGPT) kunnen geen lokale
 stdio-server bereiken, en het antwoord is **niet** om je soevereine kluis naar
 het internet te tunnelen - het is de handmatige brug hieronder.
 
@@ -941,7 +969,8 @@ het internet te tunnelen - het is de handmatige brug hieronder.
 `setup.sh --agents codex` installeert:
 
 - `~/.agents/skills/<commando>/SKILL.md`, inclusief `sessiestart`, `sessielog`,
-  temporele commando's en de handgeschreven KennisBank-skills
+  temporele commando's, `kennisbank-experience-recall`,
+  `kennisbank-source-recall` en de handgeschreven KennisBank-skills
 - `~/.codex/prompts/*.md`-aliassen, aangeroepen als `/prompts:sessielog`, `/prompts:sessiestart`, `/prompts:kennisbank-upgrade`, enz.
 - `~/.codex/AGENTS.md` met het actieve kluispad
 - `~/.codex/hooks.json` met één SessionStart- en één exit-coördinator plus
@@ -977,7 +1006,8 @@ KB_LLM_ENDPOINT = "http://localhost:11434"
 
 `setup.sh --agents opencode` installeert:
 
-- `~/.config/opencode/commands/*.md`, aangeroepen als `/sessielog`, `/sessiestart`, `/kennisbank-upgrade`, enz.
+- `~/.config/opencode/commands/*.md`, inclusief
+  `/kennisbank-experience-recall` en `/kennisbank-source-recall`
 - `~/.agents/skills/{autoresearch,kennisbank-upgrade,kennisbank-contribute}/`
 - `~/.config/opencode/AGENTS.md` met het actieve kluispad
 - `~/.config/opencode/opencode.json` MCP-server `kennisbank`
@@ -995,13 +1025,14 @@ KENNISBANK_VAULT="/absolute/path/to/vault" bash setup.sh --yes --agents copilot
 
 `setup.sh --agents copilot` installeert, idempotent en zonder login:
 
-- `~/.copilot/mcp-config.json` - MCP-server `kennisbank` (`recall`, `capture`, en de temporele tools), geregistreerd via een key-scoped JSON-merge en gevalideerd met een echte initialize/list-tools-handshake
+- `~/.copilot/mcp-config.json` - MCP-server `kennisbank` (gewone, bron-, experience-, capture-, review- en temporele tools), geregistreerd via een key-scoped JSON-merge en gevalideerd met een echte initialize/list-tools/call-smoke
 - `~/.copilot/hooks/kennisbank.json` - één cross-platform start- en
   exit-coördinator plus fail-open prompt/tool-capture-hooks
 - `~/.copilot/copilot-instructions.md` - een door KennisBank beheerd instructieblok
 - `~/.copilot/agents/kennisbank.agent.md` - een aangepast agent-profiel, geselecteerd met `copilot --agent kennisbank`
 - native slash-commandskills onder `~/.agents/skills/`, inclusief
-  `/sessiestart`, `/sessielog`, `/weeklog` en `/timeline`
+  `/sessiestart`, `/sessielog`, `/weeklog`, `/timeline`,
+  `/kennisbank-experience-recall` en `/kennisbank-source-recall`
 
 KennisBank coördineert startup achter één hook, omdat Copilot geen hookveld
 biedt om zijn eigen tijdlijnregels te verbergen. Eén generieke regel kan

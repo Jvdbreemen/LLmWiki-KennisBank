@@ -31,6 +31,22 @@ Architecturally this component sits between the transcript/session layer (upstre
 - **Diagnostics and repair**: `kb-state-audit.py` (read-only anomaly report: duplicates, orphans, config-like bodies stuck as free text) and `memory-doctor.py` (diagnose + repair) give operators visibility without requiring manual grep-through of `09-memory/`.
 - **Discard/audit logging**: every automated promotion or retraction is written to an append-only discard/audit log and is reversible via `_memory.reopen()` — automation never silently deletes a claim.
 
+### Outcome/experience projection
+
+The experience layer is a separate, optional projection rather than a second
+copy of raw memory. Typed append-only events, outcomes, and reviews in
+`kb-experience-ledger.db` are the retained source of truth;
+`_experience_extract.py` derives candidate or validated experiences
+only when source and outcome evidence resolve. `kb-experience-recall.py` exposes
+only explicitly requested, owner-accepted lessons with SourceRef ids and an
+honest hybrid or lexical-fallback label, while
+`rebuild-experience.py` can reconstruct disposable `kb-experience-index.db`
+after corruption or schema migration. Retraction and supersession close records
+but do not erase their ledger audit trail. Source deletion, redaction, and hash
+changes are surfaced as lifecycle warnings and cannot silently become fresh
+evidence. There is intentionally no automatic retention deletion in v1: remove
+or archive canonical evidence only through an explicit future owner policy.
+
 ## Code Elements
 
 From [c4-code-scripts.md](./c4-code-scripts.md) — the memory slice:
@@ -77,6 +93,7 @@ From [c4-code-commands-skills.md](./c4-code-commands-skills.md):
 - `/kennisbank:autoreview` — Trap 2 of the review pipeline: bundles quarantined cases, dispatches parallel subagent adjudication, applies verdicts via `kb-autoreview.py apply`, reindexes
 - `/kennisbank:review` — memory system health check: quarantine counts, index consistency, stale entries
 - `/kennisbank:rebuild-memory` — full re-extraction of memory from archived transcripts (heavy, confirmation-gated)
+- `/kennisbank:rebuild-experience` — atomically rebuild the disposable local projection from the append-only ledger, with lexical fallback and rollback-by-preservation
 
 ## Interfaces
 

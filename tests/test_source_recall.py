@@ -20,10 +20,6 @@ if str(SCRIPTS) not in sys.path:
 import _source_recall as sr  # noqa: E402
 
 
-def _vec(*values: float) -> list[float]:
-    return list(values)
-
-
 class SourceChunkContractTest(unittest.TestCase):
     def test_chunks_preserve_exact_offsets_and_overlap(self):
         text = "0123456789abcdefghijklmnopqrstuvwxyz"
@@ -44,55 +40,69 @@ class SourceIndexContractTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.db = Path(self.tmp.name) / "source.db"
+        self.vault = Path(self.tmp.name) / "vault"
+        self.db = self.vault / ".claude" / "source.db"
         self.conn = sr.connect(self.db)
         self.addCleanup(self.conn.close)
-        sr.ensure_schema(self.conn, dim=4, embed_id="fake:4")
+        sr.ensure_schema(self.conn)
+
+    def _write(self, relative: str, text: str) -> tuple[str, list[dict]]:
+        path = self.vault / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        return sr.sha256_file(path), sr.chunk_text(text, size=2000, overlap=200)
 
     def test_upsert_returns_exact_provenance_and_context(self):
         source = "01-raw/transcripts/session-a.md"
         text = "prefix evidence phrase suffix"
-        chunks = [{"index": 0, "start": 0, "end": len(text), "text": text}]
+        source_hash, chunks = self._write(source, text)
         sr.upsert_source(
             self.conn,
             source_path=source,
-            source_hash="sha256:a",
+            source_hash=source_hash,
             chunks=chunks,
-            vectors=[_vec(1, 0, 0, 0)],
             metadata={"session_id": "s-a", "project": "repo-a", "role": "assistant"},
         )
         hits = sr.source_hits(
-            self.conn, query_vector=_vec(1, 0, 0, 0), query_text="evidence phrase", k=3
+            self.conn, query_text="evidence phrase", k=3, source_root=self.vault
         )
         self.assertEqual(len(hits), 1)
         hit = hits[0]
         self.assertEqual(hit["source_path"], source)
-        self.assertEqual(hit["source_hash"], "sha256:a")
+        self.assertEqual(hit["source_hash"], source_hash)
         self.assertEqual(hit["start"], 0)
         self.assertEqual(hit["end"], len(text))
         self.assertEqual(hit["passage"], text)
         self.assertEqual(hit["session_id"], "s-a")
         self.assertEqual(hit["project"], "repo-a")
         self.assertEqual(hit["layer"], "source")
+        self.assertTrue(hit["fresh"])
+        self.assertEqual(hit["source_state"], "current")
+        self.assertEqual(hit["retrieval_route"], "lexical_fts")
+        self.assertTrue(hit["best_effort"])
+        self.assertRegex(hit["passage_sha256"], r"^sha256:[0-9a-f]{64}$")
+        self.assertRegex(hit["source_ref"]["source_ref_id"], r"^sr_[0-9a-f]{64}$")
 
     def test_source_filter_cannot_leak_a_different_document(self):
-        for idx, path in enumerate(("01-raw/a.md", "01-raw/b.md")):
+        for idx, path in enumerate(("01-raw/transcripts/a.md",
+                                    "01-raw/transcripts/b.md")):
+            source_hash, chunks = self._write(path, "evidence")
             sr.upsert_source(
                 self.conn,
                 source_path=path,
-                source_hash=f"h{idx}",
-                chunks=[{"index": 0, "start": 0, "end": 7, "text": "evidence"}],
-                vectors=[_vec(1, 0, 0, 0)],
+                source_hash=source_hash,
+                chunks=chunks,
                 metadata={},
             )
         hits = sr.source_hits(
             self.conn,
-            query_vector=_vec(1, 0, 0, 0),
             query_text="evidence",
             k=5,
-            source_path="01-raw/b.md",
+            source_path="01-raw/transcripts/b.md",
+            source_root=self.vault,
         )
-        self.assertEqual([h["source_path"] for h in hits], ["01-raw/b.md"])
+        self.assertEqual(
+            [h["source_path"] for h in hits], ["01-raw/transcripts/b.md"])
 
     def test_replacing_source_removes_stale_chunks(self):
         old = [
@@ -100,25 +110,45 @@ class SourceIndexContractTest(unittest.TestCase):
             {"index": 1, "start": 2, "end": 5, "text": "net"},
         ]
         sr.upsert_source(self.conn, source_path="a.md", source_hash="old",
-                         chunks=old, vectors=[_vec(1, 0, 0, 0)] * 2, metadata={})
+                         chunks=old, metadata={})
         new = [{"index": 0, "start": 0, "end": 3, "text": "new"}]
         sr.upsert_source(self.conn, source_path="a.md", source_hash="new",
-                         chunks=new, vectors=[_vec(0, 1, 0, 0)], metadata={})
+                         chunks=new, metadata={})
         rows = self.conn.execute(
             "SELECT source_hash, chunk_index FROM source_chunks WHERE source_path='a.md'"
         ).fetchall()
         self.assertEqual(rows, [("new", 0)])
 
-    def test_model_identity_mismatch_disables_hits(self):
+    def test_schema_contains_fts_but_no_vector_table(self):
+        tables = {row[0] for row in self.conn.execute(
+            "SELECT name FROM sqlite_master WHERE type IN ('table','view')")}
+        self.assertIn("source_fts", tables)
+        self.assertFalse(any("vec" in name.lower() for name in tables))
+
+    def test_unrelated_lexical_query_is_a_no_hit(self):
+        source_hash, chunks = self._write(
+            "01-raw/transcripts/timeout.md", "timeout")
         sr.upsert_source(
-            self.conn, source_path="a.md", source_hash="h",
-            chunks=[{"index": 0, "start": 0, "end": 1, "text": "x"}],
-            vectors=[_vec(1, 0, 0, 0)], metadata={})
+            self.conn, source_path="01-raw/transcripts/timeout.md",
+            source_hash=source_hash, chunks=chunks, metadata={})
         self.assertEqual(
-            sr.source_hits(self.conn, query_vector=_vec(1, 0, 0, 0),
-                           query_text="x", k=1, embed_id="other:model"),
-            [],
-        )
+            sr.source_hits(self.conn, query_text="unrelated phrase", k=3,
+                           source_root=self.vault), [])
+
+    def test_stale_source_is_labeled_and_never_returns_cached_passage(self):
+        relative = "01-raw/transcripts/stale.md"
+        source_hash, chunks = self._write(relative, "exact old evidence")
+        sr.upsert_source(self.conn, source_path=relative,
+                         source_hash=source_hash, chunks=chunks, metadata={})
+        (self.vault / relative).write_text("changed evidence", encoding="utf-8")
+
+        hit = sr.source_hits(
+            self.conn, query_text="exact old", k=1,
+            source_root=self.vault)[0]
+
+        self.assertFalse(hit["fresh"])
+        self.assertEqual(hit["source_state"], "stale")
+        self.assertEqual(hit["passage"], "")
 
 
 class SourceRouteContractTest(unittest.TestCase):
@@ -126,10 +156,9 @@ class SourceRouteContractTest(unittest.TestCase):
         for mode in ("explicit", "verify", "reconstruct"):
             self.assertTrue(sr.should_route(mode, primary_hits=[]))
 
-    def test_fallback_requires_an_insufficient_primary_result(self):
-        self.assertTrue(sr.should_route("fallback", primary_hits=[]))
-        self.assertTrue(sr.should_route("fallback", primary_hits=[{"cos": 0.2}], floor=0.5))
-        self.assertFalse(sr.should_route("fallback", primary_hits=[{"cos": 0.8}], floor=0.5))
+    def test_fallback_never_routes(self):
+        self.assertFalse(sr.should_route("fallback", primary_hits=[]))
+        self.assertFalse(sr.should_route("fallback", primary_hits=[{"score": 0.2}]))
 
     def test_normal_mode_never_routes(self):
         self.assertFalse(sr.should_route("normal", primary_hits=[]))
@@ -145,4 +174,3 @@ class ContractFixtureTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

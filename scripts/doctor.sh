@@ -176,16 +176,17 @@ else
 fi
 
 # 7. Slash commands installed.
-COMMAND_FILES="sessielog wiki intake stale sessiestart import reconcile uitdaag brug weeklog timeline watdeedik"
+COMMAND_FILES="sessielog wiki intake stale sessiestart import reconcile uitdaag brug weeklog timeline watdeedik kennisbank/rebuild-source-index kennisbank/rebuild-experience kennisbank/source-recall kennisbank/experience-recall"
 if [ ! -d "$COMMANDS_DIR" ]; then
   report_warn "commands dir" "$COMMANDS_DIR not found (user may have opted out)"
 else
   for cmd in $COMMAND_FILES; do
     cmd_path="$COMMANDS_DIR/$cmd.md"
+    cmd_label="${cmd//\//:}"
     if [ -f "$cmd_path" ]; then
-      report_pass "command /$cmd" "$cmd_path"
+      report_pass "command /$cmd_label" "$cmd_path"
     else
-      report_warn "command /$cmd" "missing $cmd_path"
+      report_warn "command /$cmd_label" "missing $cmd_path"
     fi
   done
 fi
@@ -733,6 +734,25 @@ except Exception:
       fi
       ;;
   esac
+fi
+
+# 13e. Canonical source and split experience health, bounded for routine setup.
+# Deep source inventory and exact-ref checks remain an explicit operator action.
+if command -v python3 >/dev/null 2>&1; then
+  if PROJECTION_HEALTH="$(python3 "$SCRIPTS_DIR/kb-projection-doctor.py" --vault "$VAULT" --fast --shell-summary 2>/dev/null)" && [ -n "$PROJECTION_HEALTH" ]; then
+    while IFS='|' read -r severity label detail; do
+      case "$severity" in
+        pass) report_pass "$label" "$detail" ;;
+        info) report_info "$label" "$detail" ;;
+        warn) report_warn "$label" "$detail" ;;
+        *) report_warn "projection health" "unexpected summary; run kb-projection-doctor.py manually" ;;
+      esac
+    done <<HEALTHEOF
+$PROJECTION_HEALTH
+HEALTHEOF
+  else
+    report_warn "projection health" "bounded health report unavailable; run kb-projection-doctor.py --fast manually"
+  fi
 fi
 
 # Footer.

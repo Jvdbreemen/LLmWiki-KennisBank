@@ -30,6 +30,7 @@ autonome down-weight; de ranking-penalty is deterministisch en begrensd
 from __future__ import annotations
 
 import os
+import re
 import sqlite3
 import sys
 from contextlib import closing
@@ -58,6 +59,43 @@ CREATE TABLE IF NOT EXISTS pending (
 CREATE TABLE IF NOT EXISTS neighbor_log (
     day TEXT PRIMARY KEY,
     n INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS exposures (
+    exposure_id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    task_id TEXT NOT NULL DEFAULT '',
+    item_id TEXT NOT NULL,
+    layer TEXT NOT NULL,
+    rank INTEGER,
+    query TEXT NOT NULL DEFAULT '',
+    ts TEXT NOT NULL,
+    source_id TEXT NOT NULL DEFAULT '',
+    retrieval_kind TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_exposures_session_task
+    ON exposures(session_id, task_id, ts);
+CREATE TABLE IF NOT EXISTS use_events (
+    use_id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    task_id TEXT NOT NULL DEFAULT '',
+    item_id TEXT NOT NULL,
+    layer TEXT NOT NULL,
+    ts TEXT NOT NULL,
+    evidence_kind TEXT NOT NULL,
+    evidence_ref TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_use_events_session_task
+    ON use_events(session_id, task_id, ts);
+CREATE TABLE IF NOT EXISTS projection_metrics (
+    day TEXT NOT NULL,
+    layer TEXT NOT NULL,
+    route TEXT NOT NULL,
+    status TEXT NOT NULL,
+    calls INTEGER NOT NULL DEFAULT 0,
+    hits INTEGER NOT NULL DEFAULT 0,
+    latency_ms_total REAL NOT NULL DEFAULT 0,
+    latency_ms_max REAL NOT NULL DEFAULT 0,
+    PRIMARY KEY (day, layer, route, status)
 );
 """
 
@@ -138,6 +176,185 @@ def log_injected(stems, session_id: str = "", today: str | None = None,
         return len(stems)
     except Exception:
         return 0
+
+
+def log_exposures(items, *, session_id: str = "", task_id: str = "",
+                  query: str = "", ts: str = "", source_id: str = "",
+                  retrieval_kind: str = "") -> int:
+    """Persist ranked layer exposures; unlike pending, this survives cleanup."""
+    if not items or not session_id or not enabled():
+        return 0
+    import hashlib
+    ts = ts or date.today().isoformat()
+    try:
+        with closing(_connect()) as conn, conn:
+            count = 0
+            for item in items:
+                item_id = str(item.get("item_id") or item.get("id") or "")
+                layer = str(item.get("layer") or "")
+                if not item_id or not layer:
+                    continue
+                rank = item.get("rank")
+                sid = str(item.get("source_id") or source_id or "")
+                item_query = str(item.get("query") or query or "")
+                item_ts = str(item.get("ts") or ts)
+                key = "|".join((session_id, task_id, item_id, layer,
+                                str(rank if rank is not None else ""), item_query, item_ts))
+                exposure_id = hashlib.sha256(key.encode("utf-8")).hexdigest()
+                conn.execute(
+                    "INSERT OR IGNORE INTO exposures(exposure_id, session_id, task_id, "
+                    "item_id, layer, rank, query, ts, source_id, retrieval_kind) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (exposure_id, session_id, task_id, item_id, layer, rank,
+                     item_query, item_ts, sid,
+                     str(item.get("retrieval_kind") or retrieval_kind or "")))
+                count += 1
+        return count
+    except Exception:
+        return 0
+
+
+def log_projection_metric(*, layer: str, route: str, status: str, hits: int,
+                          latency_ms: float, today: str = "") -> bool:
+    """Store aggregate deeper-recall health without accepting content fields."""
+    if not enabled():
+        return False
+    import _projection_metrics
+    metric = _projection_metrics.sanitize_metric({
+        "route": route, "status": status, "latency_ms": latency_ms,
+        "count": hits,
+    })
+    safe_layer = str(layer).lower() if str(layer).lower() in {
+        "source", "experience"} else "other"
+    safe_route = str(metric.get("route") or "").lower() if str(
+        metric.get("route") or "").lower() in {
+        "exact_ref", "lexical_fts", "hybrid", "lexical_fallback"} else "other"
+    safe_status = str(metric.get("status") or "").lower() if str(
+        metric.get("status") or "").lower() in {
+        "ok", "no_hit", "evidence_unavailable", "invalid", "unavailable",
+        "disabled", "policy_disabled", "not_routed",
+    } else "other"
+    day = str(today or date.today().isoformat())[:10]
+    hit_count = min(max(int(metric.get("count", 0)), 0), 100)
+    latency = min(max(float(metric.get("latency_ms", 0.0)), 0.0), 600000.0)
+    try:
+        with closing(_connect()) as conn, conn:
+            conn.execute(
+                "INSERT INTO projection_metrics(day, layer, route, status, calls, "
+                "hits, latency_ms_total, latency_ms_max) VALUES (?,?,?,?,1,?,?,?) "
+                "ON CONFLICT(day, layer, route, status) DO UPDATE SET "
+                "calls=calls+1, hits=hits+excluded.hits, "
+                "latency_ms_total=latency_ms_total+excluded.latency_ms_total, "
+                "latency_ms_max=max(latency_ms_max, excluded.latency_ms_max)",
+                (day, safe_layer, safe_route, safe_status, hit_count, latency, latency))
+        return True
+    except Exception:
+        return False
+
+
+def log_use_evidence(items, *, session_id: str = "", task_id: str = "",
+                     ts: str = "", evidence_kind: str = "tool_use",
+                     evidence_ref: str = "") -> int:
+    """Persist session-bound read/use evidence separately from exposure."""
+    if not items or not session_id or not enabled():
+        return 0
+    import hashlib
+    ts = ts or date.today().isoformat()
+    try:
+        with closing(_connect()) as conn, conn:
+            count = 0
+            for item in items:
+                item_id = str(item.get("item_id") or item.get("id") or "")
+                layer = str(item.get("layer") or "")
+                if not item_id or not layer:
+                    continue
+                item_task = str(item.get("task_id") or task_id or "")
+                item_ts = str(item.get("ts") or ts)
+                kind = str(item.get("evidence_kind") or evidence_kind or "tool_use")
+                reference = str(item.get("evidence_ref") or evidence_ref or "")
+                key = "|".join((session_id, item_task, item_id, layer,
+                                item_ts, kind, reference))
+                use_id = hashlib.sha256(key.encode("utf-8")).hexdigest()
+                conn.execute(
+                    "INSERT OR IGNORE INTO use_events(use_id, session_id, task_id, "
+                    "item_id, layer, ts, evidence_kind, evidence_ref) "
+                    "VALUES (?,?,?,?,?,?,?,?)",
+                    (use_id, session_id, item_task, item_id, layer, item_ts,
+                     kind, reference))
+                count += 1
+        return count
+    except Exception:
+        return 0
+
+
+def use_evidence_for(session_id: str, *, task_id: str | None = None) -> list[dict]:
+    """Return session-bound use evidence; fail-open for old usage databases."""
+    if not session_id or not enabled():
+        return []
+    try:
+        with closing(_connect()) as conn:
+            columns = ("use_id, session_id, task_id, item_id, layer, ts, "
+                       "evidence_kind, evidence_ref")
+            if task_id is None:
+                rows = conn.execute(
+                    f"SELECT {columns} FROM use_events WHERE session_id=? "
+                    "ORDER BY ts, use_id", (session_id,)).fetchall()
+            else:
+                rows = conn.execute(
+                    f"SELECT {columns} FROM use_events WHERE session_id=? AND task_id=? "
+                    "ORDER BY ts, use_id", (session_id, task_id)).fetchall()
+        keys = ("use_id", "session_id", "task_id", "item_id", "layer", "ts",
+                "evidence_kind", "evidence_ref")
+        return [dict(zip(keys, row)) for row in rows]
+    except Exception:
+        return []
+
+
+def exposures_for(session_id: str, *, task_id: str | None = None) -> list[dict]:
+    if not session_id or not enabled():
+        return []
+    try:
+        with closing(_connect()) as conn:
+            if task_id is None:
+                rows = conn.execute(
+                    "SELECT exposure_id, session_id, task_id, item_id, layer, rank, "
+                    "query, ts, source_id, retrieval_kind FROM exposures "
+                    "WHERE session_id=? ORDER BY ts, rank, exposure_id", (session_id,)).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT exposure_id, session_id, task_id, item_id, layer, rank, "
+                    "query, ts, source_id, retrieval_kind FROM exposures "
+                    "WHERE session_id=? AND task_id=? ORDER BY ts, rank, exposure_id",
+                    (session_id, task_id)).fetchall()
+        keys = ("exposure_id", "session_id", "task_id", "item_id", "layer", "rank",
+                "query", "ts", "source_id", "retrieval_kind")
+        return [dict(zip(keys, row)) for row in rows]
+    except Exception:
+        return []
+
+
+def exposures_from_context(context: str, *, query: str = "") -> list[dict]:
+    """Normalize injected wiki/memory bullets into exposure records."""
+    layer = ""
+    ranks = {"wiki": 0, "memory": 0, "source": 0, "experience": 0}
+    items = []
+    for line in str(context or "").splitlines():
+        lower = line.lower()
+        if "wiki" in lower and line.rstrip().endswith(":"):
+            layer = "wiki"
+        elif ("geheugen" in lower or "memory" in lower) and line.rstrip().endswith(":"):
+            layer = "memory"
+        elif "source" in lower and line.rstrip().endswith(":"):
+            layer = "source"
+        elif "experience" in lower and line.rstrip().endswith(":"):
+            layer = "experience"
+        match = re.search(r"\[\[([^\[\]|#]+)", line)
+        if not match or not layer:
+            continue
+        ranks[layer] += 1
+        items.append({"item_id": match.group(1), "layer": layer,
+                      "rank": ranks[layer], "query": query})
+    return items
 
 
 def neighbor_injected(days: int = 30) -> int:

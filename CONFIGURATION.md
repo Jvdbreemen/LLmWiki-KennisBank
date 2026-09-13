@@ -576,6 +576,50 @@ The five env vars below control the behavior of the vault-onderhoud scripts
 
 ---
 
+## 4c. Gated source and experience projections
+
+These layers are local and disabled by default until their paired holdout gates
+pass. `experience_capture` controls append-only ledger capture,
+`experience_projection` controls derived index construction,
+`experience_explicit_recall` exposes reviewed prior lessons only on an explicit
+request, and `source_explicit_recall` exposes source reconstruction or
+verification only on demand. No flag adds automatic advisories or changes
+normal prompt injection. Legacy `source_recall` and `experience_recall` keys
+grant no capability.
+
+The source projection is rebuilt from approved `01-raw`, `05-bronnen`, and
+`08-archive` files. It stores chunks, hashes, offsets, and an allowlisted set of
+scalar metadata, not arbitrary frontmatter or a replacement for the raw files.
+The experience projection is rebuilt from canonical events, outcomes, and
+reviews in `kb-experience-ledger.db` into disposable
+`kb-experience-index.db`;
+candidate, unknown, retracted, superseded, stale, and redaction-affected
+records remain labelled and are not silently promoted.
+
+Use `rebuild-source-index.py --progress`, `rebuild-experience.py --progress`,
+and `kb-projection-doctor.py` off the hot path. Builders use staging and an
+atomic replacement, so an embedding, read, or schema failure preserves the
+previous derived database. The doctor is read-only. Raw source deletion or
+redaction therefore produces a stale/orphan/lifecycle signal and requires an
+operator decision; it does not erase audit history automatically.
+
+For routine monitoring, `kb-projection-doctor.py --fast` avoids raw-file and
+multi-gigabyte source-index scans. Its source inventory, source integrity, and
+exact SourceRef fields are deliberately `not_checked`/null, not zero. Use the
+unflagged doctor for exact freshness and `--deep` for the full SQLite integrity
+check; both belong off the interactive path on a large vault.
+
+All four supported client integrations (Claude Code, Codex, OpenCode, and
+Copilot) receive the same configured `KENNISBANK_VAULT` boundary and local
+MCP/command paths where supported. The retrieval layers do not create a cloud
+fallback. Cloud LLM or embedding endpoints remain separate explicit settings
+and are not permitted by these rebuild commands unless the operator changes
+the endpoint policy.
+
+The release gate is `kb-layer-eval.py`: source and experience decisions are
+independent, six-arm coverage is explicit, downstream correctness deltas and
+latency are required, and missing reviewed holdouts produce `hold`, not `go`.
+
 ## 5. autoresearch skill
 
 ### Output path
@@ -774,6 +818,10 @@ De achtergrond-automatieken zijn individueel aan/uit te zetten via
 | `daily_graphify` | aan | 1x/dag automatisch `/graphify --update` (kost-gated op 20u) | alleen `.needs-rebuild` bijhouden; graph handmatig |
 | `memory_capture` | aan | extractie + judge van memories naar `09-memory/` + onderhoud | geen automatische memory-extractie; `/wiki` blijft werken |
 | `memory_recall` | aan | injecteer relevante memories in de context via hook + lokale MCP | geen memory-injectie; context bevat alleen wiki-retrieval |
+| `experience_capture` | uit | leg typed events en outcomes append-only vast | geen nieuwe experience-events |
+| `experience_projection` | uit | bouw de afgeleide reviewed-experience-index | ledger blijft intact; geen projectiebouw |
+| `experience_explicit_recall` | uit | geef maximaal drie gevalideerde lessen na een expliciete vraag | geen experience-route; nooit automatische advisories |
+| `source_explicit_recall` | uit | zoek of hydrateer bronbewijs expliciet en on demand | geen bronroute of promptinjectie |
 | `usage_telemetry` | aan | registreer geinjecteerde + gebruikte kennis in `kb-usage.db` (ranking-boost, stale-warm-skip) | geen gebruiksmeting; ranking en stale-check vallen terug op leeftijd |
 | `activity_llm_fallback` | uit | laag 3 van de temporele parser: lokale LLM duidt exotische datums/periodes (zie 4b) | alleen de deterministische lagen 1-2 |
 | `checkpoints` | uit | Claude PreCompact schrijft automatisch een werkstand-stub; volgende sessiestart meldt hem (`/checkpoint load`) | alleen handmatige checkpoints via `/checkpoint` |
@@ -800,7 +848,7 @@ compatibele lokale MCP-clients via **stdio** — lokaal, geen netwerk.
 Voor Codex/OpenCode is dit geen losse handmatige stap meer: `setup.sh --agents
 codex` of `setup.sh --agents opencode` installeert `mcp==1.28.1` in dezelfde
 Python-interpreter als de gegenereerde MCP-config en valideert daarna een echte
-MCP initialize/list-tools handshake. `doctor.sh` faalt voortaan als Codex of
+MCP initialize/list-tools/call smoke. `doctor.sh` faalt voortaan als Codex of
 OpenCode KennisBank MCP geconfigureerd heeft maar de Python MCP runtime mist.
 
 Handmatige MCP-registratie vereist nog steeds dat je dezelfde interpreter
@@ -922,7 +970,7 @@ the interpreter convention: `py -3` on Windows, `python3` on POSIX.
 ```
 
 Registration is a login-free key-scoped JSON merge (not `copilot mcp add`),
-validated with the same real initialize/list-tools handshake used for
+validated with the same real initialize/list-tools/call smoke used for
 Codex/OpenCode. `copilot mcp list` then shows the server. The Copilot-only
 `KENNISBANK_MCP_COMPACT_OUTPUT=1` setting keeps MCP responses brief: temporal
 tools return up to three summarized events, and recall limits its result count

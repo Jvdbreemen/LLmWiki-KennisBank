@@ -102,6 +102,22 @@ class TestUsageScan(UsageCase):
         # artikel-b stond alleen in het user-bericht (de injectie) -> niet gebruikt
         self.assertEqual(self.u.last_used_of("artikel-b"), "")
 
+    def test_scan_persists_session_bound_use_evidence(self):
+        self.u.log_exposures(
+            [{"item_id": "artikel-a", "layer": "memory", "rank": 1}],
+            session_id="s1", task_id="t1", query="vraag", ts="2026-08-26T10:00:00Z")
+        self.u.log_injected(["artikel-a"], session_id="s1")
+        t = self._transcript([{
+            "type": "assistant", "message": {"content": [
+                {"type": "tool_use", "input": {"file_path": "02-wiki/artikel-a.md"}}
+            ]}
+        }])
+        self.assertEqual(self.scan_mod.scan("s1", t, task_id="t1"), 1)
+        uses = self.u.use_evidence_for("s1", task_id="t1")
+        self.assertEqual([(row["item_id"], row["layer"]) for row in uses],
+                         [("artikel-a", "memory")])
+        self.assertEqual(uses[0]["evidence_kind"], "tool_use")
+
     def test_prose_only_mention_does_not_count_as_use(self):
         self.u.log_injected(["artikel-a"], session_id="s1")
         t = self._transcript([

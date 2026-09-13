@@ -530,7 +530,7 @@ This machine uses a non-default KennisBank vault:
 Operational rules for GitHub Copilot CLI:
 - Always set or preserve `KENNISBANK_VAULT={vault_s}` for KennisBank scripts, skills and the MCP server.
 - Do not use `~/KennisBank` as the active vault on this machine unless the user explicitly changes it.
-- Prefer the local KennisBank MCP server (`recall`, `capture`) before external search when a task may depend on prior local knowledge. For temporal questions use `what_did_i_do`, `timeline`, `weeklog` or `topic_timeline` first.
+- Prefer the local KennisBank MCP server before external search when a task may depend on prior local knowledge. For an explicit question about what worked before, use `experience_recall` first; use `source_recall` only on demand for underlying evidence, reconstruction, or verification. Neither deeper route is an automatic advisory. For temporal questions use `what_did_i_do`, `timeline`, `weeklog` or `topic_timeline` first.
 - KennisBank MCP tools already return compact summaries. Use a short query and request only the details needed; summarize the result instead of reproducing tool output.
 - KennisBank uses one fail-open start and one exit coordinator. Copilot may render one row per lifecycle event; routine details stay silent and actionable startup results are consolidated.
 - Use `/sessiestart` for explicit startup maintenance and `/sessielog` for session capture.
@@ -559,6 +559,8 @@ Vault: `{vault_s}` (always pinned via `KENNISBANK_VAULT`).
 
 Use the local KennisBank MCP server before external search:
 - `recall(query, k)` for wiki/memory retrieval.
+- `experience_recall(query, mode, k)` first for an explicit prior-lesson question.
+- `source_recall(query, mode, k, source_ref)` only on demand for deeper evidence or exact reconstruction; never as an automatic advisory.
 - `capture(title, body, memory_type, importance)` for unverified memory.
 - `what_did_i_do`, `timeline`, `weeklog`, `topic_timeline` for temporal recall.
 - KennisBank MCP responses are compact by design. Use a narrow query and report

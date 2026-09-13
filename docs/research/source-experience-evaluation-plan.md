@@ -12,6 +12,20 @@ knowledge?
 
 The two hypotheses are independent. One layer may pass while the other fails.
 
+### Scope clarification: source evidence is not memory content
+
+Memories are derived summaries and may carry provenance pointers such as a
+session id or chunk stamp, but they are not required to contain the raw source
+body. Source recall is therefore an independent, opt-in evidence projection.
+It is routed only for explicit source requests, verification, reconstruction,
+or an explicitly configured weak-result fallback. Its value claim is whether
+it can recover and ground evidence from approved raw sources on demand; it is
+not whether every existing memory can be backfilled with a passage.
+
+This keeps the two questions separate: experience memory captures validated
+outcomes and lessons, while source recall supplies deeper underlying evidence
+when the user asks for substantiation.
+
 ## Test-first rule
 
 Contract tests, fixtures, arm definitions, minimum sample sizes, and winner
@@ -42,18 +56,20 @@ and fail-open behaviour. They are not evidence of product value.
 
 ### Frozen source holdout
 
-At least 30 query/source pairs from approved live-vault raw sources, with at
-least five no-hit queries, five historical/supersession queries, and five
-queries whose expected evidence crosses a chunk boundary. Expected source ids
-and evidence spans are frozen before the source index is built for the run.
+At least 60 query/source pairs from approved live-vault raw sources: 50
+positive queries and 10 no-hit queries. The positive set must span at least 20
+source documents and include historical/supersession queries, paraphrases,
+late-transcript queries, and queries whose expected evidence crosses a chunk
+boundary. Expected source ids and evidence spans are frozen before the source
+index is built for the run.
 
 ### Frozen experience holdout
 
-At least 20 labelled task/work-unit experiences, including at least five
-validated failures, five validated successes, five unknown/candidate cases,
-and five unrelated warning probes. Each validated item has independent local
-evidence such as a test result, commit/diff, explicit user feedback, or later
-reversal. The query author must not see retrieval output before labels freeze.
+At least 60 labelled task/work-unit experiences: 20 validated failures, 20
+validated successes, 10 conflict/stale or mixed cases, and 10 unknown or
+unrelated warning probes. Each validated item has independent local evidence
+such as a test result, commit/diff, explicit user feedback, or later reversal.
+The query author must not see retrieval output before labels freeze.
 
 ## Arms
 
@@ -76,15 +92,18 @@ derived index size.
 
 Source recall passes only if all hold:
 
-1. at least 30 labelled positive queries and five labelled no-hit queries;
+1. at least 50 labelled positive queries and 10 labelled no-hit queries;
 2. hybrid source hit@5 is at least 0.70;
 3. hybrid source hit@5 improves lexical-only by at least 0.10 absolute, or the
    lexical baseline already reaches 0.85 and hybrid does not regress it;
 4. exact provenance precision is 1.00 for every reported hit;
-5. no-hit precision is at least 0.80;
+5. no-hit specificity is at least 0.95;
 6. normal-path p50 and p95 change by less than 5 ms while the route is off;
 7. explicit warm source query p95 is below 2 seconds locally;
-8. rebuild failure leaves the prior known-good index queryable.
+8. rebuild failure leaves the prior known-good index queryable;
+9. on a paired answer benchmark, the source arm improves answer correctness
+   by at least 10 percentage points over the strongest non-source baseline,
+   with a reported paired confidence interval.
 
 If hybrid does not beat a strong lexical baseline, the vector arm is rejected
 and source recall may ship lexical-only or remain a verification tool.
@@ -97,15 +116,19 @@ unknown calibration, p50/p95 latency, and coverage.
 
 Experience recall passes the retrieval/usefulness gate only if all hold:
 
-1. at least 20 labelled experiences with the category minima above;
+1. at least 60 labelled experiences with the category minima above;
 2. validated experience hit@3 is at least 0.70;
 3. hybrid hit@3 improves lexical-only by at least 0.10 absolute, or lexical
    already reaches 0.85 and hybrid does not regress it;
 4. validated failure hit@3 is at least 0.70;
 5. evidence-link precision is 1.00;
 6. candidate/unknown-as-validated leakage is zero;
-7. false-warning rate is at most 0.10;
-8. normal-path latency remains within the same 5 ms off-route bound.
+7. false-warning rate is at most 0.10 and advisory precision is at least
+   0.90;
+8. normal-path latency remains within the same 5 ms off-route bound;
+9. on a paired action benchmark, the experience arm improves correct action
+   selection by at least 10 percentage points over the strongest baseline,
+   with a reported paired confidence interval.
 
 Passing these gates proves retrieval of evidence-bound experience, not improved
 future task completion. Claims about fewer repeated failures or better task
@@ -150,4 +173,3 @@ arm configuration, all metrics, paired deltas, latency distributions, failures,
 and a separate go/hold/reject verdict for source and experience recall. The
 packet also states which claims remain untested. ADR-010 cannot be accepted
 without this packet and explicit owner confirmation.
-

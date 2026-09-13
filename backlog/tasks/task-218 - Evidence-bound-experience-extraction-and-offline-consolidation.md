@@ -1,10 +1,10 @@
 ---
 id: TASK-218
 title: Extract and consolidate experience records with evidence-bound gates
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-25 00:00'
-updated_date: '2026-08-25 00:00'
+updated_date: '2026-08-29 00:00'
 labels:
   - experience-memory
   - extraction
@@ -40,13 +40,28 @@ The original episodes remain available for source recall.
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The extractor produces schema-valid candidate experiences with source and outcome references
-- [ ] #2 TASK-172 reports the observed survival rate of dead ends and records the decision to preserve, change, or reject the extraction prompt
-- [ ] #3 Success, failure, mixed, and unknown episodes are all represented; failure is not discarded as irrelevant intermediate work
-- [ ] #4 No experience can become validated without sufficient source/evidence links and an explicit confidence/uncertainty state
-- [ ] #5 Consolidation is offline, bounded, versioned, idempotent, and reversible
-- [ ] #6 Contradictory experiences remain distinguishable by scope/time rather than being silently averaged
-- [ ] #7 Model timeout, missing source, malformed output, and partial extraction fail open without losing the raw event
-- [ ] #8 Fixture tests cover unsupported lessons, duplicate experiences, repeated failures, and valid multi-level lessons
+- [x] #1 The extractor produces schema-valid candidate experiences with source and outcome references
+- [x] #2 TASK-172 reports the observed survival rate of dead ends and records the decision to preserve, change, or reject the extraction prompt
+- [x] #3 Success, failure, mixed, and unknown episodes are all represented; failure is not discarded as irrelevant intermediate work
+- [x] #4 No experience can become validated without sufficient source/evidence links and an explicit confidence/uncertainty state
+- [x] #5 Consolidation is offline, bounded, versioned, idempotent, and reversible
+- [x] #6 Contradictory experiences remain distinguishable by scope/time rather than being silently averaged
+- [x] #7 Model timeout, missing source, malformed output, and partial extraction fail open without losing the raw event
+- [x] #8 Fixture tests cover unsupported lessons, duplicate experiences, repeated failures, and valid multi-level lessons
 <!-- AC:END -->
 
+## Evidence
+
+- `scripts/_experience_extract.py` retains failure and partial outcomes,
+  keeps missing/unsupported evidence as candidates, and turns contradictory
+  success/failure evidence into an unvalidated mixed record.
+- Bounded consolidation produces deterministic, reversible proposals and does
+  not mutate source records or the event log.
+- Focused evidence: 6 extractor tests pass, including dead-end survival
+  measurement and idempotent consolidation; broader experience regression is
+  24 tests green.
+- The private reviewed projection contains 22 failure-labelled episodes. All
+  22 retained an evidence-bound lesson: survival 1.00, lost 0, decision
+  `preserve`. This proves lossless projection of the reviewed records, not
+  independent LLM extraction quality. Consolidation proposed zero shared
+  lessons, remained reversible, and performed no mutation.

@@ -197,7 +197,29 @@ def select_passage(claim: str, chunks: list) -> str:
     return "\n[…]\n".join(w for _i, _j, w in kept)
 
 
-def verify_grounded(body: str, chunks: list, stamp: str = "") -> dict:
+def source_recall_passage(claim: str) -> dict:
+    """Optional lexical source-index adapter for explicit verification only."""
+    try:
+        import _settings
+        if not _settings.get("source_explicit_recall", False):
+            return {}
+        import _source_recall
+        db = vault_root() / ".claude" / "kb-source.db"
+        if not db.is_file():
+            return {}
+        conn = _source_recall.connect(db)
+        try:
+            hits = _source_recall.source_hits(
+                conn, query_text=claim, k=1, source_root=vault_root())
+        finally:
+            conn.close()
+        return hits[0] if hits else {}
+    except Exception:
+        return {}
+
+
+def verify_grounded(body: str, chunks: list, stamp: str = "", *,
+                    source_recall_fn=None) -> dict:
     """One grounded verdict for a memory body against its transcript chunks.
 
     Returns {"verdict", "reason", "route"}; verdict is one of VERDICTS,
@@ -209,6 +231,17 @@ def verify_grounded(body: str, chunks: list, stamp: str = "") -> dict:
         passage, route = exact[:PASSAGE_BUDGET], "stamp"
     else:
         passage, route = select_passage(body, chunks), "windows"
+    # Routine verification must remain limited to the supplied transcript.
+    # Enabling an explicit read capability does not authorize automatic source
+    # fallback. Only a caller that deliberately supplies a callback may use it.
+    if not passage and source_recall_fn is not None:
+        try:
+            source_hit = source_recall_fn(body) or {}
+            passage = str(source_hit.get("passage") or "")[:PASSAGE_BUDGET]
+            if passage:
+                route = "source-recall"
+        except Exception:
+            pass
     if not passage:
         return {"verdict": "no_transcript", "reason": "", "route": route}
     import _llm

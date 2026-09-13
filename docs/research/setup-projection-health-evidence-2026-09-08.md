@@ -1,0 +1,103 @@
+# Bounded canonical setup health — 2026-09-08
+
+Scope: TASK-241. The supported live deployment entrypoint remains `setup.sh`.
+No raw sources, memories, canonical ledger rows, or live client settings were
+changed by these tests or the read-only owner-vault check.
+
+## Reproduction before implementation
+
+The shell doctor's projection section read the retired `source_recall` and
+`experience_recall` flags, inspected the retired mixed-store schema, and then
+called `kb-projection-doctor.py` without `--fast`. Its parser also expected
+experience fields at the top level instead of separate `ledger` and
+`projection` records. A successful CLI unit test therefore did not prove the
+actual setup boundary was correct or bounded.
+
+Five test-first checks produced **4 failed, 1 passed in 2.54 seconds**. The
+actual shell section, extracted from `doctor.sh` and executed by Git Bash
+against a temporary vault, failed a stub requiring bounded summary arguments.
+The failing-command warning control already passed. Three tests also recorded
+the absent canonical summary formatter.
+
+## Repair and verification
+
+The shell now makes one `--vault ... --fast --shell-summary` call. The canonical
+doctor formats content-free route and health rows, separating the append-only
+ledger from the derived experience projection. It reports disabled routes as
+information, unreadable stores and forbidden flags as warnings, and does not
+print exception details or source text. Shell mode always selects fast checks,
+even when `--deep` is also supplied. Ordinary JSON/deep operator mode is retained.
+
+Source schema presence is **not** a successful integrity/provenance check.
+Routine output explicitly says source integrity, inventory and exact reference
+checks were not performed. Ledger/projection PASS rows refer to the reported
+quick integrity check and do not certify practical recall value.
+
+Focused doctor, observability, TASK-209 and collection checks:
+**34 passed in 5.26 seconds**. Independent TASK-209 `unittest discover` found and
+passed all 17 measurement tests in **0.423 seconds**. Git Bash syntax checking
+of `setup.sh` and `scripts/doctor.sh` passed. No test allowlist was expanded.
+
+A read-only owner-vault fast summary returned: 16,286 source documents present
+(integrity/inventory not checked), 42 events, 42 outcomes, one review, one
+projected experience, and both explicit read routes disabled. These are
+point-in-time operational counts, not additional natural canary observations.
+
+## Full-suite evidence remains separately gated
+
+The preceding clean commit `8c323a06be5368e598d8b8edd64af9f660a45d79` completed
+with **2,018 passed, four skipped, one failed in 636.13 seconds**. Its only failure
+was test discovery: the 17 new TASK-209 tests used module-level pytest functions,
+which `unittest discover` could not see. They are now ordinary TestCase methods
+with temporary-vault isolation and deterministic cleanup. The product runtime
+was not changed by that conversion.
+
+The private JUnit report contains 2,023 tests, zero errors, one failure, four
+skips and duration 636.098 seconds. SHA-256:
+`cbd249f5f60228df3df079332d48ab8ec489b969a9295ff9763d6c1322499e00`.
+It remains in the configured vault's production-canary run directory. The
+repaired tree still needs its own clean-commit full-suite pass; focused checks
+do not silently replace that gate. Owner experience canary remains 0/20, and
+no release or ADR acceptance is implied.
+
+### Completed clean-commit recheck
+
+Commit `cf3062787a446908898055744ae4fc5302a3fb7b` subsequently completed the
+entire Python suite: **2,026 passed, four existing skips, no failures or errors
+in 604.39 seconds**. JUnit records 2,030 tests and 604.362 seconds; SHA-256:
+`b14f65b07d7f9dea59784c78c214e94ef2b4aa69ee6c1bf8a0a21f8a227482a3`.
+The full suite includes the four supported clients' install/setup/artifact and
+MCP-wire tests. Separate Atlas frontend typechecking and all **39 tests** passed.
+TASK-239, TASK-240 and TASK-241 are complete on that tested runtime. Subsequent
+runtime changes still require their own full-suite proof before release.
+
+### Namespace regression follow-up (2026-09-09)
+
+Live setup exposed four false missing-command warnings. Section 7 searched
+root-level files, while setup installs the four source/experience commands under
+`kennisbank/`. A real Git Bash section regression first failed (1 failed,
+7 passed in 3.23 seconds). The corrected file paths and colon-form command labels
+then passed all eight section/summary tests in 2.36 seconds. The regression also
+removes the namespaced files while leaving root-level decoys: these must warn,
+not pass. Existing root-level wiki command detection is retained.
+
+This follow-up still requires a new full-suite run and supported live setup
+verification. It does not waive the six existing wiki provenance failures or
+establish practical recall benefit. Cache migration was not started while
+regular memory maintenance was reported active.
+
+The combined projection-doctor, migration and Copilot-doctor regression run
+completed with **19 passed in 97.95 seconds**. No live vault was changed by
+these fixture-based tests.
+
+### Full runtime verification completed (2026-09-09)
+
+Runtime commit `b74a008` completed the full repository suite: **2,032 passed,
+four existing skips, zero errors or failures in 825.12 seconds**. JUnit records
+2,036 tests and 825.094 seconds; SHA-256:
+`374cc3eef18b0146bead9aed14fdbf26097c11a0714f5c32b034679e27c20459`.
+The process exited zero. Only documentation/backlog edits occurred during the
+run; runtime and test files remained identical to the starting commit.
+Regular owner-vault maintenance was active concurrently, so this duration is
+not an isolated latency benchmark. Supported client fixture checks passed;
+actual owner-vault setup verification and natural-use pilot remain separate.

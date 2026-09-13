@@ -127,6 +127,26 @@ class MigrationsTest(unittest.TestCase):
             self.m.MIGRATIONS.pop(0)
             self.m.MIGRATIONS.pop(0)
 
+    def test_legacy_experience_store_is_split_with_verified_backup(self):
+        legacy = self.vault / ".claude" / "kb-experience.db"
+        import sqlite3
+        conn = sqlite3.connect(legacy)
+        conn.execute(
+            "CREATE TABLE experience_events(event_id TEXT PRIMARY KEY, payload_json TEXT)")
+        conn.execute("INSERT INTO experience_events VALUES ('evt-1', '{}')")
+        conn.commit()
+        conn.close()
+        before = legacy.read_bytes()
+
+        applied = self.m.run(self.vault, str(self.settings), skip_hooks=True)
+
+        self.assertIn("experience-store-splitsen", applied)
+        self.assertEqual(legacy.read_bytes(), before)
+        self.assertTrue((self.vault / ".claude" / "kb-experience-ledger.db").is_file())
+        backups = list((self.vault / ".claude").glob("kb-experience.db.backup-*"))
+        self.assertEqual(len(backups), 1)
+        self.assertEqual(backups[0].read_bytes(), before)
+
 
 if __name__ == "__main__":
     unittest.main()

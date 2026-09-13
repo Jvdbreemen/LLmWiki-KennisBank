@@ -218,8 +218,9 @@ codex mcp list
 
 Expected: a `kennisbank` server pointing to
 `<vault>/.claude/scripts/kb-mcp.py`.
-The MCP validator must list `recall`, `capture`, `what_did_i_do`, `timeline`,
-`weeklog`, and `topic_timeline`.
+The MCP validator must list `recall`, `source_recall`, `experience_recall`,
+`capture`, `what_did_i_do`, `timeline`, `weeklog`, and `topic_timeline`, then
+call ordinary recall plus both explicit deeper routes without an MCP error.
 
 For OpenCode, inspect:
 

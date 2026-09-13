@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A sweep lock left behind by a hard kill is reclaimed at once instead of an
+  hour later.** `sweep_lock()` releases through a context manager, so an
+  exception or an interrupt frees it, but a hard kill never runs `__exit__` and
+  only the 3600-second lease then frees the file. Two orphaned locks in two days
+  in one vault, each naming a PID that no longer existed, each removed by hand to
+  get a sweep started at all; the visible symptom was `sweep-launch.py` refusing
+  to spawn with "er draait al een sweep". The lease stays time-based on purpose,
+  because a PID can be reused and "this PID exists" does not prove the sweep is
+  alive. The reverse carries no such caveat: if the named PID does not exist, the
+  holder is dead. That check now runs alongside the lease, never instead of it.
+  The lock token gains a host (`host:pid:random`) so the probe only ever judges a
+  PID on its own machine, which keeps a vault on a shared or synced drive safe;
+  an old two-part token, an unknown host, or a lock that cannot be stat-ed all
+  fall back to the lease alone. The probe is the canonical `_common.pid_alive`,
+  not a new one: TASK-183 ended two divergent copies of it and a third would
+  undo that. It answers "dead" when it cannot tell and reads a Windows zombie as
+  alive while any handle to it remains, so a dead PID frees a lock only once the
+  lock is also older than `PID_GRACE_SEC` (5 s, the same guard and the same
+  reason as `index-launch.py`) — five seconds against the lease's 3600 keeps the
+  gain. Reclaiming a lock now also re-reads the token
+  and removes only the one it just judged: two acquirers seeing the same orphan
+  would otherwise both clear it and both take it, the second discarding the
+  first's fresh lock. That race predates this change, but an orphan used to
+  become visible only after an hour and was never realistically seen by two
+  processes at once; a probe that answers immediately makes it reachable.
+
+- **The sweep status no longer reports zero after a run that was killed.**
+  `memory-sweep-status.json` was written only on the sweep's terminal paths, so
+  a run interrupted mid-loop left the previous status in place and every counter
+  reading zero. Measured in one vault on 2026-09-09: the `.swept` watermark held
+  418 stems and 170 memory files had been written in the preceding 36 hours,
+  while the status reported `processed: 0`. Two runs that had done real work
+  were read as failures on that evidence, and `memory-notify.py` repeated the
+  same zeros at every session start. A partial heartbeat now lands after each
+  transcript, carrying `running: true` and a current `pending_left`; the
+  terminal paths stamp `running: false`. The partial write skips the rot corpus
+  scan (thousands of files, and its answer does not depend on the transcript
+  that just finished) and carries the previous counts forward, so what
+  `memory-notify.py` reports is unchanged. Every write now goes through a
+  temporary file and `os.replace`, because a partial write lands during the run
+  and a kill during an in-place write would leave unparseable JSON.
+
 ## [0.37.0] - 2026-08-19
 
 The top of the ranking belongs to relevance again. The reranker had been

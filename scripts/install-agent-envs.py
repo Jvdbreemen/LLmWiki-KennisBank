@@ -73,7 +73,20 @@ NESTED_COMMAND_ALIASES = {
     "kennisbank/settings": "kennisbank-settings",
     "kennisbank/rebuild-index": "kennisbank-rebuild-index",
     "kennisbank/rebuild-memory": "kennisbank-rebuild-memory",
+    "kennisbank/source-recall": "kennisbank-source-recall",
+    "kennisbank/experience-recall": "kennisbank-experience-recall",
+    "kennisbank/rebuild-source-index": "kennisbank-rebuild-source-index",
+    "kennisbank/rebuild-experience": "kennisbank-rebuild-experience",
+    "kennisbank/experience-proposal": "kennisbank-experience-proposal",
 }
+
+PROJECTION_COMMAND_ALIASES = (
+    "kennisbank-source-recall",
+    "kennisbank-experience-recall",
+    "kennisbank-rebuild-source-index",
+    "kennisbank-rebuild-experience",
+    "kennisbank-experience-proposal",
+)
 
 MODEL_CHECK_TEXT = "KennisBank model smoke test. Antwoord exact met OK."
 OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1"
@@ -182,6 +195,7 @@ Operational rules:
 - Always set or preserve `KENNISBANK_VAULT={vault_s}` for KennisBank scripts, hooks, MCP servers, skills, and commands.
 - Do not use `C:\\Users\\rvdbr\\KennisBank` or `~/KennisBank` as the active vault on this machine unless the user explicitly changes the vault.
 - Prefer the local KennisBank MCP server before external search when the task may depend on prior local knowledge.
+- For an explicit question about what worked before, use reviewed `experience_recall` first; retrieve raw evidence with `source_recall` only on demand for verification or deeper support. Never turn either route into an automatic advisory.
 - The local LLM backend is Ollama with `{KB_LLM_MODEL_DEFAULT}`; embeddings use `{KB_EMBED_MODEL_DEFAULT}` unless the vault config says otherwise.
 - KennisBank hooks must fail open: missing Ollama, missing embeddings, or a script error may skip context injection, but must not block the agent.
 
@@ -649,6 +663,15 @@ def validate_files(repo: Path, vault: Path, agents: list[str]) -> list[str]:
         for skill in ("autoresearch", "kennisbank-upgrade", "kennisbank-contribute"):
             if not (base / "skills" / skill / "SKILL.md").is_file():
                 errors.append(f"missing Claude skill: {skill}")
+        for rel in (
+            "kennisbank/source-recall.md",
+            "kennisbank/experience-recall.md",
+            "kennisbank/rebuild-source-index.md",
+            "kennisbank/rebuild-experience.md",
+            "kennisbank/experience-proposal.md",
+        ):
+            if not (base / "commands" / rel).is_file():
+                errors.append(f"missing Claude projection command: {rel}")
         settings = base / "settings.json"
         if settings.is_file():
             txt = settings.read_text(encoding="utf-8")
@@ -711,6 +734,11 @@ def validate_files(repo: Path, vault: Path, agents: list[str]) -> list[str]:
         for prompt in ("sessielog", "sessiestart", "kennisbank-upgrade", "weeklog", "timeline", "watdeedik"):
             if not (codex / "prompts" / f"{prompt}.md").is_file():
                 errors.append(f"missing Codex prompt alias: {prompt}")
+        for alias in PROJECTION_COMMAND_ALIASES:
+            if not (codex / "prompts" / f"{alias}.md").is_file():
+                errors.append(f"missing Codex projection prompt: {alias}")
+            if not (_home() / ".agents" / "skills" / alias / "SKILL.md").is_file():
+                errors.append(f"missing Codex projection skill: {alias}")
         for p in (codex / "AGENTS.md", codex / "hooks.json", codex / "config.toml"):
             if not p.is_file():
                 errors.append(f"missing Codex config file: {p}")
@@ -766,6 +794,9 @@ def validate_files(repo: Path, vault: Path, agents: list[str]) -> list[str]:
         for cmd in ("sessielog", "sessiestart", "kennisbank-upgrade", "weeklog", "timeline", "watdeedik"):
             if not (cfg / "commands" / f"{cmd}.md").is_file():
                 errors.append(f"missing OpenCode command: {cmd}")
+        for alias in PROJECTION_COMMAND_ALIASES:
+            if not (cfg / "commands" / f"{alias}.md").is_file():
+                errors.append(f"missing OpenCode projection command: {alias}")
         for p in (cfg / "AGENTS.md", cfg / "plugins" / "kennisbank.js", cfg / "opencode.json"):
             if not p.is_file():
                 errors.append(f"missing OpenCode config file: {p}")
@@ -784,6 +815,9 @@ def validate_files(repo: Path, vault: Path, agents: list[str]) -> list[str]:
         ):
             if not (_home() / ".agents" / "skills" / skill / "SKILL.md").is_file():
                 errors.append(f"missing Copilot shared skill: {skill}")
+        for alias in PROJECTION_COMMAND_ALIASES:
+            if not (_home() / ".agents" / "skills" / alias / "SKILL.md").is_file():
+                errors.append(f"missing Copilot projection skill: {alias}")
         if not (vault / ".claude" / "scripts" / "kb-copilot-capture.py").is_file():
             errors.append(f"missing Copilot capture hook script: {vault / '.claude' / 'scripts' / 'kb-copilot-capture.py'}")
         errors.extend(_copilot.validate_config(vault))
@@ -851,10 +885,38 @@ async def main():
             await session.initialize()
             tools = await session.list_tools()
             names = {t.name for t in tools.tools}
-            missing = {"recall", "capture", "what_did_i_do", "timeline", "weeklog", "topic_timeline"} - names
+            missing = {"recall", "source_recall", "experience_recall", "capture",
+                       "what_did_i_do", "timeline", "weeklog", "topic_timeline"} - names
             if missing:
                 raise SystemExit("missing MCP tools: " + ", ".join(sorted(missing)))
-            print("MCP handshake OK: " + ", ".join(sorted(names)))
+            # Presence is not enough: dispatch the ordinary route and both
+            # deeper routes exactly as a configured client will. Empty recall
+            # avoids requiring Ollama; default-off deeper tools must answer
+            # with a structured fail-open status rather than raising.
+            ordinary = await session.call_tool("recall", {"query": "", "k": 1})
+            if getattr(ordinary, "isError", False):
+                raise SystemExit("ordinary recall smoke returned an MCP error")
+            statuses = {}
+            for name, arguments in (
+                ("experience_recall", {"query": "what worked", "mode": "explicit", "k": 1}),
+                ("source_recall", {"query": "show evidence", "mode": "explicit", "k": 1}),
+            ):
+                result = await session.call_tool(name, arguments)
+                if getattr(result, "isError", False):
+                    raise SystemExit(name + " smoke returned an MCP error")
+                text = "".join(getattr(item, "text", "") for item in result.content)
+                try:
+                    payload = json.loads(text)
+                except Exception:
+                    raise SystemExit(name + " smoke returned non-JSON content")
+                status = str(payload.get("status") or "")
+                if status not in {"disabled", "ok", "no_hit", "unavailable",
+                                  "evidence_unavailable"}:
+                    raise SystemExit(name + " smoke returned unsafe status: " + status)
+                statuses[name] = status
+            print("MCP handshake/call smoke OK: " + ", ".join(
+                name + "=" + statuses.get(name, "ok") for name in
+                ("recall", "experience_recall", "source_recall")))
 
 anyio.run(main)
 '''

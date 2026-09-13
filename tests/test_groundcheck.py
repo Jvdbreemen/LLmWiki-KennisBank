@@ -20,6 +20,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
@@ -205,6 +206,43 @@ class VerifyPassTest(unittest.TestCase):
         self.assertIn("De drempel is 0.75 geworden.", seen["prompt"])
         rows = _memory.recent_promotions()
         self.assertEqual(rows[0]["route"], "stamp")
+
+    def test_source_recall_can_supply_a_missing_groundcheck_passage(self):
+        seen = {}
+        def fake(prompt, system=""):
+            seen["prompt"] = prompt
+            return self._answer("supported")
+        self._llm.generate = fake
+        result = _groundcheck.verify_grounded(
+            "claim", [], source_recall_fn=lambda _claim: {
+                "passage": "raw source evidence", "source_path": "raw.md"})
+        self.assertEqual(result["route"], "source-recall")
+        self.assertIn("raw source evidence", seen["prompt"])
+
+    def test_missing_transcript_does_not_select_explicit_source_route(self):
+        (self.vault / "kennisbank-settings.json").write_text(
+            '{"source_explicit_recall": true}', encoding="utf-8")
+        with mock.patch.object(_groundcheck, "source_recall_passage",
+                               return_value={}) as source, \
+                mock.patch.object(self._llm, "generate") as generate:
+            result = _groundcheck.verify_grounded("claim", [])
+        self.assertEqual(result["verdict"], "no_transcript")
+        source.assert_not_called()
+        generate.assert_not_called()
+
+    def test_routine_pass_cannot_promote_using_implicit_source_fallback(self):
+        path = self._mem("requires-real-transcript")
+        (self.vault / "01-raw/transcripts/s1.jsonl").write_text("", encoding="utf-8")
+        (self.vault / "kennisbank-settings.json").write_text(
+            '{"source_explicit_recall": true}', encoding="utf-8")
+        self._llm.generate = lambda *a, **k: self._answer("supported")
+        with mock.patch.object(_groundcheck, "source_recall_passage",
+                               return_value={"passage": "other source text"}) as source:
+            promoted = _groundcheck.verify_pass(max_n=1)
+        self.assertEqual(promoted, 0)
+        self.assertEqual(parse_frontmatter(path.read_text(encoding="utf-8"))[0]["status"],
+                         "unverified")
+        source.assert_not_called()
 
 
 class CandidateOrderTest(unittest.TestCase):

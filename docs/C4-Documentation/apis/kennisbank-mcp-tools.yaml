@@ -19,13 +19,13 @@
 # list_tools() handshake and confirms every tool name below is present
 # (contract rule C9) — a config file naming the server is not sufficient.
 #
-# Verified directly against source: scripts/kb-mcp.py (8 @mcp.tool()-
-# decorated functions confirmed by grep, matching the 8 operations
+# Verified directly against source: scripts/kb-mcp.py (10 @mcp.tool()-
+# decorated functions confirmed by grep, matching the 10 operations
 # documented in c4-component-agent-integration.md and
 # c4-component-temporal-recall.md combined). Note: some component-doc prose
 # says "six tools" when referring to the base set before the four temporal
 # tools were counted individually elsewhere in the same document set — this
-# file uses the verified source count of 8 as authoritative.
+# file uses the verified source count of 10 as authoritative.
 
 protocol: MCP (Model Context Protocol) over stdio
 transport: stdio (spawned child process, one per agent session)
@@ -36,7 +36,7 @@ registered_by: [Codex CLI, OpenCode, GitHub Copilot CLI]
 not_registered_by: [Claude Code]
 acceptance_test: >
   install-agent-envs.py:validate_mcp_runtime — runs a real initialize() +
-  list_tools() handshake and requires all 8 tool names present before an
+  list_tools() handshake and requires all 8 gated tool names present before an
   install is accepted as successful (contract rule C9).
 
 tools:
@@ -58,6 +58,38 @@ tools:
     output:
       type: string
       description: Formatted text block of relevant vault knowledge, ready for prompt injection.
+
+  - name: source_recall
+    handler: source_recall_tool
+    source_ref: "scripts/kb-mcp.py"
+    summary: "Explicit provenance-first recall from the local raw-source projection."
+    side_effects: none (read-only)
+    input_schema:
+      type: object
+      required: [query]
+      properties:
+        query: {type: string}
+        mode: {type: string, default: explicit, enum: [explicit, verify, reconstruct, fallback]}
+        k: {type: integer, default: 5}
+    output:
+      type: string
+      description: "JSON response with source path, hash, offsets, freshness, and result flags."
+
+  - name: experience_recall
+    handler: experience_recall_tool
+    source_ref: "scripts/kb-mcp.py"
+    summary: "Gated recall of validated outcomes and labelled failure advisories."
+    side_effects: none (read-only)
+    input_schema:
+      type: object
+      required: [query]
+      properties:
+        query: {type: string}
+        mode: {type: string, default: explicit, enum: [explicit, failure]}
+        k: {type: integer, default: 5}
+    output:
+      type: string
+      description: "JSON response with validated experience or failure-advisory labels."
 
   - name: capture
     handler: capture_tool
@@ -183,6 +215,6 @@ tools:
     shared_dispatcher: "_activity_call"
 
 notes:
-  - "All 8 tools live in one process (kb-mcp.py) and share the same Python API used by the CLI hook scripts and Atlas sidecar — no separate reimplementation of retrieval, memory, or activity logic exists behind the MCP surface."
+  - "All 10 tools live in one process (kb-mcp.py) and share the same Python API used by the CLI hook scripts and Atlas sidecar — no separate reimplementation of retrieval, memory, or activity logic exists behind the MCP surface."
   - "compact output mode (KENNISBANK_MCP_COMPACT_OUTPUT=1) is set only by _copilot.py (scripts/_copilot.py:46), i.e. it is a Copilot-specific env-driven behavior, not something Codex or OpenCode configure."
   - "review_decide and capture are the only tools with write side effects; every other tool is read-only against kb-index.db / kb-activity.db / 09-memory frontmatter."

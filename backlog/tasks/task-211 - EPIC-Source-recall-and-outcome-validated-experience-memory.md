@@ -2,10 +2,10 @@
 id: TASK-211
 title: >-
   EPIC: Source recall and outcome-validated experience memory
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-25 00:00'
-updated_date: '2026-08-25 00:00'
+updated_date: '2026-08-31 00:00'
 labels:
   - epic
   - memory
@@ -119,24 +119,54 @@ experience records can be collected before they influence retrieval.
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 All child tasks TASK-212 through TASK-222 exist, have explicit dependencies, and contain testable acceptance criteria
-- [ ] #2 The design distinguishes raw source evidence, source-recall projections, wiki/memory, episodes, outcomes, lessons, and procedures
-- [ ] #3 Raw source material remains recoverable after every derived-index rebuild, supersession, narrowing, retraction, and failed model run
-- [ ] #4 Source recall is additive and gated; normal wiki/memory recall has no new latency or ranking regression when the source route is unused
-- [ ] #5 Experience records preserve outcome evidence, provenance, uncertainty, and attribution limits; no unsupported lesson is promoted
-- [ ] #6 Outcome telemetry is measured before it is used for ranking, memory promotion, noise marking, or skill evolution
-- [ ] #7 A paired evaluation reports source evidence quality, experience usefulness, repeated-failure rate, latency, false warnings, and regressions
-- [ ] #8 New skills and autonomous evolution remain owner-approved until their dedicated acceptance gates are met
-- [ ] #9 Setup, doctor, rebuild, documentation, and all supported client surfaces describe and validate the new projections
+- [x] #1 All child tasks TASK-212 through TASK-222 exist, have explicit dependencies, and contain testable acceptance criteria
+- [x] #2 The design distinguishes raw source evidence, source-recall projections, wiki/memory, episodes, outcomes, lessons, and procedures
+- [x] #3 Raw source material remains recoverable after every derived-index rebuild, supersession, narrowing, retraction, and failed model run
+- [x] #4 Source recall is additive and gated; normal wiki/memory recall has no new latency or ranking regression when the source route is unused
+- [x] #5 Experience records preserve outcome evidence, provenance, uncertainty, and attribution limits; no unsupported lesson is promoted
+- [x] #6 Outcome telemetry is measured before it is used for ranking, memory promotion, noise marking, or skill evolution
+- [x] #7 A paired evaluation reports source evidence quality, experience usefulness, repeated-failure rate, latency, false warnings, and regressions
+- [x] #8 New skills and autonomous evolution remain owner-approved until their dedicated acceptance gates are met
+- [x] #9 Setup, doctor, rebuild, documentation, and all supported client surfaces describe and validate the new projections
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 TASK-212 through TASK-222 are Done or explicitly Blocked with evidence and owner
-- [ ] #2 A design/ADR and research note document the accepted and rejected prior-art patterns
-- [ ] #3 Source recall is usable in explicit and verification modes without changing default recall
-- [ ] #4 Experience recall is bounded, provenance-labelled, and disabled when evidence or evaluation gates are not met
-- [ ] #5 Rebuilds and maintenance are deterministic, local, observable, and reversible
-- [ ] #6 The final decision records whether outcome-aware ranking is justified; absence of evidence is not treated as approval
+- [x] #1 TASK-212 through TASK-222 are Done or explicitly Blocked with evidence and owner
+- [x] #2 A design/ADR and research note document the accepted and rejected prior-art patterns
+- [x] #3 Source recall is usable in explicit and verification modes without changing default recall
+- [x] #4 Experience recall is bounded, provenance-labelled, and disabled when evidence or evaluation gates are not met
+- [x] #5 Rebuilds and maintenance are deterministic, local, observable, and reversible
+- [x] #6 The final decision records whether outcome-aware ranking is justified; absence of evidence is not treated as approval
 <!-- DOD:END -->
 
+## Implementation and evidence checkpoint
+
+The feature branch now contains the two isolated recall gateways, append-only
+outcome/experience projections, staged rebuilds, lifecycle doctor, proposal-only
+promotion path, MCP surfaces, and the preregistered six-arm evaluator. The
+implementation evidence is documented in
+`docs/research/source-experience-evidence-packet-2026-08-26.md`.
+
+The reviewed packet is now in
+`docs/research/source-experience-evidence-packet-2026-08-29.md`. Source recall
+is **hold** because the full vector arm is unmeasured and naive pre-embedding is
+not operationally justified. The final attempt-aware experience holdout was
+run once after independent development calibration: hybrid hit@3 is 0.90
+versus lexical 0.80, failure hit@3 and advisory precision are 0.931, but false
+warnings are 0.20. Experience recall is therefore **reject for rollout** and
+the holdout is spent. The completed blinded action comparison then measured
+43/60 correct/actionable experience candidates versus 19/60 for the strongest
+baseline, delta +0.40 with 95% CI +0.20 to +0.5833. This proves downstream
+experience value but does not override the safety rejection. Outcome-aware
+ranking remains **rejected**. TASK-223 then evaluated 18 sparse-first source
+configurations on an independent owner-reviewed development set. The best
+point lost heavily to BM25 (hit@5 0.25 versus 0.75), missed no-hit specificity
+(0.90 versus 0.95 required), and missed warm latency (8.33 seconds versus 2
+seconds required). It was pre-rejected without spending the frozen holdout or
+collecting a downstream answer benchmark for an already disqualified route.
+TASK-215 and TASK-223 are complete with that negative result. TASK-221 is
+complete as a proposal-only path with existing-skill evolution rejected for
+this rollout; its AC #5 remains visibly unmet. TASK-224 is complete with its
+false-warning criterion honestly unmet. All child work is now closed with
+positive or negative evidence rather than implied approval.

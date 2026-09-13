@@ -40,6 +40,13 @@ class RunBoundedTest(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
+    @staticmethod
+    def _write_bash(path: Path, content: str) -> None:
+        # WSL bash sees CR as part of ``sleep 30\r``.  The fixture models a
+        # hanging process, not shell newline portability, so pin POSIX lines.
+        with path.open("w", encoding="utf-8", newline="\n") as handle:
+            handle.write(content)
+
     def test_gewone_run_geeft_output_en_returncode(self):
         r = run_bounded([sys.executable, "-c", "print('hallo')"], timeout=60)
         self.assertIn("hallo", r.output)
@@ -76,7 +83,7 @@ class RunBoundedTest(unittest.TestCase):
         ook klaar. Er is geen timeout meer nodig om eronderuit te komen.
         """
         script = self.tmp / "kleinkind.sh"
-        script.write_text(KLEINKIND, encoding="utf-8")
+        self._write_bash(script, KLEINKIND)
         begin = time.monotonic()
         r = run_bounded([BASH, str(script)], timeout=20)
         verstreken = time.monotonic() - begin
@@ -91,7 +98,7 @@ class RunBoundedTest(unittest.TestCase):
     def test_een_hangende_ouder_wordt_wel_afgekapt(self):
         """De andere helft: hangt de OUDER, dan moet het budget wel binden."""
         script = self.tmp / "hangt.sh"
-        script.write_text(HANGT, encoding="utf-8")
+        self._write_bash(script, HANGT)
         begin = time.monotonic()
         r = run_bounded([BASH, str(script)], timeout=3)
         verstreken = time.monotonic() - begin

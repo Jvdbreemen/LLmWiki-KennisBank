@@ -105,7 +105,7 @@ C4Component
         Component(conftest, "Test Isolation Fixtures", "conftest.py, __init__.py, _loader.py", "Temp vault, dead-endpoint pinning, dynamic script loading")
         Component(ci, "CI Workflow", "GitHub Actions (ci.yml)", "test + atlas jobs: syntax check, pytest+coverage gate, Atlas gate")
         Component(doctor, "Doctor Health Check", "Bash (doctor.sh)", "Read-only post-install diagnostics; non-zero exit on failure")
-        Component(eval, "Eval Harnesses", "Python CLIs", "kb-eval, kb-eval-gen, judge-model-sweep, rerank-eval, recall-ablation")
+        Component(eval, "Eval Harnesses", "Python CLIs", "kb-eval, kb-eval-gen, judge-model-sweep, rerank-eval, recall-ablation, kb-layer-eval")
     }
 
     Container_Ext(scripts, "KennisBank Scripts", "Retrieval, ranking, memory, embedding, Copilot subsystems under test")
@@ -132,5 +132,6 @@ C4Component
 - **pytest, never `unittest discover`**: `unittest discover` silently skips bare module-level `test_*` functions. TASK-53 found this had let 21 tests across six files — including the documentation-consistency guard — run zero times in CI. The gate is `python -m pytest tests -q`; running `unittest discover` locally will under-report failures.
 - **Hermeticity is a guarantee, not a convention**: `tests/__init__.py` pins embed/LLM endpoints to a dead listening socket by default, so no test can reach a real model server or the production vault unless `KB_INTEGRATION=1` is explicitly set — and that tier is excluded from the CI gate.
 - **Eval sets are private by policy**: gold-standard and generated eval sets never ship in the repo or a release; `.gitignore` plus `test_eval_privacy.py` enforce this as a checked invariant, not just a documented rule. Only example eval sets are public.
+- **Deep recall has an independent gate**: `kb-layer-eval.py` measures source and experience layers separately, requires explicit six-arm coverage, downstream correctness, and latency, and returns `hold` when reviewed holdouts are absent. Retrieval hits alone cannot turn either experimental toggle on.
 - **Atlas has its own failure domain**: prior to TASK-91, Atlas was tested outside CI, which let unguarded changes land. It now has an independent CI job with its own timeout, so a KennisBank-core failure can't hide an Atlas regression and vice versa.
 - **Timeout margins are deliberately generous**: the `test` job's 30-minute timeout is roughly 1.5x the measured ~20-minute baseline (781 tests, Windows dev machine) — a hang safety net, not a performance target.

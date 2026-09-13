@@ -219,6 +219,10 @@ def coordinate(
 
     results = run_parallel(capture, scripts, payload, runner)
     results.extend(run_parallel(after, scripts, payload, runner))
+    # Outcome extraction depends on capture/import having completed, but is
+    # independent from them afterwards. It is deliberately not part of the
+    # prompt or exit hot path and remains fail-open.
+    results.extend(run_parallel((Job("kb-outcome.py"),), scripts, payload, runner))
 
     for result in results:
         outcome = result.error or (

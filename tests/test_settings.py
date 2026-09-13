@@ -13,6 +13,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr
+from io import StringIO
 from pathlib import Path
 
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
@@ -135,6 +137,14 @@ class SettingsTest(unittest.TestCase):
         self.assertIs(_settings.DEFAULTS.get("memory_capture"), True)
         self.assertIs(_settings.DEFAULTS.get("memory_recall"), True)
 
+    def test_experimental_layers_are_opt_in_by_default(self):
+        for key in ("experience_capture", "experience_projection",
+                    "experience_explicit_recall", "source_explicit_recall"):
+            self.assertIs(_settings.DEFAULTS.get(key), False)
+            self.assertFalse(_settings.get(key, _settings.DEFAULTS[key]))
+        self.assertNotIn("source_recall", _settings.DEFAULTS)
+        self.assertNotIn("experience_recall", _settings.DEFAULTS)
+
     def test_memory_toggle_independently_settable(self):
         # recall uit, capture aan: onafhankelijk schakelbaar.
         _settings.set("memory_recall", False)
@@ -200,6 +210,27 @@ class SettingsMigrateTest(unittest.TestCase):
         self.assertIn("memory_recall", data, "memory_recall must be added by migrate()")
         self.assertEqual(data["memory_capture"], True,
                          "memory_capture default (True) must be added correctly")
+
+    def test_legacy_true_values_warn_but_new_capabilities_stay_off(self):
+        p = self.vault / "kennisbank-settings.json"
+        p.write_text(json.dumps({
+            "source_recall": True,
+            "experience_recall": True,
+            "future_setting": "preserved",
+        }), encoding="utf-8")
+        warning = StringIO()
+
+        with redirect_stderr(warning):
+            self.assertTrue(self.s.migrate())
+
+        data = json.loads(p.read_text(encoding="utf-8"))
+        self.assertFalse(data["source_explicit_recall"])
+        self.assertFalse(data["experience_capture"])
+        self.assertFalse(data["experience_projection"])
+        self.assertFalse(data["experience_explicit_recall"])
+        self.assertEqual(data["future_setting"], "preserved")
+        self.assertIn("legacy source_recall=true", warning.getvalue())
+        self.assertIn("legacy experience_recall=true", warning.getvalue())
 
 
 if __name__ == "__main__":

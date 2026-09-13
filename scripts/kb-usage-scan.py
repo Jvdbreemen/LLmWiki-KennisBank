@@ -61,7 +61,7 @@ def tool_use_input_text(transcript_path: Path, cap_bytes: int = 20_000_000) -> s
     return "\n".join(chunks)
 
 
-def scan(session_id: str, transcript_path: Path) -> int:
+def scan(session_id: str, transcript_path: Path, task_id: str = "") -> int:
     """Markeer pending stems als gebruikt op basis van het transcript.
 
     Returns het aantal als gebruikt gemarkeerde stems.
@@ -75,6 +75,19 @@ def scan(session_id: str, transcript_path: Path) -> int:
     text = tool_use_input_text(transcript_path) if transcript_path.exists() else ""
     used = [stem for stem in pending if stem and stem in text]
     n = _usage.mark_used(used) if used else 0
+    if used:
+        try:
+            exposures = _usage.exposures_for(session_id, task_id=task_id or None)
+            use_items = []
+            for stem in used:
+                matches = [item for item in exposures
+                           if item.get("item_id") == stem]
+                use_items.extend(matches[:1] or [{"item_id": stem, "layer": "unknown"}])
+            _usage.log_use_evidence(
+                use_items, session_id=session_id, task_id=task_id,
+                evidence_kind="tool_use", evidence_ref=transcript_path.name)
+        except Exception:
+            pass
     _usage.clear_pending(session_id)
     return n
 
@@ -88,11 +101,12 @@ def main() -> int:
     except Exception:
         return 0
     session_id = str(data.get("session_id") or "")
+    task_id = str(data.get("task_id") or "")
     transcript = Path(str(data.get("transcript_path") or ""))
     if not session_id:
         return 0
     try:
-        scan(session_id, transcript)
+        scan(session_id, transcript, task_id=task_id)
     except Exception:
         pass
     return 0

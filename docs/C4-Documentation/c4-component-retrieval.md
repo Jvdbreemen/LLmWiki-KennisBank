@@ -11,6 +11,17 @@
 
 Retrieval and Ranking is the component that answers "what does the vault already know that's relevant to this prompt, right now?" It embeds the incoming query, searches the hybrid vector+keyword index, reranks the hits with multiple signals, fits them into a token budget, and injects them as additional context for the calling agent. It also closes the feedback loop by logging which injected items were actually used or ignored, and it powers ad-hoc search/lookup commands.
 
+The feature branch adds two explicitly gated projections beside the normal
+wiki/memory index. **Source recall** searches immutable raw-source passages for
+explicit reconstruction or verification and returns the source path, hash and
+character offsets. **Experience recall** searches validated outcome-bound
+records for prior approaches. Automatic failure advisories are not a public
+mode. Neither route is part of
+normal prompt injection; both are opt-in, fail-open, and rebuildable from local
+vault evidence. A hit-rate improvement alone is not a release decision: the
+paired evaluation must also show downstream correctness and acceptable
+latency.
+
 **Fail-open behaviour.** The retrieval hook is explicitly documented as fail-open: "kb-retrieve.py must never block the hot path. Any error → silent, no output, exit 0" (docs/C4-Documentation/c4-code-scripts.md, "Design Patterns" §2, and the "Critical Paths" section: "Fail-open: any error → no output"). `kb-recall.py` mirrors this via a documented fallback path when the index is unavailable (c4-code-tests.md, `test_kb_recall.py`: "fallback when index unavailable"), and `test_kb_retrieve_cold_notice.py` guards the degraded "cold start" notice shown when the index has not yet been built. This means a missing/stale Ollama backend, a corrupt or absent `kb-index.db`, or an embedding failure degrade the user experience (no context injected, or a cold-start notice) rather than blocking the interactive prompt.
 
 **Latency budget.** c4-code-scripts.md names the retrieval hook explicitly as a "Hot Path: Retrieval Hook (2s budget)" under "Critical Paths (Performance-Sensitive)", tracing `kb-retrieve.py → embed(prompt) → _kbindex.search() → rank → inject`, and requires `_embeddings` to be "warm" and `_kbindex` to be "current" for that path to stay fast. This is consistent with this repo's CLAUDE.md north-star principle that "de interactieve weg (recall, prompts) blijft sub-seconde" — heavy work is pushed off the hot path. Concretely: index building (`build-kb-index.py`) is documented as "Hours-long, not on critical path... Offline operation"; embedding-cache warm-up (`build-embed-index.py`) and corpus re-embedding (`embed-sweep.py`) run separately from the retrieval hook; and `memory-sweep.py` (extraction/judging/reconciliation) is documented as running "Concurrent with retrieval (read-only to main index)" so it never contends with the hot path. The scripts doc also records a concurrency constraint that protects hot-path read latency: "Only sweep and index builds write to kb-index.db; retrieval reads only (prevents lock contention)" (Known Constraints §4).
@@ -27,6 +38,9 @@ Retrieval and Ranking is the component that answers "what does the vault already
 - **Retrieval-feedback usage tracking** — `_usage.py` logs which stems were injected and later marks them used/noise, feeding back into the trust/usage ranking factors.
 - **Ad-hoc query interfaces** — `kb-search.py` (full-text + semantic search over memories), `kb-ask.py` (manual export/paste bridge for cloud agents), `kb-recall.py` (memory-only recall).
 - **Cross-model safety** — cache/index entries are validated against the active `embed_id` before use, preventing stale-model vector comparisons (`_kbindex.is_valid_for`, `_embeddings.embed_id`).
+- **Source recall gateway** — `kb-source-recall.py` routes only explicit lexical evidence search and exact verification/reconstruction requests, rejects automatic fallback, labels freshness/conflict/no-hit state, and never serves a stale passage as current evidence.
+- **Experience recall gateway** — `kb-experience-recall.py` routes explicit requests only, returns at most three source/task-diversified and human-accepted lessons, uses compatible hybrid retrieval when available, and labels its FTS-only degradation as `lexical_fallback`.
+- **Evidence packet** — `kb-layer-eval.py` keeps six arms, source and experience gates, downstream deltas, latency summaries, and go/hold/reject decisions separate and content-safe.
 
 ## 4. Code Elements
 
@@ -108,6 +122,11 @@ No retrieval-specific research report beyond the ADRs above was distinctly separ
 | `embed-sweep.py` | CLI (offline/scheduled) | Refreshes embeddings for out-of-date documents (e.g. after model change). | |
 | `context-budget.py` | CLI | Analyzes context-window usage/cost. | |
 | `find-similar.py` | CLI | Finds semantically similar memories. | |
+| `kb-source-recall.py` | CLI (explicit only) | Runs best-effort FTS5/BM25 evidence search or resolves an exact structured SourceRef. | Opt-in; fail-open; no embeddings, fallback, or normal-hook routing. |
+| `kb-experience-recall.py` | CLI (explicit only) | Retrieves validated outcome-bound lessons through compatible hybrid search or labelled lexical fallback. | Candidates, unverified/unaccepted records, and raw passages are excluded; repaired episodes retain separate attempt, resolution, and final-outcome states. |
+| `rebuild-experience.py` | CLI (offline) | Fully rebuilds `kb-experience-index.db` from canonical events, outcomes, and reviews in `kb-experience-ledger.db`. | Atomic staging; local hybrid retrieval with complete lexical fallback; `--records-only` forces lexical-only. |
+| `kb-projection-doctor.py` | CLI (read-only) | Reports projection schema, freshness, provenance, orphan, redaction, and lifecycle health. | Never mutates derived state. |
+| `kb-layer-eval.py` | CLI (offline) | Builds the preregistered source/experience evidence packet and gates. | Content-safe; no prompts in output. |
 
 ### Python API (library modules)
 

@@ -39,6 +39,12 @@ DEFAULTS = {
     # bewust afwijkend van de opt-in-conventie van auto_archive.
     "memory_capture": True,
     "memory_recall": True,
+    # Deeper layers have separate write/build/read authority. A legacy broad
+    # toggle must never silently grant one of these capabilities.
+    "experience_capture": False,
+    "experience_projection": False,
+    "experience_explicit_recall": False,
+    "source_explicit_recall": False,
     # Retrieval-feedbackloop: passief en lokaal, dus default aan.
     "usage_telemetry": True,
     # Optionele LLM-laatste-redmiddel voor temporele recall (Laag 3): normaliseert
@@ -64,27 +70,42 @@ DEFAULTS = {
 }
 
 _TRUTHY = ("1", "true", "yes", "y", "on")
+_LEGACY_FLAGS = {
+    "source_recall": ("source_explicit_recall",),
+    "experience_recall": (
+        "experience_capture", "experience_projection",
+        "experience_explicit_recall",
+    ),
+}
 
 
-def settings_path() -> Path:
-    return vault_root() / FILENAME
+def settings_path(vault: Path | None = None) -> Path:
+    """Return the settings file for *vault* or the configured active vault.
+
+    Library callers that already resolved an explicit vault must be able to
+    evaluate policy in that same vault. Falling back to the process-global
+    environment in that case can grant or deny a write using another vault's
+    settings.
+    """
+    root = Path(vault) if vault is not None else vault_root()
+    return root / FILENAME
 
 
-def _load() -> dict:
+def _load(vault: Path | None = None) -> dict:
     try:
-        data = json.loads(settings_path().read_text(encoding="utf-8"))
+        data = json.loads(settings_path(vault).read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else {}
     except (OSError, ValueError):
         return {}
 
 
-def get(key: str, default: bool) -> bool:
+def get(key: str, default: bool, *, vault: Path | None = None) -> bool:
     """Lees een toggle. Ontbrekend bestand/key of parse-fout -> default.
 
     De docs nodigen uit om het JSON-bestand met de hand te bewerken. Een
     string-waarde (bv. "false") wordt daarom via _TRUTHY genormaliseerd, zodat
     "false"/"0"/"no" niet per ongeluk truthy is (bool("false") == True)."""
-    val = _load().get(key, default)
+    val = _load(vault).get(key, default)
     if isinstance(val, str):
         return val.strip().lower() in _TRUTHY
     return bool(val)
@@ -146,6 +167,16 @@ def migrate() -> bool:
             data = {}
     else:
         data = {}
+    for legacy, replacements in _LEGACY_FLAGS.items():
+        value = data.get(legacy, False)
+        enabled = (value.strip().lower() in _TRUTHY
+                   if isinstance(value, str) else bool(value))
+        if enabled:
+            print(
+                f"_settings: legacy {legacy}=true activeert niets meer; "
+                f"kies expliciet uit {', '.join(replacements)}.",
+                file=sys.stderr,
+            )
     missing = {k: v for k, v in DEFAULTS.items() if k not in data}
     if not missing:
         return False

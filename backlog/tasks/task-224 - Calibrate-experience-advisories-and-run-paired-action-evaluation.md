@@ -1,0 +1,146 @@
+---
+id: TASK-224
+title: Calibrate experience advisories and run paired action evaluation
+status: Done
+assignee: []
+created_date: '2026-08-29 00:00'
+updated_date: '2026-08-30 00:00'
+labels:
+  - experience-memory
+  - evaluation
+  - safety
+  - human-review
+dependencies:
+  - TASK-219
+  - TASK-220
+ordinal: 176300
+---
+
+## Description
+
+Create an independent advisory-development set, calibrate the failure-warning
+gate there, and rerun the frozen reviewed holdout without further tuning. Also
+human-review the provisional success/failure/mixed/partial labels and compare
+correct action selection with and without retrieved experience.
+
+The current retrieval gain is not permission to tune the ten reviewed negative
+probes. The final one-shot run produced a measured 0.20 false-warning rate.
+That holdout is now spent and may not be used for further tuning or reruns.
+
+## Acceptance Criteria
+
+- [x] #1 A separate labelled development set contains failure matches and unrelated/no-warning probes
+- [x] #2 Threshold and routing changes are selected using only the development set and committed before the holdout rerun
+- [x] #3 A human confirms or corrects all 60 provisional outcome-state labels
+- [ ] #4 The untouched holdout false-warning rate is at most 0.10 and advisory precision at least 0.90
+- [x] #5 Validated failure hit@3 remains at least 0.70 with evidence precision 1.00 and zero candidate leakage
+- [x] #6 At least 60 paired action judgments report delta and confidence interval against the strongest baseline
+- [x] #7 No threshold is accepted if the gain is explainable by lexical retrieval alone
+- [x] #8 Skill promotion and outcome-aware ranking remain disabled unless every gate passes and the owner approves
+
+## Evidence baseline
+
+The completed human review separates attempt state, resolution state, and the
+evaluator-facing final state for all 60 cases. Final states contain 38 success,
+18 partial, 1 mixed, and 3 failure episodes; the independent attempt axis still
+preserves 29 failures for dead-end recall.
+
+The frozen-holdout rerun measured hybrid hit@3 0.90 versus lexical 0.80,
+failure hit@3 0.667, p95 133.0 ms, evidence precision 1.00, and candidate
+leakage zero. One of ten abstention probes received a warning, meeting the 0.10
+boundary, but advisory precision is only 0.667 and one of three final failures
+was missed. Rollout remains rejected until this task supplies independent
+calibration and paired value evidence.
+
+## Historical protocol amendment before the final frozen rerun
+
+The two-axis review exposed a defect in that baseline: the advisory evaluator
+treated only a final `failure` as a failed approach. A repaired episode such as
+`failure -> fix_validated -> success` is exactly where recall can prevent a
+repeated dead end, so classifying its warning as incorrect erases the lesson.
+
+The implementation and evaluator now preserve `attempt_state`,
+`resolution_state`, and final `outcome_state` separately. Failure retrieval and
+advisory correctness use the attempt axis; final-state calibration continues to
+use `outcome_state`. Legacy records with no attempt label fall back only when
+their final state is failure. This semantic correction is committed and tested
+before further threshold selection or another frozen-holdout run. The 0.667
+failure/advisory figures above remain historical baseline evidence, not the
+target for development-set tuning.
+
+## Independent development calibration
+
+The owner-reviewed development set contains 11 positive failed-approach cases
+and 10 factual no-warning probes over 21 unique sources. Its IDs, exact queries,
+and evidence sources are disjoint from the 60-case frozen source holdout. The
+private cases and per-query observations remain outside the repository.
+
+On `ollama:qwen3-embedding:4b`, the selected threshold is 0.50: positive recall
+10/11 (0.909), precision 10/11 (0.909), and one false warning in ten negatives
+(0.10). Pure lexical retrieval reaches 8/11 positive recall and returns a
+warning for all ten negatives, so the hybrid gain is 2/11 (18.2 percentage
+points) and is not explained by lexical matching. Threshold 0.45 violates the
+safety gates; 0.55 removes false warnings but drops positive recall to 7/11.
+
+The incumbent numeric default was already 0.50. It is now versioned as
+`FAILURE_ADVISORY_MIN_COS`, the gateway reads that constant, and
+`scripts/calibrate-experience-advisory.py` reproduces the private calibration
+without writing prompts to the repository. Aggregate evidence is recorded in
+`docs/research/experience-advisory-calibration-2026-08-30.md`.
+
+## Final frozen holdout — spent
+
+The threshold and evaluator were committed before scoring (`91ffea4` and
+`364034e`). The frozen 70-case set was then run exactly once with
+`ollama:qwen3-embedding:4b`; the private aggregate report records input SHA-256
+`0f5881ee6181fe8d9df94ea2779a1404ab71403dca61c7b29fccd443e36208be`.
+
+Hybrid hit@3 is 0.90 versus lexical 0.80, a ten-point gain. Failure-attempt
+hit@3 is 27/29 (0.931), evidence precision is 1.00, candidate leakage is zero,
+and advisory precision is 27/29 (0.931). However, two of ten unrelated probes
+received a warning, so false-warning rate is 0.20 and AC #4 fails despite the
+precision pass. Explicit-route latency was 99.0 ms p50 and 129.3 ms p95.
+
+The preregistered aggregate gate therefore fails. There will be no threshold
+tuning or rerun on this holdout. Experience recall remains experimental;
+outcome-aware ranking and skill promotion remain disabled. The downstream
+value experiment below cannot override the failed safety gate for this rollout
+decision.
+
+## Paired-action protocol
+
+The 60-case downstream protocol is preregistered in
+`docs/research/experience-paired-action-protocol-2026-08-30.md`. It compares the
+same local `qwen3.5:4b` and current top-four wiki/memory context in both arms;
+the experiment receives only the additional actual top-three validated
+experience hits. Arm order is deterministically balanced 30/30 and hidden
+until all owner judgments are recorded. The four-way review distinguishes
+only-A, only-B, both-correct, and neither-correct. The final aggregate reports
+experience-minus-baseline correctness delta and a paired 10,000-resample 95%
+bootstrap interval.
+
+All 60 pairs were generated once and owner-reviewed while the arm mapping
+remained hidden. The experience arm produced 43 correct/actionable candidates,
+versus 19 for the strongest baseline: paired delta +0.40, with a deterministic
+10,000-resample 95% bootstrap interval from +0.20 to +0.5833. The A-arm balance
+was exactly 30 baseline and 30 experience. Human verdicts were 22 only-A, 22
+only-B, 9 both, and 7 neither. The preregistered value gate (n >= 60 and delta
+>= +0.10) passes.
+
+This establishes downstream action value for retrieved experience context. It
+does not authorize rollout: AC #4 remains visibly unmet because the separately
+frozen warning holdout measured a 0.20 false-warning rate against a maximum of
+0.10. The private report and review packets remain under the configured vault;
+the aggregate result is recorded in
+`docs/research/experience-paired-action-result-2026-08-30.md`.
+
+## Final summary
+
+The evaluation work is complete. Independent calibration showed a real hybrid
+retrieval gain, the one-shot holdout preserved 27 of 29 failed-approach warnings
+with perfect evidence precision, and the blinded downstream experiment showed
+a large action-correctness improvement. The same frozen holdout also produced
+two false warnings in ten unrelated probes. The evidence therefore supports
+continued research on experience context, but rejects this advisory design for
+rollout. No threshold was retuned, no spent holdout was rerun, and ranking and
+promotion remain disabled.

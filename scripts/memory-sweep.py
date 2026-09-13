@@ -244,28 +244,72 @@ def _run_pass(s: dict, key: str, fn) -> None:
         _note_pass_failure(s, key, e)
 
 
-def _write_heartbeat(summary: dict) -> None:
-    """Schrijf de heartbeat-status naar <vault>/.claude/memory-sweep-status.json."""
+#: Rot-velden die een tussenstand overneemt in plaats van hertelt.
+ROT_KEYS = ("rot", "rot_hours", "rot_waiting", "rot_undecided")
+
+
+def _read_heartbeat() -> dict:
+    """De heartbeat zoals hij nu op schijf staat. Leeg als er geen leesbare is."""
+    try:
+        return json.loads(
+            (vault_root() / ".claude" / HEARTBEAT).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def _write_heartbeat(summary: dict, partial: bool = False) -> None:
+    """Schrijf de heartbeat-status naar <vault>/.claude/memory-sweep-status.json.
+
+    partial=True is de TUSSENSTAND na elk verwerkt transcript (TASK-246). Zonder
+    die tussenstand schreef de sweep alleen op zijn eindpaden, en zag een
+    afgebroken run er precies zo uit als een run die niets deed: alle tellers op
+    nul. Gemeten op 2026-09-09 in de Kluis-vault: watermark op 418 stems en 170
+    memories in 36 uur geschreven, terwijl de status processed 0 meldde. Twee
+    geslaagde runs zijn daardoor als mislukt gelezen.
+
+    Een tussenstand slaat de rot-telling over -- dat is een corpusscan over
+    duizenden bestanden en de uitkomst hangt niet aan het transcript dat net af
+    is -- en neemt de vorige waarden over, zodat memory-notify hetzelfde blijft
+    melden. Het eindpad telt wel.
+    """
     hb = vault_root() / ".claude" / HEARTBEAT
     out = dict(summary)
     out["last_run"] = datetime.now(timezone.utc).isoformat()
+    # Onderscheidt "draait nog of is afgebroken" van "netjes afgerond". Een
+    # lezer die running True ziet bij een oude last_run weet dat de tellers een
+    # tussenstand zijn en niet het eindresultaat.
+    out["running"] = partial
     out["provider"] = _llm.providers()[0] if _llm.providers() else ""
     out["is_local"] = _llm.is_local()
-    # Bewust ALTIJD, ook wanneer het model onbereikbaar was en de sweep vroeg
-    # terugkeert: de telling is een lokale scan en heeft met Ollama niets te
-    # maken. Hem alleen op het geslaagde pad schrijven zou de melding stil laten
-    # verdwijnen juist wanneer er iets aan de hand is.
-    rot = _rot_breakdown()
-    if rot is not None:
-        out["rot"] = rot["total"]
-        out["rot_hours"] = ROT_HOURS
-        out["rot_waiting"] = rot["waiting"]
-        out["rot_undecided"] = rot["undecided"]
+    if partial:
+        prev = _read_heartbeat()
+        for k in ROT_KEYS:
+            if k in prev:
+                out[k] = prev[k]
+    else:
+        # Bewust ALTIJD, ook wanneer het model onbereikbaar was en de sweep vroeg
+        # terugkeert: de telling is een lokale scan en heeft met Ollama niets te
+        # maken. Hem alleen op het geslaagde pad schrijven zou de melding stil laten
+        # verdwijnen juist wanneer er iets aan de hand is.
+        rot = _rot_breakdown()
+        if rot is not None:
+            out["rot"] = rot["total"]
+            out["rot_hours"] = ROT_HOURS
+            out["rot_waiting"] = rot["waiting"]
+            out["rot_undecided"] = rot["undecided"]
+    # Atomair: de tussenstand wordt nu tijdens de run geschreven, dus een kill
+    # kan midden in het schrijven vallen. Een half bestand is erger dan een oud
+    # bestand -- json.loads faalt en de lezer ziet helemaal niets meer.
+    tmp = hb.with_name(f"{hb.name}.{os.getpid()}.tmp")
     try:
         hb.parent.mkdir(parents=True, exist_ok=True)
-        hb.write_text(json.dumps(out, indent=2, ensure_ascii=False), encoding="utf-8")
+        tmp.write_text(json.dumps(out, indent=2, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, hb)
     except OSError:
-        pass
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
 
 
 #: Hoeveel chunks van één transcript de extractor leest, en hoeveel memories dat
@@ -537,6 +581,12 @@ def _run_sweep_locked(max_transcripts: int = 10, max_chunks: int = MAX_CHUNKS,
         finally:
             done_count += 1
             voortgang.step()
+            # Tussenstand na ELK transcript (TASK-246). pending_left hoort
+            # erbij: zonder die regel meldt een afgebroken run nul resterend,
+            # wat leest als "klaar". Bij een nette afronding is done_count
+            # gelijk aan len(todo), dus dit laat de eindwaarde nul.
+            s["pending_left"] = len(todo) - done_count
+            _write_heartbeat(s, partial=True)
     voortgang.close(f"({s['written']} memories geschreven, "
                     f"{s['duplicates']} duplicaten)")
 
