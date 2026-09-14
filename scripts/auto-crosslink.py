@@ -132,7 +132,9 @@ def process_file(filepath: Path, node_map: dict, links: list, dry_run: bool = Fa
         if not other_node:
             continue
 
-        other_file = other_node.get("source_file", "")
+        # Tag- en referentie-nodes uit de link-laag hebben source_file=None:
+        # .get() met default vangt dat niet, dus expliciet naar "" dwingen.
+        other_file = other_node.get("source_file") or ""
         if not other_file.startswith(WIKI_DIR_PREFIX):
             continue
         if other_file == rel_path:
