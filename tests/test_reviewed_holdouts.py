@@ -270,7 +270,7 @@ class ReviewedHoldoutsTest(unittest.TestCase):
             }), encoding="utf-8")
             output = root / "private-holdouts"
             result = subprocess.run(
-                [sys.executable, "scripts/prepare-reviewed-holdouts.py",
+                [sys.executable, "scripts/dev/prepare-reviewed-holdouts.py",
                  "--reviews", str(reviews), "--experience-states", str(states),
                  "--output-dir", str(output)],
                 capture_output=True, text=True, check=False,

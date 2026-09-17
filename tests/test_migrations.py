@@ -187,3 +187,42 @@ class SceneLayerPruneTest(MigrationsTest):
         (d / "kb-recall.py").write_text("# live script\n", encoding="utf-8")
         self.m.run(self.vault, self.settings, skip_hooks=True)
         self.assertTrue((d / "kb-recall.py").exists())
+
+
+class DevScriptsLeaveTheVaultTest(MigrationsTest):
+    """Evaluation and research tools moved to scripts/dev/, which setup.sh does
+    not deploy (its glob is scripts/*.py). setup.sh never prunes, so without a
+    migration every vault that was installed before the move would keep the
+    old copies in .claude/scripts/ for ever."""
+
+    def _deploy(self, names):
+        d = self.vault / ".claude" / "scripts"
+        d.mkdir(parents=True, exist_ok=True)
+        for n in names:
+            (d / n).write_text("# stale copy\n", encoding="utf-8")
+        return d
+
+    def test_every_dev_script_and_retired_one_off_is_pruned(self):
+        dev = sorted(p.name for p in (SCRIPTS / "dev").glob("*.py"))
+        one_offs = ["build-task245-supplemental-fixture.py",
+                    "generate-task245-bge-scores.py",
+                    "generate-task245-local-judge.py"]
+        d = self._deploy(dev + one_offs + ["kb-eval.py", "doctor.sh"])
+        self.m.run(self.vault, self.settings, skip_hooks=True)
+        survivors = [n for n in dev + one_offs if (d / n).exists()]
+        self.assertEqual(survivors, [])
+        self.assertTrue((d / "kb-eval.py").exists())
+        self.assertTrue((d / "doctor.sh").exists())
+
+    def test_the_retired_list_covers_scripts_dev_exactly_plus_the_one_offs(self):
+        dev = {p.name for p in (SCRIPTS / "dev").glob("*.py")}
+        retired = set(self.m.RETIRED_SCRIPTS)
+        self.assertEqual(dev - retired, set(), "a dev script would stay behind in old vaults")
+        shipped = {p.name for p in SCRIPTS.glob("*.py")}
+        self.assertEqual(retired & shipped, set(), "a shipped script would be deleted on upgrade")
+
+    def test_prune_runs_on_a_vault_stamped_at_the_previous_release(self):
+        self.m.write_stamp(self.vault, "0.38.0")
+        d = self._deploy(["rerank-eval.py"])
+        self.m.run(self.vault, self.settings, skip_hooks=True)
+        self.assertFalse((d / "rerank-eval.py").exists())

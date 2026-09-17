@@ -83,8 +83,8 @@ stay under the configured vault evaluation directory. The repository receives
 only this protocol, tests, tooling, and the final aggregate report. Generation
 is local-only and usage telemetry is disabled.
 
-Implementation: `scripts/experience-action-review.py` and
-`scripts/_paired_action_eval.py`.
+Implementation: `scripts/dev/experience-action-review.py` and
+`scripts/dev/_paired_action_eval.py`.
 
 ## Completed aggregate result
 

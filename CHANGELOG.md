@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Research and evaluation tools no longer ship to the vault.** `setup.sh`
+  copied every `scripts/*.py` into `.claude/scripts/`, so 25 one-person research
+  harnesses (rerank ceiling, rank factors, recall ablation, judge-model sweep,
+  experience calibration, holdout and regression evaluators, sparse source
+  evaluation, the raw-source audit) sat in every vault beside the runtime. They
+  now live in `scripts/dev/`, which the deploy glob does not reach; they run from
+  the repository checkout. Tools that a command, a skill, `doctor.sh` or runtime
+  code calls stay where they were, `kb-eval.py` included. The three TASK-245
+  fixture generators are deleted. Schema migration 0.39.0
+  (`dev-scripts-uit-de-vault`) removes the old copies from an upgraded vault,
+  because `setup.sh` copies and never prunes; a test keeps its list equal to
+  `scripts/dev/` and disjoint from the shipped scripts (ADR-012).
+- Moving the tools exposed that their private-data boundary was computed as
+  "the parent of this script": in `scripts/dev/` that is `scripts/`, which
+  would have allowed private evaluation output in the repository root. The
+  boundary is the repository again, and `test_source_sparse_eval_cli` guards it.
+
 ### Fixed
 
 - **A sweep lock left behind by a hard kill is reclaimed at once instead of an

@@ -521,7 +521,7 @@ The entire suite is isolated via conftest.py and __init__.py:
 - `scripts/_migrations.py` — Schema migration tracking
 - `scripts/_progress.py` — Progress reporting
 - `scripts/_provenance.py` — Source tracking for facts
-- `scripts/_querycache.py` — Query result caching
+- `scripts/dev/_querycache.py` — Query result caching
 - `scripts/_rank.py` — Ranking factors and scoring
 - `scripts/_reconcile.py` — State reconciliation after crashes
 - `scripts/_settings.py` — Settings file loading and defaults

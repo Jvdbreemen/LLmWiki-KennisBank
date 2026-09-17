@@ -152,11 +152,11 @@ and replaced a planned implementation with a smaller and better-targeted one.
 ## Reproducing
 
 ```bash
-python3 scripts/rerank-ceiling.py \
+python3 scripts/dev/rerank-ceiling.py \
     --set <vault>/06-claude/kb-memory-eval-set.json \
     --split dev --pool 50 --out ceiling.json --cache q.json
 # and, to separate the floor from the ranking:
-python3 scripts/rerank-ceiling.py --set ... --min-cos 0.0 --cache q.json
+python3 scripts/dev/rerank-ceiling.py --set ... --min-cos 0.0 --cache q.json
 ```
 
 Query vectors are cached and keyed by embedding-model identity, so the second

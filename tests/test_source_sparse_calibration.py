@@ -17,9 +17,10 @@ SCRIPTS = REPO / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
+    sys.path.insert(0, str(SCRIPTS / "dev"))
 import _source_sparse_selection as selection  # noqa: E402
 
-SCRIPT = SCRIPTS / "calibrate-source-sparse.py"
+SCRIPT = SCRIPTS / "dev" / "calibrate-source-sparse.py"
 
 
 def _load_cli():

@@ -21,7 +21,7 @@ import os
 import sys
 from pathlib import Path
 
-VERSION = "0.38.0"
+VERSION = "0.39.0"
 STAMP_REL = ".claude/.kennisbank-schema-version"
 
 
@@ -107,6 +107,52 @@ def _m_split_experience_store(vault_root, ctx):
         raise RuntimeError("experience store migration failed safely")
 
 
+# Evaluation and research tools live in scripts/dev/ since 0.39.0: setup.sh
+# deploys scripts/*.py only, so they no longer reach a vault. The three task245
+# one-offs were deleted. setup.sh never prunes, so this list removes the copies
+# an older install left in .claude/scripts/. tests/test_migrations.py keeps it
+# equal to scripts/dev/ plus the one-offs, and disjoint from shipped scripts.
+RETIRED_SCRIPTS = (
+    "_advisory_calibration.py",
+    "_outcome_report.py",
+    "_paired_action_eval.py",
+    "_querycache.py",
+    "_reviewed_holdouts.py",
+    "_reviewed_retrieval_eval.py",
+    "_source_lexical_eval.py",
+    "_source_sparse_eval.py",
+    "_source_sparse_selection.py",
+    "audit_raw_sources.py",
+    "calibrate-experience-advisory.py",
+    "calibrate-source-sparse.py",
+    "evaluate-experience-applicability.py",
+    "evaluate-experience-holdout.py",
+    "evaluate-experience-regression.py",
+    "evaluate-source-sparse.py",
+    "experience-action-review.py",
+    "judge-model-sweep.py",
+    "kb-outcome-report.py",
+    "prepare-reviewed-holdouts.py",
+    "rank-factors.py",
+    "recall-ablation.py",
+    "rerank-ceiling.py",
+    "rerank-eval.py",
+    "task209-neighbour-benchmark.py",
+    "build-task245-supplemental-fixture.py",
+    "generate-task245-bge-scores.py",
+    "generate-task245-local-judge.py",
+)
+
+
+def _m_prune_dev_scripts(vault_root, ctx):
+    scripts = Path(vault_root) / ".claude" / "scripts"
+    for name in RETIRED_SCRIPTS:
+        try:
+            (scripts / name).unlink()
+        except FileNotFoundError:
+            pass
+
+
 # (versie, naam, apply_fn(vault_root, ctx)). Geordend; idempotent.
 MIGRATIONS = [
     ("0.9.0", "geheugen-dirs", _m_memory_dirs),
@@ -114,6 +160,7 @@ MIGRATIONS = [
     ("0.9.0", "geheugen-toggles", _m_memory_toggles),
     ("0.36.0", "scene-laag-opruimen", _m_prune_scene_layer),
     ("0.38.0", "experience-store-splitsen", _m_split_experience_store),
+    ("0.39.0", "dev-scripts-uit-de-vault", _m_prune_dev_scripts),
 ]
 
 

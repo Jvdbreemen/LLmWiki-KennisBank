@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 
 
-SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "experience-action-review.py"
+SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "dev" / "experience-action-review.py"
 
 
 def load_script():

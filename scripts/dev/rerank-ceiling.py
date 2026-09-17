@@ -50,6 +50,7 @@ from pathlib import Path
 # at collection time (TASK-167/181).
 SCRIPTS = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPTS)
+sys.path.append(str(__import__("pathlib").Path(__file__).resolve().parents[1]))  # shipped scripts/; dev tools live in scripts/dev/
 
 import _embeddings as emb  # noqa: E402
 from _progress import Progress  # noqa: E402
@@ -65,7 +66,7 @@ def _load(filename: str):
     """Import a hyphenated sibling script by path."""
     spec = importlib.util.spec_from_file_location(
         filename.replace("-", "_").replace(".py", ""),
-        os.path.join(SCRIPTS, filename))
+        os.path.join(SCRIPTS, filename) if os.path.exists(os.path.join(SCRIPTS, filename)) else os.path.join(os.path.dirname(SCRIPTS), filename))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod

@@ -11,7 +11,7 @@ was spending the answer's budget. That is TASK-143, fixed before these arms ran.
 Every number below was produced with `think: false`; without it the comparison
 would have measured the fail-safes instead of the models.
 
-Harness: `scripts/judge-model-sweep.py`. Raw responses and metrics are written
+Harness: `scripts/dev/judge-model-sweep.py`. Raw responses and metrics are written
 alongside the report by the same run.
 
 ## What the judge decides
@@ -118,7 +118,7 @@ never triggered it in 54 calls; the 9b did twice in 20.
 ## Reproducing
 
 ```bash
-python3 scripts/judge-model-sweep.py \
+python3 scripts/dev/judge-model-sweep.py \
     --models qwen3.5:4b,qwen3.5:9b --pairs 20 --chunks 6 --reps 3 \
     --out judge-sweep.json
 ```

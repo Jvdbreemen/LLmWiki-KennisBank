@@ -66,7 +66,7 @@ class SceneModulesAreGoneTest(unittest.TestCase):
         """`_querycache.py` was extracted from the scene experiment (TASK-190)
         and is now shared by rank-factors and rerank-ceiling. Removing the
         scene layer must not take it along."""
-        self.assertTrue((SCRIPTS / "_querycache.py").exists())
+        self.assertTrue((SCRIPTS / "dev" / "_querycache.py").exists())
 
 
 class SceneTogglesAreGoneTest(unittest.TestCase):

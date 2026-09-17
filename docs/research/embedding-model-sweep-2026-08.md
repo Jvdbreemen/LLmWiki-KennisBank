@@ -4,8 +4,8 @@ Status: measured, acted on
 Date: 2026-08-03
 Scope: the embedding model on the retrieval hot path, measured on one real
 vault (1515 documents, Dutch and English) against its owner's own eval sets
-Harness: `scripts/embed-sweep.py`, with `scripts/recall-ablation.py` for the
-dense-versus-lexical split and `scripts/rerank-eval.py` for the cross-encoder
+Harness: `scripts/embed-sweep.py`, with `scripts/dev/recall-ablation.py` for the
+dense-versus-lexical split and `scripts/dev/rerank-eval.py` for the cross-encoder
 question
 Task: TASK-126, follow-up TASK-128
 
@@ -226,7 +226,7 @@ python3 scripts/embed-sweep.py --vault /tmp/kb-sweep --models nomic-embed-text \
     --query-prefix "search_query: " --doc-prefix "search_document: "
 
 # The dense-versus-lexical split, on the index the sweep just built
-python3 scripts/recall-ablation.py --vault /tmp/kb-sweep \
+python3 scripts/dev/recall-ablation.py --vault /tmp/kb-sweep \
     --model qwen3-embedding:4b --layer memory
 
 # Existing results table without re-running anything
