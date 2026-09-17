@@ -132,7 +132,10 @@ def process_file(filepath: Path, node_map: dict, links: list, dry_run: bool = Fa
         if not other_node:
             continue
 
-        other_file = other_node.get("source_file", "")
+        # Tag- en referentienodes uit graphify's linklaag staan in
+        # graph.json met "source_file": null. Een default in .get()
+        # grijpt daar niet: de sleutel bestaat, de waarde is None.
+        other_file = other_node.get("source_file") or ""
         if not other_file.startswith(WIKI_DIR_PREFIX):
             continue
         if other_file == rel_path:
