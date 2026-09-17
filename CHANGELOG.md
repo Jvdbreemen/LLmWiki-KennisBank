@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`auto-crosslink.py` crashed after every `graphify --update`.** graphify's
+  link layer writes tag and reference nodes with an explicit
+  `"source_file": null`, and `get("source_file", "")` hands back None for those,
+  because a default only applies when the key is absent. The next `.startswith`
+  then raised `AttributeError: 'NoneType' object has no attribute 'startswith'`
+  and no article got its backlinks. Reported on a vault of 2076 nodes, 232 of
+  them without a source file. Fix and report from PR #169; this change is the
+  fix plus the regression test it lacked (`tests/test_auto_crosslink.py`).
+
 ### Changed
 
 - **Research and evaluation tools no longer ship to the vault.** `setup.sh`
