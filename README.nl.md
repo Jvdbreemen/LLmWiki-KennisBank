@@ -76,7 +76,38 @@ Geheugensystemen van leveranciers (Mem0, Zep, Letta, Cognee) zijn krachtig maar 
 
 De ontwerpvoorkeur is overal dezelfde: **deterministisch waar mogelijk, LLM alleen waar het oordeelsvermogen toevoegt, fail-open overal**. Een dood model blokkeert nooit een sessie, verliest nooit een transcript, en verwijdert nooit geverifieerde kennis.
 
-## Functie-highlights (v0.37.0)
+## Functie-highlights (v0.39.0)
+
+### Nieuw in v0.39.0
+
+Vraag om de bron, vraag om de les, en niets antwoordt ongevraagd.
+
+**Expliciete source recall.** `/kennisbank:source-recall` (MCP: `source_recall`)
+doorzoekt je goedgekeurde ruwe bronnen met exacte FTS/BM25 en geeft een
+`SourceRef` terug die te controleren is: pad, bronhash, half-open offsets en
+passagehash. Een bron die gewijzigd, verdwenen of geredigeerd is, zegt dat, in
+plaats van stil vertrouwd te blijven.
+
+**Expliciete experience recall.** `/kennisbank:experience-recall` (MCP:
+`experience_recall`) geeft maximaal drie beoordeelde, aan een uitkomst gebonden
+lessen terug uit een append-only ledger. Extractie maakt alleen kandidaten; een
+les wordt pas oproepbaar na geverifieerd bewijs en een menselijke acceptatie
+die aan de beoordeelde inhoudshash hangt.
+
+**Standaard uit, en alleen expliciet.** Vier nieuwe toggles, allemaal uit. Er is
+geen automatische advisory, geen bron-fallback en geen hook-injectie, omdat de
+meting nee zei: experience-context tilde geblindeerde actiekeuze van 19/60 naar
+43/60, maar automatische advisories gaven twee valse waarschuwingen in tien
+ongerelateerde probes. Wiki- en memory-recall is ongewijzigd.
+
+**Een sweep-lock dat zichzelf vrijgeeft.** Een harde kill liet `sweep-launch.py`
+een uur lang weigeren te starten. Een lock waarvan de houder aantoonbaar niet
+meer bestaat wordt nu direct teruggenomen; de tijdlease blijft, ernaast
+(ADR-011).
+
+**De kluis draagt alleen wat erin draait.** Onderzoeks- en evaluatietools staan
+in `scripts/dev/` en rollen niet meer uit; een upgrade verwijdert de 28 oude
+kopieën (ADR-012). `auto-crosslink.py` crasht niet meer na `graphify --update`.
 
 ### Nieuw in v0.37.0
 

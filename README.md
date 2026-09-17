@@ -73,7 +73,37 @@ Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: 
 
 The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
 
-## Feature highlights (v0.37.0)
+## Feature highlights (v0.39.0)
+
+### New in v0.39.0
+
+Ask for the source, ask for the lesson, and nothing answers unasked.
+
+**Explicit source recall.** `/kennisbank:source-recall` (MCP: `source_recall`)
+searches your approved raw sources with exact FTS/BM25 and returns a
+`SourceRef` that can be checked: path, source hash, half-open offsets and
+passage hash. A source that changed, vanished or was redacted says so instead
+of staying quietly trusted.
+
+**Explicit experience recall.** `/kennisbank:experience-recall` (MCP:
+`experience_recall`) returns at most three reviewed, outcome-bound lessons from
+an append-only ledger. Extraction creates candidates only; a lesson becomes
+recallable after verified evidence and a human acceptance tied to the reviewed
+content hash.
+
+**Off by default, and explicit only.** Four new toggles, all off. There is no
+automatic advisory, no source fallback and no hook injection, because the
+measurement said no: experience context lifted blinded action selection from
+19/60 to 43/60, but automatic advisories raised two false warnings in ten
+unrelated probes. Wiki and memory recall is unchanged.
+
+**A sweep lock that frees itself.** A hard kill left `sweep-launch.py` refusing
+to start for an hour. A lock whose holder provably no longer exists is now
+reclaimed at once; the time lease stays, beside it (ADR-011).
+
+**The vault carries only what runs in it.** Research and evaluation tools moved
+to `scripts/dev/` and no longer deploy; an upgrade removes the 28 old copies
+(ADR-012). `auto-crosslink.py` no longer crashes after `graphify --update`.
 
 ### New in v0.37.0
 
