@@ -23,7 +23,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import sys
 import threading
 import time
@@ -34,6 +33,7 @@ from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
+import _llmjson  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402
 
 API_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -122,13 +122,12 @@ def call_model(api_key: str, model: str, messages: list[dict]) -> tuple[str, dic
 
 
 def parse_verdict(raw: str) -> dict:
-    text = raw.strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```[a-z]*\s*|\s*```$", "", text, flags=re.IGNORECASE)
-    start, end = text.find("{"), text.rfind("}")
-    if start == -1 or end == -1:
+    # Het eerste complete object, niet het stuk van de eerste "{" tot de
+    # laatste "}": een opmerking met accolades na het antwoord maakt dat stuk
+    # ongeldig en gooit een betaald oordeel weg (TASK-189, _llmjson).
+    data = _llmjson.first_object(raw)
+    if data is None:
         raise ValueError("geen JSON-object in antwoord")
-    data = json.loads(text[start:end + 1])
     if not isinstance(data.get("tegenspraak"), bool):
         raise ValueError(f"ongeldig tegenspraak-veld: {data.get('tegenspraak')!r}")
     return data

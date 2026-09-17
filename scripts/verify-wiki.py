@@ -34,6 +34,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from _frontmatter import parse_frontmatter, split_frontmatter  # noqa: E402
+import _llmjson  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402
 
 API_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -160,13 +161,12 @@ def build_messages(item: dict) -> list[dict]:
 
 def parse_verdict(raw: str) -> dict:
     """Parse het modelantwoord; accepteert code fences eromheen."""
-    text = raw.strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```[a-z]*\s*|\s*```$", "", text, flags=re.IGNORECASE)
-    start, end = text.find("{"), text.rfind("}")
-    if start == -1 or end == -1:
+    # Het eerste complete object, niet het stuk van de eerste "{" tot de
+    # laatste "}": een opmerking met accolades na het antwoord maakt dat stuk
+    # ongeldig en gooit een betaald oordeel weg (TASK-189, _llmjson).
+    data = _llmjson.first_object(raw)
+    if data is None:
         raise ValueError("geen JSON-object in antwoord")
-    data = json.loads(text[start:end + 1])
     if data.get("verdict") not in ("ok", "issues"):
         raise ValueError(f"ongeldig verdict: {data.get('verdict')!r}")
     if not isinstance(data.get("claims"), list):
