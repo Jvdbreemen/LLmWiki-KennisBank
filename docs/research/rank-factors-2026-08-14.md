@@ -119,7 +119,7 @@ metric is the one that would say so even if recency were working perfectly.
 ## Reproducing
 
 ```bash
-python3 scripts/rank-factors.py \
+python3 scripts/dev/rank-factors.py \
     --set <vault>/06-claude/kb-memory-eval-set.json \
     --cache q.json --out factors.json
 ```

@@ -1,7 +1,7 @@
 # Outcome telemetry baseline
 
 Date: 2026-08-26
-Command: `KENNISBANK_VAULT=<configured-local-vault> python scripts/kb-outcome-report.py`
+Command: `KENNISBANK_VAULT=<configured-local-vault> python scripts/dev/kb-outcome-report.py`
 Mutation: none; read-only SQLite queries.
 
 The current vault returned no structured exposure/outcome pairs. The report

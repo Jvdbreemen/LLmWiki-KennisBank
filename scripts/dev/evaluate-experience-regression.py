@@ -25,6 +25,7 @@ from unittest.mock import patch
 
 SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS))
+sys.path.append(str(__import__("pathlib").Path(__file__).resolve().parents[1]))  # shipped scripts/; dev tools live in scripts/dev/
 
 
 def sha(path):
@@ -44,7 +45,7 @@ def readonly(path):
 
 
 def gateway(name):
-    spec = importlib.util.spec_from_file_location(name, SCRIPTS / (name + '.py'))
+    spec = importlib.util.spec_from_file_location(name, SCRIPTS.parent / (name + '.py'))
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -110,7 +111,7 @@ def validate_output(output, vault):
     output, vault = Path(output).resolve(), Path(vault).resolve()
     private = vault / '06-claude' / 'evaluations'
     if (not output.is_relative_to(private) or output == private
-            or output.is_relative_to(SCRIPTS.parent)):
+            or output.is_relative_to(SCRIPTS.parents[1])):
         raise ValueError('output must be a new private vault evaluation subdirectory')
     if output.exists():
         raise ValueError('refusing to overwrite an existing evaluation')
@@ -344,7 +345,7 @@ def main():
     summary['historical_action_rescore'] = _paired_action_eval.score(
         [r['blind'] for r in master], [r['key'] for r in master], read_rows(paths['experience-action-reviews.jsonl']))
     summary.update(schema_version=1, evaluation_kind='historical_regression_replay_not_natural_canary',
-                   commit=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=SCRIPTS.parent, text=True).strip(),
+                   commit=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=SCRIPTS.parents[1], text=True).strip(),
                    harness_sha256=sha(__file__), frozen_inputs_sha256=hashes,
                    frozen_inputs_unchanged=all(sha(paths[name]) == digest for name, digest in hashes.items()),
                    projection={key: value for key, value in projection.items() if key != 'excluded'},

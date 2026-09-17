@@ -863,7 +863,8 @@ Upgrade and contribute are two halves of one loop: `contribute` sends your local
   08-archive/      Archived articles
   09-memory/       Agent memory (typed, judged, bi-temporal; archive/ for retired items)
   .claude/
-    scripts/       Python + shell tooling (incl. doctor.sh)
+    scripts/       Python + shell tooling (incl. doctor.sh); the repo's scripts/dev/
+                   research and evaluation tools are not deployed
     kb-index.db    Hybrid vector + FTS index (refreshed incrementally each session)
     kb-usage.db    Aggregate usage telemetry (survives rebuilds and model switches)
     kb-source.db   Disposable lexical source-evidence projection

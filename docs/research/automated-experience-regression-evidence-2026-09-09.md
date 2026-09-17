@@ -169,7 +169,7 @@ intermediate failed XML is retained as `pytest-final.xml`, SHA-256
 The remaining skip is the existing symlink test because this Windows process
 lacks symlink-creation privileges. No product failure was silently skipped.
 
-Reproduce with `scripts/evaluate-experience-regression.py --vault <configured-vault>
+Reproduce with `scripts/dev/evaluate-experience-regression.py --vault <configured-vault>
 --input-dir <private-historical-corpus> --output-dir <new-private-evaluation-dir>`.
 Set `KENNISBANK_VAULT` to that same vault. Existing output directories are rejected.
 The command's successful exit means the evaluation completed, not that its

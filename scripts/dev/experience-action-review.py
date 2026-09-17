@@ -12,9 +12,10 @@ from pathlib import Path
 
 
 SCRIPTS = Path(__file__).resolve().parent
-REPOSITORY = SCRIPTS.parent
+REPOSITORY = SCRIPTS.parents[1]
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
+sys.path.append(str(__import__("pathlib").Path(__file__).resolve().parents[1]))  # shipped scripts/; dev tools live in scripts/dev/
 
 import _paired_action_eval as paired  # noqa: E402
 
@@ -132,7 +133,7 @@ def _load_cases(path: Path) -> list[dict]:
 
 def _load_recall_module():
     spec = importlib.util.spec_from_file_location(
-        "kb_recall", SCRIPTS / "kb-recall.py")
+        "kb_recall", SCRIPTS.parent / "kb-recall.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

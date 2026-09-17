@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-SCRIPT = REPO / "scripts" / "evaluate-source-sparse.py"
+SCRIPT = REPO / "scripts" / "dev" / "evaluate-source-sparse.py"
 
 
 def _load():

@@ -23,7 +23,7 @@ from tests._loader import load_script  # noqa: E402
 class SweepParsersMatchProductionTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.m = load_script("judge-model-sweep.py")
+        cls.m = load_script("dev/judge-model-sweep.py")
 
     def test_parse_reconcile_accepts_what_production_accepts(self):
         raw = ('{"action": "SUPERSEDE", "reason": "nieuwer"}\n'

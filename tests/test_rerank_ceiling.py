@@ -22,7 +22,7 @@ sys.path.insert(0, str(REPO / "scripts"))
 
 def _load():
     spec = importlib.util.spec_from_file_location(
-        "rerank_ceiling", str(REPO / "scripts" / "rerank-ceiling.py"))
+        "rerank_ceiling", str(REPO / "scripts" / "dev" / "rerank-ceiling.py"))
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
     return m

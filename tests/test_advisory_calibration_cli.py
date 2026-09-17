@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 
-SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "calibrate-experience-advisory.py"
+SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "dev" / "calibrate-experience-advisory.py"
 
 
 def load_runner():

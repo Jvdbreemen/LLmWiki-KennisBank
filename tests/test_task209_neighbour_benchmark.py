@@ -15,7 +15,7 @@ from unittest.mock import patch
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 spec = importlib.util.spec_from_file_location(
-    "task209_benchmark", SCRIPTS / "task209-neighbour-benchmark.py")
+    "task209_benchmark", SCRIPTS / "dev" / "task209-neighbour-benchmark.py")
 benchmark = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(benchmark)
 

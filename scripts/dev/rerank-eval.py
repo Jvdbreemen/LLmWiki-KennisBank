@@ -42,13 +42,14 @@ from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS))
+sys.path.append(str(__import__("pathlib").Path(__file__).resolve().parents[1]))  # shipped scripts/; dev tools live in scripts/dev/
 
 KS = (1, 3, 5)
 
 
 def _load_by_path(filename: str):
     spec = importlib.util.spec_from_file_location(
-        filename.replace("-", "_").replace(".py", ""), str(SCRIPTS / filename))
+        filename.replace("-", "_").replace(".py", ""), str(SCRIPTS / filename if (SCRIPTS / filename).exists() else SCRIPTS.parent / filename))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod

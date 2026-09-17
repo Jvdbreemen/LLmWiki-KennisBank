@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 
-MODULE = Path(__file__).resolve().parents[1] / "scripts" / "_paired_action_eval.py"
+MODULE = Path(__file__).resolve().parents[1] / "scripts" / "dev" / "_paired_action_eval.py"
 
 
 def load_module():

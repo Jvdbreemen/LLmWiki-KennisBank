@@ -603,15 +603,15 @@ These are invoked by the Claude Code harness on UserPromptSubmit (synchronously,
 
 - **judge-model-sweep.py** (~418 lines)
   - Evaluate different judge model configs.
-  - **Location**: [judge-model-sweep.py](../../scripts/judge-model-sweep.py)
+  - **Location**: [judge-model-sweep.py](../../scripts/dev/judge-model-sweep.py)
 
 - **rerank-eval.py**
   - Evaluate ranking factor combinations.
-  - **Location**: [rerank-eval.py](../../scripts/rerank-eval.py)
+  - **Location**: [rerank-eval.py](../../scripts/dev/rerank-eval.py)
 
 - **recall-ablation.py**
   - Ablation study on recall components.
-  - **Location**: [recall-ablation.py](../../scripts/recall-ablation.py)
+  - **Location**: [recall-ablation.py](../../scripts/dev/recall-ablation.py)
 
 - **kb-layer-eval.py**
   - Build the content-safe six-arm evidence packet and independent source and

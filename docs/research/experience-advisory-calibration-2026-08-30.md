@@ -49,7 +49,7 @@ false-warning rate <= 0.10.
 
 ## Reproducibility and boundaries
 
-`scripts/calibrate-experience-advisory.py` builds a private dev-only experience
+`scripts/dev/calibrate-experience-advisory.py` builds a private dev-only experience
 projection, runs hybrid and pure lexical retrieval, verifies split
 independence, and writes only an aggregate report outside the repository.
 Usage telemetry is disabled for the run. The runner and threshold contracts

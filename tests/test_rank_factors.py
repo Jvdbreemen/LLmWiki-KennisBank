@@ -21,7 +21,7 @@ import _rank  # noqa: E402
 
 def _load():
     spec = importlib.util.spec_from_file_location(
-        "rank_factors", str(REPO / "scripts" / "rank-factors.py"))
+        "rank_factors", str(REPO / "scripts" / "dev" / "rank-factors.py"))
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
     return m
