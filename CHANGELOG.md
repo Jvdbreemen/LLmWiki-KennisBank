@@ -7,16 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
+Nothing yet.
 
-- **`auto-crosslink.py` crashed after every `graphify --update`.** graphify's
-  link layer writes tag and reference nodes with an explicit
-  `"source_file": null`, and `get("source_file", "")` hands back None for those,
-  because a default only applies when the key is absent. The next `.startswith`
-  then raised `AttributeError: 'NoneType' object has no attribute 'startswith'`
-  and no article got its backlinks. Reported on a vault of 2076 nodes, 232 of
-  them without a source file. Fix and report from PR #169; this change is the
-  fix plus the regression test it lacked (`tests/test_auto_crosslink.py`).
+## [0.39.0] - 2026-09-17
+
+Explicit recall over sources and reviewed experiences, a sweep lock that
+frees itself, and a vault that carries only what runs in it.
+
+### Added
+
+- **Explicit source recall and experience recall (ADR-010).** Two new read
+  routes beside the wiki and memory index, each behind its own toggle and both
+  off by default. `/kennisbank:source-recall` searches the approved raw roots
+  with exact FTS/BM25 and hydrates an exact `SourceRef`: path, source hash,
+  half-open offsets and passage hash. A source that changed, vanished or was
+  redacted is reported as such and never stays silently trusted.
+  `/kennisbank:experience-recall` returns at most three reviewed,
+  outcome-bound, evidence-verified lessons. The same two routes are MCP tools
+  (`source_recall`, `experience_recall`) for every client on the machine.
+- **What v1 deliberately does not do.** No automatic failure advisory, no
+  automatic source fallback, no source vectors, no cross-layer ranking, no hook
+  injection. The measurement decided that: retrieved experience context lifted
+  blinded action selection from 19/60 to 43/60, but automatic advisories raised
+  two false warnings in ten unrelated probes, and sparse-first vector reranking
+  reached hit@5 0.25 against 0.75 for BM25. The public contracts reject those
+  modes (`policy_disabled`); they are not dormant knobs. Normal wiki and memory
+  recall is unchanged and unaware of both routes.
+- **An append-only experience ledger with a rebuildable projection.**
+  `kb-experience-ledger.db` holds canonical events, outcomes and reviews;
+  `kb-source.db` and the experience projection are disposable and rebuilt with
+  `/kennisbank:rebuild-source-index` and `/kennisbank:rebuild-experience`.
+  Automatic extraction creates candidates only; a lesson becomes recallable
+  after verified source and outcome references, no open contradiction, and a
+  human acceptance tied to the reviewed content hash
+  (`/kennisbank:experience-proposal`).
+- **Four new toggles in `/kennisbank:settings`**: `experience_capture`,
+  `experience_projection`, `experience_explicit_recall` and
+  `source_explicit_recall`, all default off. The legacy keys `source_recall`
+  and `experience_recall` grant nothing; `_settings.py migrate` warns and each
+  replacement is switched on separately.
+- **Operations for the new projections**: `/kennisbank:projection-canary`,
+  `/kennisbank:layer-eval`, `/kennisbank:freeze-source-holdout` and
+  `/kennisbank:source-holdout-report`, plus bounded projection health checks in
+  `doctor.sh` and setup.
+- **Contributed tooling (#169).** `conflict-triage.py` judges conflict-scan
+  candidate pairs for real contradiction and `verify-wiki.py` checks wiki
+  articles against their raw session sources; both call OpenRouter and cost
+  money per run. Also six journalistic work templates and ten commands
+  (`cozempic`, `itemsheet`, `opruimen`, `project-handoff`, `research`,
+  `scrolly-plan`, `scrolly-review`, `scrolly-scaffold`, `startup`,
+  `transcript`). Commands land in `~/.claude/commands` on every install.
 
 ### Changed
 
@@ -39,6 +79,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`auto-crosslink.py` crashed after every `graphify --update`.** graphify's
+  link layer writes tag and reference nodes with an explicit
+  `"source_file": null`, and `get("source_file", "")` hands back None for those,
+  because a default only applies when the key is absent. The next `.startswith`
+  then raised `AttributeError: 'NoneType' object has no attribute 'startswith'`
+  and no article got its backlinks. Reported on a vault of 2076 nodes, 232 of
+  them without a source file. Fix and report from PR #169; this change is the
+  fix plus the regression test it lacked (`tests/test_auto_crosslink.py`).
 - **A sweep lock left behind by a hard kill is reclaimed at once instead of an
   hour later.** `sweep_lock()` releases through a context manager, so an
   exception or an interrupt frees it, but a hard kill never runs `__exit__` and
@@ -80,6 +128,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `memory-notify.py` reports is unchanged. Every write now goes through a
   temporary file and `os.replace`, because a partial write lands during the run
   and a kill during an in-place write would leave unparseable JSON.
+
+### Upgrading
+
+- **Schema 0.39.0, two steps.** `experience-store-splitsen` splits a legacy
+  experience store into the ledger and its projection with a verified backup
+  (a failed split stops before the stamp, so a re-run resumes).
+  `dev-scripts-uit-de-vault` deletes the 28 retired research scripts from
+  `.claude/scripts/`. Run `/kennisbank-upgrade`; both are idempotent.
+- **0.38.0 was never tagged.** Its schema step landed on `main` and ships here,
+  so a vault stamped 0.38.0 from a development checkout upgrades normally.
 
 ## [0.37.0] - 2026-08-19
 
@@ -2379,7 +2437,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.37.0...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.39.0...HEAD
+[0.39.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.37.0...v0.39.0
 [0.37.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.36.0...v0.37.0
 [0.36.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.35.0...v0.36.0
 [0.35.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.34.0...v0.35.0
