@@ -1,12 +1,12 @@
 ---
 id: "ADR-012"
 title: "Research and evaluation tools live in scripts/dev/ and are not deployed"
-status: "Proposed"
+status: "Accepted"
 date: "2026-09-17"
-binding: false
+binding: true
 gate: null
 documents_shipped: false
-verified_in: []
+verified_in: ["TASK-252"]
 supersedes: []
 superseded_by: null
 format: "madr"
@@ -17,6 +17,26 @@ topics:
 ---
 
 # ADR-012: Research and evaluation tools live in scripts/dev/ and are not deployed
+
+## Status
+
+Accepted, 2026-09-17.
+
+## Status History
+
+```yaml
+status_history:
+  - date: 2026-09-17
+    status: Proposed
+    changed_by: Claude
+    reason: Owner asked whether the evaluation scripts can be dropped before release or split into a separate project
+    changed_via: manual
+  - date: 2026-09-17
+    status: Accepted
+    changed_by: Robert van den Breemen
+    reason: "Accepted by the user in session 2026-09-17 (explicit: 'Accept adr-012') after the sandbox upgrade evidence"
+    changed_via: manual
+```
 
 ## Context and Problem Statement
 
