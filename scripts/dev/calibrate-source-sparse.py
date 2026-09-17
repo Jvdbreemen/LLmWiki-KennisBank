@@ -13,9 +13,10 @@ import sys
 from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parent
-REPOSITORY = SCRIPTS.parent
+REPOSITORY = SCRIPTS.parents[1]
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
+sys.path.append(str(__import__("pathlib").Path(__file__).resolve().parents[1]))  # shipped scripts/; dev tools live in scripts/dev/
 
 import _source_sparse_eval as sparse  # noqa: E402
 import _source_sparse_selection as selection  # noqa: E402

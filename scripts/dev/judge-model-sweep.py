@@ -47,6 +47,7 @@ import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(str(__import__("pathlib").Path(__file__).resolve().parents[1]))  # shipped scripts/; dev tools live in scripts/dev/
 from _frontmatter import parse_frontmatter  # noqa: E402
 from _vaultpath import vault_root  # noqa: E402
 

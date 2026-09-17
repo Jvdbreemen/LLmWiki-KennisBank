@@ -8,6 +8,7 @@ from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
+sys.path.insert(0, str(SCRIPTS / "dev"))
 import _reviewed_retrieval_eval as live  # noqa: E402
 import _source_ref  # noqa: E402
 

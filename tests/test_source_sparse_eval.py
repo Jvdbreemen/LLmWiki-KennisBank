@@ -20,6 +20,7 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
+    sys.path.insert(0, str(SCRIPTS / "dev"))
 import _source_lexical_eval as lexical  # noqa: E402
 import _source_sparse_eval as sparse  # noqa: E402
 

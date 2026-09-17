@@ -10,8 +10,9 @@ from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
+sys.path.insert(0, str(SCRIPTS / "dev"))
 import _outcome_report as report  # noqa: E402
-spec = importlib.util.spec_from_file_location("kb_outcome_report", SCRIPTS / "kb-outcome-report.py")
+spec = importlib.util.spec_from_file_location("kb_outcome_report", SCRIPTS / "dev" / "kb-outcome-report.py")
 cli = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(cli)
 

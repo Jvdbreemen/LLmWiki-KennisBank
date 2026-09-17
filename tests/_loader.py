@@ -24,7 +24,7 @@ def load_script(filename: str):
     path = SCRIPTS_DIR / filename
     if not path.exists():
         raise FileNotFoundError(f"script not found: {path}")
-    mod_name = "script_" + filename.replace("-", "_").replace(".py", "")
+    mod_name = "script_" + filename.replace("/", "_").replace("-", "_").replace(".py", "")
     spec = importlib.util.spec_from_file_location(mod_name, path)
     if spec is None or spec.loader is None:
         raise ImportError(f"cannot build import spec for {path}")

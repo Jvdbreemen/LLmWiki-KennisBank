@@ -9,10 +9,11 @@ import unittest
 from pathlib import Path
 
 
-SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "evaluate-experience-holdout.py"
+SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "dev" / "evaluate-experience-holdout.py"
 SCRIPTS = SCRIPT.parent
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
+sys.path.insert(1, str(SCRIPTS.parent))
 
 import _experience as experience  # noqa: E402
 import _source_ref as source_ref  # noqa: E402

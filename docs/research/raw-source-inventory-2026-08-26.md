@@ -2,7 +2,7 @@
 
 Date: 2026-08-26
 Vault: configured local KennisBank vault
-Method: `scripts/audit_raw_sources.py --progress`
+Method: `scripts/dev/audit_raw_sources.py --progress`
 Mutation: none; the scan read files and emitted aggregate counts only.
 
 | measure | result |
