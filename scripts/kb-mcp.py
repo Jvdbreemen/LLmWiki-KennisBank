@@ -88,13 +88,15 @@ def _ann(**kw):
 
 # kb-recall via importlib (hyphen); module-globaal zodat tests het kunnen patchen.
 kb_recall = None
+kb_recall_error = ""
 try:
     _spec = importlib.util.spec_from_file_location(
         "kb_recall", os.path.join(os.path.dirname(os.path.abspath(__file__)), "kb-recall.py"))
     kb_recall = importlib.util.module_from_spec(_spec)
     _spec.loader.exec_module(kb_recall)
-except Exception:
-    kb_recall = None
+except Exception as exc:
+    kb_recall_error = f"{type(exc).__name__}: {exc}"
+kb_recall_original = getattr(kb_recall, "recall_hits", None) if kb_recall is not None else None
 
 activity = None
 try:
@@ -163,20 +165,60 @@ def _compact_activity_result(result: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _index_unavailable_line(code: str = "search_error", message: str = "") -> str:
+    detail = str(message or "").strip()
+    if code == "missing_index":
+        return "KennisBank-index onbruikbaar: indexbestand ontbreekt."
+    if code == "embed_mismatch":
+        return f"KennisBank-index onbruikbaar: embedding-model wijkt af ({detail})."
+    if code == "index_stamp_missing":
+        return "KennisBank-index onbruikbaar: embed_id-stempel ontbreekt."
+    if code == "sqlite_vec_missing":
+        return "KennisBank-index onbruikbaar: sqlite-vec ontbreekt."
+    if code == "extension_loading_unsupported":
+        return "KennisBank-index onbruikbaar: Python sqlite3 heeft geen load_extension."
+    if code == "vec0_unavailable":
+        return f"KennisBank-index onbruikbaar: vec0 kon niet worden geladen ({detail or 'sqlite-vec'})"
+    if code == "schema_error":
+        return f"KennisBank-index onbruikbaar: indexschema klopt niet ({detail})."
+    return f"KennisBank-index onbruikbaar: zoekfout ({detail or type(message).__name__})."
+
+
 def recall_tool(query: str, k: int = 5, *, compact: bool = False) -> str:
-    """Doorzoek de KennisBank (geheugen + wiki) en geef relevante kennis als tekst."""
+    """Doorzoek de KennisBank en geef een onderscheid tussen leeg en onbruikbaar."""
     q = (query or "").strip()
     if not q:
         return ""
     try:
         import _embeddings as emb
         qvec = emb.embed_query(q)
-        if not qvec or kb_recall is None:
-            return "Geen treffers (model onbereikbaar of index ontbreekt)."
-        hits = kb_recall.recall_hits(qvec, query_text=q, k=int(k),
-                                     layers=("wiki", "memory"))
-    except Exception:
-        return "Geen treffers (fout bij ophalen)."
+    except Exception as exc:
+        return f"Geen treffers (embedding-modelfout: {type(exc).__name__})."
+    if not qvec:
+        return "Geen treffers (embedding-model onbereikbaar)."
+    if kb_recall is None:
+        detail = kb_recall_error or "recall-module kon niet worden geladen"
+        return f"KennisBank-index onbruikbaar: {detail}."
+    try:
+        if (hasattr(kb_recall, "recall_hits_with_status") and
+                getattr(kb_recall, "recall_hits", None) is kb_recall_original):
+            result = kb_recall.recall_hits_with_status(
+                qvec, query_text=q, k=int(k), layers=("wiki", "memory"))
+        else:
+            legacy_hits = kb_recall.recall_hits(
+                qvec, query_text=q, k=int(k), layers=("wiki", "memory"))
+            result = {
+                "status": "ok" if legacy_hits else "no_hit",
+                "hits": legacy_hits,
+                "code": "",
+                "message": "",
+            }
+    except Exception as exc:
+        code, message = getattr(kb_recall, "_index_error", lambda _e: ("search_error", str(_e)))(exc)
+        return _index_unavailable_line(code, message)
+    if result.get("status") == "unusable":
+        return _index_unavailable_line(result.get("code", ""), result.get("message", ""))
+    hits = result.get("hits") or []
     if not hits:
         return "Geen treffers in de KennisBank."
     lines = []

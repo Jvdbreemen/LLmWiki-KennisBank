@@ -57,6 +57,75 @@ def _open_ro(db_path: Path):
         return None
 
 
+def _open_ro_checked(db_path: Path):
+    if not db_path.exists():
+        raise _kbindex.IndexUnavailable(
+            "missing_index",
+            f"indexbestand ontbreekt: {db_path}",
+        )
+    conn = None
+    enabled = False
+    try:
+        import sqlite_vec
+        uri = f"file:{db_path.as_posix()}?mode=ro"
+        conn = sqlite3.connect(uri, uri=True)
+        if not hasattr(conn, "enable_load_extension") or not hasattr(conn, "load_extension"):
+            raise _kbindex.IndexUnavailable(
+                "extension_loading_unsupported",
+                "Python sqlite3 heeft geen load_extension/enable_load_extension API",
+            )
+        conn.enable_load_extension(True)
+        enabled = True
+        sqlite_vec.load(conn)
+        conn.enable_load_extension(False)
+        enabled = False
+        return conn
+    except _kbindex.IndexUnavailable:
+        if conn is not None:
+            conn.close()
+        raise
+    except ImportError as exc:
+        if conn is not None:
+            conn.close()
+        raise _kbindex.IndexUnavailable("sqlite_vec_missing", str(exc)) from exc
+    except Exception as exc:
+        if conn is not None:
+            conn.close()
+        message = str(exc)
+        low = message.lower()
+        if "load_extension" in low or "enable_load_extension" in low:
+            code = "extension_loading_unsupported"
+        elif "vec0" in low or "no such module" in low:
+            code = "vec0_unavailable"
+        elif "sqlite_vec" in low or "sqlite-vec" in low:
+            code = "sqlite_vec_missing"
+        else:
+            code = "index_open_failed"
+        raise _kbindex.IndexUnavailable(code, message or type(exc).__name__) from exc
+    finally:
+        if conn is not None and enabled:
+            try:
+                conn.enable_load_extension(False)
+            except Exception:
+                pass
+
+
+def _index_error(exc: Exception) -> tuple[str, str]:
+    if isinstance(exc, _kbindex.IndexUnavailable):
+        return exc.code, exc.message
+    message = str(exc) or type(exc).__name__
+    low = message.lower()
+    if "no such module: vec0" in low or "vec0" in low:
+        return "vec0_unavailable", message
+    if "load_extension" in low or "enable_load_extension" in low:
+        return "extension_loading_unsupported", message
+    if "sqlite-vec" in low or "sqlite_vec" in low:
+        return "sqlite_vec_missing", message
+    if isinstance(exc, sqlite3.OperationalError) and "no such table" in low:
+        return "schema_error", message
+    return "search_error", message
+
+
 def _open_graph_ro():
     """Read-only open van kb-graph.db; None bij afwezig/fout.
 
@@ -199,38 +268,31 @@ def _neighbor_entry(out) -> "dict | None":
         return None
 
 
-def recall_hits(query_vector, query_text: str = "", k: int = 3,
-                layers=("wiki", "memory"), expand: bool = False,
-                min_cos: float = 0.0, fusion: str = "rrf") -> list:
-    """Recall-hits over de opgegeven lagen (status=current), fail-soft -> [].
-    Live-status-hercheck ALLEEN voor de memory-laag (wiki is gecureerd).
-
-    Ranking: de hybride RRF-score wordt voor de memory-laag herwogen met
-    recency (halfwaardetijd per memory_type) en importance (judge, 1-5);
-    wiki blijft ongewogen (zie _rank).
-
-    ``expand=True`` voegt na de directe hits de gewogen graafbuur toe (via
-    ``_neighbor_entry`` / ``graph_neighbor``, TASK-87/93) als extra entry met
-    ``neighbor: True`` — altijd ACHTERAAN, verdringt nooit een directe hit.
-    ``graph_retrieval`` uit levert dan GEEN buur (TASK-93: de legacy
-    wikilink-expansie-terugval is verwijderd, geen source-select meer).
-    """
+def _recall_hits_impl(query_vector, query_text: str = "", k: int = 3,
+                      layers=("wiki", "memory"), expand: bool = False,
+                      min_cos: float = 0.0, fusion: str = "rrf") -> list:
     if not query_vector:
         return []
-    conn = _open_ro(_kbindex.index_path())
-    if conn is None:
-        return []
+    conn = _open_ro_checked(_kbindex.index_path())
     try:
-        if not _kbindex.is_valid_for(conn, emb.embed_id()):
-            return []
+        live_id = emb.embed_id()
+        if not _kbindex.is_valid_for(conn, live_id):
+            stored = _kbindex.meta_get(conn, "embed_id")
+            if not stored:
+                raise _kbindex.IndexUnavailable(
+                    "index_stamp_missing",
+                    "index mist het embed_id-stempel",
+                )
+            raise _kbindex.IndexUnavailable(
+                "embed_mismatch",
+                f"index gebruikt {stored}, actueel model is {live_id}",
+            )
         rows = _kbindex.search(conn, query_vector=query_vector, query_text=query_text,
                                k=k, layers=tuple(layers), statuses=("current",),
                                min_cos=min_cos, fusion=fusion)
         out = []
         for r in rows:
             layer = r.get("layer", "")
-            # Stale-index-bescherming alleen voor memory: een ingetrokken memory mag
-            # nooit als current geserveerd worden. Wiki vertrouwt de index-status.
             if layer == "memory" and _mem.read_status(Path(r["path"])) != "current":
                 continue
             snippet = emb.doc_text(Path(r["path"]), cap=280).replace("\n", " ").strip()
@@ -240,8 +302,6 @@ def recall_hits(query_vector, query_text: str = "", k: int = 3,
                         "snippet": snippet})
         try:
             import _usage
-            # Eén batch-query voor alle kandidaten in plaats van twee opens per
-            # treffer tijdens het herwegen.
             _stats = _usage.stats_for(Path(r["path"]).stem for r in out)
             _lu = lambda stem: _stats.get(stem, {}).get("last_used", "")
             _nf = lambda stem: (_stats.get(stem, {}).get("noise", 0),
@@ -251,9 +311,6 @@ def recall_hits(query_vector, query_text: str = "", k: int = 3,
             _nf = None
         out = _rank.rerank(out, _frontmatter_of, last_used_fn=_lu, noise_fn=_nf,
                            sources_fn=_coupling_sources_fn(conn, rows))
-        # Defensive cap: the index already returns at most k, but reranking
-        # runs before the neighbour append and the block must never exceed the
-        # configured top_n.
         out = out[:k]
         if expand and out:
             try:
@@ -263,13 +320,41 @@ def recall_hits(query_vector, query_text: str = "", k: int = 3,
             except Exception:
                 pass
         return out
-    except Exception:
-        return []
     finally:
         try:
             conn.close()
         except Exception:
             pass
+
+
+def recall_hits_with_status(query_vector, query_text: str = "", k: int = 3,
+                            layers=("wiki", "memory"), expand: bool = False,
+                            min_cos: float = 0.0, fusion: str = "rrf") -> dict:
+    """Return hits plus an explicit ``ok``/``no_hit``/``unusable`` status."""
+    try:
+        hits = _recall_hits_impl(
+            query_vector, query_text=query_text, k=k, layers=layers,
+            expand=expand, min_cos=min_cos, fusion=fusion,
+        )
+    except Exception as exc:
+        code, message = _index_error(exc)
+        return {"status": "unusable", "hits": [], "code": code, "message": message}
+    return {
+        "status": "ok" if hits else "no_hit",
+        "hits": hits,
+        "code": "",
+        "message": "",
+    }
+
+
+def recall_hits(query_vector, query_text: str = "", k: int = 3,
+                layers=("wiki", "memory"), expand: bool = False,
+                min_cos: float = 0.0, fusion: str = "rrf") -> list:
+    """Recall-hits over de opgegeven lagen (status=current), fail-soft -> []."""
+    return recall_hits_with_status(
+        query_vector, query_text=query_text, k=k, layers=layers,
+        expand=expand, min_cos=min_cos, fusion=fusion,
+    )["hits"]
 
 
 # Memories zijn kort en atomair; hun cosinus tegen een prompt ligt structureel
@@ -309,29 +394,38 @@ def memory_hits(query_vector, query_text: str = "", k: int = 3,
                        min_cos=min_cos, fusion=fusion)
 
 
-def index_is_gated() -> bool:
-    """True als de index zelf een relevantiedrempel kan afdwingen.
-
-    Vereist een geldige index voor het live embedmodel EN de unit_norm-vlag:
-    zonder genormaliseerde vectoren klopt de afstand-naar-cosinus-omrekening
-    niet en past search() geen drempel toe. De aanroeper kan dan niet op de
-    index vertrouwen als poort en moet de oude cosine-cache-weg nemen.
-
-    Eén read-only sqlite-open; ordes goedkoper dan de JSON-cache parsen.
-    """
-    conn = _open_ro(_kbindex.index_path())
-    if conn is None:
-        return False
+def index_status() -> dict:
+    """Return the index runtime state without hiding a broken sqlite-vec setup."""
     try:
-        return (_kbindex.is_valid_for(conn, emb.embed_id())
-                and _kbindex.meta_get(conn, "unit_norm") == "1")
-    except Exception:
-        return False
+        conn = _open_ro_checked(_kbindex.index_path())
+    except Exception as exc:
+        code, message = _index_error(exc)
+        return {"status": "unusable", "code": code, "message": message}
+    try:
+        live_id = emb.embed_id()
+        stored = _kbindex.meta_get(conn, "embed_id")
+        if not stored:
+            return {"status": "unusable", "code": "index_stamp_missing",
+                    "message": "index mist het embed_id-stempel"}
+        if stored != live_id:
+            return {"status": "unusable", "code": "embed_mismatch",
+                    "message": f"index gebruikt {stored}, actueel model is {live_id}"}
+        return {"status": "ok", "code": "", "message": "",
+                "unit_norm": _kbindex.meta_get(conn, "unit_norm") == "1"}
+    except Exception as exc:
+        code, message = _index_error(exc)
+        return {"status": "unusable", "code": code, "message": message}
     finally:
         try:
             conn.close()
         except Exception:
             pass
+
+
+def index_is_gated() -> bool:
+    """True only when the live index can enforce its relevance gate."""
+    state = index_status()
+    return state.get("status") == "ok" and bool(state.get("unit_norm"))
 
 
 def has_fts_match(query_text: str, layer: str = "wiki") -> bool:

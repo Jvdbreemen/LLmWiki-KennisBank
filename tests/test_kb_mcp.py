@@ -62,6 +62,39 @@ class KbMcpTest(unittest.TestCase):
         out = self.m.recall_tool("iets")
         self.assertIn("geen", out.lower())
 
+    def test_recall_tool_reports_unusable_index_explicitly(self):
+        old_status = self.m.kb_recall.recall_hits_with_status
+        old_hits = self.m.kb_recall.recall_hits
+        self.m.kb_recall.recall_hits = self.m.kb_recall_original
+        self.m.kb_recall.recall_hits_with_status = lambda *a, **k: {
+            "status": "unusable",
+            "hits": [],
+            "code": "vec0_unavailable",
+            "message": "no such module: vec0",
+        }
+        try:
+            out = self.m.recall_tool("iets")
+        finally:
+            self.m.kb_recall.recall_hits_with_status = old_status
+            self.m.kb_recall.recall_hits = old_hits
+        self.assertIn("KennisBank-index onbruikbaar", out)
+        self.assertIn("vec0", out)
+        self.assertNotIn("Geen treffers in de KennisBank", out)
+
+    def test_recall_tool_distinguishes_empty_index(self):
+        old_status = self.m.kb_recall.recall_hits_with_status
+        old_hits = self.m.kb_recall.recall_hits
+        self.m.kb_recall.recall_hits = self.m.kb_recall_original
+        self.m.kb_recall.recall_hits_with_status = lambda *a, **k: {
+            "status": "no_hit", "hits": [], "code": "", "message": "",
+        }
+        try:
+            out = self.m.recall_tool("iets")
+        finally:
+            self.m.kb_recall.recall_hits_with_status = old_status
+            self.m.kb_recall.recall_hits = old_hits
+        self.assertEqual(out, "Geen treffers in de KennisBank.")
+
     def test_recall_tool_embed_fail_is_soft(self):
         self.emb.embed = lambda *a, **k: None
         self.assertIn("geen", self.m.recall_tool("iets").lower())

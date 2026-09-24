@@ -26,6 +26,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -99,8 +100,60 @@ def copilot_home() -> Path:
     return _norm_path(raw) if raw else _home() / ".copilot"
 
 
-def _mcp_server_argv(vault: Path) -> list:
-    py = ["py", "-3"] if _is_windows_like() else ["python3"]
+_MCP_PYTHON_CACHE: list | None = None
+
+
+def _default_mcp_python() -> list:
+    global _MCP_PYTHON_CACHE
+    if _MCP_PYTHON_CACHE is not None:
+        return list(_MCP_PYTHON_CACHE)
+    candidates: list[list[str]] = []
+    override = os.environ.get("KENNISBANK_PYTHON", "").strip()
+    if override:
+        try:
+            candidates.append(shlex.split(override))
+        except ValueError:
+            candidates.append([override])
+    if sys.executable:
+        candidates.append([sys.executable])
+    if _is_windows_like():
+        candidates.append(["py", "-3"])
+    else:
+        candidates.append(["python3"])
+    seen: set[tuple[str, ...]] = set()
+    failures: list[str] = []
+    probe = Path(__file__).with_name("_mcp_probe.py")
+    for candidate in candidates:
+        key = tuple(candidate)
+        if not candidate or key in seen:
+            continue
+        seen.add(key)
+        try:
+            proc = subprocess.run(
+                [*candidate, str(probe), "--json"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=15,
+            )
+            lines = (proc.stdout or "").strip().splitlines()
+            result = json.loads(lines[-1]) if lines else {}
+        except (FileNotFoundError, subprocess.TimeoutExpired, ValueError, OSError) as exc:
+            failures.append(f"{' '.join(candidate)}: {type(exc).__name__}")
+            continue
+        if proc.returncode == 0 and isinstance(result, dict) and result.get("ok"):
+            _MCP_PYTHON_CACHE = list(candidate)
+            return list(_MCP_PYTHON_CACHE)
+        failures.append(f"{' '.join(candidate)}: {(result or {}).get('error_code', 'probe_failed')}")
+    attempted = ", ".join(" ".join(c) for c in candidates)
+    raise RuntimeError(
+        "geen Python-interpreter kan zowel mcp als sqlite-vec/vec0 laden. "
+        f"Pogingen: {attempted}. Details: {'; '.join(failures)}. "
+        "Installeer mcp==1.28.1 en sqlite-vec==0.1.9 in een geschikte "
+        "virtual environment en zet KENNISBANK_PYTHON."
+    )
+
+
+def _mcp_server_argv(vault: Path, python_argv=None) -> list:
+    py = list(python_argv) if python_argv is not None else _default_mcp_python()
     return [*py, _posix(vault / ".claude" / "scripts" / "kb-mcp.py")]
 
 
@@ -294,8 +347,8 @@ def remove_managed_block(path: Path, *, dry_run: bool) -> dict:
 
 # --- surface writers (built on the primitives) -----------------------------
 
-def _mcp_server_spec(vault: Path) -> dict:
-    argv = _mcp_server_argv(vault)
+def _mcp_server_spec(vault: Path, python_argv=None) -> dict:
+    argv = _mcp_server_argv(vault, python_argv=python_argv)
     return {
         "type": "local",
         "command": argv[0],
@@ -305,11 +358,13 @@ def _mcp_server_spec(vault: Path) -> dict:
     }
 
 
-def ensure_mcp(home: Path, vault: Path, *, dry_run: bool = False) -> dict:
+def ensure_mcp(home: Path, vault: Path, *, dry_run: bool = False,
+               python_argv=None) -> dict:
     """Register the KennisBank stdio MCP server in ~/.copilot/mcp-config.json
     (schema verified against copilot v1.0.70). Idempotent, login-free (ADR D1)."""
     return merge_json_key(home / "mcp-config.json", "mcpServers", "kennisbank",
-                          _mcp_server_spec(vault), dry_run=dry_run)
+                          _mcp_server_spec(vault, python_argv=python_argv),
+                          dry_run=dry_run)
 
 
 # Capture script (built by TASK-26.6); the hook map references it here so the
@@ -592,12 +647,13 @@ def ensure_agent_profile(home: Path, vault: Path, *, dry_run: bool = False) -> d
 
 # --- orchestration ---------------------------------------------------------
 
-def install(vault: Path, *, home: "Path | None" = None, dry_run: bool = False) -> dict:
+def install(vault: Path, *, home: "Path | None" = None, dry_run: bool = False,
+            python_argv=None) -> dict:
     """Install Copilot surfaces and consolidate legacy start/exit hooks."""
     home = home or copilot_home()
     vault = _norm_path(vault)
     results = {
-        "mcp": ensure_mcp(home, vault, dry_run=dry_run),
+        "mcp": ensure_mcp(home, vault, dry_run=dry_run, python_argv=python_argv),
         "hooks": ensure_hooks(home, vault, dry_run=dry_run),
         "instructions": ensure_instructions(home, vault, dry_run=dry_run),
         "agent_profile": ensure_agent_profile(home, vault, dry_run=dry_run),

@@ -11,6 +11,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
 if str(SCRIPTS_DIR) not in sys.path:
@@ -97,6 +98,32 @@ class KbRecallTest(unittest.TestCase):
     def test_missing_index_returns_empty(self):
         (self.vault / ".claude" / "kb-index.db").unlink()
         self.assertEqual(self.kb.memory_hits([0.1, 0.2, 0.3, 0.4], k=5), [])
+
+    def test_status_distinguishes_missing_index(self):
+        (self.vault / ".claude" / "kb-index.db").unlink()
+        result = self.kb.recall_hits_with_status([0.1, 0.2, 0.3, 0.4])
+        self.assertEqual(result["status"], "unusable")
+        self.assertEqual(result["code"], "missing_index")
+        self.assertEqual(result["hits"], [])
+
+    def test_status_distinguishes_embed_mismatch(self):
+        import _embeddings as emb
+        original = emb.embed_id
+        emb.embed_id = lambda: "ollama:ander-model"
+        try:
+            result = self.kb.recall_hits_with_status([0.1, 0.2, 0.3, 0.4])
+        finally:
+            emb.embed_id = original
+        self.assertEqual(result["status"], "unusable")
+        self.assertEqual(result["code"], "embed_mismatch")
+
+    def test_status_distinguishes_unloadable_vec_extension(self):
+        failure = _kbindex.IndexUnavailable(
+            "extension_loading_unsupported", "load_extension ontbreekt")
+        with patch.object(self.kb, "_open_ro_checked", side_effect=failure):
+            result = self.kb.recall_hits_with_status([0.1, 0.2, 0.3, 0.4])
+        self.assertEqual(result["status"], "unusable")
+        self.assertEqual(result["code"], "extension_loading_unsupported")
 
     def test_stale_index_retracted_not_recalled(self):
         """Regressietest IMPORTANT 1: stale index dient geen ingetrokken geheugen op.
