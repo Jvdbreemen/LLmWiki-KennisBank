@@ -162,6 +162,14 @@ class KbMcpWireTest(unittest.TestCase):
         self.assertEqual(names, EXPECTED_TOOLS,
                          "de tool-namen zijn een contract in uitgerolde client-configs")
 
+    def test_recall_schema_exposes_optional_token_budget(self):
+        self._handshake_legacy()
+        rid = self.client.send("tools/list", {})
+        tools = {t["name"]: t for t in self.client.read_result(rid)["result"]["tools"]}
+        schema = tools["recall"].get("inputSchema") or {}
+        self.assertIn("max_tokens", (schema.get("properties") or {}))
+        self.assertNotIn("max_tokens", schema.get("required") or [])
+
     def test_tools_call_returns_content(self):
         self._handshake_legacy()
         rid = self.client.send("tools/call",

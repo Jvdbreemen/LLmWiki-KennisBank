@@ -14,6 +14,7 @@ Stdlib + sqlite-vec. Hyphen in de naam: importeer via importlib of draai als CLI
 """
 from __future__ import annotations
 
+import importlib.util
 import os
 import re as _re
 import sqlite3
@@ -124,6 +125,60 @@ def _index_error(exc: Exception) -> tuple[str, str]:
     if isinstance(exc, sqlite3.OperationalError) and "no such table" in low:
         return "schema_error", message
     return "search_error", message
+
+
+def _load_context_budget():
+    spec = importlib.util.spec_from_file_location(
+        "context_budget", os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                       "context-budget.py"))
+    if spec is None or spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _document_key(hit: dict, index: int) -> str:
+    path = str(hit.get("path", ""))
+    if not path:
+        return f"__hit-{index}"
+    try:
+        return Path(path).resolve().as_posix()
+    except OSError:
+        return Path(path).as_posix()
+
+
+def _fit_hits(hits: list, max_tokens) -> tuple[list, dict | None]:
+    try:
+        budget = int(max_tokens)
+    except (TypeError, ValueError):
+        return list(hits), None
+    if budget <= 0:
+        return list(hits), None
+    unique: list[dict] = []
+    seen: set[str] = set()
+    for index, hit in enumerate(hits):
+        key = _document_key(hit, index)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(hit)
+    module = _load_context_budget()
+    if module is None:
+        return [], {
+            "max_tokens": budget,
+            "estimated_tokens": 0,
+            "within_budget": True,
+            "dropped": {"relevant": len(unique)},
+            "unavailable": True,
+        }
+    fitted, report = module.fit_to_budget({"relevant": unique}, budget)
+    retained = []
+    for number, hit in enumerate(fitted.get("relevant", []), 1):
+        item = dict(hit)
+        item["citation"] = f"[{number}]"
+        retained.append(item)
+    return retained, report
 
 
 def _open_graph_ro():
@@ -270,9 +325,10 @@ def _neighbor_entry(out) -> "dict | None":
 
 def _recall_hits_impl(query_vector, query_text: str = "", k: int = 3,
                       layers=("wiki", "memory"), expand: bool = False,
-                      min_cos: float = 0.0, fusion: str = "rrf") -> list:
+                      min_cos: float = 0.0, fusion: str = "rrf",
+                      max_tokens=0) -> tuple[list, dict | None]:
     if not query_vector:
-        return []
+        return [], None
     conn = _open_ro_checked(_kbindex.index_path())
     try:
         live_id = emb.embed_id()
@@ -319,7 +375,7 @@ def _recall_hits_impl(query_vector, query_text: str = "", k: int = 3,
                     out.append(entry)
             except Exception:
                 pass
-        return out
+        return _fit_hits(out, max_tokens)
     finally:
         try:
             conn.close()
@@ -329,12 +385,14 @@ def _recall_hits_impl(query_vector, query_text: str = "", k: int = 3,
 
 def recall_hits_with_status(query_vector, query_text: str = "", k: int = 3,
                             layers=("wiki", "memory"), expand: bool = False,
-                            min_cos: float = 0.0, fusion: str = "rrf") -> dict:
+                            min_cos: float = 0.0, fusion: str = "rrf",
+                            max_tokens=0) -> dict:
     """Return hits plus an explicit ``ok``/``no_hit``/``unusable`` status."""
     try:
-        hits = _recall_hits_impl(
+        hits, budget_report = _recall_hits_impl(
             query_vector, query_text=query_text, k=k, layers=layers,
             expand=expand, min_cos=min_cos, fusion=fusion,
+            max_tokens=max_tokens,
         )
     except Exception as exc:
         code, message = _index_error(exc)
@@ -344,16 +402,17 @@ def recall_hits_with_status(query_vector, query_text: str = "", k: int = 3,
         "hits": hits,
         "code": "",
         "message": "",
+        "budget_report": budget_report,
     }
 
 
 def recall_hits(query_vector, query_text: str = "", k: int = 3,
                 layers=("wiki", "memory"), expand: bool = False,
-                min_cos: float = 0.0, fusion: str = "rrf") -> list:
+                min_cos: float = 0.0, fusion: str = "rrf", max_tokens=0) -> list:
     """Recall-hits over de opgegeven lagen (status=current), fail-soft -> []."""
     return recall_hits_with_status(
         query_vector, query_text=query_text, k=k, layers=layers,
-        expand=expand, min_cos=min_cos, fusion=fusion,
+        expand=expand, min_cos=min_cos, fusion=fusion, max_tokens=max_tokens,
     )["hits"]
 
 
@@ -388,10 +447,11 @@ MEMORY_MIN_COS = env_float("KB_MEMORY_THRESHOLD", 0.45)
 
 
 def memory_hits(query_vector, query_text: str = "", k: int = 3,
-                min_cos: float = MEMORY_MIN_COS, fusion: str = "rrf") -> list:
+                min_cos: float = MEMORY_MIN_COS, fusion: str = "rrf",
+                max_tokens=0) -> list:
     """Dunne wrapper: alleen de memory-laag (backward-compat)."""
     return recall_hits(query_vector, query_text=query_text, k=k, layers=("memory",),
-                       min_cos=min_cos, fusion=fusion)
+                       min_cos=min_cos, fusion=fusion, max_tokens=max_tokens)
 
 
 def index_status() -> dict:
@@ -456,8 +516,8 @@ def has_fts_match(query_text: str, layer: str = "wiki") -> bool:
 
 def wiki_hits(query_vector, query_text: str = "", k: int = 3,
               expand: bool = False, min_cos: float = 0.0,
-              fusion: str = "rrf") -> list:
+              fusion: str = "rrf", max_tokens=0) -> list:
     """Dunne wrapper: alleen de wiki-laag (hybride, optioneel met graafbuur)."""
     return recall_hits(query_vector, query_text=query_text, k=k,
                        layers=("wiki",), expand=expand, min_cos=min_cos,
-                       fusion=fusion)
+                       fusion=fusion, max_tokens=max_tokens)

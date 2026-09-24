@@ -49,7 +49,7 @@ Reached today by Codex CLI, OpenCode, and GitHub Copilot CLI, each pointed at th
 
 | Tool | Signature | Purpose |
 |---|---|---|
-| `recall` | `recall_tool(query: str, k: int = 5, *, compact: bool = False) -> str` (`kb-mcp.py:150`) | Search the vault (memory + wiki) and return relevant knowledge as text. Must be called before external search per the Copilot instructions block. |
+| `recall` | `recall_tool(query: str, k: int = 5, *, compact: bool = False, max_tokens: int = 0) -> str` (`kb-mcp.py`) | Search the vault (memory + wiki) and return relevant knowledge as text. A positive `max_tokens` returns deterministic cited, path-bearing output and reports dropped hits; zero preserves the legacy response. Must be called before external search per the Copilot instructions block. |
 | `experience_recall` | `experience_recall_tool(query: str, mode: str = "explicit", k: int = 3) -> str` | For an explicit prior-experience question, retrieve at most three owner-accepted, source-grounded lessons first. |
 | `source_recall` | `source_recall_tool(query: str = "", mode: str = "explicit", k: int = 5, source_ref: dict \| None = None) -> str` | Retrieve exact or best-effort source evidence only on demand for verification or reconstruction. |
 | `capture` | `capture_tool(title: str, body: str, memory_type: str = "feit", importance: int = 3) -> str` (`:179`) | Write a new memory (pull-write) into the vault's memory layer. |

@@ -184,7 +184,149 @@ def _index_unavailable_line(code: str = "search_error", message: str = "") -> st
     return f"KennisBank-index onbruikbaar: zoekfout ({detail or type(message).__name__})."
 
 
-def recall_tool(query: str, k: int = 5, *, compact: bool = False) -> str:
+def _load_context_budget():
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "context_budget", os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                           "context-budget.py"))
+        if spec is None or spec.loader is None:
+            return None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    except Exception:
+        return None
+
+
+def _hit_path(path: str) -> str:
+    raw = Path(str(path or ""))
+    try:
+        from _vaultpath import vault_root
+        return raw.resolve().relative_to(vault_root().resolve()).as_posix()
+    except Exception:
+        return raw.as_posix()
+
+
+def _unique_hits(hits: list) -> list:
+    unique: list[dict] = []
+    seen: set[str] = set()
+    for index, hit in enumerate(hits or []):
+        raw = str(hit.get("path", ""))
+        try:
+            key = Path(raw).resolve().as_posix() if raw else f"__hit-{index}"
+        except OSError:
+            key = Path(raw).as_posix() if raw else f"__hit-{index}"
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(hit)
+    return unique
+
+
+def _retrieve_recall_result(query: str, k: int):
+    try:
+        import _embeddings as emb
+        qvec = emb.embed_query(query)
+    except Exception as exc:
+        return "embedding_error", f"Geen treffers (embedding-modelfout: {type(exc).__name__})."
+    if not qvec:
+        return "model_error", "Geen treffers (embedding-model onbereikbaar)."
+    if kb_recall is None:
+        detail = kb_recall_error or "recall-module kon niet worden geladen"
+        return "module_error", f"KennisBank-index onbruikbaar: {detail}."
+    try:
+        if (hasattr(kb_recall, "recall_hits_with_status") and
+                getattr(kb_recall, "recall_hits", None) is kb_recall_original):
+            result = kb_recall.recall_hits_with_status(
+                qvec, query_text=query, k=int(k), layers=("wiki", "memory"))
+        else:
+            legacy_hits = kb_recall.recall_hits(
+                qvec, query_text=query, k=int(k), layers=("wiki", "memory"))
+            result = {
+                "status": "ok" if legacy_hits else "no_hit",
+                "hits": legacy_hits,
+                "code": "",
+                "message": "",
+            }
+    except Exception as exc:
+        code, message = getattr(kb_recall, "_index_error", lambda _e: ("search_error", str(_e)))(exc)
+        return "index_error", _index_unavailable_line(code, message)
+    return "result", result
+
+
+def _budget_recall_output(query: str, k: int, compact: bool, max_tokens: int) -> str:
+    kind, payload = _retrieve_recall_result(query, k)
+    if kind != "result":
+        return str(payload)
+    if payload.get("status") == "unusable":
+        return _index_unavailable_line(payload.get("code", ""), payload.get("message", ""))
+    hits = _unique_hits(payload.get("hits") or [])
+    if not hits:
+        return "Geen treffers in de KennisBank."
+    module = _load_context_budget()
+    if module is None:
+        return ""
+    lines = []
+    for number, hit in enumerate(hits, 1):
+        tag = "geheugen" if hit.get("layer") == "memory" else "wiki"
+        stem = Path(hit.get("path", "")).stem
+        snippet = hit.get("snippet", "")
+        if compact:
+            snippet = _short_text(snippet, 260)
+        lines.append(
+            f"- [{number}] [{tag}] [[{stem}|{hit.get('title', '')}]] "
+            f"({hit.get('score', 0.0):.2f}) — {_hit_path(hit.get('path', ''))}: {snippet}"
+        )
+    try:
+        from _vaultpath import vault_root
+        root = vault_root()
+    except Exception:
+        root = Path(os.environ.get("KENNISBANK_VAULT", ""))
+    header = f"KennisBank-treffers (budget: {max_tokens} tokens; vault: {root}):"
+    header_tokens = module.estimate_tokens(header)
+    worst_footer = f"Budget: {len(payload.get('hits') or [])} treffers weggelaten; plafond {max_tokens} tokens."
+    allowance = max_tokens - header_tokens
+    fitted, _ = module.fit_to_budget({"relevant": lines}, allowance)
+    kept = list(fitted.get("relevant", []))
+    dropped = len(payload.get("hits") or []) - len(kept)
+    footer = (f"Budget: {dropped} treffers weggelaten; plafond {max_tokens} tokens."
+              if dropped else "")
+
+    def render(kept_lines, footer_text):
+        pieces = [header]
+        if kept_lines:
+            pieces.append("\n".join(kept_lines))
+        if footer_text:
+            pieces.append(footer_text)
+        return "\n".join(pieces)
+
+    output = render(kept, footer)
+    if module.estimate_tokens(output) <= max_tokens:
+        return output
+    allowance = max_tokens - header_tokens - module.estimate_tokens(worst_footer)
+    while allowance > 0:
+        fitted, _ = module.fit_to_budget({"relevant": lines}, allowance)
+        kept = list(fitted.get("relevant", []))
+        dropped = len(payload.get("hits") or []) - len(kept)
+        footer = (f"Budget: {dropped} treffers weggelaten; plafond {max_tokens} tokens."
+                  if dropped else "")
+        output = render(kept, footer)
+        if module.estimate_tokens(output) <= max_tokens:
+            return output
+        overflow = module.estimate_tokens(output) - max_tokens
+        allowance = max(0, allowance - overflow - 1)
+    return ""
+
+
+def recall_tool(query: str, k: int = 5, *, compact: bool = False,
+                max_tokens=0) -> str:
+    """Doorzoek de KennisBank en geef een onderscheid tussen leeg en onbruikbaar."""
+    try:
+        budget = int(max_tokens)
+    except (TypeError, ValueError):
+        budget = 0
+    if budget > 0:
+        return _budget_recall_output((query or "").strip(), k, compact, budget)
     """Doorzoek de KennisBank en geef een onderscheid tussen leeg en onbruikbaar."""
     q = (query or "").strip()
     if not q:
@@ -440,12 +582,13 @@ def build_server():
         srv = MCPServer("kennisbank-geheugen")
 
     @srv.tool(annotations=_ann(title="Recall knowledge", readOnlyHint=True, openWorldHint=False))
-    def recall(query: str, k: int = 5) -> str:
+    def recall(query: str, k: int = 5, max_tokens: int = 0) -> str:
         """Search your own KennisBank (personal memory + curated wiki) BEFORE
         searching externally or making an assumption. Give a short query; get the
-        best-matching entries back."""
+        best-matching entries back. A positive max_tokens returns cited, budgeted output."""
         compact = _compact_output_enabled()
-        return recall_tool(query, k=min(int(k), 3) if compact else k, compact=compact)
+        return recall_tool(query, k=min(int(k), 3) if compact else k, compact=compact,
+                           max_tokens=max_tokens)
 
     @srv.tool(annotations=_ann(title="Recall source evidence", readOnlyHint=True, openWorldHint=False))
     def source_recall(query: str = "", mode: str = "explicit", k: int = 5,

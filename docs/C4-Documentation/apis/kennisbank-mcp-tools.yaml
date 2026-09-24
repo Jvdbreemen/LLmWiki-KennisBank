@@ -53,8 +53,10 @@ tools:
       required: [query]
       properties:
         query: {type: string, description: "Search query text."}
-        k: {type: integer, default: 5, description: "Max results to return."}
-        compact: {type: boolean, default: false, keyword_only: true, description: "Short human-readable summary instead of full text."}
+         k: {type: integer, default: 5, description: "Max results to return."}
+         max_tokens: {type: integer, default: 0, description: "Positive token ceiling for deterministic cited output with paths and a dropped-hit report; zero preserves legacy output."}
+         compact: {type: boolean, default: false, keyword_only: true, description: "Short human-readable summary instead of full text."}
+
     output:
       type: string
       description: Formatted text block of relevant vault knowledge, ready for prompt injection.

@@ -54,6 +54,38 @@ class KbMcpTest(unittest.TestCase):
         self.assertIn("Oude bug", out)
         self.assertIn("geheugen", out)
 
+    def test_no_budget_preserves_legacy_bytes(self):
+        expected = (
+            "KennisBank-treffers:\n"
+            "- [geheugen] [[x|Oude bug]] (0.90): token expiry < ipv <="
+        )
+        self.assertEqual(self.m.recall_tool("token expiry bug"), expected)
+        self.assertEqual(self.m.recall_tool("token expiry bug", max_tokens=0), expected)
+        self.assertEqual(self.m.recall_tool("token expiry bug", max_tokens=-1), expected)
+        self.assertEqual(self.m.recall_tool("token expiry bug", max_tokens=None), expected)
+
+    def test_recall_tool_budget_cites_paths_and_reports_dropped_hits(self):
+        base = self.vault / "09-memory"
+        base.mkdir(parents=True)
+        first = str(base / "x.md")
+        second = str(base / "y.md")
+        self.m.kb_recall.recall_hits = lambda *a, **k: [
+            {"path": first, "layer": "memory", "title": "First", "score": 0.9,
+             "snippet": "a long first passage " * 8},
+            {"path": first, "layer": "memory", "title": "Duplicate", "score": 0.8,
+             "snippet": "duplicate"},
+            {"path": second, "layer": "wiki", "title": "Second", "score": 0.7,
+             "snippet": "a long second passage " * 8},
+        ]
+        out = self.m.recall_tool("token expiry bug", max_tokens=140)
+        estimate = self.m._load_context_budget().estimate_tokens(out)
+        self.assertLessEqual(estimate, 140)
+        self.assertIn("[1]", out)
+        self.assertIn("09-memory/x.md", out)
+        self.assertEqual(out.count("09-memory/x.md"), 1)
+        self.assertIn("Budget:", out)
+        self.assertIn("weggelaten", out)
+
     def test_recall_tool_empty_query(self):
         self.assertEqual(self.m.recall_tool("").strip(), "")
 
