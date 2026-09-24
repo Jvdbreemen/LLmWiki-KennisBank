@@ -19,10 +19,20 @@ from _common import print_summary, slugify  # noqa: E402
 from _liteparse import (  # noqa: E402
     DocumentParseError,
     LiteParseUnavailable,
+    SUPPORTED_DOCUMENT_EXTENSIONS,
     default_output_path,
     is_supported_document,
     parse_document,
     render_source_markdown,
+)
+from _media_transcript import (  # noqa: E402
+    MAIL_EXTENSIONS,
+    OFFLINE_EXTENSIONS,
+    SUBTITLE_EXTENSIONS,
+    OfflineParseError,
+    offline_output_path,
+    parse_offline_source,
+    render_offline_markdown,
 )
 from _vaultpath import vault_root  # noqa: E402
 
@@ -30,12 +40,13 @@ VAULT_DEFAULT = vault_root()
 
 
 def _iter_sources(source: Path, recursive: bool) -> list[Path]:
+    supported = SUPPORTED_DOCUMENT_EXTENSIONS | SUBTITLE_EXTENSIONS | MAIL_EXTENSIONS
     if source.is_file():
-        return [source] if is_supported_document(source) else []
+        return [source] if source.suffix.lower() in supported else []
     if not source.is_dir():
         return []
     iterator = source.rglob("*") if recursive else source.iterdir()
-    return sorted(p for p in iterator if p.is_file() and is_supported_document(p))
+    return sorted(p for p in iterator if p.is_file() and p.suffix.lower() in supported)
 
 
 def _target_for(vault: Path, source: Path, output: Path | None, prefix: str) -> Path:
@@ -47,12 +58,64 @@ def _target_for(vault: Path, source: Path, output: Path | None, prefix: str) -> 
     return output / f"{slug}.md"
 
 
-def _parse_one(args: argparse.Namespace, source: Path, imported_at: list[str]) -> dict:
+def _offline_target_for(vault: Path, source: Path, output: Path | None,
+                        prefix: str, message_index: int | None) -> Path:
+    if output is None:
+        return offline_output_path(
+            vault, source, prefix=prefix, message_index=message_index)
+    if output.suffix.lower() == ".md":
+        if source.suffix.lower() == ".mbox":
+            raise OfflineParseError(
+                "een .mbox levert meerdere bestanden op; gebruik een outputmap")
+        return output
+    slug = slugify(f"{prefix}-{source.stem}" if prefix else source.stem)
+    if message_index is not None:
+        slug += f"-message-{message_index:03d}"
+    return output / f"{slug}.md"
+
+
+def _parse_one(args: argparse.Namespace, source: Path, imported_at: list[str]) -> list[dict]:
+    suffix = source.suffix.lower()
+    if suffix in OFFLINE_EXTENSIONS:
+        parsed_units = parse_offline_source(source)
+        results: list[dict] = []
+        for parsed in parsed_units:
+            message_index = parsed.message_index if suffix == ".mbox" else None
+            target = _offline_target_for(
+                args.vault, source, args.output, args.prefix, message_index)
+            if target.exists() and not args.force:
+                results.append({"status": "skipped", "target": str(target), "reason": "exists"})
+                continue
+            if args.dry_run:
+                results.append({
+                    "status": "parsed",
+                    "target": str(target),
+                    "dry_run": True,
+                    "unit_count": parsed.unit_count,
+                    "engine_version": parsed.engine,
+                })
+                continue
+            text = render_offline_markdown(
+                source=source,
+                parsed=parsed,
+                title=args.title if len(imported_at) == 1 and len(parsed_units) == 1 else None,
+                prefix=args.prefix,
+            )
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(text, encoding="utf-8")
+            results.append({
+                "status": "parsed",
+                "target": str(target),
+                "unit_count": parsed.unit_count,
+                "engine_version": parsed.engine,
+            })
+        return results
+
     target = _target_for(args.vault, source, args.output, args.prefix)
     if target.exists() and not args.force:
-        return {"status": "skipped", "target": str(target), "reason": "exists"}
+        return [{"status": "skipped", "target": str(target), "reason": "exists"}]
     if args.dry_run:
-        return {"status": "parsed", "target": str(target), "dry_run": True}
+        return [{"status": "parsed", "target": str(target), "dry_run": True}]
 
     parsed = parse_document(
         source,
@@ -73,17 +136,17 @@ def _parse_one(args: argparse.Namespace, source: Path, imported_at: list[str]) -
     )
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(text, encoding="utf-8")
-    return {
+    return [{
         "status": "parsed",
         "target": str(target),
         "pages": parsed.page_count,
         "engine_version": parsed.engine_version,
-    }
+    }]
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Parse PDF/Office/image documents to KennisBank source markdown via LiteParse."
+        description="Parse PDF/Office/image, subtitle, and mail sources to KennisBank markdown."
     )
     parser.add_argument("source", type=Path, help="Document file or directory.")
     parser.add_argument("--vault", type=Path, default=VAULT_DEFAULT,
@@ -117,7 +180,7 @@ def main(argv: list[str] | None = None) -> int:
 
     files = _iter_sources(source, args.recursive)
     if not files:
-        print(f"[error] geen ondersteunde LiteParse-documenten gevonden: {source}", file=sys.stderr)
+        print(f"[error] geen ondersteunde bronbestanden gevonden: {source}", file=sys.stderr)
         return 2
 
     imported = skipped = errors = 0
@@ -127,18 +190,20 @@ def main(argv: list[str] | None = None) -> int:
 
     for fp in files:
         try:
-            result = _parse_one(args, fp, imported_at)
-            if result["status"] == "skipped":
-                skipped += 1
-                if args.verbose or not args.json:
-                    print(f"[skip] exists: {result['target']}")
-                continue
-            imported += 1
-            files_out.append(result["target"])
-            if not args.json:
-                action = "dry-run" if args.dry_run else "parsed"
-                print(f"[+] {action} {fp} -> {result['target']}")
-        except (LiteParseUnavailable, DocumentParseError, OSError, FileNotFoundError) as exc:
+            results = _parse_one(args, fp, imported_at)
+            for result in results:
+                if result["status"] == "skipped":
+                    skipped += 1
+                    if args.verbose or not args.json:
+                        print(f"[skip] exists: {result['target']}")
+                    continue
+                imported += 1
+                files_out.append(result["target"])
+                if not args.json:
+                    action = "dry-run" if args.dry_run else "parsed"
+                    print(f"[+] {action} {fp} -> {result['target']}")
+        except (LiteParseUnavailable, DocumentParseError, OfflineParseError,
+                OSError, FileNotFoundError) as exc:
             errors += 1
             errors_detail.append({"path": str(fp), "stage": "parse", "error": str(exc)})
             if args.verbose or not args.json:
