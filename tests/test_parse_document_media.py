@@ -155,6 +155,15 @@ class OfflineParserTest(unittest.TestCase):
         for suffix in (".srt", ".vtt", ".eml", ".mbox"):
             self.assertIn(suffix, text)
 
+    def test_same_stem_subtitle_formats_have_distinct_targets(self):
+        srt = self.tmp / "interview.srt"
+        vtt = self.tmp / "interview.vtt"
+        srt.write_text("1\n00:00:01,000 --> 00:00:02,000\nText\n", encoding="utf-8")
+        vtt.write_text("WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nText\n", encoding="utf-8")
+        first = _media_transcript.offline_output_path(self.vault, srt)
+        second = _media_transcript.offline_output_path(self.vault, vtt)
+        self.assertNotEqual(first, second)
+
     def test_generated_source_link_passes_kb_lint(self):
         source = self.tmp / "mail.eml"
         message = EmailMessage()

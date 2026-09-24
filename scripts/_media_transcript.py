@@ -247,6 +247,7 @@ def parse_offline_source(path: Path) -> list[ParsedOffline]:
 def offline_output_path(vault: Path, source: Path, *, prefix: str = "",
                         message_index: int | None = None) -> Path:
     base = slugify(f"{prefix}-{source.stem}" if prefix else source.stem)
+    base += f"-{source.suffix.lower().lstrip('.') or 'source'}"
     if message_index is not None:
         base += f"-message-{int(message_index):03d}"
     return vault / "05-bronnen" / "liteparse" / f"bron-{file_date(source)}-{base}.md"

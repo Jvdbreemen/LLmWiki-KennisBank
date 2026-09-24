@@ -69,6 +69,7 @@ def _offline_target_for(vault: Path, source: Path, output: Path | None,
                 "een .mbox levert meerdere bestanden op; gebruik een outputmap")
         return output
     slug = slugify(f"{prefix}-{source.stem}" if prefix else source.stem)
+    slug += f"-{source.suffix.lower().lstrip('.') or 'source'}"
     if message_index is not None:
         slug += f"-message-{message_index:03d}"
     return output / f"{slug}.md"
