@@ -283,6 +283,7 @@ The server exposes:
 - `source_recall(query, mode, k, source_ref)` only on demand for source
   verification or exact reconstruction; never as an automatic advisory.
 - `capture(title, body, memory_type, importance)` for unverified memory capture.
+- `shortest_path(source, target, max_hops)` for a read-only BFS path through the local graphify snapshot.
 - `what_did_i_do(date_or_period, topic, project, max_events)` for compact date
   or period recall.
 - `timeline(period, topic, project, max_events)` for chronological activity.

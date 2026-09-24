@@ -4,7 +4,7 @@
 # MCP (Model Context Protocol) is a stdio, JSON-RPC-based protocol between
 # an agent harness and a local server process. There are no paths, no HTTP
 # methods, and no network transport — the harness spawns
-#   <py -3 | python3> <vault>/.claude/scripts/kb-mcp.py
+#   <validated-python> <vault>/.claude/scripts/kb-mcp.py
 # as a child process and speaks initialize() / list_tools() / call_tool()
 # over stdin/stdout. This file is a tool-contract listing (name, input
 # schema, output shape, side effects) documenting that surface, not a
@@ -19,24 +19,24 @@
 # list_tools() handshake and confirms every tool name below is present
 # (contract rule C9) — a config file naming the server is not sufficient.
 #
-# Verified directly against source: scripts/kb-mcp.py (10 @mcp.tool()-
-# decorated functions confirmed by grep, matching the 10 operations
+# Verified directly against source: scripts/kb-mcp.py (11 @mcp.tool()-
+# decorated functions confirmed by grep, matching the 11 operations
 # documented in c4-component-agent-integration.md and
 # c4-component-temporal-recall.md combined). Note: some component-doc prose
-# says "six tools" when referring to the base set before the four temporal
-# tools were counted individually elsewhere in the same document set — this
-# file uses the verified source count of 10 as authoritative.
+# says "six tools" when referring to the base set before the temporal and
+# graph tools were counted individually elsewhere in the same document set —
+# this file uses the verified source count of 11 as authoritative.
 
 protocol: MCP (Model Context Protocol) over stdio
 transport: stdio (spawned child process, one per agent session)
-server_command: "<py -3 | python3> <vault>/.claude/scripts/kb-mcp.py"
+server_command: "<validated-python> <vault>/.claude/scripts/kb-mcp.py"
 server_module: scripts/kb-mcp.py
 sdk: "mcp Python SDK, pinned mcp==1.28.1, + anyio"
 registered_by: [Codex CLI, OpenCode, GitHub Copilot CLI]
 not_registered_by: [Claude Code]
 acceptance_test: >
   install-agent-envs.py:validate_mcp_runtime — runs a real initialize() +
-  list_tools() handshake and requires all 8 gated tool names present before an
+  list_tools() handshake and requires all 9 gated tool names present before an
   install is accepted as successful (contract rule C9).
 
 tools:
@@ -53,9 +53,9 @@ tools:
       required: [query]
       properties:
         query: {type: string, description: "Search query text."}
-         k: {type: integer, default: 5, description: "Max results to return."}
-         max_tokens: {type: integer, default: 0, description: "Positive token ceiling for deterministic cited output with paths and a dropped-hit report; zero preserves legacy output."}
-         compact: {type: boolean, default: false, keyword_only: true, description: "Short human-readable summary instead of full text."}
+        k: {type: integer, default: 5, description: "Max results to return."}
+        max_tokens: {type: integer, default: 0, description: "Positive token ceiling for deterministic cited output with paths and a dropped-hit report; zero preserves legacy output."}
+        compact: {type: boolean, default: false, keyword_only: true, description: "Short human-readable summary instead of full text."}
 
     output:
       type: string
@@ -112,6 +112,22 @@ tools:
     output:
       type: string
       description: Confirmation text (memory identifier / stem written).
+
+  - name: shortest_path
+    handler: shortest_path_tool
+    source_ref: "scripts/kb-mcp.py"
+    summary: "Read-only BFS path through the local graphify snapshot."
+    side_effects: none (read-only)
+    input_schema:
+      type: object
+      required: [source, target]
+      properties:
+        source: {type: string, description: "Exact node ID, vault-relative document path, or exact label."}
+        target: {type: string, description: "Exact node ID, vault-relative document path, or exact label."}
+        max_hops: {type: integer, default: 8, minimum: 0, maximum: 64}
+    output:
+      type: object
+      description: "Status, node chain, edge metadata, and containing vault documents."
 
   - name: review_pending
     handler: review_pending_tool
@@ -217,6 +233,6 @@ tools:
     shared_dispatcher: "_activity_call"
 
 notes:
-  - "All 10 tools live in one process (kb-mcp.py) and share the same Python API used by the CLI hook scripts and Atlas sidecar — no separate reimplementation of retrieval, memory, or activity logic exists behind the MCP surface."
+  - "All 11 tools live in one process (kb-mcp.py) and share the same Python API used by the CLI hook scripts and Atlas sidecar — no separate reimplementation of retrieval, memory, graph, or activity logic exists behind the MCP surface."
   - "compact output mode (KENNISBANK_MCP_COMPACT_OUTPUT=1) is set only by _copilot.py (scripts/_copilot.py:46), i.e. it is a Copilot-specific env-driven behavior, not something Codex or OpenCode configure."
   - "review_decide and capture are the only tools with write side effects; every other tool is read-only against kb-index.db / kb-activity.db / 09-memory frontmatter."

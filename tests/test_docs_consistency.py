@@ -99,9 +99,9 @@ class CodeDerivedFactTest(unittest.TestCase):
     def test_mcp_primitive_count_matches_the_server(self):
         source = (SCRIPTS / "kb-mcp.py").read_text(encoding="utf-8")
         tools = {name for name in
-                 ("recall", "capture", "what_did_i_do", "timeline", "weeklog", "topic_timeline")
+                 ("recall", "shortest_path", "capture", "what_did_i_do", "timeline", "weeklog", "topic_timeline")
                  if f"def {name}_tool(" in source}
-        self.assertEqual(len(tools), 6, f"tool-set veranderd: {sorted(tools)}")
+        self.assertEqual(len(tools), 7, f"tool-set veranderd: {sorted(tools)}")
         for readme, word in (("README.md", "three primitives"),
                              ("README.nl.md", "drie primitieven")):
             text = (REPO_ROOT / readme).read_text(encoding="utf-8")

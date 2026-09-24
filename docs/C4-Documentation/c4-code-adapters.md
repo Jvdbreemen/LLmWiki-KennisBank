@@ -156,13 +156,14 @@ validate the Claude deploy. Stdlib only. Called from `setup.sh:215`, `:219`, `:2
   both in the manifest at `scripts/_hooks_manifest.py:14` and `:21`, is never asserted.
 
 - `validate_mcp_runtime(vault: Path, timeout: int = 15) -> list[str]` — `:793`
-  Proves the configured stdio server actually works. Two subprocess steps: an import check for
-  `mcp`, `mcp.client.stdio`, `mcp.server.fastmcp` (`:800`), then a real client that performs
-  `initialize()` + `list_tools()` and requires the eight gated tools (`recall`, `source_recall`,
-  `experience_recall`, `capture`, `what_did_i_do`, `timeline`, `weeklog`, `topic_timeline`; the
-  server exposes ten, with the two review tools not part of the gate) (`:854`).
-  Depends on the `mcp` package (pinned `mcp==1.28.1` in the remediation hint at `:818`), `anyio`,
-  and `<vault>/.claude/scripts/kb-mcp.py`.
+  Proves the configured stdio server actually works. It first selects an interpreter
+  that passes the local MCP + sqlite-vec/vec0 capability probe, then runs a real client
+  that performs `initialize()` + `list_tools()` and requires the nine gated tools
+  (`recall`, `source_recall`, `experience_recall`, `capture`, `shortest_path`,
+  `what_did_i_do`, `timeline`, `weeklog`, `topic_timeline`; the server exposes eleven,
+  with the two review tools not part of the gate). The capability probe is
+  implemented in `scripts/_mcp_probe.py`; the handshake is implemented in
+  `install-agent-envs.py`.
 
 - `validate_models(vault: Path, timeout: int = 45) -> list[str]` — `:978`
   Local-model smoke tests: `ollama list`, `ollama show <model>`, then HTTP
@@ -638,5 +639,6 @@ through hooks only and never writes a Claude MCP registration (§3.1).
    integration is opt-in. KennisBank's own retrieval stays local; Copilot's model traffic does not.
 6. **Recent MCP enhancement: response compaction for Copilot.** Commit `1969dfd` (Aug 12 2026)
    added `KENNISBANK_MCP_COMPACT_OUTPUT=1` to Copilot's env (`_copilot.py:46`) so temporal tools
-   return short summaries. The ten tools and their interface remain unchanged; this is a
+    return short summaries. The eleven tools and their interface remain unchanged; this is a
+
    Copilot-only optimization that does not affect the contract (C1, C9).

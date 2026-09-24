@@ -89,6 +89,20 @@ class KbMcpTest(unittest.TestCase):
     def test_recall_tool_empty_query(self):
         self.assertEqual(self.m.recall_tool("").strip(), "")
 
+    def test_shortest_path_tool_reads_local_graph(self):
+        graph_dir = self.vault / "graphify-out"
+        graph_dir.mkdir(parents=True)
+        (graph_dir / "graph.json").write_text(json.dumps({
+            "nodes": [
+                {"id": "a", "label": "A", "source_file": "02-wiki/a.md"},
+                {"id": "b", "label": "B", "source_file": "02-wiki/b.md"},
+            ],
+            "links": [{"source": "a", "target": "b", "relation": "references"}],
+        }), encoding="utf-8")
+        result = self.m.shortest_path_tool("02-wiki/a.md", "02-wiki/b.md")
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["documents"], ["02-wiki/a.md", "02-wiki/b.md"])
+
     def test_recall_tool_no_hits(self):
         self.m.kb_recall.recall_hits = lambda *a, **k: []
         out = self.m.recall_tool("iets")
@@ -218,7 +232,7 @@ class KbMcpTest(unittest.TestCase):
         self.assertEqual(experience_cli["status"], "policy_disabled")
         self.assertEqual(experience_mcp["status"], experience_cli["status"])
 
-    def test_build_server_registers_eight_annotated_tools(self):
+    def test_build_server_registers_annotated_tools(self):
         """Vervangt test_build_server_none_without_mcp, dat op 'MCPServer is None'
         aftakte en in BEIDE takken slaagde: die kon niets bewijzen.
 
@@ -260,10 +274,10 @@ class KbMcpTest(unittest.TestCase):
         self.assertIsNotNone(srv)
         self.assertEqual(set(registered), {
             "recall", "source_recall", "experience_recall", "capture", "review_pending", "review_decide",
-            "what_did_i_do", "timeline", "weeklog", "topic_timeline"})
+            "shortest_path", "what_did_i_do", "timeline", "weeklog", "topic_timeline"})
 
-        read_only = {"recall", "source_recall", "experience_recall", "review_pending", "what_did_i_do", "timeline",
-                     "weeklog", "topic_timeline"}
+        read_only = {"recall", "source_recall", "experience_recall", "review_pending", "shortest_path",
+                     "what_did_i_do", "timeline", "weeklog", "topic_timeline"}
         for name in read_only:
             ann = registered[name]["annotations"]
             self.assertTrue(ann["readOnlyHint"], f"{name} hoort read-only te zijn")

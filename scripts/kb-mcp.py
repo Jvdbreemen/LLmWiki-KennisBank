@@ -9,6 +9,7 @@ al die omgevingen al spreken, dus dit is het brede-bereik-oppervlak.
 
 Primitieven:
   - recall (tool)        : doorzoek geheugen+wiki (PULL-retrieval). Read-only.
+  - shortest_path (tool) : read-only BFS over the local graphify snapshot.
   - capture (tool)       : leg een nieuwe memory vast (PULL-write). Landt als
                            unverified/agent zodat de sweep-judge of de mens 'm
                            later promoot (mens = update-autoriteit).
@@ -97,6 +98,12 @@ try:
 except Exception as exc:
     kb_recall_error = f"{type(exc).__name__}: {exc}"
 kb_recall_original = getattr(kb_recall, "recall_hits", None) if kb_recall is not None else None
+
+graph = None
+try:
+    import _graph as graph  # type: ignore
+except Exception:
+    graph = None
 
 activity = None
 try:
@@ -376,6 +383,19 @@ def recall_tool(query: str, k: int = 5, *, compact: bool = False,
     return "KennisBank-treffers:\n" + "\n".join(lines)
 
 
+def shortest_path_tool(source: str, target: str, max_hops: int = 8) -> dict[str, Any]:
+    """Find a shortest path in the local graphify snapshot without writing."""
+    if graph is None:
+        return {"status": "unavailable", "reason": "graph helper is niet beschikbaar"}
+    try:
+        from _vaultpath import vault_root
+        vault = vault_root()
+        return graph.shortest_path(
+            source, target, vault=vault, max_hops=max_hops)
+    except Exception as exc:
+        return {"status": "unavailable", "reason": f"{type(exc).__name__}: {exc}"}
+
+
 def source_recall_tool(query: str = "", mode: str = "explicit", k: int = 5,
                        source_ref: dict | None = None) -> str:
     """Explicit provenance-first source recall; never part of normal injection."""
@@ -563,6 +583,7 @@ INSTRUCTIONS_TEXT = (
     "evidence, reconstruction, or verification. Neither route is automatic.\n"
     "- Call `what_did_i_do`, `timeline`, `weeklog` or `topic_timeline` for "
     "questions about what happened on a date, in a week, or around a topic.\n"
+    "- Call `shortest_path` when the user asks what connects two documents or graph nodes.\n"
     "- `review_pending` lists unverified memories awaiting human review; "
     "`review_decide` applies a decision - ONLY after the user explicitly "
     "decided per item (approve/reject/skip). Never decide on their behalf.\n"
@@ -589,6 +610,11 @@ def build_server():
         compact = _compact_output_enabled()
         return recall_tool(query, k=min(int(k), 3) if compact else k, compact=compact,
                            max_tokens=max_tokens)
+
+    @srv.tool(annotations=_ann(title="Shortest graph path", readOnlyHint=True, openWorldHint=False))
+    def shortest_path(source: str, target: str, max_hops: int = 8) -> dict[str, Any]:
+        """Find the shortest local graph path between two documents or node IDs."""
+        return shortest_path_tool(source, target, max_hops=max_hops)
 
     @srv.tool(annotations=_ann(title="Recall source evidence", readOnlyHint=True, openWorldHint=False))
     def source_recall(query: str = "", mode: str = "explicit", k: int = 5,

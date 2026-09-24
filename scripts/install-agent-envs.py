@@ -965,7 +965,7 @@ async def main():
             tools = await session.list_tools()
             names = {t.name for t in tools.tools}
             missing = {"recall", "source_recall", "experience_recall", "capture",
-                       "what_did_i_do", "timeline", "weeklog", "topic_timeline"} - names
+                       "shortest_path", "what_did_i_do", "timeline", "weeklog", "topic_timeline"} - names
             if missing:
                 raise SystemExit("missing MCP tools: " + ", ".join(sorted(missing)))
             # Presence is not enough: dispatch the ordinary route and both

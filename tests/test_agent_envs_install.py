@@ -354,6 +354,7 @@ command = "other"
         self.assertIn('session.call_tool(name, arguments)', wire_client)
         self.assertIn('("experience_recall"', wire_client)
         self.assertIn('("source_recall"', wire_client)
+        self.assertIn('"shortest_path"', wire_client)
 
     def test_projection_command_artifacts_have_cross_client_semantic_parity(self):
         self.m.install_codex(REPO_ROOT, self.vault)

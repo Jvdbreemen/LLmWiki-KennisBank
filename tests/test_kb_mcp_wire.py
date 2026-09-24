@@ -27,12 +27,12 @@ from pathlib import Path
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
 SERVER = SCRIPTS_DIR / "kb-mcp.py"
 
-# De tien tools die de server sinds v0.37 aanbiedt. Namen zijn een CONTRACT:
+# The eleven tools that the server offers. Names are a CONTRACT:
 # ze staan in uitgerolde client-configuraties, dus een rename hoort hier te
 # falen en niet stil door te glippen.
 EXPECTED_TOOLS = {
     "recall", "source_recall", "experience_recall", "capture", "review_pending", "review_decide",
-    "what_did_i_do", "timeline", "weeklog", "topic_timeline",
+    "shortest_path", "what_did_i_do", "timeline", "weeklog", "topic_timeline",
 }
 
 LEGACY_PROTOCOL = "2025-06-18"
@@ -170,6 +170,17 @@ class KbMcpWireTest(unittest.TestCase):
         self.assertIn("max_tokens", (schema.get("properties") or {}))
         self.assertNotIn("max_tokens", schema.get("required") or [])
 
+    def test_shortest_path_is_callable_when_graph_is_absent(self):
+        self._handshake_legacy()
+        rid = self.client.send("tools/call", {
+            "name": "shortest_path",
+            "arguments": {"source": "02-wiki/a.md", "target": "02-wiki/b.md"},
+        })
+        reply = self.client.read_result(rid)
+        self.assertNotIn("error", reply, f"shortest_path raised over MCP: {reply}")
+        text = "".join(str(item.get("text") or "") for item in reply["result"].get("content") or [])
+        self.assertEqual(json.loads(text)["status"], "unavailable")
+
     def test_tools_call_returns_content(self):
         self._handshake_legacy()
         rid = self.client.send("tools/call",
@@ -216,8 +227,8 @@ class KbMcpWireTest(unittest.TestCase):
         rid = self.client.send("tools/list", {})
         reply = self.client.read_result(rid)
         tools = {t["name"]: t for t in reply["result"]["tools"]}
-        read_only = {"recall", "source_recall", "experience_recall", "review_pending", "what_did_i_do", "timeline",
-                     "weeklog", "topic_timeline"}
+        read_only = {"recall", "source_recall", "experience_recall", "review_pending", "shortest_path",
+                     "what_did_i_do", "timeline", "weeklog", "topic_timeline"}
         for name in read_only:
             ann = tools[name].get("annotations") or {}
             self.assertTrue(ann.get("readOnlyHint"),

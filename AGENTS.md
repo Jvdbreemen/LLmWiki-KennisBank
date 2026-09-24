@@ -24,11 +24,12 @@ integrations. It is not Claude-Code-only. Supported install targets are:
 upgrade. Do not hand-copy files unless `setup.sh` itself is broken and you are
 repairing it.
 
-The current feature set includes Temporal Activity Recall and local LiteParse
-document intake. Setup must deploy `build-activity-index.py`, `kb-activity.py`,
-`kb-activity-eval.py`, `parse-document.py`, `_liteparse.py`, the commands
+The current feature set includes Temporal Activity Recall, local LiteParse
+document intake, and offline subtitle/mail intake. Setup must deploy
+`build-activity-index.py`, `kb-activity.py`, `kb-activity-eval.py`,
+`parse-document.py`, `_liteparse.py`, `_media_transcript.py`, `_graph.py`, the commands
 `/weeklog`, `/timeline`, `/watdeedik`, `/intake`, `/import`, and MCP tools
-`what_did_i_do`, `timeline`, `weeklog`, and `topic_timeline`.
+`what_did_i_do`, `timeline`, `weeklog`, `topic_timeline`, and `shortest_path`.
 
 ## Vault Path Rule
 
@@ -219,7 +220,7 @@ codex mcp list
 Expected: a `kennisbank` server pointing to
 `<vault>/.claude/scripts/kb-mcp.py`.
 The MCP validator must list `recall`, `source_recall`, `experience_recall`,
-`capture`, `what_did_i_do`, `timeline`, `weeklog`, and `topic_timeline`, then
+`capture`, `shortest_path`, `what_did_i_do`, `timeline`, `weeklog`, and `topic_timeline`, then
 call ordinary recall plus both explicit deeper routes without an MCP error.
 
 For OpenCode, inspect:
