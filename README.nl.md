@@ -716,7 +716,7 @@ melden had.
   pad voor eerste installatie, reparatie, en upgrade: het ververst tooling,
   behoudt gebruikersdata, voert migraties uit, installeert geselecteerde
   agent-integraties, en blokkeert voltooiing wanneer validatie faalt.
-- **Multi-agent van opzet.** Kies `claude`, `codex`, `opencode`, of `all`.
+- **Multi-agent van opzet.** Kies `claude`, `codex`, `opencode`, `copilot`, `hermes`, of `all`.
   Claude Code krijgt native commando's en hooks; Codex krijgt gedeelde skills,
   `/prompts:*`-aliassen, hooks, MCP, en `AGENTS.md`; OpenCode krijgt commando's,
   gedeelde skills, MCP, globale regels, en een lokale plugin.
@@ -787,7 +787,7 @@ melden had.
 
 ## Vereisten
 
-- Minimaal één lokale agent-client: [Claude Code](https://claude.ai/code), Codex, OpenCode, of de [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli)
+- Minimaal één lokale agent-client: [Claude Code](https://claude.ai/code), Codex, OpenCode, de [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli), of [Hermes](https://github.com/bespokelabsai/hermes)
 - Python 3.10+
 - [Ollama](https://ollama.com) met:
   - `qwen3-embedding:4b` (embeddings; meertalige standaard. Kluizen met alleen Engels kunnen het lichtere `nomic-embed-text` gebruiken)
@@ -809,17 +809,23 @@ cd LLmWiki-KennisBank
 bash setup.sh           # interactive
 bash setup.sh --yes     # non-interactive (recommended for AI agents)
 KENNISBANK_VAULT="/absolute/path/to/vault" bash setup.sh --yes --agents claude,codex,opencode
+# of voeg de Hermes agent-client toe:
+KENNISBANK_VAULT="/absolute/path/to/vault" bash setup.sh --yes --agents claude,codex,opencode,hermes
 ```
 
 In één idempotente run doet het setup-script:
 - maakt de kluis-mappenstructuur aan onder `$KENNISBANK_VAULT` of `~/KennisBank/`
 - kopieert scripts en templates op hun plaats
 - initialiseert de settings-toggles en voert versie-gebonden migraties uit
-- vraagt welke agent-omgevingen geïnstalleerd moeten worden (`claude`, `codex`, `opencode`, of `all`; standaard `claude,codex`)
+- vraagt welke agent-omgevingen geïnstalleerd moeten worden (`claude`, `codex`, `opencode`, `copilot`, `hermes`, of `all`; standaard `claude,codex`)
 - installeert Claude Code-commando's/skills/hooks wanneer `claude` is geselecteerd
 - installeert Codex-commandskills, `/prompts:*`-compatibiliteitsaliassen,
   MCP-config en globale `AGENTS.md`; upgrades verwijderen oude KennisBank-hooks
 - installeert OpenCode-commando's, gedeelde skills, MCP-config, globale `AGENTS.md`, en een lokale plugin-hook wanneer `opencode` is geselecteerd
+- installeert Hermes MCP-registratie, gescopeede skills onder
+  `~/.hermes/skills/kennisbank/`, en een beheerd instructieblok in
+  `~/.hermes/SOUL.md`; lifecycle-hooks zijn opt-in en gedocumenteerd, niet
+  automatisch geïnstalleerd
 - installeert Copilot-commandskills, MCP-config, persoonlijke instructies en
   een aangepast agentprofiel; upgrades verwijderen oude KennisBank-hooks
 - vraagt om de LLM-backend in interactieve modus: standaard `ollama`, optioneel `openrouter` met model-slug en API-sleutel-omgevingsvariabele
@@ -831,8 +837,9 @@ Nuttige vlaggen:
 
 ```bash
 bash setup.sh --yes --agents claude,codex      # default non-interactive target set
-bash setup.sh --yes --agents all               # Claude Code + Codex + OpenCode + Copilot
+bash setup.sh --yes --agents all               # Claude Code + Codex + OpenCode + Copilot + Hermes
 bash setup.sh --yes --agents codex             # Codex only
+bash setup.sh --yes --agents hermes            # Hermes only
 bash setup.sh --yes --skip-model-check         # CI/offline validation without Ollama smoke tests
 bash setup.sh --yes --skip-doctor              # skip the closing doctor gate (tests/CI that run doctor.sh themselves)
 ```
@@ -851,7 +858,9 @@ Lees na installatie [POST-INSTALL.md](POST-INSTALL.md) voor de eerste-sessie-wal
 Claude Code, Codex en Copilot krijgen elk één SessionStart-coördinator en één
 exit-coördinator plus hun prompt/tool-hooks. De tabel noemt coordinator-children
 als jobs, niet als los geregistreerde handlers. OpenCode gebruikt MCP plus een
-globale plugin onder `~/.config/opencode/plugins/`.
+globale plugin onder `~/.config/opencode/plugins/`. Hermes krijgt MCP,
+gescopeede skills en een beheerd `SOUL.md`-instructieblok; lifecycle-hooks zijn
+opt-in omdat Hermes expliciete toestemming per hook vereist.
 
 | Hook | Script | Wat het doet |
 |------|--------|--------------|

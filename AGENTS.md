@@ -19,6 +19,8 @@ integrations. It is not Claude-Code-only. Supported install targets are:
 - `copilot` - standalone GitHub Copilot CLI: MCP config, personal
   instructions, and a custom agent profile under `~/.copilot/`. Opt-in and
   cloud-backed; not in the default target set.
+- `hermes` - Hermes agent client: MCP registration, namespaced skills, and
+  a managed `SOUL.md` instruction block. Opt-in; not in the default target set.
 
 `setup.sh` is the single supported entrypoint for both initial install and
 upgrade. Do not hand-copy files unless `setup.sh` itself is broken and you are
@@ -197,6 +199,19 @@ Copilot (standalone GitHub Copilot CLI, opt-in):
 - Capture/import: `kb-copilot-capture.py` writes redacted events to
   `<vault>/.claude/copilot-events/`; `import-copilot.py` normalizes them into
   `01-raw/transcripts/` with `agent=github-copilot-cli` provenance.
+
+Hermes (opt-in):
+
+- MCP server `kennisbank` is registered in `$HERMES_HOME/config.yaml` (or
+  `~/.hermes/config.yaml`) via `hermes mcp add`, with `--args` last.
+- Skills go to `$HERMES_HOME/skills/kennisbank/<skill>/SKILL.md`, namespaced so
+  no existing skill directory is overwritten.
+- Global instructions go in `$HERMES_HOME/SOUL.md` as a managed marker block.
+- KennisBank installs no Hermes lifecycle hooks. Hermes requires per-hook user
+  consent and a nested YAML `hooks:` block, so session-start warm-up and
+  session-end capture are opt-in (see `POST-INSTALL.md`, Step 12).
+- Repair is a re-run of `bash setup.sh --agents hermes`; `doctor.sh` is
+  read-only.
 
 ## Validation
 

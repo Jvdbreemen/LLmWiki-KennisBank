@@ -14,6 +14,13 @@
       "kind": "mcp-registration",
       "path": "docs/agent-integrations.md#codex-cli",
       "purpose": "Register the local MCP server in ~/.codex/config.toml"
+    },
+    {
+      "id": "hermes-mcp",
+      "platform": "hermes",
+      "kind": "mcp-registration",
+      "path": "docs/agent-integrations.md#hermes",
+      "purpose": "Register the local MCP server in ~/.hermes/config.yaml"
     }
   ]
 }
