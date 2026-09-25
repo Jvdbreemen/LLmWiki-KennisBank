@@ -76,7 +76,42 @@ Geheugensystemen van leveranciers (Mem0, Zep, Letta, Cognee) zijn krachtig maar 
 
 De ontwerpvoorkeur is overal dezelfde: **deterministisch waar mogelijk, LLM alleen waar het oordeelsvermogen toevoegt, fail-open overal**. Een dood model blokkeert nooit een sessie, verliest nooit een transcript, en verwijdert nooit geverifieerde kennis.
 
-## Functie-highlights (v0.39.0)
+## Functie-highlights (v0.40.0)
+
+### Nieuw in v0.40.0
+
+Hermes komt erbij als lokale client, en een index die niet kan antwoorden zegt
+dat nu, in plaats van niets.
+
+**Hermes als lokale client van de eerste klas.** `setup.sh --agents hermes`
+registreert de MCP-server `kennisbank` in `$HERMES_HOME/config.yaml` via `hermes
+mcp add`, zet de repo-skills in een `kennisbank/`-namespace en schrijft één
+beheerd instructieblok in `SOUL.md`, het enige Hermes-bestand dat elke prompt
+haalt. Hermes bezit zijn eigen configuratie: de registratie is key-scoped, dus
+commentaar en andere servers blijven staan, en een repo-skill met een naam die jij
+al gebruikt wordt overgeslagen met een waarschuwing in plaats van als
+schaduwkopie te blijven liggen. Lifecycle-hooks worden bewust niet
+geïnstalleerd, want Hermes eist toestemming per hook; `/sessiestart` en
+`/sessielog` zijn expliciet, en het hooks-fragment staat gedocumenteerd voor als
+je ze wel wilt.
+
+**Een onbruikbare index kan niet langer als lege index antwoorden.** Op een
+machine waarvan `python3` geen `load_extension` heeft, laadde de
+`sqlite-vec`-extensie nooit, werd de fout fail-soft ingeslikt, en antwoordde
+`recall` "geen treffers" terwijl de index 235 ingebedde documenten bevatte.
+Ontbrekende, niet-passende, onlaadbare en misvormde indexen geven nu elk hun eigen
+regel, `doctor.sh` bewijst het laden van de extensie met een echte
+`vec0`-query, en de installer kiest en meldt een interpreter die dat kan.
+
+**Ondertitels en mail worden doorzoekbaar.** `.srt`, `.vtt`, `.eml` en `.mbox`
+sluiten aan op het documentpad. Een `.mbox` wordt één bestand per bericht.
+
+**Recall met een budget.** `recall` neemt `max_tokens` en citeert het vaultpad
+van elke treffer, ontdubbeld, met een voettekst die zegt hoeveel treffers het
+plafond heeft weggelaten. `0` houdt het oude gedrag byte voor byte.
+
+**Graafpaden.** `graph paths` vindt een route tussen twee knopen, en intake stelt
+links voor zonder ze te schrijven.
 
 ### Nieuw in v0.39.0
 
