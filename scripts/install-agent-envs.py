@@ -7,6 +7,7 @@ Claude Code deploy; this script owns the cross-agent layer:
 - Codex: command skills, compatibility prompts, AGENTS.md, one coordinated
   hook at session start and exit, prompt/tool hooks, and MCP config.
 - OpenCode: skills, commands, AGENTS.md, plugin hook, MCP config.
+- Hermes: MCP registration, namespaced skills, global instructions in SOUL.md.
 - Claude Code validation: verifies the files setup.sh installed.
 
 All generated client config pins KENNISBANK_VAULT explicitly. That prevents a
@@ -34,10 +35,11 @@ except ModuleNotFoundError:  # Python 3.10 support.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _copilot  # noqa: E402  (Copilot config layer, ADR-0003)
 import _embeddings  # noqa: E402  (embed-model default, TASK-182)
+import _frontmatter  # noqa: E402
 import _hooks_manifest  # noqa: E402
 
 
-AGENTS = ("claude", "codex", "opencode", "copilot")
+AGENTS = ("claude", "codex", "opencode", "copilot", "hermes")
 # The judge/extraction model every generated agent config pins. Defined once in
 # _copilot.py (the only surface that must stay importable on its own) and aliased
 # here so the four writers below cannot drift apart. See _llm.OLLAMA_DEFAULT_MODEL
@@ -243,6 +245,11 @@ def _opencode_home() -> Path:
     return _norm_path(raw) if raw else _home() / ".config" / "opencode"
 
 
+def _hermes_home() -> Path:
+    raw = os.environ.get("HERMES_HOME", "").strip()
+    return _norm_path(raw) if raw else _home() / ".hermes"
+
+
 def _read_text(path: Path) -> str:
     try:
         return path.read_text(encoding="utf-8")
@@ -372,6 +379,129 @@ def _install_command_skills(repo: Path, skills_root: Path) -> list[Path]:
         _write_text(dst, _command_skill_text(name, source, description))
         installed.append(dst)
     return installed
+
+
+def _soul_block(vault: Path) -> str:
+    vault_s = _posix(vault)
+    return f"""{KB_START}
+# LLmWiki-KennisBank
+
+Active vault: `{vault_s}`
+
+Operational rules:
+- Use `KENNISBANK_VAULT={vault_s}` for every KennisBank script, hook, MCP server, skill, and command on this machine.
+- Never let a KennisBank tool resolve a different vault path than the one above, and never fall back to a product default.
+- Prefer the local KennisBank MCP server before external search when the task may depend on prior local knowledge.
+- For an explicit question about what worked before, use reviewed `experience_recall` first; retrieve raw evidence with `source_recall` only on demand for verification or deeper support. Never turn either route into an automatic advisory.
+- If a reusable fact, preference, procedure, or decision appears during the session, capture it.
+- The KennisBank vault is local-only: nothing leaves this machine unless the user explicitly chooses a cloud backend.
+- Entry points: `/sessiestart` to load session-start context, `/sessielog` to create or update the session log.
+
+{KB_END}
+"""
+
+
+def _install_soul_block(hermes_home: Path, vault: Path) -> dict:
+    """Append or replace a marker-delimited KennisBank block in SOUL.md.
+
+    Text outside the markers is never modified. A backup is written once before
+    the first edit.
+    """
+    path = hermes_home / "SOUL.md"
+    block = _soul_block(vault)
+    old = _read_text(path)
+    result: dict = {"path": str(path), "changed": False, "backup": None}
+
+    if old.strip() and not any(path.parent.glob("SOUL.md.kennisbank-backup-*")):
+        backup = path.parent / f"SOUL.md.kennisbank-backup-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+        _write_text(backup, old)
+        result["backup"] = str(backup)
+
+    pattern = re.compile(re.escape(KB_START) + r".*?" + re.escape(KB_END), re.S)
+    if pattern.search(old):
+        new = pattern.sub(lambda _m: block.strip(), old)
+    else:
+        sep = "\n\n" if old.strip() else ""
+        new = old.rstrip() + sep + block.strip() + "\n"
+
+    if new != old:
+        _write_text(path, new)
+        result["changed"] = True
+    return result
+
+
+def _hermes_foreign_skill_names(hermes_home: Path, namespace: str) -> dict[str, Path]:
+    """Map skill name -> SKILL.md for every Hermes skill outside *namespace*.
+
+    Hermes registers only the first skill it scans for a given name, so a copy
+    we deploy under *namespace* would be a shadowed duplicate: present on disk,
+    silently ignored, and confusing on the next upgrade.
+    """
+    found: dict[str, Path] = {}
+    root = hermes_home / "skills"
+    if not root.is_dir():
+        return found
+    for sibling in sorted(root.iterdir()):
+        if not sibling.is_dir() or sibling.name == namespace:
+            continue
+        for skill_dir in sorted(sibling.iterdir()):
+            other = skill_dir / "SKILL.md"
+            if not other.is_file():
+                continue
+            data, _body = _frontmatter.parse_frontmatter(other.read_text(encoding="utf-8"))
+            name = str(data.get("name", "")).strip()
+            if name:
+                found.setdefault(name, other)
+    return found
+
+
+def _install_hermes_skills(repo: Path, hermes_home: Path) -> tuple[list[Path], list[str]]:
+    """Deploy repo skills into a namespaced Hermes skills directory.
+
+    Returns (installed SKILL.md paths, warnings). A skill whose ``name`` already
+    exists elsewhere in the Hermes skills tree is skipped and reported: the
+    user's own skill keeps winning, and the repository copy is neither deployed
+    nor left behind from an earlier install.
+    """
+    installed: list[Path] = []
+    warnings: list[str] = []
+    src_root = repo / "skills"
+    if not src_root.is_dir():
+        return installed, warnings
+
+    namespace = "kennisbank"
+    dst_root = hermes_home / "skills" / namespace
+    dst_root.mkdir(parents=True, exist_ok=True)
+    foreign = _hermes_foreign_skill_names(hermes_home, namespace)
+
+    for sdir in sorted(src_root.iterdir()):
+        src_skill = sdir / "SKILL.md"
+        if not src_skill.is_file():
+            continue
+        data, _body = _frontmatter.parse_frontmatter(src_skill.read_text(encoding="utf-8"))
+        name = str(data.get("name", "")).strip()
+        dst = dst_root / sdir.name
+        if name and name in foreign:
+            warnings.append(
+                f"Hermes skill name collision: '{name}' already exists at {foreign[name]}; "
+                f"keeping that one and skipping the repository copy. Delete the existing "
+                f"skill and re-run to switch to the repository version."
+            )
+            if dst.is_dir():
+                shutil.rmtree(dst)
+            continue
+        _copytree(sdir, dst)
+        installed.append(dst / "SKILL.md")
+
+    # Validate frontmatter for every deployed skill.
+    for path in installed:
+        data, _body = _frontmatter.parse_frontmatter(path.read_text(encoding="utf-8"))
+        if not data.get("name"):
+            warnings.append(f"Hermes skill missing frontmatter name: {path}")
+        if not data.get("description"):
+            warnings.append(f"Hermes skill missing frontmatter description: {path}")
+
+    return installed, warnings
 
 
 def install_codex(repo: Path, vault: Path) -> dict:
@@ -693,6 +823,173 @@ def _ensure_opencode_config(path: Path, vault: Path, plugin: Path) -> Path:
     return path
 
 
+def _has_hermes_mcp_config(config_path: Path) -> bool:
+    """Return True when config.yaml contains an mcp_servers.kennisbank key.
+
+    Hermes owns config.yaml; this is a read-only, stdlib-only heuristic used
+    by doctor/validation. It avoids adding a YAML dependency.
+    """
+    text = _read_text(config_path)
+    if "mcp_servers" not in text or "kennisbank" not in text:
+        return False
+    # Match kennisbank: as an indented key under mcp_servers: before the next
+    # top-level key (lines starting in column 0 that are not comments/blank).
+    pattern = re.compile(
+        r"^mcp_servers:\s*(?:#.*)?\n"
+        r"(?:^[ \t]+.*\n|^\s*\n)*"
+        r"^[ \t]+kennisbank:\s*(?:#.*)?$",
+        re.M,
+    )
+    return bool(pattern.search(text))
+
+
+def install_hermes(repo: Path, vault: Path) -> dict:
+    """Install the KennisBank integration for Hermes.
+
+    Registers the stdio MCP server with `hermes mcp add`, using an interpreter
+    that can load sqlite-vec/vec0. Never writes config.yaml by hand.
+    """
+    hermes_home = _hermes_home()
+    config_path = hermes_home / "config.yaml"
+    result: dict = {
+        "hermes_home": str(hermes_home),
+        "config_path": str(config_path),
+    }
+
+    installed_skills, skill_warnings = _install_hermes_skills(repo, hermes_home)
+    result["skills"] = [str(p) for p in installed_skills]
+    result["warnings"] = skill_warnings
+
+    soul = _install_soul_block(hermes_home, vault)
+    result["soul_md"] = soul["path"]
+    result["soul_changed"] = soul["changed"]
+    if soul.get("backup"):
+        result["soul_backup"] = soul["backup"]
+
+    hermes_bin = shutil.which("hermes")
+    if hermes_bin is None:
+        result["completed"] = False
+        result["error"] = (
+            "hermes binary not found on PATH; install Hermes first. "
+            "Once installed, re-run: bash setup.sh --agents hermes"
+        )
+        return result
+
+    try:
+        interpreter = select_capable_interpreter()
+    except RuntimeError as exc:
+        result["completed"] = False
+        result["error"] = str(exc)
+        return result
+
+    vault_s = _posix(vault)
+    env = {
+        "KENNISBANK_VAULT": vault_s,
+        "KB_LLM_PROVIDERS": "ollama",
+        "KB_LLM_MODEL": KB_LLM_MODEL_DEFAULT,
+        "KB_LLM_ENDPOINT": "http://localhost:11434",
+    }
+    argv = [
+        hermes_bin,
+        "mcp",
+        "add",
+        "kennisbank",
+        "--command",
+        interpreter[0],
+        "--env",
+        f"KENNISBANK_VAULT={vault_s}",
+        "--env",
+        "KB_LLM_PROVIDERS=ollama",
+        "--env",
+        f"KB_LLM_MODEL={KB_LLM_MODEL_DEFAULT}",
+        "--env",
+        "KB_LLM_ENDPOINT=http://localhost:11434",
+        "--connect-timeout",
+        "60",
+        "--args",
+        _posix(vault / ".claude" / "scripts" / "kb-mcp.py"),
+    ]
+
+    proc_env = dict(os.environ)
+    proc_env["HERMES_HOME"] = str(hermes_home)
+    proc_env.update(env)
+    try:
+        proc = subprocess.run(
+            argv,
+            input="y\n",
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=proc_env,
+            timeout=120,
+        )
+    except FileNotFoundError:
+        result["completed"] = False
+        result["error"] = f"hermes binary not found: {hermes_bin}"
+        return result
+    except subprocess.TimeoutExpired:
+        result["completed"] = False
+        result["error"] = "hermes mcp add timed out after 120s"
+        return result
+
+    result["command"] = _shell_join(argv)
+    tool_match = re.search(r"Found\s+(\d+)\s+tool\(s\)", proc.stdout or "")
+    if tool_match:
+        result["tools"] = int(tool_match.group(1))
+    if proc.returncode != 0:
+        result["completed"] = False
+        detail = "\n".join(x for x in ((proc.stderr or "").strip(), (proc.stdout or "").strip()) if x)
+        if len(detail) > 1200:
+            detail = detail[:1200] + "..."
+        result["error"] = f"hermes mcp add failed: {detail}"
+        return result
+
+    result["completed"] = True
+    return result
+
+
+def validate_hermes(vault: Path, selected: bool = True) -> list[str]:
+    """Validate the Hermes MCP registration using `hermes mcp test`."""
+    hermes_home = _hermes_home()
+    config_path = hermes_home / "config.yaml"
+    if not config_path.is_file():
+        if not selected:
+            return []
+        return [f"missing Hermes config: {config_path}"]
+    if not _has_hermes_mcp_config(config_path):
+        if not selected:
+            return []
+        return [f"Hermes config lacks mcp_servers.kennisbank: {config_path}"]
+
+    hermes_bin = shutil.which("hermes")
+    if hermes_bin is None:
+        return ["hermes binary not found on PATH"]
+
+    proc_env = dict(os.environ)
+    proc_env["HERMES_HOME"] = str(hermes_home)
+    try:
+        proc = subprocess.run(
+            [hermes_bin, "mcp", "test", "kennisbank"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=proc_env,
+            timeout=120,
+        )
+    except FileNotFoundError:
+        return ["hermes binary not found on PATH"]
+    except subprocess.TimeoutExpired:
+        return ["hermes mcp test kennisbank timed out after 120s"]
+    if proc.returncode != 0:
+        detail = "\n".join(x for x in ((proc.stderr or "").strip(), (proc.stdout or "").strip()) if x)
+        if len(detail) > 1200:
+            detail = detail[:1200] + "..."
+        return [f"hermes mcp test kennisbank failed: {detail}"]
+    return []
+
+
 def install_copilot(repo: Path, vault: Path) -> dict:
     """Install the KennisBank integration for the standalone GitHub Copilot CLI.
 
@@ -915,6 +1212,36 @@ def validate_files(repo: Path, vault: Path, agents: list[str]) -> list[str]:
         if not (vault / ".claude" / "scripts" / "kb-copilot-capture.py").is_file():
             errors.append(f"missing Copilot capture hook script: {vault / '.claude' / 'scripts' / 'kb-copilot-capture.py'}")
         errors.extend(_copilot.validate_config(vault))
+
+    if "hermes" in agents:
+        errors.extend(validate_hermes(vault, selected=True))
+        hermes_home = _hermes_home()
+        soul_path = hermes_home / "SOUL.md"
+        if not soul_path.is_file():
+            errors.append(f"missing Hermes SOUL.md: {soul_path}")
+        elif KB_START not in soul_path.read_text(encoding="utf-8"):
+            errors.append(f"Hermes SOUL.md lacks the KennisBank instruction block: {soul_path}")
+        repo_skills = repo / "skills"
+        if repo_skills.is_dir():
+            foreign = _hermes_foreign_skill_names(hermes_home, "kennisbank")
+            for skill_dir in sorted(repo_skills.iterdir()):
+                src_skill = skill_dir / "SKILL.md"
+                if not src_skill.is_file():
+                    continue
+                data, _body = _frontmatter.parse_frontmatter(src_skill.read_text(encoding="utf-8"))
+                name = str(data.get("name", "")).strip()
+                if name and name in foreign:
+                    # Install skipped it on purpose: the user's skill keeps winning.
+                    continue
+                deployed = hermes_home / "skills" / "kennisbank" / skill_dir.name / "SKILL.md"
+                if not deployed.is_file():
+                    errors.append(f"missing Hermes skill: {deployed}")
+                    continue
+                data, _body = _frontmatter.parse_frontmatter(deployed.read_text(encoding="utf-8"))
+                if not data.get("name"):
+                    errors.append(f"Hermes skill missing frontmatter name: {deployed}")
+                if not data.get("description"):
+                    errors.append(f"Hermes skill missing frontmatter description: {deployed}")
     return errors
 
 
@@ -1269,7 +1596,7 @@ def main(argv: list[str] | None = None) -> int:
         "validation_errors": [],
     }
     try:
-        needs_mcp = any(a in agents for a in ("codex", "opencode", "copilot"))
+        needs_mcp = any(a in agents for a in ("codex", "opencode", "copilot", "hermes"))
         if needs_mcp and (args.install or args.validate):
             selected = select_capable_interpreter()
             result["mcp_python"] = _shell_join(selected)
@@ -1289,6 +1616,8 @@ def main(argv: list[str] | None = None) -> int:
                 result["install"]["opencode"] = install_opencode(repo, vault)
             if "copilot" in agents:
                 result["install"]["copilot"] = install_copilot(repo, vault)
+            if "hermes" in agents:
+                result["install"]["hermes"] = install_hermes(repo, vault)
         if args.validate:
             result["validation_errors"].extend(validate_files(repo, vault, agents))
             if any(a in agents for a in ("codex", "opencode", "copilot")):

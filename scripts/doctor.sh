@@ -425,6 +425,108 @@ except Exception:
   fi
 fi
 
+# 11b-hermes. Hermes integration (optional).
+HERMES_HOME_DIR="${HERMES_HOME:-$HOME/.hermes}"
+HERMES_CONFIG="$HERMES_HOME_DIR/config.yaml"
+HERMES_CONFIGURED=0
+if [ -f "$HERMES_CONFIG" ] && grep -q "kennisbank:" "$HERMES_CONFIG" 2>/dev/null; then
+  HERMES_CONFIGURED=1
+fi
+if [ "$HERMES_CONFIGURED" = "0" ]; then
+  report_info "hermes integration" "not configured (optional; run setup.sh --agents hermes)"
+else
+  if ! command -v hermes >/dev/null 2>&1; then
+    report_fail "hermes cli" "configured but hermes binary not found on PATH"
+  else
+    HERMES_MCP_TEST_OUT="$(HERMES_HOME="$HERMES_HOME_DIR" hermes mcp test kennisbank 2>&1)"
+    HERMES_MCP_TEST_RC=$?
+    if [ "$HERMES_MCP_TEST_RC" = "0" ]; then
+      report_pass "hermes mcp test" "kennisbank handshake OK"
+    else
+      report_fail "hermes mcp test" "${HERMES_MCP_TEST_OUT:-hermes mcp test kennisbank failed}"
+    fi
+  fi
+  HERMES_INTERPRETER="$(python3 - "$HERMES_CONFIG" <<'PYEOF' 2>/dev/null
+import sys
+path = sys.argv[1]
+in_mcp = False
+in_kb = False
+kb_indent = 0
+cmd = None
+args = []
+try:
+    with open(path, encoding="utf-8") as f:
+        for raw in f:
+            line = raw.rstrip("\n")
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            indent = len(line) - len(line.lstrip())
+            if stripped == "mcp_servers:":
+                in_mcp = True
+                continue
+            if not in_mcp:
+                continue
+            # Top-level sibling of mcp_servers ends the section.
+            if indent <= 0 and ":" in stripped:
+                break
+            if stripped == "kennisbank:":
+                in_kb = True
+                kb_indent = indent
+                continue
+            if in_kb:
+                # Sibling of kennisbank ends the server block.
+                if indent <= kb_indent and ":" in stripped:
+                    break
+                if stripped.startswith("command:"):
+                    cmd = stripped.split(":", 1)[1].strip().strip('"').strip("'")
+                elif stripped.startswith("args:"):
+                    rest = stripped.split(":", 1)[1].strip()
+                    if rest.startswith("[") and rest.endswith("]"):
+                        args = [x.strip().strip('"').strip("'") for x in rest[1:-1].split(",") if x.strip()]
+                if cmd is not None:
+                    break
+except Exception:
+    pass
+if cmd:
+    print("\t".join([cmd] + [str(a) for a in args]))
+PYEOF
+)"
+  if [ -n "$HERMES_INTERPRETER" ]; then
+    IFS=$'\t' read -r -a HERMES_PY <<< "$HERMES_INTERPRETER" || true
+    if command -v "${HERMES_PY[0]}" >/dev/null 2>&1; then
+      HERMES_PROBE_OUT="$("${HERMES_PY[@]}" "$SCRIPTS_DIR/_mcp_probe.py" --json 2>&1)"
+      HERMES_PROBE_RC=$?
+      if [ "$HERMES_PROBE_RC" = "0" ]; then
+        report_pass "hermes interpreter" "${HERMES_PY[*]} | vec0 probe OK"
+      else
+        report_fail "hermes interpreter" "${HERMES_PY[*]} | ${HERMES_PROBE_OUT:-vec0 probe failed}. Fix: use a Python with sqlite3.load_extension and mcp==1.28.1 + sqlite-vec==0.1.9"
+      fi
+    else
+      report_fail "hermes interpreter" "configured interpreter not found: ${HERMES_PY[*]}"
+    fi
+  else
+    report_warn "hermes interpreter" "could not read configured interpreter from $HERMES_CONFIG"
+  fi
+  HERMES_SKILLS_DIR="$HERMES_HOME_DIR/skills/kennisbank"
+  if [ -d "$HERMES_SKILLS_DIR" ]; then
+    report_pass "hermes skills dir" "$HERMES_SKILLS_DIR"
+  else
+    report_warn "hermes skills dir" "missing $HERMES_SKILLS_DIR; run setup.sh --agents hermes"
+  fi
+  HERMES_SOUL="$HERMES_HOME_DIR/SOUL.md"
+  if [ -f "$HERMES_SOUL" ] && grep -q "BEGIN LLmWiki-KennisBank" "$HERMES_SOUL" 2>/dev/null; then
+    report_pass "hermes SOUL.md" "KennisBank block present"
+  else
+    report_warn "hermes SOUL.md" "missing KennisBank instruction block; run setup.sh --agents hermes"
+  fi
+  if [ -f "$HERMES_CONFIG" ] && grep -qE "on_session_start:|on_session_end:" "$HERMES_CONFIG" 2>/dev/null; then
+    report_info "hermes hooks" "one or more KennisBank lifecycle hooks are configured"
+  else
+    report_info "hermes hooks" "no KennisBank lifecycle hooks configured (optional; see POST-INSTALL.md Step 12)"
+  fi
+fi
+
 # 11c. Temporal Activity Recall index.
 if command -v python3 >/dev/null 2>&1 && [ -f "$SCRIPTS_DIR/kb-activity.py" ]; then
   ACTIVITY_STATUS="$(python3 "$SCRIPTS_DIR/kb-activity.py" --vault "$VAULT" --json status 2>/dev/null)"

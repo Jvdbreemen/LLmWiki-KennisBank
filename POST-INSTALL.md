@@ -383,6 +383,39 @@ mechanical post-save work through one helper. Confirm it surfaces in recall:
 
 ---
 
+## Step 12: Optional: Hermes lifecycle hooks
+
+Only relevant if you installed the Hermes agent client target
+(`bash setup.sh --agents hermes`). Hermes requires explicit user consent for each
+shell hook, and its `hooks:` block is a nested YAML map, so `setup.sh` does **not**
+install these automatically. Add them manually to `$HERMES_HOME/config.yaml` (or
+`~/.hermes/config.yaml` when `HERMES_HOME` is unset) if you want session-start
+warm-up and session-end capture.
+
+Use the same Python interpreter that `hermes mcp add` selected — the one that can
+load `sqlite-vec`/`vec0`. If you are unsure, run `bash setup.sh --agents hermes`
+again and read the reported MCP interpreter, or set `KENNISBANK_PYTHON` to a
+capable interpreter before editing the snippet.
+
+```yaml
+hooks:
+  on_session_start:
+    - command: "python3 $HOME/KennisBank/.claude/scripts/kb-session-start.py --client hermes"
+      timeout: 60
+  on_session_end:
+    - command: "python3 $HOME/KennisBank/.claude/scripts/kb-session-end.py --client hermes"
+      timeout: 60
+```
+
+Hermes will prompt for consent the first time a hook fires (`hermes hooks list`
+shows the current consent state). Without these hooks the install is still
+functional: `/sessiestart` and `/sessielog` work as explicit slash commands, but
+there is no automatic session-log capture at the end of a Hermes session. That
+means `/watdeedik` and `/weeklog` only reflect sessions you explicitly logged
+with `/sessielog`.
+
+---
+
 ## Maintenance rhythm
 
 Three cadences keep the system healthy:

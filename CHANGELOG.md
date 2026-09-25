@@ -7,7 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **Hermes agent client target (`--agents hermes`).** Registers the local
+  `kennisbank` MCP server in `~/.hermes/config.yaml` via `hermes mcp add`,
+  deploys repository skills into a `kennisbank/` namespace, and writes a managed
+  KennisBank instruction block into `~/.hermes/SOUL.md`. A repository skill whose
+  name already exists elsewhere in the Hermes skills tree is skipped with a
+  warning instead of being deployed as a shadowed duplicate; the existing skill
+  keeps winning. Lifecycle hooks are
+  deliberately opt-in and documented in `POST-INSTALL.md` because Hermes
+  requires per-hook user consent. Validation and a read-only `doctor.sh` section
+  are included.
 
 ## [0.39.0] - 2026-09-17
 

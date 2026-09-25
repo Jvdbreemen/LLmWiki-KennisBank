@@ -15,7 +15,7 @@
 #   --no-commands      sla het kopiëren van commands over (heeft voorrang op --yes)
 #   --no-skill         sla het kopiëren van de autoresearch skill over (heeft voorrang op --yes)
 #   --no-hooks         sla het registreren van de retrieval-hooks over (heeft voorrang op --yes)
-#   --agents LIST      agentdoelen: claude,codex,opencode,copilot,all (default: claude,codex)
+#   --agents LIST      agentdoelen: claude,codex,opencode,copilot,hermes,all (default: claude,codex)
 #   --no-codex         alias voor --agents claude
 #   --skip-model-check sla Ollama model-smoke-tests over in de post-install validatie
 #   --skip-doctor      sla de afsluitende doctor-gate over (voor tests/CI)
@@ -51,7 +51,7 @@ Opties:
   --no-commands      sla het kopiëren van commands over
   --no-skill         sla het kopiëren van de skills (autoresearch, kennisbank-upgrade, kennisbank-contribute) over
   --no-hooks         sla het registreren van de retrieval-hooks in ~/.claude/settings.json over
-  --agents LIST      installeer agent-integraties voor LIST: claude,codex,opencode,copilot,all
+  --agents LIST      installeer agent-integraties voor LIST: claude,codex,opencode,copilot,hermes,all
   --no-codex         installeer alleen Claude Code-integratie (compatibiliteitsalias)
   --skip-model-check sla lokale Ollama model-smoke-tests over tijdens post-install validatie
   --skip-doctor      sla de afsluitende doctor-gate over (bedoeld voor tests/CI die
@@ -84,7 +84,7 @@ while [ $# -gt 0 ]; do
     --agents)
       shift
       if [ $# -eq 0 ]; then
-        echo "--agents verwacht een waarde (claude,codex,opencode,all)" >&2
+        echo "--agents verwacht een waarde (claude,codex,opencode,copilot,hermes,all)" >&2
         exit 1
       fi
       AGENTS="$1"
@@ -135,7 +135,8 @@ except Exception:
   echo "  codex     Codex CLI"
   echo "  opencode  OpenCode"
   echo "  copilot   GitHub Copilot CLI  (${COPILOT_DETECT:-onbekend})"
-  printf "Agent-integraties installeren voor welke omgevingen? [claude,codex] (opties: claude,codex,opencode,copilot,all) "
+  echo "  hermes    Hermes agent client"
+  printf "Agent-integraties installeren voor welke omgevingen? [claude,codex] (opties: claude,codex,opencode,copilot,hermes,all) "
   read REPLY
   if [ -n "$REPLY" ]; then
     AGENTS="$(printf "%s" "$REPLY" | tr '[:upper:]' '[:lower:]' | tr -d ' ')"
@@ -294,7 +295,7 @@ install_python_dep() {
 install_python_dep "sqlite-vec==0.1.9" "sqlite_vec" "kb-index"
 install_python_dep "liteparse>=2.0,<3" "liteparse" "document parsing (PDF/Office/images)"
 install_python_dep "dateparser>=1.2,<2" "dateparser" "multilingual temporal recall (200+ language fallback)"
-if has_agent codex || has_agent opencode || has_agent copilot; then
+if has_agent codex || has_agent opencode || has_agent copilot || has_agent hermes; then
   install_python_dep "mcp==1.28.1" "mcp" "KennisBank MCP"
 fi
 
