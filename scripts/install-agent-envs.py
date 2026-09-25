@@ -386,13 +386,11 @@ def _soul_block(vault: Path) -> str:
     return f"""{KB_START}
 # LLmWiki-KennisBank
 
-This machine uses a non-default KennisBank vault:
-
-`{vault_s}`
+Active vault: `{vault_s}`
 
 Operational rules:
-- Always set or preserve `KENNISBANK_VAULT={vault_s}` for KennisBank scripts, hooks, MCP servers, skills, and commands.
-- Do not use `~/KennisBank` as the active vault on this machine unless the user explicitly changes the vault.
+- Use `KENNISBANK_VAULT={vault_s}` for every KennisBank script, hook, MCP server, skill, and command on this machine.
+- Never let a KennisBank tool resolve a different vault path than the one above, and never fall back to a product default.
 - Prefer the local KennisBank MCP server before external search when the task may depend on prior local knowledge.
 - For an explicit question about what worked before, use reviewed `experience_recall` first; retrieve raw evidence with `source_recall` only on demand for verification or deeper support. Never turn either route into an automatic advisory.
 - If a reusable fact, preference, procedure, or decision appears during the session, capture it.
