@@ -7,6 +7,7 @@ Claude Code deploy; this script owns the cross-agent layer:
 - Codex: command skills, compatibility prompts, AGENTS.md, one coordinated
   hook at session start and exit, prompt/tool hooks, and MCP config.
 - OpenCode: skills, commands, AGENTS.md, plugin hook, MCP config.
+- Hermes: MCP registration, namespaced skills, global instructions in SOUL.md.
 - Claude Code validation: verifies the files setup.sh installed.
 
 All generated client config pins KENNISBANK_VAULT explicitly. That prevents a
@@ -37,7 +38,7 @@ import _embeddings  # noqa: E402  (embed-model default, TASK-182)
 import _hooks_manifest  # noqa: E402
 
 
-AGENTS = ("claude", "codex", "opencode", "copilot")
+AGENTS = ("claude", "codex", "opencode", "copilot", "hermes")
 # The judge/extraction model every generated agent config pins. Defined once in
 # _copilot.py (the only surface that must stay importable on its own) and aliased
 # here so the four writers below cannot drift apart. See _llm.OLLAMA_DEFAULT_MODEL
@@ -241,6 +242,11 @@ def _codex_home() -> Path:
 def _opencode_home() -> Path:
     raw = os.environ.get("OPENCODE_CONFIG_DIR", "").strip()
     return _norm_path(raw) if raw else _home() / ".config" / "opencode"
+
+
+def _hermes_home() -> Path:
+    raw = os.environ.get("HERMES_HOME", "").strip()
+    return _norm_path(raw) if raw else _home() / ".hermes"
 
 
 def _read_text(path: Path) -> str:
@@ -691,6 +697,14 @@ def _ensure_opencode_config(path: Path, vault: Path, plugin: Path) -> Path:
         data["permission"]["skill"].setdefault(skill, "allow")
     _write_text(path, json.dumps(data, indent=2, ensure_ascii=False) + "\n")
     return path
+
+
+def install_hermes(repo: Path, vault: Path) -> dict:
+    """Install the KennisBank integration for Hermes.
+
+    Placeholder for H2: MCP registration, skills, and SOUL.md instructions.
+    """
+    return {"status": "pending H2"}
 
 
 def install_copilot(repo: Path, vault: Path) -> dict:
@@ -1269,7 +1283,7 @@ def main(argv: list[str] | None = None) -> int:
         "validation_errors": [],
     }
     try:
-        needs_mcp = any(a in agents for a in ("codex", "opencode", "copilot"))
+        needs_mcp = any(a in agents for a in ("codex", "opencode", "copilot", "hermes"))
         if needs_mcp and (args.install or args.validate):
             selected = select_capable_interpreter()
             result["mcp_python"] = _shell_join(selected)
@@ -1289,6 +1303,8 @@ def main(argv: list[str] | None = None) -> int:
                 result["install"]["opencode"] = install_opencode(repo, vault)
             if "copilot" in agents:
                 result["install"]["copilot"] = install_copilot(repo, vault)
+            if "hermes" in agents:
+                result["install"]["hermes"] = install_hermes(repo, vault)
         if args.validate:
             result["validation_errors"].extend(validate_files(repo, vault, agents))
             if any(a in agents for a in ("codex", "opencode", "copilot")):
