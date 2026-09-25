@@ -430,11 +430,38 @@ def _install_soul_block(hermes_home: Path, vault: Path) -> dict:
     return result
 
 
+def _hermes_foreign_skill_names(hermes_home: Path, namespace: str) -> dict[str, Path]:
+    """Map skill name -> SKILL.md for every Hermes skill outside *namespace*.
+
+    Hermes registers only the first skill it scans for a given name, so a copy
+    we deploy under *namespace* would be a shadowed duplicate: present on disk,
+    silently ignored, and confusing on the next upgrade.
+    """
+    found: dict[str, Path] = {}
+    root = hermes_home / "skills"
+    if not root.is_dir():
+        return found
+    for sibling in sorted(root.iterdir()):
+        if not sibling.is_dir() or sibling.name == namespace:
+            continue
+        for skill_dir in sorted(sibling.iterdir()):
+            other = skill_dir / "SKILL.md"
+            if not other.is_file():
+                continue
+            data, _body = _frontmatter.parse_frontmatter(other.read_text(encoding="utf-8"))
+            name = str(data.get("name", "")).strip()
+            if name:
+                found.setdefault(name, other)
+    return found
+
+
 def _install_hermes_skills(repo: Path, hermes_home: Path) -> tuple[list[Path], list[str]]:
     """Deploy repo skills into a namespaced Hermes skills directory.
 
-    Returns (installed SKILL.md paths, warnings). Warnings include invalid
-    frontmatter and name collisions with skills outside the kennisbank namespace.
+    Returns (installed SKILL.md paths, warnings). A skill whose ``name`` already
+    exists elsewhere in the Hermes skills tree is skipped and reported: the
+    user's own skill keeps winning, and the repository copy is neither deployed
+    nor left behind from an earlier install.
     """
     installed: list[Path] = []
     warnings: list[str] = []
@@ -442,14 +469,27 @@ def _install_hermes_skills(repo: Path, hermes_home: Path) -> tuple[list[Path], l
     if not src_root.is_dir():
         return installed, warnings
 
-    dst_root = hermes_home / "skills" / "kennisbank"
+    namespace = "kennisbank"
+    dst_root = hermes_home / "skills" / namespace
     dst_root.mkdir(parents=True, exist_ok=True)
+    foreign = _hermes_foreign_skill_names(hermes_home, namespace)
 
     for sdir in sorted(src_root.iterdir()):
         src_skill = sdir / "SKILL.md"
         if not src_skill.is_file():
             continue
+        data, _body = _frontmatter.parse_frontmatter(src_skill.read_text(encoding="utf-8"))
+        name = str(data.get("name", "")).strip()
         dst = dst_root / sdir.name
+        if name and name in foreign:
+            warnings.append(
+                f"Hermes skill name collision: '{name}' already exists at {foreign[name]}; "
+                f"keeping that one and skipping the repository copy. Delete the existing "
+                f"skill and re-run to switch to the repository version."
+            )
+            if dst.is_dir():
+                shutil.rmtree(dst)
+            continue
         _copytree(sdir, dst)
         installed.append(dst / "SKILL.md")
 
@@ -460,31 +500,6 @@ def _install_hermes_skills(repo: Path, hermes_home: Path) -> tuple[list[Path], l
             warnings.append(f"Hermes skill missing frontmatter name: {path}")
         if not data.get("description"):
             warnings.append(f"Hermes skill missing frontmatter description: {path}")
-
-    # Detect collisions with skills outside the kennisbank namespace.
-    namespaced = {p.parent.name for p in installed}
-    our_names: dict[str, Path] = {}
-    for path in installed:
-        data, _body = _frontmatter.parse_frontmatter(path.read_text(encoding="utf-8"))
-        name = str(data.get("name", "")).strip()
-        if name:
-            our_names[name] = path
-
-    skills_root = hermes_home / "skills"
-    for sibling in sorted(skills_root.iterdir()):
-        if not sibling.is_dir() or sibling.name == "kennisbank":
-            continue
-        for skill_dir in sorted(sibling.iterdir()):
-            other = skill_dir / "SKILL.md"
-            if not other.is_file():
-                continue
-            data, _body = _frontmatter.parse_frontmatter(other.read_text(encoding="utf-8"))
-            name = str(data.get("name", "")).strip()
-            if name and name in our_names:
-                warnings.append(
-                    f"Hermes skill name collision: '{name}' exists at both "
-                    f"{our_names[name]} and {other}; Hermes loads the first registered one"
-                )
 
     return installed, warnings
 

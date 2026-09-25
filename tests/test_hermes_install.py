@@ -178,13 +178,22 @@ class HermesInstallTest(unittest.TestCase):
 
     def test_install_warns_on_skill_name_collision(self):
         _make_fake_hermes(self.bin_dir, behavior="ok")
+        home = Path(os.environ["HERMES_HOME"])
         # A pre-existing skill outside the kennisbank namespace claims the same name.
-        decoy = Path(os.environ["HERMES_HOME"]) / "skills" / "other" / "autoresearch"
+        decoy = home / "skills" / "other" / "autoresearch"
         decoy.mkdir(parents=True)
         (decoy / "SKILL.md").write_text("---\nname: autoresearch\ndescription: x\n---\nbody\n", encoding="utf-8")
+        # And an earlier install left our copy of that name behind.
+        stale = home / "skills" / "kennisbank" / "autoresearch"
+        stale.mkdir(parents=True)
+        (stale / "SKILL.md").write_text("---\nname: autoresearch\ndescription: old\n---\nbody\n", encoding="utf-8")
         result = self.m.install_hermes(REPO_ROOT, self.vault)
         warnings = result.get("warnings", [])
         self.assertTrue(any("collision" in w and "autoresearch" in w for w in warnings), warnings)
+        # The user's skill keeps winning: our shadowed copy is not deployed, and a
+        # stale copy from an earlier install is removed rather than left behind.
+        self.assertTrue((decoy / "SKILL.md").is_file())
+        self.assertFalse(stale.exists(), "the shadowed repository copy must not stay on disk")
 
     def test_install_warns_on_invalid_skill_frontmatter(self):
         _make_fake_hermes(self.bin_dir, behavior="ok")

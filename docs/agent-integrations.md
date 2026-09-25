@@ -271,11 +271,13 @@ a nested YAML map, so session-start warm-up and session-end capture are opt-in.
 Run `/sessiestart` and `/sessielog` explicitly, or add the hooks manually (see
 `POST-INSTALL.md`, Step 12).
 
-When a repository skill's `name` collides with a skill outside the
-`kennisbank/` namespace, setup prints a WARN naming both paths. Hermes loads the
-first registered skill for each name; if you want the KennisBank version to win,
-keep it in a namespace that is scanned before the conflicting one, or remove the
-conflicting skill.
+When a repository skill's `name` already exists somewhere else in the Hermes
+skills tree, setup does not deploy that skill and prints a WARN naming both
+paths. The existing skill keeps winning, and a copy left behind by an earlier
+install is removed, so a re-run converges instead of leaving a shadowed
+duplicate on disk. To switch to the repository version, remove the conflicting
+skill and re-run setup. KennisBank skills that collide with nothing are deployed
+normally.
 
 The MCP registration must use a Python interpreter that can load `sqlite-vec`/`vec0`.
 A bare `python3` that lacks the extension silently degrades `recall` to "no hits".
