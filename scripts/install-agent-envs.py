@@ -35,6 +35,7 @@ except ModuleNotFoundError:  # Python 3.10 support.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _copilot  # noqa: E402  (Copilot config layer, ADR-0003)
 import _embeddings  # noqa: E402  (embed-model default, TASK-182)
+import _frontmatter  # noqa: E402
 import _hooks_manifest  # noqa: E402
 
 
@@ -378,6 +379,65 @@ def _install_command_skills(repo: Path, skills_root: Path) -> list[Path]:
         _write_text(dst, _command_skill_text(name, source, description))
         installed.append(dst)
     return installed
+
+
+def _install_hermes_skills(repo: Path, hermes_home: Path) -> tuple[list[Path], list[str]]:
+    """Deploy repo skills into a namespaced Hermes skills directory.
+
+    Returns (installed SKILL.md paths, warnings). Warnings include invalid
+    frontmatter and name collisions with skills outside the kennisbank namespace.
+    """
+    installed: list[Path] = []
+    warnings: list[str] = []
+    src_root = repo / "skills"
+    if not src_root.is_dir():
+        return installed, warnings
+
+    dst_root = hermes_home / "skills" / "kennisbank"
+    dst_root.mkdir(parents=True, exist_ok=True)
+
+    for sdir in sorted(src_root.iterdir()):
+        src_skill = sdir / "SKILL.md"
+        if not src_skill.is_file():
+            continue
+        dst = dst_root / sdir.name
+        _copytree(sdir, dst)
+        installed.append(dst / "SKILL.md")
+
+    # Validate frontmatter for every deployed skill.
+    for path in installed:
+        data, _body = _frontmatter.parse_frontmatter(path.read_text(encoding="utf-8"))
+        if not data.get("name"):
+            warnings.append(f"Hermes skill missing frontmatter name: {path}")
+        if not data.get("description"):
+            warnings.append(f"Hermes skill missing frontmatter description: {path}")
+
+    # Detect collisions with skills outside the kennisbank namespace.
+    namespaced = {p.parent.name for p in installed}
+    our_names: dict[str, Path] = {}
+    for path in installed:
+        data, _body = _frontmatter.parse_frontmatter(path.read_text(encoding="utf-8"))
+        name = str(data.get("name", "")).strip()
+        if name:
+            our_names[name] = path
+
+    skills_root = hermes_home / "skills"
+    for sibling in sorted(skills_root.iterdir()):
+        if not sibling.is_dir() or sibling.name == "kennisbank":
+            continue
+        for skill_dir in sorted(sibling.iterdir()):
+            other = skill_dir / "SKILL.md"
+            if not other.is_file():
+                continue
+            data, _body = _frontmatter.parse_frontmatter(other.read_text(encoding="utf-8"))
+            name = str(data.get("name", "")).strip()
+            if name and name in our_names:
+                warnings.append(
+                    f"Hermes skill name collision: '{name}' exists at both "
+                    f"{our_names[name]} and {other}; Hermes loads the first registered one"
+                )
+
+    return installed, warnings
 
 
 def install_codex(repo: Path, vault: Path) -> dict:
@@ -731,6 +791,11 @@ def install_hermes(repo: Path, vault: Path) -> dict:
         "hermes_home": str(hermes_home),
         "config_path": str(config_path),
     }
+
+    installed_skills, skill_warnings = _install_hermes_skills(repo, hermes_home)
+    result["skills"] = [str(p) for p in installed_skills]
+    result["warnings"] = skill_warnings
+
     hermes_bin = shutil.which("hermes")
     if hermes_bin is None:
         result["completed"] = False
@@ -1080,6 +1145,19 @@ def validate_files(repo: Path, vault: Path, agents: list[str]) -> list[str]:
 
     if "hermes" in agents:
         errors.extend(validate_hermes(vault, selected=True))
+        hermes_home = _hermes_home()
+        for skill_dir in sorted((REPO_ROOT / "skills").iterdir()) if (REPO_ROOT / "skills").is_dir() else []:
+            if not (skill_dir / "SKILL.md").is_file():
+                continue
+            deployed = hermes_home / "skills" / "kennisbank" / skill_dir.name / "SKILL.md"
+            if not deployed.is_file():
+                errors.append(f"missing Hermes skill: {deployed}")
+                continue
+            data, _body = _frontmatter.parse_frontmatter(deployed.read_text(encoding="utf-8"))
+            if not data.get("name"):
+                errors.append(f"Hermes skill missing frontmatter name: {deployed}")
+            if not data.get("description"):
+                errors.append(f"Hermes skill missing frontmatter description: {deployed}")
     return errors
 
 

@@ -156,6 +156,47 @@ class HermesInstallTest(unittest.TestCase):
         errors = self.m.validate_hermes(self.vault, selected=False)
         self.assertEqual(errors, [])
 
+    def test_install_deploys_namespaced_skills(self):
+        _make_fake_hermes(self.bin_dir, behavior="ok")
+        result = self.m.install_hermes(REPO_ROOT, self.vault)
+        self.assertTrue(result.get("completed"), result)
+        for skill in ("autoresearch", "kennisbank-contribute", "kennisbank-release"):
+            path = Path(os.environ["HERMES_HOME"]) / "skills" / "kennisbank" / skill / "SKILL.md"
+            self.assertTrue(path.is_file(), skill)
+            text = path.read_text(encoding="utf-8")
+            self.assertIn("name:", text)
+            self.assertIn("description:", text)
+
+    def test_install_preserves_existing_skills_outside_namespace(self):
+        _make_fake_hermes(self.bin_dir, behavior="ok")
+        decoy = Path(os.environ["HERMES_HOME"]) / "skills" / "other" / "decoy"
+        decoy.mkdir(parents=True)
+        (decoy / "SKILL.md").write_text("---\nname: decoy\ndescription: x\n---\nbody\n", encoding="utf-8")
+        self.m.install_hermes(REPO_ROOT, self.vault)
+        self.assertTrue((decoy / "SKILL.md").is_file())
+        self.assertEqual((decoy / "SKILL.md").read_text(encoding="utf-8"), "---\nname: decoy\ndescription: x\n---\nbody\n")
+
+    def test_install_warns_on_skill_name_collision(self):
+        _make_fake_hermes(self.bin_dir, behavior="ok")
+        # A pre-existing skill outside the kennisbank namespace claims the same name.
+        decoy = Path(os.environ["HERMES_HOME"]) / "skills" / "other" / "autoresearch"
+        decoy.mkdir(parents=True)
+        (decoy / "SKILL.md").write_text("---\nname: autoresearch\ndescription: x\n---\nbody\n", encoding="utf-8")
+        result = self.m.install_hermes(REPO_ROOT, self.vault)
+        warnings = result.get("warnings", [])
+        self.assertTrue(any("collision" in w and "autoresearch" in w for w in warnings), warnings)
+
+    def test_install_warns_on_invalid_skill_frontmatter(self):
+        _make_fake_hermes(self.bin_dir, behavior="ok")
+        # Use a copy of the repo skills so the real source is never mutated.
+        fake_repo = self.tmp / "repo"
+        shutil.copytree(REPO_ROOT / "skills", fake_repo / "skills")
+        (fake_repo / "skills" / "autoresearch" / "SKILL.md").write_text(
+            "---\nno-name-here: x\n---\nbody\n", encoding="utf-8")
+        result = self.m.install_hermes(fake_repo, self.vault)
+        warnings = result.get("warnings", [])
+        self.assertTrue(any("missing frontmatter name" in w for w in warnings), warnings)
+
 
 if __name__ == "__main__":
     unittest.main()
