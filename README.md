@@ -73,7 +73,41 @@ Vendor memory systems (Mem0, Zep, Letta, Cognee) are powerful but cloud-shaped: 
 
 The design bias throughout: **deterministic where possible, LLM only where it adds judgment, fail-open everywhere**. A dead model never blocks a session, never loses a transcript, and never deletes verified knowledge.
 
-## Feature highlights (v0.39.0)
+## Feature highlights (v0.40.0)
+
+### New in v0.40.0
+
+Hermes joins as a local client, and an index that cannot answer now says so
+instead of saying nothing.
+
+**Hermes as a first-class local client.** `setup.sh --agents hermes` registers
+the `kennisbank` MCP server in `$HERMES_HOME/config.yaml` through `hermes mcp
+add`, deploys the repository skills into a `kennisbank/` namespace, and writes
+one managed instruction block into `SOUL.md`, the only Hermes file that reaches
+every prompt. Hermes owns its own configuration: the registration is key-scoped,
+so comments and unrelated servers survive, and a repository skill whose name you
+already use is skipped with a warning instead of being left behind as a shadowed
+duplicate. Lifecycle hooks are deliberately not installed, because Hermes
+requires per-hook consent; `/sessiestart` and `/sessielog` are explicit, and the
+hooks snippet is documented for when you want them.
+
+**An unusable index can no longer answer as an empty one.** On a machine whose
+`python3` has no `load_extension`, the `sqlite-vec` extension never loaded, the
+failure was swallowed fail-soft, and `recall` answered "no hits" while the index
+held 235 embedded documents. Missing, mismatched, unloadable and malformed
+indexes now each produce their own line, `doctor.sh` proves extension loading
+with a real `vec0` query, and the installer selects and reports an interpreter
+that can do it.
+
+**Subtitle files and mail become searchable.** `.srt`, `.vtt`, `.eml` and
+`.mbox` join the document path. An `.mbox` becomes one file per message.
+
+**A recall you can budget.** `recall` takes `max_tokens` and cites the vault path
+of every hit, deduplicated, with a footer saying how many hits the ceiling left
+out. `0` keeps the previous behaviour byte for byte.
+
+**Graph paths.** `graph paths` finds a route between two nodes, and intake
+proposes links without writing them.
 
 ### New in v0.39.0
 

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.40.0] - 2026-09-25
+
+Hermes joins as a first-class local client, an unusable index can no longer
+answer as an empty one, and subtitle files and mail become searchable.
+
 ### Added
 
 - **Hermes agent client target (`--agents hermes`).** Registers the local
@@ -15,10 +22,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   KennisBank instruction block into `~/.hermes/SOUL.md`. A repository skill whose
   name already exists elsewhere in the Hermes skills tree is skipped with a
   warning instead of being deployed as a shadowed duplicate; the existing skill
-  keeps winning. Lifecycle hooks are
-  deliberately opt-in and documented in `POST-INSTALL.md` because Hermes
-  requires per-hook user consent. Validation and a read-only `doctor.sh` section
-  are included.
+  keeps winning. Lifecycle hooks are deliberately opt-in and documented in
+  `POST-INSTALL.md`, because Hermes requires per-hook user consent and its
+  `hooks:` block is a nested YAML map this stdlib-only installer will not write.
+  Validation and a read-only `doctor.sh` section are included.
+- **Offline subtitle and mail intake.** `.srt`, `.vtt`, `.eml` and `.mbox` join
+  the document path, so subtitle files from audio and video work and mail are
+  searchable. An `.mbox` produces one file per message; same-stem sources stay
+  distinct.
+- **Recall with an explicit token budget and citations.** `recall` takes
+  `max_tokens` (`0` keeps the previous behaviour byte for byte), cites the vault
+  path of every hit, deduplicates repeated paths, and reports how many hits the
+  ceiling left out.
+- **Graph paths and write-time crosslink suggestions.** `graph paths` finds a
+  route between two nodes; intake proposes links without writing them.
+
+### Changed
+
+- **The installer selects an interpreter that can actually run the MCP server.**
+  It probes for `mcp`, extension loading and a real `vec0` query, reports which
+  interpreter it chose, and stops with an actionable message instead of writing a
+  config that degrades silently. `KENNISBANK_PYTHON` overrides the choice.
+- **`doctor.sh` proves extension loading, not just `import mcp`.** It opens a
+  connection, loads `sqlite-vec`, runs `vec_version()` and queries `vec0`, and
+  fails with the exact remedy when any step fails.
+- **`recall` and the MCP server distinguish "no hits" from "index unusable".** A
+  missing index, a missing or mismatched embed stamp, an interpreter without
+  extension loading, a missing `sqlite-vec` and a search error each produce their
+  own explicit line. A silent empty answer was the worst failure this product
+  could produce, and it can no longer happen.
+
+### Fixed
+
+- **A budgeted recall never answers with an empty string.** When the ceiling is
+  too small for even one hit, the tool says so and names the number of available
+  hits; when the budget module cannot be loaded, it returns the citation list and
+  says the ceiling was not applied.
+- **The dropped-hit counter counts the raw hit list again.** Counting
+  deduplicated hits made the `Budget:` footer disappear and coupled an assertion
+  about the footer to whether hit paths rendered relative or absolute.
 
 ## [0.39.0] - 2026-09-17
 
@@ -2448,7 +2490,8 @@ The integration grew out of a hands-on test of Understand-Anything against a rea
 
 - Initial release. Core slash commands (`/sessielog`, `/wiki`, `/intake`, `/stale`), four utility scripts (`auto-crosslink.py`, `intake-scan.py`, `semantic-tiling.py`, `stale-check.py`), session-log and wiki-article templates, vault scaffolding via `setup.sh`, `/autoresearch` skill, `CLAUDE.md.template`.
 
-[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.39.0...HEAD
+[Unreleased]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.40.0...HEAD
+[0.40.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.39.0...v0.40.0
 [0.39.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.37.0...v0.39.0
 [0.37.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.36.0...v0.37.0
 [0.36.0]: https://github.com/Jvdbreemen/LLmWiki-KennisBank/compare/v0.35.0...v0.36.0
