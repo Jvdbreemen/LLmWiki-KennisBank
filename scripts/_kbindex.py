@@ -30,6 +30,15 @@ from _vaultpath import vault_root  # noqa: E402
 VEC0_MAX_K = 4096
 
 
+class IndexUnavailable(RuntimeError):
+    """De sqlite-vec-index kan op deze runtime niet betrouwbaar worden gebruikt."""
+
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = str(code)
+        self.message = str(message)
+
+
 def index_path() -> Path:
     return vault_root() / ".claude" / "kb-index.db"
 
@@ -66,12 +75,45 @@ def connect(path=None) -> sqlite3.Connection:
     p = str(path) if path is not None else str(index_path())
     if path is None:
         index_path().parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(p)
-    conn.enable_load_extension(True)
-    conn.load_extension(vec0_extension())
-    conn.enable_load_extension(False)
-    conn.execute("PRAGMA journal_mode=WAL")
-    return conn
+    conn = None
+    extension_enabled = False
+    try:
+        conn = sqlite3.connect(p)
+        if not hasattr(conn, "enable_load_extension") or not hasattr(conn, "load_extension"):
+            raise IndexUnavailable(
+                "extension_loading_unsupported",
+                "Python sqlite3 heeft geen load_extension/on_enable_load_extension API",
+            )
+        conn.enable_load_extension(True)
+        extension_enabled = True
+        try:
+            conn.load_extension(vec0_extension())
+        except ImportError as exc:
+            raise IndexUnavailable("sqlite_vec_missing", str(exc)) from exc
+        except Exception as exc:
+            raise IndexUnavailable(
+                "vec0_unavailable",
+                f"sqlite-vec kon niet worden geladen: {type(exc).__name__}: {exc}",
+            ) from exc
+        finally:
+            if extension_enabled:
+                try:
+                    conn.enable_load_extension(False)
+                except Exception:
+                    extension_enabled = False
+        conn.execute("PRAGMA journal_mode=WAL")
+        return conn
+    except IndexUnavailable:
+        if conn is not None:
+            conn.close()
+        raise
+    except Exception as exc:
+        if conn is not None:
+            conn.close()
+        raise IndexUnavailable(
+            "index_open_failed",
+            f"index kon niet worden geopend: {type(exc).__name__}: {exc}",
+        ) from exc
 
 
 def ensure_schema(conn: sqlite3.Connection, dim: int, embed_id: str) -> None:

@@ -54,7 +54,7 @@ Traverseer de graaf om **brugpaden** te vinden:
 - Noteer elk brugnodepad: `A-artikel -> tussenknoop -> B-artikel`, inclusief de `relation`-waarden op de links. Los intermediate node-ids op naar hun `source_file` voor de `[[wikilink]]`.
 - Als `hyperedges` aanwezig zijn: behandel elke hyperedge waarvan `nodes` zowel een cluster-A- als een cluster-B-entiteit raakt als een sterk brugssignaal.
 
-Gebruik deze graaf-bruggen als primaire bron voor de verbindingen in stap 5.
+Gebruik deze graaf-bruggen als primaire bron voor de verbindingen in stap 5. Als MCP beschikbaar is, kan dezelfde read-only vraag rechtstreeks worden gesteld met `shortest_path(source, target, max_hops)`; gebruik de exacte vault-relative paden of node-ID's.
 
 **Als graph.json niet aanwezig is of geen pad gevonden:**
 

@@ -183,7 +183,7 @@ zodat een aanroeper die enkel vraagt "is er rot?" geen JSON hoeft te parsen.
 
 **Architectuurdocumentatie die benoemt wat ze aantrof.** Een volledige C4-set
 onder `docs/C4-Documentation/` — vier niveaus, een OpenAPI-specificatie voor de
-13 routes van de Atlas-sidecar, en een toolcontract voor de 10 MCP-tools. De
+13 routes van de Atlas-sidecar, en een toolcontract voor de 11 MCP-tools. De
 containers beschrijven wat er echt draait in plaats van een geïdealiseerde
 topologie, en de drift die de pass vond staat er als drift in: ADR-0001 nog
 Accepted op `qwen3-embedding:8b` terwijl het onderzoek `:4b` aanbeveelt,
@@ -983,9 +983,9 @@ lokale LibreOffice-/ImageMagick-tooling vereisen, zoals LiteParse rapporteert.
 
 ## KennisBank gebruiken vanuit andere agents (Codex, OpenCode, Copilot, ChatGPT)
 
-De kluis is niet alleen voor Claude Code. `scripts/kb-mcp.py` is een lokale **MCP-server** die elf primitieven blootstelt: tien tools - `recall` (zoek geheugen + wiki), `source_recall` en `experience_recall` (expliciete, gated diepe recall), `capture` (sla een nieuwe herinnering op), `review_pending` en `review_decide` (de menselijke reviewwachtrij), en de temporele set `what_did_i_do`, `timeline`, `weeklog`, `topic_timeline` - plus een `instructions`-resource (een duwtje om te trekken vóór je extern zoekt). MCP is het ene protocol dat elke moderne agent al spreekt, dus elke client die **op deze machine** draait kan de kluis gebruiken.
+De kluis is niet alleen voor Claude Code. `scripts/kb-mcp.py` is een lokale **MCP-server** die elf tools plus een `instructions`-resource blootstelt: `recall` (zoek geheugen + wiki), `source_recall` en `experience_recall` (expliciete, gated diepe recall), `capture` (sla een nieuwe herinnering op), `review_pending` en `review_decide` (de menselijke reviewwachtrij), `shortest_path` (read-only BFS door de graaf), en de temporele set `what_did_i_do`, `timeline`, `weeklog`, `topic_timeline`. MCP is het ene protocol dat elke moderne agent al spreekt, dus elke client die **op deze machine** draait kan de kluis gebruiken.
 
-Elke tool draagt MCP-annotaties, en dat is niet cosmetisch: een client leidt uit `readOnlyHint` af of een aanroep bevestiging nodig heeft en of hij parallel mag draaien, en zet beide op "nee" als de hint ontbreekt. De acht read-only retrieval/temporal-tools zijn als zodanig gemarkeerd; `capture` is een niet-destructieve schrijver, `review_decide` een destructieve. Het pull-duwtje reist via drie dragers, omdat geen enkele op zichzelf elke client bereikt: het `instructions`-veld van de protocol-handshake, de `kennisbank://instructions`-resource, en de managed block in `.github/copilot-instructions.md`.
+Elke tool draagt MCP-annotaties, en dat is niet cosmetisch: een client leidt uit `readOnlyHint` af of een aanroep bevestiging nodig heeft en of hij parallel mag draaien, en zet beide op "nee" als de hint ontbreekt. De negen read-only retrieval/graaf-/temporele tools zijn als zodanig gemarkeerd; `capture` is een niet-destructieve schrijver, `review_decide` een destructieve. Het pull-duwtje reist via drie dragers, omdat geen enkele op zichzelf elke client bereikt: het `instructions`-veld van de protocol-handshake, de `kennisbank://instructions`-resource, en de managed block in `.github/copilot-instructions.md`.
 
 **De harde grens: alleen lokaal.** De MCP-server bindt niets aan het netwerk
 (stdio-transport); de kluis verlaat nooit je machine. Setup koppelt Codex,

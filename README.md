@@ -175,7 +175,7 @@ needs no JSON parser.
 
 **Architecture documentation that admits what it found.** A full C4 set under
 `docs/C4-Documentation/` — four levels, an OpenAPI specification for the Atlas
-sidecar's 13 routes, and a tool contract for the 10 MCP tools. The containers
+sidecar's 13 routes, and a tool contract for the 11 MCP tools. The containers
 describe what is actually deployed rather than an idealised topology, and the
 drift the pass uncovered is written down as drift: ADR-0001 still Accepted on
 `qwen3-embedding:8b` where the research recommends `:4b`, `kb-usage.db`
@@ -953,9 +953,9 @@ reports.
 
 ## Using KennisBank from other agents (Codex, OpenCode, Copilot, ChatGPT)
 
-The vault is not Claude-Code-only. `scripts/kb-mcp.py` is a local **MCP server** exposing eleven primitives: ten tools - `recall` (search memory + wiki), `source_recall` and `experience_recall` (explicit gated deeper recall), `capture` (save a new memory), `review_pending` and `review_decide` (the human review queue), and the temporal set `what_did_i_do`, `timeline`, `weeklog`, `topic_timeline` - plus an `instructions` resource (a nudge to pull before searching externally). MCP is the one protocol every modern agent already speaks, so any client running **on this machine** can use the vault.
+The vault is not Claude-Code-only. `scripts/kb-mcp.py` is a local **MCP server** exposing eleven tools plus an `instructions` resource (a nudge to pull before searching externally): `recall` (search memory + wiki), `source_recall` and `experience_recall` (explicit gated deeper recall), `capture` (save a new memory), `review_pending` and `review_decide` (the human review queue), `shortest_path` (read-only graph BFS), and the temporal set `what_did_i_do`, `timeline`, `weeklog`, `topic_timeline`. MCP is the one protocol every modern agent already speaks, so any client running **on this machine** can use the vault.
 
-Every tool carries MCP annotations, which is not cosmetic: a client derives from `readOnlyHint` whether a call needs confirmation and whether it may run in parallel, and defaults both to "no" when the hint is absent. The eight read-only retrieval/temporal tools are marked as such; `capture` is a non-destructive writer, `review_decide` a destructive one. The pull nudge travels on three carriers, because none of them reaches every client on its own: the `instructions` field of the protocol handshake, the `kennisbank://instructions` resource, and the managed block in `.github/copilot-instructions.md`.
+Every tool carries MCP annotations, which is not cosmetic: a client derives from `readOnlyHint` whether a call needs confirmation and whether it may run in parallel, and defaults both to "no" when the hint is absent. The nine read-only retrieval/graph/temporal tools are marked as such; `capture` is a non-destructive writer, `review_decide` a destructive one. The pull nudge travels on three carriers, because none of them reaches every client on its own: the `instructions` field of the protocol handshake, the `kennisbank://instructions` resource, and the managed block in `.github/copilot-instructions.md`.
 
 **The hard boundary: local only.** The MCP server binds nothing to the network
 (stdio transport); the vault never leaves your machine. Setup connects Codex,

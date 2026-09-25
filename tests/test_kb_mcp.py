@@ -54,13 +54,92 @@ class KbMcpTest(unittest.TestCase):
         self.assertIn("Oude bug", out)
         self.assertIn("geheugen", out)
 
+    def test_no_budget_preserves_legacy_bytes(self):
+        expected = (
+            "KennisBank-treffers:\n"
+            "- [geheugen] [[x|Oude bug]] (0.90): token expiry < ipv <="
+        )
+        self.assertEqual(self.m.recall_tool("token expiry bug"), expected)
+        self.assertEqual(self.m.recall_tool("token expiry bug", max_tokens=0), expected)
+        self.assertEqual(self.m.recall_tool("token expiry bug", max_tokens=-1), expected)
+        self.assertEqual(self.m.recall_tool("token expiry bug", max_tokens=None), expected)
+
+    def test_recall_tool_budget_cites_paths_and_reports_dropped_hits(self):
+        base = self.vault / "09-memory"
+        base.mkdir(parents=True)
+        first = str(base / "x.md")
+        second = str(base / "y.md")
+        self.m.kb_recall.recall_hits = lambda *a, **k: [
+            {"path": first, "layer": "memory", "title": "First", "score": 0.9,
+             "snippet": "a long first passage " * 8},
+            {"path": first, "layer": "memory", "title": "Duplicate", "score": 0.8,
+             "snippet": "duplicate"},
+            {"path": second, "layer": "wiki", "title": "Second", "score": 0.7,
+             "snippet": "a long second passage " * 8},
+        ]
+        out = self.m.recall_tool("token expiry bug", max_tokens=140)
+        estimate = self.m._load_context_budget().estimate_tokens(out)
+        self.assertLessEqual(estimate, 140)
+        self.assertIn("[1]", out)
+        self.assertIn("09-memory/x.md", out)
+        self.assertEqual(out.count("09-memory/x.md"), 1)
+        self.assertIn("Budget:", out)
+        self.assertIn("weggelaten", out)
+
     def test_recall_tool_empty_query(self):
         self.assertEqual(self.m.recall_tool("").strip(), "")
+
+    def test_shortest_path_tool_reads_local_graph(self):
+        graph_dir = self.vault / "graphify-out"
+        graph_dir.mkdir(parents=True)
+        (graph_dir / "graph.json").write_text(json.dumps({
+            "nodes": [
+                {"id": "a", "label": "A", "source_file": "02-wiki/a.md"},
+                {"id": "b", "label": "B", "source_file": "02-wiki/b.md"},
+            ],
+            "links": [{"source": "a", "target": "b", "relation": "references"}],
+        }), encoding="utf-8")
+        result = self.m.shortest_path_tool("02-wiki/a.md", "02-wiki/b.md")
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["documents"], ["02-wiki/a.md", "02-wiki/b.md"])
 
     def test_recall_tool_no_hits(self):
         self.m.kb_recall.recall_hits = lambda *a, **k: []
         out = self.m.recall_tool("iets")
         self.assertIn("geen", out.lower())
+
+    def test_recall_tool_reports_unusable_index_explicitly(self):
+        old_status = self.m.kb_recall.recall_hits_with_status
+        old_hits = self.m.kb_recall.recall_hits
+        self.m.kb_recall.recall_hits = self.m.kb_recall_original
+        self.m.kb_recall.recall_hits_with_status = lambda *a, **k: {
+            "status": "unusable",
+            "hits": [],
+            "code": "vec0_unavailable",
+            "message": "no such module: vec0",
+        }
+        try:
+            out = self.m.recall_tool("iets")
+        finally:
+            self.m.kb_recall.recall_hits_with_status = old_status
+            self.m.kb_recall.recall_hits = old_hits
+        self.assertIn("KennisBank-index onbruikbaar", out)
+        self.assertIn("vec0", out)
+        self.assertNotIn("Geen treffers in de KennisBank", out)
+
+    def test_recall_tool_distinguishes_empty_index(self):
+        old_status = self.m.kb_recall.recall_hits_with_status
+        old_hits = self.m.kb_recall.recall_hits
+        self.m.kb_recall.recall_hits = self.m.kb_recall_original
+        self.m.kb_recall.recall_hits_with_status = lambda *a, **k: {
+            "status": "no_hit", "hits": [], "code": "", "message": "",
+        }
+        try:
+            out = self.m.recall_tool("iets")
+        finally:
+            self.m.kb_recall.recall_hits_with_status = old_status
+            self.m.kb_recall.recall_hits = old_hits
+        self.assertEqual(out, "Geen treffers in de KennisBank.")
 
     def test_recall_tool_embed_fail_is_soft(self):
         self.emb.embed = lambda *a, **k: None
@@ -153,7 +232,7 @@ class KbMcpTest(unittest.TestCase):
         self.assertEqual(experience_cli["status"], "policy_disabled")
         self.assertEqual(experience_mcp["status"], experience_cli["status"])
 
-    def test_build_server_registers_eight_annotated_tools(self):
+    def test_build_server_registers_annotated_tools(self):
         """Vervangt test_build_server_none_without_mcp, dat op 'MCPServer is None'
         aftakte en in BEIDE takken slaagde: die kon niets bewijzen.
 
@@ -195,10 +274,10 @@ class KbMcpTest(unittest.TestCase):
         self.assertIsNotNone(srv)
         self.assertEqual(set(registered), {
             "recall", "source_recall", "experience_recall", "capture", "review_pending", "review_decide",
-            "what_did_i_do", "timeline", "weeklog", "topic_timeline"})
+            "shortest_path", "what_did_i_do", "timeline", "weeklog", "topic_timeline"})
 
-        read_only = {"recall", "source_recall", "experience_recall", "review_pending", "what_did_i_do", "timeline",
-                     "weeklog", "topic_timeline"}
+        read_only = {"recall", "source_recall", "experience_recall", "review_pending", "shortest_path",
+                     "what_did_i_do", "timeline", "weeklog", "topic_timeline"}
         for name in read_only:
             ann = registered[name]["annotations"]
             self.assertTrue(ann["readOnlyHint"], f"{name} hoort read-only te zijn")

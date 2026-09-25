@@ -22,7 +22,9 @@ Voor elk bestand, voer de suggested_action uit:
 **parse_with_liteparse**: Parse PDF/Office/spreadsheet/presentation naar markdown met:
 `python3 "$VAULT/.claude/scripts/parse-document.py" "<pad>" --vault "$VAULT" --json`
 Dit schrijft citeerbare bron-markdown naar `$VAULT/05-bronnen/liteparse/`. OCR staat standaard uit; gebruik alleen `--ocr` als lokale Tesseract/tessdata beschikbaar is of als het om een scan gaat. Als LiteParse ontbreekt: installeer lokaal met `python3 -m pip install "liteparse>=2.0,<3"` of rapporteer de dependency-fout; gebruik geen cloudparser.
-**parse_with_liteparse_or_describe**: Voor documentachtige/scanned afbeeldingen dezelfde LiteParse-route proberen met `--ocr` wanneer lokale OCR beschikbaar is. Als er geen nuttige tekst uitkomt, beschrijf de afbeelding en sla de beschrijving op als .md in `$VAULT/07-media/`.
+**parse_with_offline_parser**: Verwerk `.srt`, `.vtt`, `.eml` en `.mbox` lokaal zonder LiteParse of netwerk:
+`python3 "$VAULT/.claude/scripts/parse-document.py" "<pad>" --vault "$VAULT" --json`
+Ondertitels behouden timestamps en cues; `.mbox` wordt één outputbestand per bericht. Het resultaat gaat naar `$VAULT/05-bronnen/liteparse/`.
 
 ## Stap 3: Verwijder verwerkte bestanden uit 00-inbox
 

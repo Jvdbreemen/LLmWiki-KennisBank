@@ -292,18 +292,72 @@ else
     MINGW*|MSYS*|CYGWIN*) MCP_PY=(py -3) ;;
     *) MCP_PY=(python3) ;;
   esac
+  MCP_CONFIG_COMMAND="$("${MCP_PY[@]}" - "$CODEX_CONFIG" "$OPENCODE_CONFIG" "$COPILOT_MCP_CONFIG" <<'PYEOF' 2>/dev/null
+import json
+import sys
+from pathlib import Path
+try:
+    import tomllib
+except ModuleNotFoundError:
+    tomllib = None
+
+def emit(spec):
+    if not isinstance(spec, dict):
+        return False
+    command = spec.get("command")
+    args = spec.get("args") or []
+    if not command:
+        return False
+    if isinstance(command, str):
+        values = [command] + [str(x) for x in args]
+    else:
+        values = [str(x) for x in command]
+    if values and Path(values[-1]).name == "kb-mcp.py":
+        values = values[:-1]
+    print("\t".join(values))
+    return True
+
+for raw in sys.argv[1:]:
+    path = Path(raw)
+    if not path.is_file():
+        continue
+    try:
+        if path.suffix == ".toml" and tomllib is not None:
+            data = tomllib.loads(path.read_text(encoding="utf-8"))
+            if emit(data.get("mcp_servers", {}).get("kennisbank")):
+                break
+        else:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            spec = data.get("mcp", {}).get("kennisbank") if isinstance(data.get("mcp"), dict) else None
+            if not emit(spec):
+                emit(data.get("mcpServers", {}).get("kennisbank"))
+            if spec is not None or data.get("mcpServers", {}).get("kennisbank"):
+                break
+    except Exception:
+        continue
+PYEOF
+)"
+  if [ -n "$MCP_CONFIG_COMMAND" ]; then
+    IFS=$'\t' read -r -a MCP_PY <<< "$MCP_CONFIG_COMMAND" || true
+  fi
   if ! command -v "${MCP_PY[0]}" >/dev/null 2>&1; then
     report_fail "kennisbank MCP runtime" "interpreter not found: ${MCP_PY[*]}"
   else
-    MCP_IMPORT_OUT="$("${MCP_PY[@]}" -c 'import mcp; import mcp.client.stdio; import mcp.server.fastmcp' 2>&1)"
-    MCP_IMPORT_RC=$?
-    if [ "$MCP_IMPORT_RC" = "0" ]; then
-      report_pass "kennisbank MCP runtime" "${MCP_PY[*]} imports mcp"
+    MCP_PROBE_OUT="$("${MCP_PY[@]}" "$SCRIPTS_DIR/_mcp_probe.py" --json 2>&1)"
+    MCP_PROBE_RC=$?
+    MCP_SUMMARY="$("${MCP_PY[@]}" -c 'import json,sys
+try:
+    d=json.loads(sys.stdin.read())
+    print("ok={} mcp={} api={} sqlite-vec={} vec_version={} vec0={}".format(d.get("ok"), d.get("mcp"), d.get("mcp_api"), d.get("sqlite_vec"), d.get("vec_version"), d.get("vec0")))
+except Exception:
+    print("invalid probe output")' <<< "$MCP_PROBE_OUT" 2>/dev/null)"
+    if [ "$MCP_PROBE_RC" = "0" ]; then
+      report_pass "kennisbank MCP runtime" "${MCP_PY[*]} | ${MCP_SUMMARY:-vec0 probe OK}"
     else
-      report_fail "kennisbank MCP runtime" "missing Python package for ${MCP_PY[*]} (run: ${MCP_PY[*]} -m pip install mcp==1.28.1) ${MCP_IMPORT_OUT}"
+      report_fail "kennisbank MCP runtime" "${MCP_PY[*]} | ${MCP_SUMMARY:-$MCP_PROBE_OUT}. Fix: gebruik een Python met sqlite3.load_extension en installeer mcp==1.28.1 plus sqlite-vec==0.1.9; daarna setup opnieuw."
     fi
   fi
-  if [ -f "$SCRIPTS_DIR/kb-mcp.py" ]; then
+  if [ -f "$SCRIPTS_DIR/kb-mcp.py" ] && command -v "${MCP_PY[0]}" >/dev/null 2>&1; then
     MCP_TEMPORAL_OUT="$("${MCP_PY[@]}" -c '
 import importlib.util, sys
 spec = importlib.util.spec_from_file_location("kb_mcp", sys.argv[1])
@@ -555,16 +609,20 @@ else
   # setup on a not-yet-pulled model does not hard-fail twice.
   if [ -f "$VAULT/.claude/kb-index.db" ]; then
     MISMATCH="$(KENNISBANK_VAULT="$VAULT" python3 - "$VAULT" <<'PYEOF' 2>/dev/null
-import sys, os
-sys.path.insert(0, os.path.join(sys.argv[1], ".claude", "scripts"))
+import sqlite3
+import sys
+from pathlib import Path
+vault = Path(sys.argv[1])
+sys.path.insert(0, str(vault / ".claude" / "scripts"))
 try:
     import _embeddings as emb
-    import _kbindex
-    conn = _kbindex.connect()
-    m = _kbindex.embed_mismatch(conn, emb.embed_id())
+    conn = sqlite3.connect(f"file:{(vault / '.claude' / 'kb-index.db').as_posix()}?mode=ro", uri=True)
+    row = conn.execute("SELECT value FROM meta WHERE key='embed_id'").fetchone()
     conn.close()
-    if m:
-        print(f"{m[0]}|{m[1]}")
+    stored = row[0] if row else ""
+    live = emb.embed_id()
+    if stored and stored != live:
+        print(f"{stored}|{live}")
 except Exception:
     pass
 PYEOF

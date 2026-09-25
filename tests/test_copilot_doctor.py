@@ -52,7 +52,7 @@ BASH = _find_bash()
 
 # Scripts the Copilot doctor block invokes from the vault's .claude/scripts.
 VAULT_SCRIPTS = (
-    "_copilot.py", "kb-copilot-capture.py", "kb-mcp.py", "kb-activity.py",
+    "_copilot.py", "_mcp_probe.py", "kb-copilot-capture.py", "kb-mcp.py", "kb-activity.py",
     "build-activity-index.py", "_activity.py", "_frontmatter.py", "_vaultpath.py",
 )
 

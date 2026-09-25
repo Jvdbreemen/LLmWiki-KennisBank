@@ -276,11 +276,14 @@ interpreter used by the configured command.
 
 The server exposes:
 
-- `recall(query, k)` for wiki/memory retrieval.
+- `recall(query, k, max_tokens)` for wiki/memory retrieval. `max_tokens=0` preserves
+  the legacy uncited response; a positive value returns deterministic cited hits
+  with vault-relative paths and a dropped-hit report when needed.
 - `experience_recall(query, mode, k)` first for explicit prior lessons.
 - `source_recall(query, mode, k, source_ref)` only on demand for source
   verification or exact reconstruction; never as an automatic advisory.
 - `capture(title, body, memory_type, importance)` for unverified memory capture.
+- `shortest_path(source, target, max_hops)` for a read-only BFS path through the local graphify snapshot.
 - `what_did_i_do(date_or_period, topic, project, max_events)` for compact date
   or period recall.
 - `timeline(period, topic, project, max_events)` for chronological activity.

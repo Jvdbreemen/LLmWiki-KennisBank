@@ -144,9 +144,9 @@ Two extremes are explicitly out of scope: this is not a multi-user enterprise kn
 ### <a id="journey-mcp"></a>Agent Harness Connects over MCP — Programmatic Journey
 
 1. Codex CLI, OpenCode, or GitHub Copilot CLI starts an agent session and, per its installed config, spawns `kb-mcp.py` as a child process speaking MCP over stdio (Claude Code does not do this — it uses hooks exclusively).
-2. The harness calls `initialize()` then `list_tools()`; KennisBank returns its full tool surface: `recall`, `capture`, `review_pending`, `review_decide`, plus four temporal tools (`what_did_i_do`, `timeline`, `weeklog`, `topic_timeline`).
+2. The harness calls `initialize()` then `list_tools()`; KennisBank returns its full tool surface: `recall`, `source_recall`, `experience_recall`, `capture`, `review_pending`, `review_decide`, `shortest_path`, plus four temporal tools (`what_did_i_do`, `timeline`, `weeklog`, `topic_timeline`).
 3. During the session, the agent calls `call_tool("recall", …)` to pull context on demand, or `call_tool("capture", …)` to record something worth remembering, in addition to whatever the harness's own lifecycle hooks already inject.
-4. `kb-mcp.py` dispatches into the same library modules the hook scripts use (`_kbindex.py`, `_embeddings.py`, `_memory.py`, `_activity.py`) — it is a thin protocol wrapper, not a second implementation.
+4. `kb-mcp.py` dispatches into the same library modules the hook scripts use (`_kbindex.py`, `_embeddings.py`, `_memory.py`, `_activity.py`, `_graph.py`) — it is a thin protocol wrapper, not a second implementation.
 5. Reads and writes go to the same `kb-index.db` / `kb-activity.db` stores as every other path; `capture` and `review_decide` are the two MCP calls that write.
 6. The harness owns the process's lifetime — it is killed when the agent session ends. No health check beyond the MCP handshake itself; no port, no persistence beyond that session.
 

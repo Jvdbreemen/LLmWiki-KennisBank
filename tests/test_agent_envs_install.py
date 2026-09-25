@@ -3,6 +3,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -280,11 +281,40 @@ command = "other"
         secrets = json.loads((self.tmp / ".config" / "kennisbank" / "secrets.json").read_text(encoding="utf-8"))
         self.assertEqual(secrets["OPENROUTER_API_KEY"], "fake-openrouter-token-for-test")
 
-    def test_validate_mcp_runtime_reports_missing_dependency(self):
+    def test_select_capable_interpreter_reports_chosen_command(self):
+        self.m._MCP_SELECTION = None
+        selected = [str(Path(sys.executable))]
+        with patch.object(self.m, "_probe_python", return_value={"ok": True}):
+            result = self.m.select_capable_interpreter()
+        self.assertEqual(result, selected)
+        self.assertEqual(self.m._MCP_SELECTION, selected)
+
+    def test_select_capable_interpreter_fails_actionably(self):
+        self.m._MCP_SELECTION = None
+        with patch.object(self.m, "_candidate_python_argv", return_value=[["bad-python"]]), \
+                patch.object(self.m, "_probe_python", return_value={
+                    "ok": False, "error_code": "extension_loading_unsupported",
+                    "error": "load_extension ontbreekt",
+                }):
+            with self.assertRaises(RuntimeError) as ctx:
+                self.m.select_capable_interpreter()
+        message = str(ctx.exception)
+        self.assertIn("KENNISBANK_PYTHON", message)
+        self.assertIn("sqlite-vec", message)
+        self.assertIn("mcp==1.28.1", message)
+
+    def test_mcp_server_argv_uses_selected_interpreter(self):
+        self.m._MCP_SELECTION = None
+        with patch.object(self.m, "select_capable_interpreter", return_value=["/tmp/kb-python"]):
+            argv = self.m._mcp_server_argv(self.vault)
+        self.assertEqual(argv[0], "/tmp/kb-python")
+        self.assertTrue(argv[1].endswith("kb-mcp.py"))
+
         def fake_run(args, **_kwargs):
             return subprocess.CompletedProcess(args, 1, "", "No module named mcp")
 
-        with patch.object(self.m.subprocess, "run", side_effect=fake_run):
+        with patch.object(self.m, "select_capable_interpreter", return_value=["python"]), \
+                patch.object(self.m.subprocess, "run", side_effect=fake_run):
             errors = self.m.validate_mcp_runtime(self.vault)
 
         self.assertEqual(len(errors), 1)
@@ -296,11 +326,10 @@ command = "other"
 
         def fake_run(args, **_kwargs):
             calls.append(args)
-            if len(calls) == 1:
-                return subprocess.CompletedProcess(args, 0, "", "")
             return subprocess.CompletedProcess(args, 1, "", "missing MCP tools: capture")
 
-        with patch.object(self.m.subprocess, "run", side_effect=fake_run):
+        with patch.object(self.m, "select_capable_interpreter", return_value=["python"]), \
+                patch.object(self.m.subprocess, "run", side_effect=fake_run):
             errors = self.m.validate_mcp_runtime(self.vault)
 
         self.assertEqual(len(errors), 1)
@@ -314,16 +343,18 @@ command = "other"
             calls.append(args)
             return subprocess.CompletedProcess(args, 0, "MCP handshake OK: capture, recall", "")
 
-        with patch.object(self.m.subprocess, "run", side_effect=fake_run):
+        with patch.object(self.m, "select_capable_interpreter", return_value=["python"]), \
+                patch.object(self.m.subprocess, "run", side_effect=fake_run):
             errors = self.m.validate_mcp_runtime(self.vault)
 
         self.assertEqual(errors, [])
-        self.assertEqual(len(calls), 2)
-        wire_client = calls[1][calls[1].index("-c") + 1]
+        self.assertEqual(len(calls), 1)
+        wire_client = calls[0][calls[0].index("-c") + 1]
         self.assertIn('session.call_tool("recall"', wire_client)
         self.assertIn('session.call_tool(name, arguments)', wire_client)
         self.assertIn('("experience_recall"', wire_client)
         self.assertIn('("source_recall"', wire_client)
+        self.assertIn('"shortest_path"', wire_client)
 
     def test_projection_command_artifacts_have_cross_client_semantic_parity(self):
         self.m.install_codex(REPO_ROOT, self.vault)

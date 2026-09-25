@@ -13,6 +13,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _vaultpath import vault_root  # noqa: E402
 from _liteparse import IMAGE_EXTENSIONS, OFFICE_EXTENSIONS, PDF_EXTENSIONS  # noqa: E402
+from _media_transcript import MAIL_EXTENSIONS, SUBTITLE_EXTENSIONS  # noqa: E402
 
 INBOX = vault_root() / "00-inbox"
 
@@ -38,6 +39,10 @@ def detect_type(path: Path) -> str:
         except (OSError, PermissionError):
             pass
 
+    if ext in SUBTITLE_EXTENSIONS:
+        return "subtitle"
+    if ext in MAIL_EXTENSIONS:
+        return "mail"
     if ext == ".md":
         return "markdown"
     if ext == ".txt":
@@ -71,6 +76,8 @@ def suggested_action(file_type: str, path: Path) -> str:
         return "convert_to_markdown"
     if file_type in ("pdf", "document"):
         return "parse_with_liteparse"
+    if file_type in ("subtitle", "mail"):
+        return "parse_with_offline_parser"
     if file_type == "image":
         return "parse_with_liteparse_or_describe"
     return "review_manually"
@@ -130,7 +137,11 @@ def scan() -> dict:
             if fl:
                 entry["first_line"] = fl
 
-        entry["suggested_destination"] = "01-raw/"
+        entry["suggested_destination"] = (
+            "05-bronnen/liteparse/"
+            if file_type in ("subtitle", "mail")
+            else "01-raw/"
+        )
         entry["suggested_action"] = suggested_action(file_type, path)
 
         files.append(entry)

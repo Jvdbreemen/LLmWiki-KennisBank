@@ -9,6 +9,9 @@ nodes, 232 of them without a source file (PR #169).
 """
 from __future__ import annotations
 
+import contextlib
+import io
+import json
 import sys
 import tempfile
 import unittest
@@ -68,6 +71,50 @@ class NullSourceFileTest(unittest.TestCase):
         node_map, links = self._graph()
         self.mod.process_file(article, node_map, links, dry_run=True)
         self.assertEqual(article.read_text(encoding="utf-8"), before)
+
+    def test_suggestions_are_deterministic_and_do_not_write(self):
+        article = self._article("bron.md", "# Bron\n\nTekst.\n")
+        node_map = {
+            "n1": {"source_file": "02-wiki/bron.md"},
+            "n2": {"source_file": "02-wiki/buur.md"},
+            "n3": {"source_file": "02-wiki/andere.md"},
+        }
+        links = [
+            {"source": "n1", "target": "n2", "confidence_score": 0.9,
+             "relation": "references"},
+            {"source": "n1", "target": "n3", "confidence_score": 0.9,
+             "relation": "references"},
+        ]
+        before = article.read_text(encoding="utf-8")
+        first = self.mod.suggestions_for_file(article, node_map, links)
+        second = self.mod.suggestions_for_file(article, node_map, list(reversed(links)))
+        self.assertEqual(first, second)
+        self.assertEqual([item["stem"] for item in first], ["andere", "buur"])
+        self.assertEqual(article.read_text(encoding="utf-8"), before)
+
+    def test_suggestion_cli_json_reports_zero_writes(self):
+        article = self._article("bron.md", "# Bron\n\nTekst.\n")
+        graph_path = self.vault / "graph.json"
+        graph_path.write_text(json.dumps({
+            "nodes": [
+                {"id": "n1", "source_file": "02-wiki/bron.md"},
+                {"id": "n2", "source_file": "02-wiki/buur.md"},
+            ],
+            "links": [{"source": "n1", "target": "n2", "confidence_score": 0.9}],
+        }), encoding="utf-8")
+        self.mod.GRAPH_PATH = graph_path
+        output = io.StringIO()
+        argv = sys.argv
+        sys.argv = ["auto-crosslink.py", "--suggest", "--json", str(article)]
+        try:
+            with contextlib.redirect_stdout(output):
+                self.mod.main()
+        finally:
+            sys.argv = argv
+        result = json.loads(output.getvalue())
+        self.assertEqual(result["writes"], 0)
+        self.assertEqual(result["suggestions"][0]["stem"], "buur")
+        self.assertNotIn("Zie ook", article.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
