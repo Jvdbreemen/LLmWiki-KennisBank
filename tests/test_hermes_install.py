@@ -197,6 +197,62 @@ class HermesInstallTest(unittest.TestCase):
         warnings = result.get("warnings", [])
         self.assertTrue(any("missing frontmatter name" in w for w in warnings), warnings)
 
+    def test_install_creates_soul_md_when_absent(self):
+        _make_fake_hermes(self.bin_dir, behavior="ok")
+        result = self.m.install_hermes(REPO_ROOT, self.vault)
+        self.assertTrue(result.get("soul_changed"))
+        soul = Path(os.environ["HERMES_HOME"]) / "SOUL.md"
+        self.assertTrue(soul.is_file())
+        text = soul.read_text(encoding="utf-8")
+        self.assertIn("BEGIN LLmWiki-KennisBank", text)
+        self.assertIn(str(self.vault).replace("\\", "/"), text)
+        self.assertIn("/sessiestart", text)
+        self.assertIn("/sessielog", text)
+
+    def test_install_replaces_existing_soul_block(self):
+        _make_fake_hermes(self.bin_dir, behavior="ok")
+        soul = Path(os.environ["HERMES_HOME"]) / "SOUL.md"
+        soul.parent.mkdir(parents=True, exist_ok=True)
+        soul.write_text(
+            "# My persona\n\n<!-- BEGIN LLmWiki-KennisBank -->\nold block\n<!-- END LLmWiki-KennisBank -->\n\nMore text.\n",
+            encoding="utf-8")
+        result = self.m.install_hermes(REPO_ROOT, self.vault)
+        self.assertTrue(result.get("soul_changed"))
+        text = soul.read_text(encoding="utf-8")
+        self.assertIn("# My persona", text)
+        self.assertIn("More text.", text)
+        self.assertNotIn("old block", text)
+        self.assertIn(str(self.vault).replace("\\", "/"), text)
+        self.assertEqual(text.count("BEGIN LLmWiki-KennisBank"), 1)
+
+    def test_install_soul_backup_written_exactly_once(self):
+        _make_fake_hermes(self.bin_dir, behavior="ok")
+        soul = Path(os.environ["HERMES_HOME"]) / "SOUL.md"
+        soul.parent.mkdir(parents=True, exist_ok=True)
+        original = "# persona\n"
+        soul.write_text(original, encoding="utf-8")
+        result1 = self.m.install_hermes(REPO_ROOT, self.vault)
+        self.assertIsNotNone(result1.get("soul_backup"))
+        backup = Path(result1["soul_backup"])
+        self.assertEqual(backup.read_text(encoding="utf-8"), original)
+        result2 = self.m.install_hermes(REPO_ROOT, self.vault)
+        self.assertIsNone(result2.get("soul_backup"))
+        backups = list(soul.parent.glob("SOUL.md.kennisbank-backup-*"))
+        self.assertEqual(len(backups), 1)
+
+    def test_install_soul_idempotent_re_run(self):
+        _make_fake_hermes(self.bin_dir, behavior="ok")
+        self.m.install_hermes(REPO_ROOT, self.vault)
+        soul = Path(os.environ["HERMES_HOME"]) / "SOUL.md"
+        first = soul.read_text(encoding="utf-8")
+        result = self.m.install_hermes(REPO_ROOT, self.vault)
+        self.assertFalse(result.get("soul_changed"))
+        self.assertEqual(soul.read_text(encoding="utf-8"), first)
+
+    def test_validate_files_reports_missing_soul_md(self):
+        errors = self.m.validate_files(REPO_ROOT, self.vault, ["hermes"])
+        self.assertTrue(any("missing Hermes SOUL.md" in e for e in errors), errors)
+
 
 if __name__ == "__main__":
     unittest.main()

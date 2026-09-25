@@ -381,6 +381,57 @@ def _install_command_skills(repo: Path, skills_root: Path) -> list[Path]:
     return installed
 
 
+def _soul_block(vault: Path) -> str:
+    vault_s = _posix(vault)
+    return f"""{KB_START}
+# LLmWiki-KennisBank
+
+This machine uses a non-default KennisBank vault:
+
+`{vault_s}`
+
+Operational rules:
+- Always set or preserve `KENNISBANK_VAULT={vault_s}` for KennisBank scripts, hooks, MCP servers, skills, and commands.
+- Do not use `~/KennisBank` as the active vault on this machine unless the user explicitly changes the vault.
+- Prefer the local KennisBank MCP server before external search when the task may depend on prior local knowledge.
+- For an explicit question about what worked before, use reviewed `experience_recall` first; retrieve raw evidence with `source_recall` only on demand for verification or deeper support. Never turn either route into an automatic advisory.
+- If a reusable fact, preference, procedure, or decision appears during the session, capture it.
+- The KennisBank vault is local-only: nothing leaves this machine unless the user explicitly chooses a cloud backend.
+- Entry points: `/sessiestart` to load session-start context, `/sessielog` to create or update the session log.
+
+{KB_END}
+"""
+
+
+def _install_soul_block(hermes_home: Path, vault: Path) -> dict:
+    """Append or replace a marker-delimited KennisBank block in SOUL.md.
+
+    Text outside the markers is never modified. A backup is written once before
+    the first edit.
+    """
+    path = hermes_home / "SOUL.md"
+    block = _soul_block(vault)
+    old = _read_text(path)
+    result: dict = {"path": str(path), "changed": False, "backup": None}
+
+    if old.strip() and not any(path.parent.glob("SOUL.md.kennisbank-backup-*")):
+        backup = path.parent / f"SOUL.md.kennisbank-backup-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+        _write_text(backup, old)
+        result["backup"] = str(backup)
+
+    pattern = re.compile(re.escape(KB_START) + r".*?" + re.escape(KB_END), re.S)
+    if pattern.search(old):
+        new = pattern.sub(lambda _m: block.strip(), old)
+    else:
+        sep = "\n\n" if old.strip() else ""
+        new = old.rstrip() + sep + block.strip() + "\n"
+
+    if new != old:
+        _write_text(path, new)
+        result["changed"] = True
+    return result
+
+
 def _install_hermes_skills(repo: Path, hermes_home: Path) -> tuple[list[Path], list[str]]:
     """Deploy repo skills into a namespaced Hermes skills directory.
 
@@ -796,6 +847,12 @@ def install_hermes(repo: Path, vault: Path) -> dict:
     result["skills"] = [str(p) for p in installed_skills]
     result["warnings"] = skill_warnings
 
+    soul = _install_soul_block(hermes_home, vault)
+    result["soul_md"] = soul["path"]
+    result["soul_changed"] = soul["changed"]
+    if soul.get("backup"):
+        result["soul_backup"] = soul["backup"]
+
     hermes_bin = shutil.which("hermes")
     if hermes_bin is None:
         result["completed"] = False
@@ -1146,18 +1203,25 @@ def validate_files(repo: Path, vault: Path, agents: list[str]) -> list[str]:
     if "hermes" in agents:
         errors.extend(validate_hermes(vault, selected=True))
         hermes_home = _hermes_home()
-        for skill_dir in sorted((REPO_ROOT / "skills").iterdir()) if (REPO_ROOT / "skills").is_dir() else []:
-            if not (skill_dir / "SKILL.md").is_file():
-                continue
-            deployed = hermes_home / "skills" / "kennisbank" / skill_dir.name / "SKILL.md"
-            if not deployed.is_file():
-                errors.append(f"missing Hermes skill: {deployed}")
-                continue
-            data, _body = _frontmatter.parse_frontmatter(deployed.read_text(encoding="utf-8"))
-            if not data.get("name"):
-                errors.append(f"Hermes skill missing frontmatter name: {deployed}")
-            if not data.get("description"):
-                errors.append(f"Hermes skill missing frontmatter description: {deployed}")
+        soul_path = hermes_home / "SOUL.md"
+        if not soul_path.is_file():
+            errors.append(f"missing Hermes SOUL.md: {soul_path}")
+        elif KB_START not in soul_path.read_text(encoding="utf-8"):
+            errors.append(f"Hermes SOUL.md lacks the KennisBank instruction block: {soul_path}")
+        repo_skills = repo / "skills"
+        if repo_skills.is_dir():
+            for skill_dir in sorted(repo_skills.iterdir()):
+                if not (skill_dir / "SKILL.md").is_file():
+                    continue
+                deployed = hermes_home / "skills" / "kennisbank" / skill_dir.name / "SKILL.md"
+                if not deployed.is_file():
+                    errors.append(f"missing Hermes skill: {deployed}")
+                    continue
+                data, _body = _frontmatter.parse_frontmatter(deployed.read_text(encoding="utf-8"))
+                if not data.get("name"):
+                    errors.append(f"Hermes skill missing frontmatter name: {deployed}")
+                if not data.get("description"):
+                    errors.append(f"Hermes skill missing frontmatter description: {deployed}")
     return errors
 
 
