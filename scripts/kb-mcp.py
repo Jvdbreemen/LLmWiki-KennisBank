@@ -298,11 +298,11 @@ def _budget_recall_output(query: str, k: int, compact: bool, max_tokens: int) ->
             f"plafond {max_tokens} tokens.",
         ])
     header_tokens = module.estimate_tokens(header)
-    worst_footer = f"Budget: {max(0, len(hits) - 1)} treffers weggelaten; plafond {max_tokens} tokens."
+    worst_footer = f"Budget: {len(payload.get('hits') or [])} treffers weggelaten; plafond {max_tokens} tokens."
     allowance = max_tokens - header_tokens
     fitted, _ = module.fit_to_budget({"relevant": lines}, allowance)
     kept = list(fitted.get("relevant", []))
-    dropped = len(hits) - len(kept)
+    dropped = len(payload.get("hits") or []) - len(kept)
     footer = (f"Budget: {dropped} treffers weggelaten; plafond {max_tokens} tokens."
               if dropped else "")
 
