@@ -270,9 +270,6 @@ def _budget_recall_output(query: str, k: int, compact: bool, max_tokens: int) ->
     hits = _unique_hits(payload.get("hits") or [])
     if not hits:
         return "Geen treffers in de KennisBank."
-    module = _load_context_budget()
-    if module is None:
-        return ""
     lines = []
     for number, hit in enumerate(hits, 1):
         tag = "geheugen" if hit.get("layer") == "memory" else "wiki"
@@ -290,12 +287,22 @@ def _budget_recall_output(query: str, k: int, compact: bool, max_tokens: int) ->
     except Exception:
         root = Path(os.environ.get("KENNISBANK_VAULT", ""))
     header = f"KennisBank-treffers (budget: {max_tokens} tokens; vault: {root}):"
+    module = _load_context_budget()
+    if module is None:
+        # A tool must never answer with silence: say the ceiling could not be
+        # applied instead of returning an empty result that reads as "no hits".
+        return "\n".join([
+            header,
+            "\n".join(lines),
+            f"Budget niet toegepast: context-budget.py kon niet worden geladen; "
+            f"plafond {max_tokens} tokens.",
+        ])
     header_tokens = module.estimate_tokens(header)
-    worst_footer = f"Budget: {len(payload.get('hits') or [])} treffers weggelaten; plafond {max_tokens} tokens."
+    worst_footer = f"Budget: {max(0, len(hits) - 1)} treffers weggelaten; plafond {max_tokens} tokens."
     allowance = max_tokens - header_tokens
     fitted, _ = module.fit_to_budget({"relevant": lines}, allowance)
     kept = list(fitted.get("relevant", []))
-    dropped = len(payload.get("hits") or []) - len(kept)
+    dropped = len(hits) - len(kept)
     footer = (f"Budget: {dropped} treffers weggelaten; plafond {max_tokens} tokens."
               if dropped else "")
 
@@ -322,7 +329,8 @@ def _budget_recall_output(query: str, k: int, compact: bool, max_tokens: int) ->
             return output
         overflow = module.estimate_tokens(output) - max_tokens
         allowance = max(0, allowance - overflow - 1)
-    return ""
+    return (f"KennisBank-treffers: plafond van {max_tokens} tokens te klein voor één "
+            f"treffer ({len(hits)} beschikbaar); verhoog max_tokens.")
 
 
 def recall_tool(query: str, k: int = 5, *, compact: bool = False,
@@ -334,7 +342,6 @@ def recall_tool(query: str, k: int = 5, *, compact: bool = False,
         budget = 0
     if budget > 0:
         return _budget_recall_output((query or "").strip(), k, compact, budget)
-    """Doorzoek de KennisBank en geef een onderscheid tussen leeg en onbruikbaar."""
     q = (query or "").strip()
     if not q:
         return ""
