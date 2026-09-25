@@ -262,6 +262,19 @@ class HermesInstallTest(unittest.TestCase):
         errors = self.m.validate_files(REPO_ROOT, self.vault, ["hermes"])
         self.assertTrue(any("missing Hermes SOUL.md" in e for e in errors), errors)
 
+    def test_validate_files_accepts_a_deliberately_skipped_skill(self):
+        _make_fake_hermes(self.bin_dir, behavior="ok")
+        home = Path(os.environ["HERMES_HOME"])
+        decoy = home / "skills" / "other" / "autoresearch"
+        decoy.mkdir(parents=True)
+        (decoy / "SKILL.md").write_text("---\nname: autoresearch\ndescription: x\n---\nbody\n", encoding="utf-8")
+        self.m.install_hermes(REPO_ROOT, self.vault)
+        errors = self.m.validate_files(REPO_ROOT, self.vault, ["hermes"])
+        self.assertFalse(
+            any("missing Hermes skill" in e and "autoresearch" in e for e in errors),
+            "a skill skipped because the user already has that name is not a validation failure",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1223,8 +1223,15 @@ def validate_files(repo: Path, vault: Path, agents: list[str]) -> list[str]:
             errors.append(f"Hermes SOUL.md lacks the KennisBank instruction block: {soul_path}")
         repo_skills = repo / "skills"
         if repo_skills.is_dir():
+            foreign = _hermes_foreign_skill_names(hermes_home, "kennisbank")
             for skill_dir in sorted(repo_skills.iterdir()):
-                if not (skill_dir / "SKILL.md").is_file():
+                src_skill = skill_dir / "SKILL.md"
+                if not src_skill.is_file():
+                    continue
+                data, _body = _frontmatter.parse_frontmatter(src_skill.read_text(encoding="utf-8"))
+                name = str(data.get("name", "")).strip()
+                if name and name in foreign:
+                    # Install skipped it on purpose: the user's skill keeps winning.
                     continue
                 deployed = hermes_home / "skills" / "kennisbank" / skill_dir.name / "SKILL.md"
                 if not deployed.is_file():
