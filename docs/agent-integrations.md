@@ -252,6 +252,54 @@ additionally imports Copilot's own session-state on a best-effort basis.
 `timeline`, `weeklog`, and `topic_timeline` surface Copilot activity alongside the
 other agents'.
 
+## Hermes
+
+Installed by `--agents hermes`. Hermes is a local agent client that uses a
+single injected `SOUL.md` for global instructions and namespace-isolated skills
+under its own home directory.
+
+- Global instructions: `$HERMES_HOME/SOUL.md` (or `~/.hermes/SOUL.md`)
+- Skills: `$HERMES_HOME/skills/kennisbank/<name>/SKILL.md`
+- MCP: `$HERMES_HOME/config.yaml`, server name `kennisbank`
+- Config home: `$HERMES_HOME` (`~/.hermes` by default); `HERMES_HOME` overrides it
+
+KennisBank deploys only a managed block into `SOUL.md`, copies the repository
+skills into a `kennisbank/` namespace so no existing skill directory is touched,
+and registers the MCP server with `hermes mcp add`. It does **not** install
+lifecycle hooks: Hermes requires per-hook user consent and its `hooks:` block is
+a nested YAML map, so session-start warm-up and session-end capture are opt-in.
+Run `/sessiestart` and `/sessielog` explicitly, or add the hooks manually (see
+`POST-INSTALL.md`, Step 12).
+
+When a repository skill's `name` collides with a skill outside the
+`kennisbank/` namespace, setup prints a WARN naming both paths. Hermes loads the
+first registered skill for each name; if you want the KennisBank version to win,
+keep it in a namespace that is scanned before the conflicting one, or remove the
+conflicting skill.
+
+The MCP registration must use a Python interpreter that can load `sqlite-vec`/`vec0`.
+A bare `python3` that lacks the extension silently degrades `recall` to "no hits".
+`setup.sh` selects a capable interpreter automatically; set `KENNISBANK_PYTHON` to
+pin one manually.
+
+The exact command shape `setup.sh` uses (pass `--args` last — Hermes' option
+parser folds every following flag into `args`):
+
+```bash
+printf 'y\n' | hermes mcp add kennisbank \
+  --command <capable-python> \
+  --env KENNISBANK_VAULT=/absolute/path/to/vault \
+  --env KB_LLM_PROVIDERS=ollama \
+  --env KB_LLM_MODEL=qwen3.5:4b \
+  --env KB_LLM_ENDPOINT=http://localhost:11434 \
+  --connect-timeout 60 \
+  --args /absolute/path/to/vault/.claude/scripts/kb-mcp.py
+```
+
+Repair is idempotent: re-run `bash setup.sh --agents hermes`. It backs up
+`SOUL.md` once before the first edit and never touches text outside the
+`<!-- BEGIN LLmWiki-KennisBank -->` / `<!-- END LLmWiki-KennisBank -->` markers.
+
 ## Other MCP Clients
 
 Other compatible local MCP clients can point to the same stdio server. Use the
