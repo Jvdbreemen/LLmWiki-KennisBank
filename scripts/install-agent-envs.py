@@ -699,12 +699,160 @@ def _ensure_opencode_config(path: Path, vault: Path, plugin: Path) -> Path:
     return path
 
 
+def _has_hermes_mcp_config(config_path: Path) -> bool:
+    """Return True when config.yaml contains an mcp_servers.kennisbank key.
+
+    Hermes owns config.yaml; this is a read-only, stdlib-only heuristic used
+    by doctor/validation. It avoids adding a YAML dependency.
+    """
+    text = _read_text(config_path)
+    if "mcp_servers" not in text or "kennisbank" not in text:
+        return False
+    # Match kennisbank: as an indented key under mcp_servers: before the next
+    # top-level key (lines starting in column 0 that are not comments/blank).
+    pattern = re.compile(
+        r"^mcp_servers:\s*(?:#.*)?\n"
+        r"(?:^[ \t]+.*\n|^\s*\n)*"
+        r"^[ \t]+kennisbank:\s*(?:#.*)?$",
+        re.M,
+    )
+    return bool(pattern.search(text))
+
+
 def install_hermes(repo: Path, vault: Path) -> dict:
     """Install the KennisBank integration for Hermes.
 
-    Placeholder for H2: MCP registration, skills, and SOUL.md instructions.
+    Registers the stdio MCP server with `hermes mcp add`, using an interpreter
+    that can load sqlite-vec/vec0. Never writes config.yaml by hand.
     """
-    return {"status": "pending H2"}
+    hermes_home = _hermes_home()
+    config_path = hermes_home / "config.yaml"
+    result: dict = {
+        "hermes_home": str(hermes_home),
+        "config_path": str(config_path),
+    }
+    hermes_bin = shutil.which("hermes")
+    if hermes_bin is None:
+        result["completed"] = False
+        result["error"] = (
+            "hermes binary not found on PATH; install Hermes first. "
+            "Once installed, re-run: bash setup.sh --agents hermes"
+        )
+        return result
+
+    try:
+        interpreter = select_capable_interpreter()
+    except RuntimeError as exc:
+        result["completed"] = False
+        result["error"] = str(exc)
+        return result
+
+    vault_s = _posix(vault)
+    env = {
+        "KENNISBANK_VAULT": vault_s,
+        "KB_LLM_PROVIDERS": "ollama",
+        "KB_LLM_MODEL": KB_LLM_MODEL_DEFAULT,
+        "KB_LLM_ENDPOINT": "http://localhost:11434",
+    }
+    argv = [
+        hermes_bin,
+        "mcp",
+        "add",
+        "kennisbank",
+        "--command",
+        interpreter[0],
+        "--env",
+        f"KENNISBANK_VAULT={vault_s}",
+        "--env",
+        "KB_LLM_PROVIDERS=ollama",
+        "--env",
+        f"KB_LLM_MODEL={KB_LLM_MODEL_DEFAULT}",
+        "--env",
+        "KB_LLM_ENDPOINT=http://localhost:11434",
+        "--connect-timeout",
+        "60",
+        "--args",
+        _posix(vault / ".claude" / "scripts" / "kb-mcp.py"),
+    ]
+
+    proc_env = dict(os.environ)
+    proc_env["HERMES_HOME"] = str(hermes_home)
+    proc_env.update(env)
+    try:
+        proc = subprocess.run(
+            argv,
+            input="y\n",
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=proc_env,
+            timeout=120,
+        )
+    except FileNotFoundError:
+        result["completed"] = False
+        result["error"] = f"hermes binary not found: {hermes_bin}"
+        return result
+    except subprocess.TimeoutExpired:
+        result["completed"] = False
+        result["error"] = "hermes mcp add timed out after 120s"
+        return result
+
+    result["command"] = _shell_join(argv)
+    tool_match = re.search(r"Found\s+(\d+)\s+tool\(s\)", proc.stdout or "")
+    if tool_match:
+        result["tools"] = int(tool_match.group(1))
+    if proc.returncode != 0:
+        result["completed"] = False
+        detail = "\n".join(x for x in ((proc.stderr or "").strip(), (proc.stdout or "").strip()) if x)
+        if len(detail) > 1200:
+            detail = detail[:1200] + "..."
+        result["error"] = f"hermes mcp add failed: {detail}"
+        return result
+
+    result["completed"] = True
+    return result
+
+
+def validate_hermes(vault: Path, selected: bool = True) -> list[str]:
+    """Validate the Hermes MCP registration using `hermes mcp test`."""
+    hermes_home = _hermes_home()
+    config_path = hermes_home / "config.yaml"
+    if not config_path.is_file():
+        if not selected:
+            return []
+        return [f"missing Hermes config: {config_path}"]
+    if not _has_hermes_mcp_config(config_path):
+        if not selected:
+            return []
+        return [f"Hermes config lacks mcp_servers.kennisbank: {config_path}"]
+
+    hermes_bin = shutil.which("hermes")
+    if hermes_bin is None:
+        return ["hermes binary not found on PATH"]
+
+    proc_env = dict(os.environ)
+    proc_env["HERMES_HOME"] = str(hermes_home)
+    try:
+        proc = subprocess.run(
+            [hermes_bin, "mcp", "test", "kennisbank"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=proc_env,
+            timeout=120,
+        )
+    except FileNotFoundError:
+        return ["hermes binary not found on PATH"]
+    except subprocess.TimeoutExpired:
+        return ["hermes mcp test kennisbank timed out after 120s"]
+    if proc.returncode != 0:
+        detail = "\n".join(x for x in ((proc.stderr or "").strip(), (proc.stdout or "").strip()) if x)
+        if len(detail) > 1200:
+            detail = detail[:1200] + "..."
+        return [f"hermes mcp test kennisbank failed: {detail}"]
+    return []
 
 
 def install_copilot(repo: Path, vault: Path) -> dict:
@@ -929,6 +1077,9 @@ def validate_files(repo: Path, vault: Path, agents: list[str]) -> list[str]:
         if not (vault / ".claude" / "scripts" / "kb-copilot-capture.py").is_file():
             errors.append(f"missing Copilot capture hook script: {vault / '.claude' / 'scripts' / 'kb-copilot-capture.py'}")
         errors.extend(_copilot.validate_config(vault))
+
+    if "hermes" in agents:
+        errors.extend(validate_hermes(vault, selected=True))
     return errors
 
 
