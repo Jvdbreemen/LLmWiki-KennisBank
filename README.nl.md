@@ -941,13 +941,14 @@ De hooks zijn fail-open van opzet: een fout betekent geen geïnjecteerde context
 
 ## Skills
 
-Drie skills worden met het systeem meegeleverd. Claude Code krijgt ze onder `~/.claude/skills/`; Codex en OpenCode krijgen ze onder de gedeelde gebruikers-skill-locatie `~/.agents/skills/`, die beide clients ontdekken. Commando's zijn enkele prompts; skills zijn meerstaps-procedures met hun eigen guardrails.
+Vier skills worden met het systeem meegeleverd. Claude Code krijgt ze onder `~/.claude/skills/`; Codex, OpenCode en de Copilot CLI krijgen ze onder de gedeelde gebruikers-skill-locatie `~/.agents/skills/`, die die clients ontdekken, en Hermes krijgt ze namespaced onder `~/.hermes/skills/kennisbank/`. Commando's zijn enkele prompts; skills zijn meerstaps-procedures met hun eigen guardrails.
 
 | Skill | Aangeroepen via | Wat het doet |
 |-------|-------------|--------------|
 | `autoresearch` | `/autoresearch <topic>` of "research/deep dive/onderzoek [topic]" | Autonome iteratieve research-loop: multi-ronde webzoekopdrachten, synthese, en één gestructureerd document met bronvermelding in `~/Claude/research/`. Controleert eerst je eigen kluis (luie hiërarchie) zodat research gaten vult in plaats van te herhalen wat je al weet. Gebouwd op Karpathy's autoresearch-patroon. |
 | `kennisbank-upgrade` | `/kennisbank-upgrade [--dry-run]` | Upgradet een gedeployde kluis naar de nieuwste officiële release-tag (nooit kale main): haalt tags op, toont de changelog-delta, detecteert lokale drift met een CRLF-agnostische diff, maakt back-ups van gedrifte categorieën, deployt via `setup.sh`, stempelt de geïnstalleerde versie, en verifieert met `doctor.sh`. |
 | `kennisbank-contribute` | `/kennisbank-contribute [--dry-run]` | De omgekeerde richting: isoleert lokale tooling-wijzigingen in een gedeployde kluis (scripts, templates, commando's, skills), filtert persoonlijke kluisinhoud eruit, en maakt dan een branch, commit, push, en opent een upstream-PR. Eigenaarschap staat gelijk aan duurzaamheid: verbeteringen overleven de volgende upgrade omdat ze upstream terechtkomen. |
+| `opruimen` | `/opruimen` of "ruim op" | Sessie-hygiëne: vindt stille sessies in een Hermes-sessiestore (en, waar een levende Claude Code is, in de transcripten), logt ze naar de KennisBank via OpenRouter met CCR als reserve, stuurt gevoelig materiaal achter een hard hek naar een lokaal model, en ruimt daarna de dode rest op. Machinepaden komen uit `HERMES_HOME`, `CC_PROJECTS` en `KENNISBANK_VAULT`. |
 
 Upgrade en contribute zijn twee helften van één lus: `contribute` stuurt je lokale verbeteringen upstream, `upgrade` brengt uitgebrachte verbeteringen weer terug. Een kluis die beide volgt, drift nooit permanent weg van het project.
 
@@ -1083,7 +1084,7 @@ KB_LLM_ENDPOINT = "http://localhost:11434"
 
 - `~/.config/opencode/commands/*.md`, inclusief
   `/kennisbank-experience-recall` en `/kennisbank-source-recall`
-- `~/.agents/skills/{autoresearch,kennisbank-upgrade,kennisbank-contribute}/`
+- `~/.agents/skills/{autoresearch,kennisbank-upgrade,kennisbank-contribute,opruimen}/`
 - `~/.config/opencode/AGENTS.md` met het actieve kluispad
 - `~/.config/opencode/opencode.json` MCP-server `kennisbank`
 - `~/.config/opencode/plugins/kennisbank.js`, een fail-open lokale plugin voor sessie-onderhoudsevents
