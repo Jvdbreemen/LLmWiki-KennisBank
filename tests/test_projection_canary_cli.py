@@ -33,7 +33,7 @@ class ProjectionCanaryCliTest(unittest.TestCase):
 
     def test_default_log_stays_inside_private_vault(self):
         path = cli.default_log_path()
-        self.assertTrue(path.is_relative_to(Path(self.tmp.name)))
+        self.assertTrue(path.is_relative_to(Path(self.tmp.name).resolve()))
         self.assertIn("06-claude", path.parts)
 
     def test_record_source_then_render_content_free_status(self):
