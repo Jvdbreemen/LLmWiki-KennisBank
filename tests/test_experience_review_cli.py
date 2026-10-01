@@ -84,7 +84,7 @@ class ExperienceReviewCliTest(unittest.TestCase):
         self.assertEqual((list_result, inspect_result), (0, 0))
         self.assertFalse(listing["mutated"])
         self.assertFalse(inspected["mutated"])
-        self.assertEqual(listing["ledger_path"], str(self.ledger))
+        self.assertEqual(listing["ledger_path"], str(self.ledger.resolve()))
         self.assertEqual(listing["candidates"][0]["status"], "candidate")
         self.assertEqual(listing["candidates"][0]["review_state"], "unreviewed")
         self.assertRegex(inspected["candidate"]["content_hash"], r"^sha256:[0-9a-f]{64}$")

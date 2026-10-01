@@ -148,9 +148,10 @@ class ExperienceRebuildCliTest(unittest.TestCase):
                     redirect_stdout(io.StringIO()):
                 code = module.main(["--vault", str(selected), "--records-only"])
             self.assertEqual(code, 0)
+            expected = selected.resolve()
             self.assertEqual(builder.rebuild_experience_projection.call_args.args,
-                             (selected / ".claude/kb-experience-ledger.db",
-                              selected / ".claude/kb-experience-index.db"))
+                             (expected / ".claude/kb-experience-ledger.db",
+                              expected / ".claude/kb-experience-index.db"))
 
     def test_missing_vault_never_uses_working_directory(self):
         for ambient in ({}, {"KENNISBANK_VAULT": ""}, {"KENNISBANK_VAULT": "   "}):
