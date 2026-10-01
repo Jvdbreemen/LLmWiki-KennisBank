@@ -909,13 +909,14 @@ The hooks are fail-open by design: an error means no injected context or a skipp
 
 ## Skills
 
-Three skills ship with the system. Claude Code gets them under `~/.claude/skills/`; Codex and OpenCode get them under the shared user skill location `~/.agents/skills/`, which both clients discover. Commands are single prompts; skills are multi-step procedures with their own guardrails.
+Four skills ship with the system. Claude Code gets them under `~/.claude/skills/`; Codex, OpenCode and the Copilot CLI get them under the shared user skill location `~/.agents/skills/`, which those clients discover, and Hermes gets them namespaced under `~/.hermes/skills/kennisbank/`. Commands are single prompts; skills are multi-step procedures with their own guardrails.
 
 | Skill | Invoked via | What it does |
 |-------|-------------|--------------|
 | `autoresearch` | `/autoresearch <topic>` or "research/deep dive/onderzoek [topic]" | Autonomous iterative research loop: multi-round web searches, synthesis, and one structured, cited document in `~/Claude/research/`. Checks your own vault first (lazy hierarchy) so research fills gaps instead of repeating what you already know. Built on Karpathy's autoresearch pattern. |
 | `kennisbank-upgrade` | `/kennisbank-upgrade [--dry-run]` | Upgrades a deployed vault to the latest official release tag (never bare main): fetches tags, shows the changelog delta, detects local drift with a CRLF-agnostic diff, backs up drifted categories, deploys via `setup.sh`, stamps the installed version, and verifies with `doctor.sh`. |
 | `kennisbank-contribute` | `/kennisbank-contribute [--dry-run]` | The reverse direction: isolates local tooling edits in a deployed vault (scripts, templates, commands, skills), filters out personal vault content, then branches, commits, pushes, and opens an upstream PR. Ownership equals durability: improvements survive the next upgrade because they land upstream. |
+| `opruimen` | `/opruimen` or "ruim op" | Session hygiene: finds idle sessions in a Hermes session store (and, where a live Claude Code exists, in its transcripts), logs them to the KennisBank through OpenRouter with CCR as the reserve, routes sensitive material to a local model behind a hard gate, then closes out what is dead. Machine paths come from `HERMES_HOME`, `CC_PROJECTS` and `KENNISBANK_VAULT`. |
 
 Upgrade and contribute are two halves of one loop: `contribute` sends your local improvements upstream, `upgrade` brings released improvements back down. A vault that follows both never drifts permanently from the project.
 
@@ -1055,7 +1056,7 @@ KB_LLM_ENDPOINT = "http://localhost:11434"
 
 - `~/.config/opencode/commands/*.md`, including
   `/kennisbank-experience-recall` and `/kennisbank-source-recall`
-- `~/.agents/skills/{autoresearch,kennisbank-upgrade,kennisbank-contribute}/`
+- `~/.agents/skills/{autoresearch,kennisbank-upgrade,kennisbank-contribute,opruimen}/`
 - `~/.config/opencode/AGENTS.md` with the active vault path
 - `~/.config/opencode/opencode.json` MCP server `kennisbank`
 - `~/.config/opencode/plugins/kennisbank.js`, a fail-open local plugin for session maintenance events

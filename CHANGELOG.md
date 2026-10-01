@@ -7,7 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **The `opruimen` session-hygiene skill.** It measures idle sessions in a
+  Hermes session store (and, where a live Claude Code exists, in its
+  transcripts), logs them to the KennisBank through OpenRouter with CCR as the
+  reserve, then closes out what is dead. Sensitive material hits a hard gate
+  before generation: a match in `gevoelig-paden.txt` sends the session to a
+  local model, and an unreachable local model blocks it with a report instead
+  of falling back to the cloud. An opt-in `--natek-index` runs the index
+  follow-up. The skill is rolled out to every agent client by `setup.sh`, and
+  an existing personal skill of the same name wins over the shipped one.
 
 ## [0.40.0] - 2026-09-25
 

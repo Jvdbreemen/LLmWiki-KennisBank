@@ -1,0 +1,17 @@
+# Paths and topics that must never reach a cloud model (AGENTS.md, categories 1-4).
+# One pattern per line; '#' starts a comment. Matching is case-insensitive and on
+# substring, not on a regex. The gate tests digest AND session title.
+# This file only ADDS: the built-in default list in sessielog-batch.py always
+# applies, even when this file is empty or gone. Removing a pattern is done in
+# the script.
+#
+# Machine-specific patterns belong in your own copy of this file, not here.
+01-raw/interview
+interviewtranscript
+interviewdata
+brondata
+enquete
+enquête
+sollicitatie
+medisch
+financie

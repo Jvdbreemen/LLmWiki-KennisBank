@@ -2,6 +2,14 @@
 description: Toon idle Claude-sessies en sluit gekozen sessies netjes (sessielog eerst, dan archiveren).
 ---
 
+> **On Hermes is de skill `opruimen` de route.** Dit commando is de Claude
+> Code-variant en werkt alleen met een levende Claude Code-installatie:
+> `CC_PROJECTS` (default `~/.claude/projects`) met transcripten én de CCD-sidebar.
+> Zonder die oppervlakken is er niets te meten; gebruik dan de skill
+> `opruimen`, die de Hermes-store als hoofdoppervlak neemt en stap 2 over slaat.
+> De sessielog-route, het gevoeligheidshek en de vuistregels staan in die skill en
+> gelden hier ongewijzigd.
+
 Doel: idle Claude-sessies opruimen zonder context te verliezen. Dit is de enige
 betrouwbare manier om sessies te sluiten: alleen `list_sessions`/`archive_session`
 (in-sessie) kennen de echte draai-status, en `archive_session` vraagt bewust per
@@ -37,14 +45,20 @@ veld `cliSessionId`. De CCD-id (`local_<uuid>`) is NIET de CLI-id.
 3. Sessielog capturen per gekozen sessie. De directe route
    (`claude --resume <cliSessionId> --fork-session -p "/sessielog"`) werkt alleen
    als de CLI is ingelogd. Bij 401 (zie [[cli-oauth-revoked]]): gebruik de
-   digest-route via CCR/OpenRouter. Comprimeer het transcript lokaal tot
+   digest-route uit de skill `opruimen`. Comprimeer het transcript lokaal tot
    gebruikersprompts, slotfragmenten, gebruikte tools en aangeraakte bestanden
-   (max ~60k tekens), stuur dat in een keer naar
-   `http://127.0.0.1:3456/v1/messages` met model `openrouter,z-ai/glm-5.3-flash`
-   en het template uit `$VAULT/04-templates/tpl-sessie-log.md`, en schrijf het
-   resultaat naar `$VAULT/01-raw/sessies/raw-sessie-<sessiedatum>-<slug>.md`.
+   (max ~60k tekens) en stuur dat met het template uit
+   `$VAULT/04-templates/tpl-sessie-log.md` in één request naar OpenRouter
+   (`https://openrouter.ai/api/v1/chat/completions`, model
+   `stealth/space-bunny-alpha`, reasoning aan); CCR is de reserve
+   (`SESSIELOG_ROUTE=ccr`, `http://127.0.0.1:3456/v1/messages`, model
+   `openrouter,z-ai/glm-5.3-flash`), geen hoofdroute. Schrijf het resultaat naar
+   `$VAULT/01-raw/sessies/raw-sessie-<sessiedatum>-<slug>.md`.
    Gebruik de datum van de sessie zelf, niet vandaag. Bij HTTP 500 (`ETIMEDOUT`
-   op de upstream): gewoon opnieuw proberen, drie pogingen.
+   op de upstream): gewoon opnieuw proberen, drie pogingen. Het
+   gevoeligheidshek uit de skill geldt onverkort: een sessie die onder de
+   patronen in `gevoelig-paden.txt` valt gaat naar het lokale model of wordt
+   gemeld als geblokkeerd, nooit stil naar de cloud.
 
 4. Verifieer dat het sessie-log er staat. Lukt dat niet: STOP voor die sessie,
    meld het, en archiveer NIET.

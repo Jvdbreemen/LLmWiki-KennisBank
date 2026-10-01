@@ -195,7 +195,8 @@ class SetupDeployTest(unittest.TestCase):
     def test_new_skills_are_installed(self):
         tmp, vault = self.gedeelde_installatie()
         base = tmp / ".claude" / "skills"
-        for slug in ("autoresearch", "kennisbank-upgrade", "kennisbank-contribute"):
+        for slug in ("autoresearch", "kennisbank-upgrade", "kennisbank-contribute",
+                     "opruimen"):
             skill = base / slug / "SKILL.md"
             self.assertTrue(skill.is_file(), f"{slug} not installed at {skill}")
 
