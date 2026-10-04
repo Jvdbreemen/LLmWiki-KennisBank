@@ -126,6 +126,52 @@ class NotifyTest(CheckpointBase):
         self.assertIn("1 open checkpoint", text)
 
 
+class StdinHandlingTest(CheckpointBase):
+    """TASK-254: only the PreCompact hook mode may read stdin.
+
+    An agent shell tool can hand the script a stdin pipe that never closes.
+    A subcommand that reads it blocks forever before doing its work.
+    """
+
+    SCRIPT = SCRIPTS / "kb-checkpoint.py"
+
+    def _run_with_open_stdin(self, *args: str) -> int:
+        import subprocess
+        proc = subprocess.Popen(
+            [sys.executable, str(self.SCRIPT), *args],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, env=os.environ.copy())
+        try:
+            return proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+            self.fail(f"kb-checkpoint.py {' '.join(args)} blocked on an open stdin pipe")
+        finally:
+            for stream in (proc.stdin, proc.stdout, proc.stderr):
+                stream.close()
+
+    def test_subcommands_do_not_read_stdin(self):
+        md = self.vault / "01-raw" / "checkpoints" / "c.md"
+        md.write_text("x", encoding="utf-8")
+        for args in (("--register", str(md)), ("--list",),
+                     ("--notify", "--source", "startup"), ("--done",)):
+            with self.subTest(args=args):
+                self.assertEqual(self._run_with_open_stdin(*args), 0)
+        self.assertEqual(self.mod.pending(self.vault), [],
+                         "--done must have closed the registered checkpoint")
+
+    def test_hook_mode_still_reads_payload(self):
+        import subprocess
+        self._set_toggle(True)
+        payload = json.dumps({"trigger": "auto", "transcript_path": "/tmp/t.jsonl"})
+        subprocess.run([sys.executable, str(self.SCRIPT)], input=payload.encode(),
+                       env=os.environ.copy(), timeout=10, check=True)
+        items = self.mod.pending(self.vault)
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["transcript_path"], "/tmp/t.jsonl")
+
+
 class CoordinatorWiringTest(unittest.TestCase):
     """De melding moet vóór de freshness-gate zitten en source moet geparsed worden."""
 

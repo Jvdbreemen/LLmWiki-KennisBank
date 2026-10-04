@@ -179,12 +179,6 @@ def _emit(text: str) -> None:
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     try:
-        raw = b""
-        if not sys.stdin.isatty():
-            try:
-                raw = sys.stdin.buffer.read()
-            except OSError:
-                raw = b""
         vault = vault_root()
 
         if argv and argv[0] == "--notify":
@@ -212,7 +206,15 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[kb-checkpoint] afgesloten: {n} checkpoint(s)", file=sys.stderr)
             return 0
 
-        # Geen subcommando: PreCompact-hookmodus.
+        # Geen subcommando: PreCompact-hookmodus. Only this mode reads stdin:
+        # a subcommand run from an agent shell can get a pipe that never
+        # closes, and reading it would block forever (TASK-254).
+        raw = b""
+        if not sys.stdin.isatty():
+            try:
+                raw = sys.stdin.buffer.read()
+            except OSError:
+                raw = b""
         try:
             payload = json.loads(raw.decode("utf-8", errors="replace")) if raw.strip() else {}
         except ValueError:
