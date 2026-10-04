@@ -71,6 +71,11 @@ answer as an empty one, and subtitle files and mail become searchable.
 - **The dropped-hit counter counts the raw hit list again.** Counting
   deduplicated hits made the `Budget:` footer disappear and coupled an assertion
   about the footer to whether hit paths rendered relative or absolute.
+- **`kb-checkpoint.py --done` no longer hangs under an agent shell.** The
+  script read stdin before parsing its subcommand, so a stdin pipe that never
+  closes (as an agent's shell tool can pass) blocked `--done`, `--list`,
+  `--register` and `--notify` forever, and `/sessielog` left its checkpoints
+  open. Only the PreCompact hook mode reads stdin now.
 
 ## [0.39.0] - 2026-09-17
 
