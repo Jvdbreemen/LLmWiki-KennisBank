@@ -1,10 +1,10 @@
 ---
 id: TASK-254
 title: kb-checkpoint.py --done blocks on an open stdin pipe
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-04 13:03'
-updated_date: '2026-10-04 20:33'
+updated_date: '2026-10-05 05:04'
 labels:
   - bug
   - checkpoint
@@ -33,4 +33,12 @@ kb-checkpoint.py read stdin in main() (sys.stdin.buffer.read()) before parsing i
 Fixed: stdin read moved into the PreCompact hook branch of main(). StdinHandlingTest reproduces the hang (red on main, 10s timeout) and passes now; hook mode still parses its payload. Targeted run: 188 passed; the one failure (test_opruimen_skill self-test, Windows path compare /tmp/x vs D:\tmp\x) also fails on clean main. Full suite not run: commit charge at 95%.
 
 Copilot review on PR #180: (1) an unrecognised argument fell through into hook mode, read stdin and could hang or write a stub; main() now returns with a stderr note for any leftover argument, covered by test_unknown_argument_neither_blocks_nor_writes_a_stub (red before, green after). The installed PreCompact hook passes no arguments (register-hooks.py builds the bare script path), so hook mode is unaffected. (2) Task text translated to English per AGENTS.md.
+
+PR #180 merged with only the first commit (54ddf33); the two review-fix commits were pushed after the merge and are carried by a follow-up PR.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+kb-checkpoint.py reads stdin only in PreCompact hook mode; subcommands and unrecognised arguments never touch it, so an agent shell's open stdin pipe can no longer hang --done. Core fix merged via PR #180 (3bbab0c); the Copilot review fixes (unknown-argument guard, English task text, changelog) follow in a second PR. Reaches a vault on the next release plus /kennisbank-upgrade.
+<!-- SECTION:FINAL_SUMMARY:END -->
