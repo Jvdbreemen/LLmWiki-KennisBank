@@ -161,6 +161,12 @@ class StdinHandlingTest(CheckpointBase):
         self.assertEqual(self.mod.pending(self.vault), [],
                          "--done must have closed the registered checkpoint")
 
+    def test_unknown_argument_neither_blocks_nor_writes_a_stub(self):
+        # A typo or a flag added later must not fall through into hook mode.
+        self._set_toggle(True)
+        self.assertEqual(self._run_with_open_stdin("--unknown"), 0)
+        self.assertEqual(self.mod.pending(self.vault), [])
+
     def test_hook_mode_still_reads_payload(self):
         import subprocess
         self._set_toggle(True)

@@ -75,7 +75,8 @@ answer as an empty one, and subtitle files and mail become searchable.
   script read stdin before parsing its subcommand, so a stdin pipe that never
   closes (as an agent's shell tool can pass) blocked `--done`, `--list`,
   `--register` and `--notify` forever, and `/sessielog` left its checkpoints
-  open. Only the PreCompact hook mode reads stdin now.
+  open. Only the PreCompact hook mode reads stdin now, and an unrecognised
+  argument exits with a note instead of falling through into hook mode.
 
 ## [0.39.0] - 2026-09-17
 

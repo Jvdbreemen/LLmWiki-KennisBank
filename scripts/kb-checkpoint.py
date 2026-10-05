@@ -206,6 +206,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[kb-checkpoint] afgesloten: {n} checkpoint(s)", file=sys.stderr)
             return 0
 
+        if argv:
+            print(f"[kb-checkpoint] unknown argument: {argv[0]}", file=sys.stderr)
+            return 0
+
         # Geen subcommando: PreCompact-hookmodus. Only this mode reads stdin:
         # a subcommand run from an agent shell can get a pipe that never
         # closes, and reading it would block forever (TASK-254).
