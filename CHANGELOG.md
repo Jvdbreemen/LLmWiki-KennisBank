@@ -19,6 +19,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   follow-up. The skill is rolled out to every agent client by `setup.sh`, and
   an existing personal skill of the same name wins over the shipped one.
 
+### Fixed
+
+- **`/skills` listed `kennisbank-upgrade`, `kennisbank-contribute` and
+  `opruimen` twice.** Each ships as a skill and as a root command that only
+  launches that skill, and `setup.sh` copied both into `~/.claude`. It now
+  skips a root command whose name matches a skill in `skills/`, and a re-run
+  removes the copy an older install left behind. `commands/` still feeds the
+  Codex prompts and OpenCode commands, so those keep their aliases.
+
 ## [0.40.0] - 2026-09-25
 
 Hermes joins as a first-class local client, an unusable index can no longer

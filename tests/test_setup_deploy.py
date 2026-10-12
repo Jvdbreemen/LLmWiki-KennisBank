@@ -200,6 +200,28 @@ class SetupDeployTest(unittest.TestCase):
             skill = base / slug / "SKILL.md"
             self.assertTrue(skill.is_file(), f"{slug} not installed at {skill}")
 
+    def test_no_launcher_command_beside_a_same_named_skill(self):
+        """A command named like a skill is only its launcher; Claude Code would
+        list both in /skills, so setup.sh installs the skill alone."""
+        tmp, vault = self.gedeelde_installatie()
+        skills = {p.name for p in (REPO_ROOT / "skills").iterdir() if (p / "SKILL.md").is_file()}
+        launchers = sorted(p.stem for p in (REPO_ROOT / "commands").glob("*.md") if p.stem in skills)
+        self.assertTrue(launchers, "expected at least one launcher command in commands/")
+        commands = tmp / ".claude" / "commands"
+        for name in launchers:
+            self.assertFalse((commands / f"{name}.md").exists(), f"{name}.md deployed beside its skill")
+            self.assertTrue((tmp / ".claude" / "skills" / name / "SKILL.md").is_file(), name)
+        self.assertTrue((commands / "sessielog.md").is_file(), "plain commands must still deploy")
+
+    def test_rerun_removes_a_launcher_left_by_an_older_install(self):
+        tmp = Path(tempfile.mkdtemp(prefix="kb-home-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        stale = tmp / ".claude" / "commands" / "kennisbank-upgrade.md"
+        stale.parent.mkdir(parents=True)
+        stale.write_text("launcher from an older release\n", encoding="utf-8")
+        self.run_setup_in(tmp)
+        self.assertFalse(stale.exists(), "stale launcher survived a re-run of setup.sh")
+
     def test_embedding_scripts_deployed(self):
         tmp, vault = self.gedeelde_installatie()
         scripts = vault / ".claude" / "scripts"

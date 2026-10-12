@@ -1048,7 +1048,9 @@ def validate_files(repo: Path, vault: Path, agents: list[str]) -> list[str]:
 
     if "claude" in agents:
         base = _home() / ".claude"
-        for cmd in ("sessielog", "sessiestart", "kennisbank-upgrade", "weeklog", "timeline", "watdeedik"):
+        # kennisbank-upgrade is checked as a skill below: setup.sh no longer
+        # deploys a launcher command beside a same-named skill.
+        for cmd in ("sessielog", "sessiestart", "weeklog", "timeline", "watdeedik"):
             if not (base / "commands" / f"{cmd}.md").is_file():
                 errors.append(f"missing Claude command: {cmd}")
         for skill in ("autoresearch", "kennisbank-upgrade", "kennisbank-contribute"):
