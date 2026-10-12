@@ -348,6 +348,22 @@ elif [ "$claude_md_was_present" = "1" ] && [ "$FORCE" = "1" ]; then
   echo "WAARSCHUWING: bestaande CLAUDE.md overschreven met template. Eventuele aanpassingen zijn verloren."
 fi
 
+# Root commands naar ~/.claude/commands. Een command met dezelfde naam als een
+# skill in skills/ is alleen een launcher voor die skill: Claude Code toont dan
+# beide in /skills en de prompt-roster, dus slaan we hem over en ruimen we een
+# kopie van een eerdere install op. commands/ blijft de bron voor de Codex-
+# prompts en OpenCode-commands, waar geen skill met dezelfde naam naast staat.
+install_root_commands() {
+  for f in commands/*.md; do
+    name="$(basename "$f" .md)"
+    if [ -f "skills/$name/SKILL.md" ]; then
+      rm -f "$CLAUDE_COMMANDS/$name.md"
+      continue
+    fi
+    copy_force "$f" "$CLAUDE_COMMANDS/$name.md"
+  done
+}
+
 # Commands and skill (with confirmation, of via flags)
 if ! has_agent claude; then
   echo "Claude Code commands overgeslagen (--agents bevat geen claude)."
@@ -355,9 +371,7 @@ elif [ "$NO_COMMANDS" = "1" ]; then
   echo "Commands overgeslagen (--no-commands)."
 elif [ "$ASSUME_YES" = "1" ]; then
   mkdir -p "$CLAUDE_COMMANDS"
-  for f in commands/*.md; do
-    copy_force "$f" "$CLAUDE_COMMANDS/$(basename "$f")"
-  done
+  install_root_commands
   # Genamespacede commands (bv. commands/kennisbank/settings.md -> /kennisbank:settings)
   for f in commands/*/*.md; do
     rel="${f#commands/}"
@@ -369,9 +383,7 @@ else
   read REPLY
   if [ "$REPLY" = "y" ] || [ "$REPLY" = "Y" ]; then
     mkdir -p "$CLAUDE_COMMANDS"
-    for f in commands/*.md; do
-      copy_force "$f" "$CLAUDE_COMMANDS/$(basename "$f")"
-    done
+    install_root_commands
     for f in commands/*/*.md; do
       rel="${f#commands/}"
       mkdir -p "$CLAUDE_COMMANDS/$(dirname "$rel")"

@@ -22,7 +22,7 @@ Upgrade a deployed vault to the latest **release tag** (never bare main).
 |---|---|
 | `scripts/*.py`, `scripts/*.sh`, `scripts/*.json` | `$VAULT/.claude/scripts/` |
 | `templates/*.md` | `$VAULT/04-templates/` |
-| `commands/*.md`, `commands/*/*.md` | `$HOME/.claude/commands/` |
+| `commands/*.md`, `commands/*/*.md` | `$HOME/.claude/commands/` (not a root command named like a skill: that is only its launcher) |
 | `skills/*/SKILL.md` (each skill dir) | `$HOME/.claude/skills/<name>/` |
 
 De feitelijke deploy in stap 9 gebeurt via `bash setup.sh --yes` (sinds v0.9.0 de
