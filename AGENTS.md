@@ -21,6 +21,9 @@ integrations. It is not Claude-Code-only. Supported install targets are:
   cloud-backed; not in the default target set.
 - `hermes` - Hermes agent client: MCP registration, namespaced skills, and
   a managed `SOUL.md` instruction block. Opt-in; not in the default target set.
+- `omp` - OMP (oh-my-pi): MCP config and an always-apply instructions rule
+  under `~/.omp/agent/`, plus the shared `~/.agents/skills`. Opt-in; not in the
+  default target set.
 
 `setup.sh` is the single supported entrypoint for both initial install and
 upgrade. Do not hand-copy files unless `setup.sh` itself is broken and you are
@@ -109,6 +112,8 @@ Agent target options:
 - `--agents codex`
 - `--agents opencode`
 - `--agents copilot`
+- `--agents hermes`
+- `--agents omp`
 - `--agents claude,codex`
 - `--agents all`
 
@@ -212,6 +217,23 @@ Hermes (opt-in):
   session-end capture are opt-in (see `POST-INSTALL.md`, Step 12).
 - Repair is a re-run of `bash setup.sh --agents hermes`; `doctor.sh` is
   read-only.
+
+OMP (oh-my-pi, opt-in):
+
+- MCP server `kennisbank` goes in `~/.omp/agent/mcp.json` (key
+  `mcpServers.kennisbank`, key-scoped JSON merge; every other server and key is
+  preserved). `PI_CODING_AGENT_DIR` relocates `~/.omp/agent`; named OMP
+  profiles are not targeted.
+- Global instructions go in `~/.omp/agent/rules/kennisbank.md`, a
+  KennisBank-owned rule with `alwaysApply: true`. Never write
+  `~/.omp/agent/AGENTS.md`: OMP keeps one user-level context file and that one
+  outranks the rest, so it would hide the user's `~/.claude/CLAUDE.md` or
+  `~/.codex/AGENTS.md`.
+- Skills are the shared `~/.agents/skills/` set, invoked as `/skill:<name>`.
+- KennisBank installs no OMP lifecycle hooks; OMP runs only TypeScript/JavaScript
+  extensions. Use `/skill:sessiestart` and `/skill:sessielog`; retrieval is an
+  MCP pull.
+- Repair is a re-run of `bash setup.sh --agents omp`; `doctor.sh` is read-only.
 
 ## Validation
 

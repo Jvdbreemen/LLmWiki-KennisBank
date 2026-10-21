@@ -21,6 +21,13 @@
       "kind": "mcp-registration",
       "path": "docs/agent-integrations.md#hermes",
       "purpose": "Register the local MCP server in ~/.hermes/config.yaml"
+    },
+    {
+      "id": "omp-mcp",
+      "platform": "omp",
+      "kind": "mcp-registration",
+      "path": "docs/agent-integrations.md#omp-oh-my-pi",
+      "purpose": "Register the local MCP server in ~/.omp/agent/mcp.json"
     }
   ]
 }

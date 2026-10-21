@@ -425,6 +425,27 @@ except Exception:
   fi
 fi
 
+# 11b-omp. OMP (oh-my-pi) integration (optional). Read-only; repair is a
+# setup re-run (install_omp only touches the kennisbank MCP key and its rule).
+OMP_AGENT_DIR="${PI_CODING_AGENT_DIR:-$HOME/.omp/agent}"
+if [ ! -f "$OMP_AGENT_DIR/mcp.json" ] || ! grep -q '"kennisbank"' "$OMP_AGENT_DIR/mcp.json" 2>/dev/null; then
+  report_info "omp integration" "not configured (optional; run setup.sh --agents omp)"
+elif command -v python3 >/dev/null 2>&1 && [ -f "$SCRIPTS_DIR/_omp.py" ]; then
+  OMP_VALIDATE="$(python3 "$SCRIPTS_DIR/_omp.py" validate --vault "$VAULT" 2>/dev/null | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+    print("OK" if d.get("ok") else "FAIL " + "; ".join(d.get("errors", [])))
+except Exception:
+    print("ERR")
+' 2>/dev/null | tr -d '\r')"
+  case "$OMP_VALIDATE" in
+    OK) report_pass "omp config" "mcp kennisbank and instructions rule on the active vault" ;;
+    ERR|"") report_warn "omp config" "kon _omp.py validate niet lezen (setup opnieuw draaien?)" ;;
+    *) report_fail "omp config" "${OMP_VALIDATE#FAIL }; fix: setup.sh --agents omp" ;;
+  esac
+fi
+
 # 11b-hermes. Hermes integration (optional).
 HERMES_HOME_DIR="${HERMES_HOME:-$HOME/.hermes}"
 HERMES_CONFIG="$HERMES_HOME_DIR/config.yaml"

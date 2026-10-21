@@ -19,7 +19,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _copilot  # noqa: E402
 
-AGENTS = ("claude", "codex", "opencode", "copilot")
+AGENTS = ("claude", "codex", "opencode", "copilot", "omp")
 
 
 def _home() -> Path:
@@ -76,9 +76,18 @@ def _status_copilot() -> dict:
             "mcp": configured, "detail": detail}
 
 
+def _status_omp() -> dict:
+    raw = os.environ.get("PI_CODING_AGENT_DIR", "").strip()
+    cfg = (_copilot._norm_path(raw) if raw else _home() / ".omp" / "agent") / "mcp.json"
+    mcp = '"kennisbank"' in _read(cfg)
+    return {"agent": "omp", "configured": mcp, "mcp": mcp,
+            "detail": "MCP kennisbank" if mcp else "not configured"}
+
+
 _DISPATCH = {
     "claude": _status_claude, "codex": _status_codex,
     "opencode": _status_opencode, "copilot": _status_copilot,
+    "omp": _status_omp,
 }
 
 

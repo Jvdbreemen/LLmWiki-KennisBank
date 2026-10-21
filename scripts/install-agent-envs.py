@@ -8,6 +8,7 @@ Claude Code deploy; this script owns the cross-agent layer:
   hook at session start and exit, prompt/tool hooks, and MCP config.
 - OpenCode: skills, commands, AGENTS.md, plugin hook, MCP config.
 - Hermes: MCP registration, namespaced skills, global instructions in SOUL.md.
+- OMP: shared skills, MCP config and an always-apply instructions rule.
 - Claude Code validation: verifies the files setup.sh installed.
 
 All generated client config pins KENNISBANK_VAULT explicitly. That prevents a
@@ -37,9 +38,10 @@ import _copilot  # noqa: E402  (Copilot config layer, ADR-0003)
 import _embeddings  # noqa: E402  (embed-model default, TASK-182)
 import _frontmatter  # noqa: E402
 import _hooks_manifest  # noqa: E402
+import _omp  # noqa: E402  (OMP config layer)
 
 
-AGENTS = ("claude", "codex", "opencode", "copilot", "hermes")
+AGENTS = ("claude", "codex", "opencode", "copilot", "hermes", "omp")
 # The judge/extraction model every generated agent config pins. Defined once in
 # _copilot.py (the only surface that must stay importable on its own) and aliased
 # here so the four writers below cannot drift apart. See _llm.OLLAMA_DEFAULT_MODEL
@@ -1011,6 +1013,24 @@ def install_copilot(repo: Path, vault: Path) -> dict:
     }
 
 
+def install_omp(repo: Path, vault: Path) -> dict:
+    """Install the KennisBank integration for OMP (oh-my-pi).
+
+    OMP reads the shared ~/.agents/skills set; _omp adds the MCP server and the
+    instructions rule under the OMP agent directory. No lifecycle hooks.
+    """
+    skills = _install_shared_skills(repo, _home() / ".agents" / "skills")
+    skills.extend(_install_command_skills(repo, _home() / ".agents" / "skills"))
+    report = _omp.install(vault, python_argv=_mcp_server_argv(vault)[:-1])
+    res = report["results"]
+    return {
+        "skills": [str(p) for p in skills],
+        "mcp": res["mcp"]["path"],
+        "rule": res["rule"]["path"],
+        "home": report["home"],
+    }
+
+
 def _hook_entries(data: dict):
     hooks = data.get("hooks")
     if not isinstance(hooks, dict):
@@ -1214,6 +1234,12 @@ def validate_files(repo: Path, vault: Path, agents: list[str]) -> list[str]:
         if not (vault / ".claude" / "scripts" / "kb-copilot-capture.py").is_file():
             errors.append(f"missing Copilot capture hook script: {vault / '.claude' / 'scripts' / 'kb-copilot-capture.py'}")
         errors.extend(_copilot.validate_config(vault))
+
+    if "omp" in agents:
+        for skill in ("kennisbank-upgrade", "kennisbank-contribute", "sessielog", "sessiestart"):
+            if not (_home() / ".agents" / "skills" / skill / "SKILL.md").is_file():
+                errors.append(f"missing OMP shared skill: {skill}")
+        errors.extend(_omp.validate_config(vault))
 
     if "hermes" in agents:
         errors.extend(validate_hermes(vault, selected=True))
@@ -1598,7 +1624,7 @@ def main(argv: list[str] | None = None) -> int:
         "validation_errors": [],
     }
     try:
-        needs_mcp = any(a in agents for a in ("codex", "opencode", "copilot", "hermes"))
+        needs_mcp = any(a in agents for a in ("codex", "opencode", "copilot", "hermes", "omp"))
         if needs_mcp and (args.install or args.validate):
             selected = select_capable_interpreter()
             result["mcp_python"] = _shell_join(selected)
@@ -1620,9 +1646,11 @@ def main(argv: list[str] | None = None) -> int:
                 result["install"]["copilot"] = install_copilot(repo, vault)
             if "hermes" in agents:
                 result["install"]["hermes"] = install_hermes(repo, vault)
+            if "omp" in agents:
+                result["install"]["omp"] = install_omp(repo, vault)
         if args.validate:
             result["validation_errors"].extend(validate_files(repo, vault, agents))
-            if any(a in agents for a in ("codex", "opencode", "copilot")):
+            if any(a in agents for a in ("codex", "opencode", "copilot", "omp")):
                 result["validation_errors"].extend(validate_mcp_runtime(vault))
             if not args.skip_models:
                 result["validation_errors"].extend(validate_models(vault))

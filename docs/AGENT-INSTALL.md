@@ -36,14 +36,14 @@ models unless `--skip-model-check` is passed (CI/offline only).
 
 ## Platform matrix
 
-| Capability | Claude Code | Codex CLI | Copilot CLI | OpenCode | Claude Cowork |
-|---|---|---|---|---|---|
-| Slash commands / skills | yes (`/sessielog`, …) | yes (`$sessielog` prompts + skills) | yes (personal skills) | yes | partial (skills/plugin, no hooks) |
-| Session start/exit coordinators | yes (hooks) | yes (hooks) | yes (hooks) | yes | no |
-| Prompt-time retrieval hook | yes | no (MCP pull) | no (MCP pull) | no (MCP pull) | no (MCP pull) |
-| Explicit source/experience surface | namespaced commands | MCP + prompts/skills | MCP + skills | MCP + commands | MCP when manually connected |
-| Local MCP server (`recall`, temporal tools) | not registered by setup | yes | yes | yes | yes, via connector/plugin |
-| Install target | `--agents claude` | `--agents codex` | `--agents copilot` | `--agents opencode` | manual (see below) |
+| Capability | Claude Code | Codex CLI | Copilot CLI | OpenCode | OMP | Claude Cowork |
+|---|---|---|---|---|---|---|
+| Slash commands / skills | yes (`/sessielog`, …) | yes (`$sessielog` prompts + skills) | yes (personal skills) | yes | yes (`/skill:sessielog`, shared skills) | partial (skills/plugin, no hooks) |
+| Session start/exit coordinators | yes (hooks) | yes (hooks) | yes (hooks) | yes | no (`/skill:sessiestart`, `/skill:sessielog`) | no |
+| Prompt-time retrieval hook | yes | no (MCP pull) | no (MCP pull) | no (MCP pull) | no (MCP pull) | no (MCP pull) |
+| Explicit source/experience surface | namespaced commands | MCP + prompts/skills | MCP + skills | MCP + commands | MCP + skills | MCP when manually connected |
+| Local MCP server (`recall`, temporal tools) | not registered by setup | yes | yes | yes | yes | yes, via connector/plugin |
+| Install target | `--agents claude` | `--agents codex` | `--agents copilot` | `--agents opencode` | `--agents omp` | manual (see below) |
 
 ## Claude Code
 
@@ -118,6 +118,21 @@ KENNISBANK_VAULT="/absolute/path/to/vault" bash setup.sh --yes --agents opencode
 Commands, skills, MCP config, `AGENTS.md` block, and the OpenCode plugin. The
 explicit commands are `/kennisbank-experience-recall` and
 `/kennisbank-source-recall`.
+
+## OMP (oh-my-pi)
+
+```bash
+KENNISBANK_VAULT="/absolute/path/to/vault" bash setup.sh --yes --agents omp
+```
+
+- MCP config: key-scoped `mcpServers.kennisbank` in `~/.omp/agent/mcp.json`
+  (`PI_CODING_AGENT_DIR` relocates the directory); other servers are kept.
+- Instructions: `~/.omp/agent/rules/kennisbank.md`, an always-apply rule. Setup
+  never writes `~/.omp/agent/AGENTS.md`, because that file would hide every
+  other user-level context file OMP loads.
+- Skills: the shared `~/.agents/skills/` set, invoked as `/skill:<name>`.
+- No lifecycle hooks. Start a new OMP session after install so it loads the MCP
+  server and the rule.
 
 ## Claude Cowork
 
