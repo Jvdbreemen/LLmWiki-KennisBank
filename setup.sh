@@ -19,6 +19,7 @@
 #   --no-codex         alias voor --agents claude
 #   --skip-model-check sla Ollama model-smoke-tests over in de post-install validatie
 #   --skip-doctor      sla de afsluitende doctor-gate over (voor tests/CI)
+#   --allow-wsl        installeer bewust vanuit WSL terwijl de checkout op een Windows-schijf staat
 #   -f, --force        overschrijf bestaande bestanden
 #   -h, --help         toon usage en stop
 
@@ -41,6 +42,7 @@ AGENTS="claude,codex"
 AGENTS_SET=0
 SKIP_MODEL_CHECK=0
 SKIP_DOCTOR=0
+ALLOW_WSL=0
 
 usage() {
   cat <<'USAGE'
@@ -56,6 +58,8 @@ Opties:
   --skip-model-check sla lokale Ollama model-smoke-tests over tijdens post-install validatie
   --skip-doctor      sla de afsluitende doctor-gate over (bedoeld voor tests/CI die
                      doctor.sh apart draaien; een gewone installatie hoort hem te draaien)
+  --allow-wsl        draai toch vanuit WSL terwijl de checkout op een Windows-schijf
+                     (/mnt/<letter>/) staat; zonder deze vlag weigert setup dat
   -f, --force        overschrijf bestaande bestanden (scripts, templates, commands, skill, CLAUDE.md)
   -h, --help         toon deze hulp en stop
 
@@ -100,6 +104,9 @@ while [ $# -gt 0 ]; do
     --skip-doctor)
       SKIP_DOCTOR=1
       ;;
+    --allow-wsl)
+      ALLOW_WSL=1
+      ;;
     -f|--force)
       FORCE=1
       ;;
@@ -115,6 +122,27 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+
+# WSL against a Windows checkout. On Windows, a plain `bash` can resolve to
+# System32's WSL bash even inside Git Bash. Windows HOME and KENNISBANK_VAULT do
+# not cross into WSL, so setup would silently install into the WSL home
+# (~/KennisBank there) while the intended Windows install does nothing. Observed
+# 2026-10-21. A checkout on a Windows drive mount is the tell; refuse before the
+# first write. KENNISBANK_SETUP_CHECKOUT_DIR is a test seam only.
+WSL_CHECKOUT_DIR="${KENNISBANK_SETUP_CHECKOUT_DIR:-$SCRIPT_DIR}"
+if [ "$ALLOW_WSL" != "1" ] \
+   && { [ -n "${WSL_DISTRO_NAME:-}" ] || grep -qi microsoft /proc/version 2>/dev/null; }; then
+  case "$WSL_CHECKOUT_DIR" in
+    /mnt/[a-zA-Z]/*)
+      echo "setup.sh draait in WSL (${WSL_DISTRO_NAME:-onbekende distro}) tegen een Windows-checkout: $WSL_CHECKOUT_DIR" >&2
+      echo "Windows-omgevingsvariabelen (HOME, KENNISBANK_VAULT) bereiken WSL niet, dus setup zou in de WSL-home installeren." >&2
+      echo "Gebruik Git Bash, bijvoorbeeld in PowerShell:" >&2
+      echo "  & \"C:\\Program Files\\Git\\bin\\bash.exe\" setup.sh --yes" >&2
+      echo "Wil je bewust een kluis binnen WSL installeren, draai dan opnieuw met --allow-wsl." >&2
+      exit 2
+      ;;
+  esac
+fi
 
 AGENTS="$(printf "%s" "$AGENTS" | tr '[:upper:]' '[:lower:]' | tr -d ' ')"
 if [ "$ASSUME_YES" != "1" ] && [ "$AGENTS_SET" != "1" ]; then

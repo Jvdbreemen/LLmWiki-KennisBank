@@ -21,6 +21,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`setup.sh` installed into WSL when Windows meant Git Bash.** On Windows a
+  plain `bash` can resolve to System32's WSL bash, even inside Git Bash.
+  Windows `HOME` and `KENNISBANK_VAULT` do not reach WSL, so setup silently
+  installed into `~/KennisBank` inside WSL while the intended Windows vault was
+  left alone. Setup now refuses before its first write when it runs under WSL
+  from a checkout on a Windows drive (`/mnt/<letter>/`), and names the Git Bash
+  command; `--allow-wsl` keeps a deliberate WSL install possible (TASK-259).
+- **Setup failed validation although the install had completed.** The
+  post-install MCP smoke called the explicit `experience_recall` and
+  `source_recall` routes with real queries. Once a user enables those routes,
+  each query embeds through Ollama with a 30 s HTTP timeout per address, so a
+  stalled Ollama held the smoke for 37-64 s against a 15 s budget, also under
+  `--skip-model-check`. The smoke now sends empty queries, which still load
+  each route and its settings gate but never reach the embedder. Its budget,
+  and the interpreter probe's, is now 60 s for a busy machine (a real vault
+  needs 5-9 s idle), `KENNISBANK_MCP_SMOKE_TIMEOUT` overrides it, and a timeout
+  says the install itself completed (TASK-260).
+
 - **`/skills` listed `kennisbank-upgrade`, `kennisbank-contribute` and
   `opruimen` twice.** Each ships as a skill and as a root command that only
   launches that skill, and `setup.sh` copied both into `~/.claude`. It now

@@ -25,7 +25,10 @@ Three rules that prevent the most common breakage:
    `~/KennisBank`. Pass it explicitly on every setup call.
 2. **On Windows, use Git Bash** (`C:\Program Files\Git\bin\bash.exe`), not the
    System32 `bash.exe` (that is WSL and writes Linux-shaped paths into Windows
-   agent configs). Hooks run under `py -3`; POSIX systems use `python3`.
+   agent configs). Call it by its full path: a plain `bash` can resolve to WSL
+   even inside Git Bash. `setup.sh` refuses to run under WSL from a Windows
+   checkout unless you pass `--allow-wsl`. Hooks run under `py -3`; POSIX
+   systems use `python3`.
 3. **Verify, then stop.** After setup, run
    `bash "$VAULT/.claude/scripts/doctor.sh"` and report the PASS/WARN/FAIL
    counts. Do not "fix" WARNs the user did not ask about.

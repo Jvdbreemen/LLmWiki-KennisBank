@@ -102,6 +102,27 @@ def copilot_home() -> Path:
 
 _MCP_PYTHON_CACHE: list | None = None
 
+# Wall-clock budget for the post-install MCP checks: the interpreter probe and
+# the stdio handshake smoke in install-agent-envs.py. Both wait on start-up
+# work, not on a model: the smoke sends empty queries so it never embeds.
+# Measured on Windows (2026-10-22, real vault, idle): probe 3.1 s, handshake
+# 4.9-8.5 s, of which client imports take 3.3 s and the server import 2.6 s.
+# TASK-116 showed the old 15 s budget blown under load, and setup then failed
+# although the install itself had completed. 60 s keeps that work inside the
+# budget on a busy machine and still catches a server that never answers.
+# KENNISBANK_MCP_SMOKE_TIMEOUT overrides it.
+MCP_SMOKE_TIMEOUT_DEFAULT = 60
+
+
+def mcp_smoke_timeout() -> int:
+    raw = os.environ.get("KENNISBANK_MCP_SMOKE_TIMEOUT", "").strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        return MCP_SMOKE_TIMEOUT_DEFAULT
+    return value if value > 0 else MCP_SMOKE_TIMEOUT_DEFAULT
+
+
 
 def _default_mcp_python() -> list:
     global _MCP_PYTHON_CACHE
@@ -132,7 +153,7 @@ def _default_mcp_python() -> list:
             proc = subprocess.run(
                 [*candidate, str(probe), "--json"],
                 capture_output=True, text=True, encoding="utf-8", errors="replace",
-                timeout=15,
+                timeout=mcp_smoke_timeout(),
             )
             lines = (proc.stdout or "").strip().splitlines()
             result = json.loads(lines[-1]) if lines else {}

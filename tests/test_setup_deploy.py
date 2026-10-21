@@ -573,11 +573,11 @@ class SetupInvocationGuardTest(unittest.TestCase):
 
     Elke setup.sh-aanroep hier moet --agents claude meegeven. Zonder dat draait
     install-agent-envs.py validate_mcp_runtime(), de enige harde tijdslimiet in
-    het hele pad (15 s, install-agent-envs.py:783). Die start een geneste
-    stdio-handshake waarbij een Python-client een Python MCP-server spawnt en
-    kost idle al 10 van de 15 seconden. Onder belasting gaat hij eroverheen,
-    main() geeft 1 terug, set -e breekt setup.sh af en de test faalt op iets dat
-    niets met de test te maken heeft.
+    het hele pad (_copilot.MCP_SMOKE_TIMEOUT_DEFAULT; tot TASK-260 15 s). Die
+    start een geneste stdio-handshake waarbij een Python-client een Python
+    MCP-server spawnt en kost idle al 9-10 seconden. Onder belasting kan hij
+    over zijn budget gaan, main() geeft 1 terug, set -e breekt setup.sh af en
+    de test faalt op iets dat niets met de test te maken heeft.
 
     --skip-model-check dekt dit NIET: dat mapt op --skip-models en gate alleen
     validate_models (regel 1134), niet de MCP-validatie op 1133.
@@ -605,7 +605,7 @@ class SetupInvocationGuardTest(unittest.TestCase):
             self.assertIn(
                 '"--agents"', args,
                 "een setup.sh-aanroep pint de agent-set niet vast en haalt daarmee "
-                "de 15 s MCP-handshake terug in dit bestand (TASK-116)")
+                "de MCP-handshake met zijn wall-clock-budget terug in dit bestand (TASK-116)")
 
     def test_exactly_one_invocation_still_runs_the_doctor_gate(self):
         """TASK-124: de gate mag goedkoop zijn, maar niet ongedekt.

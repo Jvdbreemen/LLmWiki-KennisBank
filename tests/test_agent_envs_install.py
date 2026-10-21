@@ -356,6 +356,45 @@ command = "other"
         self.assertIn('("source_recall"', wire_client)
         self.assertIn('"shortest_path"', wire_client)
 
+    def test_mcp_smoke_budget_fits_a_real_vault_and_can_be_overridden(self):
+        budgets = []
+
+        def fake_run(args, **kwargs):
+            budgets.append(kwargs["timeout"])
+            return subprocess.CompletedProcess(args, 0, "MCP handshake OK", "")
+
+        saved = os.environ.pop("KENNISBANK_MCP_SMOKE_TIMEOUT", None)
+        try:
+            with patch.object(self.m, "select_capable_interpreter", return_value=["python"]), \
+                    patch.object(self.m.subprocess, "run", side_effect=fake_run):
+                self.m.validate_mcp_runtime(self.vault)
+                os.environ["KENNISBANK_MCP_SMOKE_TIMEOUT"] = "120"
+                self.m.validate_mcp_runtime(self.vault)
+                os.environ["KENNISBANK_MCP_SMOKE_TIMEOUT"] = "not-a-number"
+                self.m.validate_mcp_runtime(self.vault)
+        finally:
+            os.environ.pop("KENNISBANK_MCP_SMOKE_TIMEOUT", None)
+            if saved is not None:
+                os.environ["KENNISBANK_MCP_SMOKE_TIMEOUT"] = saved
+
+        # A real vault needs 9-10 s idle; the old 15 s budget failed busy installs.
+        self.assertGreaterEqual(budgets[0], 60)
+        self.assertEqual(budgets[1], 120)
+        self.assertEqual(budgets[2], budgets[0])
+
+    def test_mcp_smoke_timeout_says_the_install_completed_and_how_to_widen_it(self):
+        def fake_run(args, **kwargs):
+            raise subprocess.TimeoutExpired(args, kwargs["timeout"])
+
+        with patch.object(self.m, "select_capable_interpreter", return_value=["python"]), \
+                patch.object(self.m.subprocess, "run", side_effect=fake_run):
+            errors = self.m.validate_mcp_runtime(self.vault, timeout=5)
+
+        self.assertEqual(len(errors), 1)
+        self.assertIn("within 5s", errors[0])
+        self.assertIn("install itself completed", errors[0])
+        self.assertIn("KENNISBANK_MCP_SMOKE_TIMEOUT", errors[0])
+
     def test_projection_command_artifacts_have_cross_client_semantic_parity(self):
         self.m.install_codex(REPO_ROOT, self.vault)
         self.m.install_opencode(REPO_ROOT, self.vault)
