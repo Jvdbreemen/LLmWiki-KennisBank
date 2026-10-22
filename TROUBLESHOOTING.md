@@ -65,6 +65,22 @@ bash setup.sh
 
 **Fix**: `bash setup.sh`. Do not use `sh setup.sh`; the script is bash-specific.
 
+### 1.6 setup.sh refuses with "draait in WSL ... tegen een Windows-checkout"
+
+**Symptom**: on Windows, `bash setup.sh` stops with exit code 2 and names Git Bash and `--allow-wsl`.
+
+**Cause**: `bash` resolved to System32's WSL bash. Windows `HOME` and `KENNISBANK_VAULT` do not reach WSL, so setup would have installed into the WSL home (`~/KennisBank` inside WSL) instead of your Windows vault. Setup stops before writing anything.
+
+**Fix**: run Git Bash by its full path, for example in PowerShell: `& "C:\Program Files\Git\bin\bash.exe" setup.sh --yes`. Use `--allow-wsl` only when you really want a vault inside WSL.
+
+### 1.7 Validation fails with "KennisBank MCP handshake did not finish within ...s"
+
+**Symptom**: setup ends with `Post-install validatie faalde` and a handshake timeout, while the install output above it looks complete.
+
+**Cause**: the post-install smoke starts a Python MCP client that spawns the KennisBank MCP server and calls three tools with empty queries, so no model is involved. On a real vault that takes 5-9 s idle; a very busy machine can exceed the 60 s budget. The install itself completed.
+
+**Fix**: re-run setup when the machine is quieter, or raise the budget: `KENNISBANK_MCP_SMOKE_TIMEOUT=180 bash setup.sh --yes`.
+
 ---
 
 ## 2. Command not found

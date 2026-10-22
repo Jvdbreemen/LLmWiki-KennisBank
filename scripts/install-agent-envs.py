@@ -154,7 +154,8 @@ def _candidate_python_argv() -> list[list[str]]:
     return unique
 
 
-def _probe_python(argv: list[str], timeout: int = 15) -> dict:
+def _probe_python(argv: list[str], timeout: int | None = None) -> dict:
+    timeout = timeout or _copilot.mcp_smoke_timeout()
     try:
         proc = subprocess.run(
             [*argv, str(_MCP_PROBE), "--json"],
@@ -169,7 +170,7 @@ def _probe_python(argv: list[str], timeout: int = 15) -> dict:
                 "error": f"interpreter not found: {_shell_join(argv)}"}
     except subprocess.TimeoutExpired:
         return {"ok": False, "error_code": "probe_timeout",
-                "error": f"runtime probe timed out: {_shell_join(argv)}"}
+                "error": f"runtime probe did not finish within {timeout}s: {_shell_join(argv)}"}
     output = (proc.stdout or "").strip().splitlines()
     try:
         result = json.loads(output[-1]) if output else {}
@@ -186,7 +187,7 @@ def _probe_python(argv: list[str], timeout: int = 15) -> dict:
     return result
 
 
-def select_capable_interpreter(timeout: int = 15) -> list[str]:
+def select_capable_interpreter(timeout: int | None = None) -> list[str]:
     """Select an interpreter that can import MCP and execute a vec0 query."""
     global _MCP_SELECTION
     if _MCP_SELECTION is not None:
@@ -1273,8 +1274,9 @@ def validate_files(repo: Path, vault: Path, agents: list[str]) -> list[str]:
     return errors
 
 
-def validate_mcp_runtime(vault: Path, timeout: int = 15) -> list[str]:
+def validate_mcp_runtime(vault: Path, timeout: int | None = None) -> list[str]:
     """Validate that the configured stdio MCP server can initialize."""
+    timeout = timeout or _copilot.mcp_smoke_timeout()
     script = vault / ".claude" / "scripts" / "kb-mcp.py"
     if not script.is_file():
         return [f"missing KennisBank MCP server script: {script}"]
@@ -1324,16 +1326,20 @@ async def main():
             if missing:
                 raise SystemExit("missing MCP tools: " + ", ".join(sorted(missing)))
             # Presence is not enough: dispatch the ordinary route and both
-            # deeper routes exactly as a configured client will. Empty recall
-            # avoids requiring Ollama; default-off deeper tools must answer
-            # with a structured fail-open status rather than raising.
+            # deeper routes exactly as a configured client will. Every call
+            # uses an empty query so none of them reaches the embedder: once a
+            # user enables the explicit routes, a real query embeds through
+            # Ollama with a 30 s HTTP timeout per address, and a stalled Ollama
+            # then held this smoke for 37-64 s (TASK-260). An empty query still
+            # loads each gateway and its settings gate, and must come back as a
+            # structured fail-open status rather than raising.
             ordinary = await session.call_tool("recall", {"query": "", "k": 1})
             if getattr(ordinary, "isError", False):
                 raise SystemExit("ordinary recall smoke returned an MCP error")
             statuses = {}
             for name, arguments in (
-                ("experience_recall", {"query": "what worked", "mode": "explicit", "k": 1}),
-                ("source_recall", {"query": "show evidence", "mode": "explicit", "k": 1}),
+                ("experience_recall", {"query": "", "mode": "explicit", "k": 1}),
+                ("source_recall", {"query": "", "mode": "explicit", "k": 1}),
             ):
                 result = await session.call_tool(name, arguments)
                 if getattr(result, "isError", False):
@@ -1344,7 +1350,7 @@ async def main():
                 except Exception:
                     raise SystemExit(name + " smoke returned non-JSON content")
                 status = str(payload.get("status") or "")
-                if status not in {"disabled", "ok", "no_hit", "unavailable",
+                if status not in {"disabled", "invalid", "ok", "no_hit", "unavailable",
                                   "evidence_unavailable"}:
                     raise SystemExit(name + " smoke returned unsafe status: " + status)
                 statuses[name] = status
@@ -1369,7 +1375,11 @@ anyio.run(main)
     except FileNotFoundError:
         return [f"KennisBank MCP python interpreter not found: {_shell_join(py)}"]
     except subprocess.TimeoutExpired:
-        return [f"KennisBank MCP handshake timed out: {_shell_join(server_argv)}"]
+        return [
+            f"KennisBank MCP handshake did not finish within {timeout}s: "
+            f"{_shell_join(server_argv)}. The install itself completed; on a busy "
+            "machine re-run setup.sh, or raise KENNISBANK_MCP_SMOKE_TIMEOUT."
+        ]
     if proc.returncode != 0:
         detail = "\n".join(x for x in (proc.stderr.strip(), proc.stdout.strip()) if x).strip()
         if len(detail) > 1200:

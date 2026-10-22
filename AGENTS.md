@@ -75,7 +75,15 @@ python3 --version
 
 On Windows, prefer Git Bash from `C:\Program Files\Git\bin\bash.exe`; the
 System32 `bash.exe` is WSL and may write Linux-shaped paths into Windows agent
-configs.
+configs. A plain `bash` can resolve to it even inside Git Bash, and Windows
+`HOME`/`KENNISBANK_VAULT` do not reach WSL, so `setup.sh` refuses to run under
+WSL from a checkout on a Windows drive (`/mnt/<letter>/`). Pass `--allow-wsl`
+only for a deliberate install into a vault inside WSL.
+
+The post-install MCP smoke is model-free (empty queries, no embedding) and has
+a 60 s budget per check; a real vault needs 5-9 s idle. On a slow or busy
+machine set `KENNISBANK_MCP_SMOKE_TIMEOUT` (seconds) rather than skipping
+validation.
 
 Check local model availability when model validation is expected:
 
