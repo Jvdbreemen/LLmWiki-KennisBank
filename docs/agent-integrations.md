@@ -302,6 +302,32 @@ Repair is idempotent: re-run `bash setup.sh --agents hermes`. It backs up
 `SOUL.md` once before the first edit and never touches text outside the
 `<!-- BEGIN LLmWiki-KennisBank -->` / `<!-- END LLmWiki-KennisBank -->` markers.
 
+## OMP (oh-my-pi)
+
+Installed by `--agents omp`. OMP already loads the shared `~/.agents/skills`
+set, so KennisBank only adds the MCP server and its instructions under the OMP
+agent directory (`~/.omp/agent`, or `PI_CODING_AGENT_DIR` when set):
+
+- MCP: `~/.omp/agent/mcp.json`, key `mcpServers.kennisbank`, written as a
+  key-scoped JSON merge. Every other server and key in the file is preserved,
+  and an identical entry is left untouched.
+- Instructions: `~/.omp/agent/rules/kennisbank.md`, a KennisBank-owned rule with
+  `alwaysApply: true`, so its body is in every prompt.
+- Skills: `~/.agents/skills/<name>/SKILL.md`, invoked as `/skill:<name>`.
+
+Instructions are a rule rather than `~/.omp/agent/AGENTS.md` on purpose: OMP
+keeps one user-level context file, and the native `AGENTS.md` outranks every
+other one, so writing it would silently hide the user's `~/.claude/CLAUDE.md` or
+`~/.codex/AGENTS.md`. A rule loads beside whichever context file wins.
+
+KennisBank installs no OMP lifecycle hooks: OMP runs only TypeScript/JavaScript
+extensions, not command hooks. Run `/skill:sessiestart` and `/skill:sessielog`
+explicitly; retrieval is an MCP pull. Named OMP profiles
+(`~/.omp/profiles/<name>/agent`) are not targeted.
+
+Repair is idempotent: re-run `bash setup.sh --agents omp`. A changed rule or MCP
+file is backed up once to `<file>.kbak` before it is rewritten.
+
 ## Other MCP Clients
 
 Other compatible local MCP clients can point to the same stdio server. Use the

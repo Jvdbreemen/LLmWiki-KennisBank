@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **OMP (oh-my-pi) as a setup target.** `setup.sh --agents omp` registers the
+  `kennisbank` MCP server in `~/.omp/agent/mcp.json` as a key-scoped merge that
+  keeps every other server, writes the KennisBank instructions as an
+  always-apply rule in `~/.omp/agent/rules/kennisbank.md`, and deploys the
+  shared `~/.agents/skills` that OMP invokes as `/skill:<name>`.
+  `PI_CODING_AGENT_DIR` relocates the directory. The instructions are a rule
+  rather than `~/.omp/agent/AGENTS.md` because that file would hide every other
+  user-level context file OMP loads. No lifecycle hooks are installed, as for
+  Copilot; `doctor.sh` and the setup status summary report the OMP integration.
+
 - **The `opruimen` session-hygiene skill.** It measures idle sessions in a
   Hermes session store (and, where a live Claude Code exists, in its
   transcripts), logs them to the KennisBank through OpenRouter with CCR as the
