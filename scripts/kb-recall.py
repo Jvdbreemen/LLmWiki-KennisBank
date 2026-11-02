@@ -44,12 +44,16 @@ def _open_ro(db_path: Path):
     if not db_path.exists():
         return None
     conn = None
+    # vec0 via _kbindex.vec0_extension(), never `import sqlite_vec`: that
+    # package's __init__ imports numpy (~320 ms per prompt, TASK-120), and on
+    # Windows loading numpy's DLLs inside the stdio MCP server deadlocks
+    # against the pending stdin read, so recall never answers (TASK-261).
     try:
-        import sqlite_vec
+        vec0 = _kbindex.vec0_extension()
         uri = f"file:{db_path.as_posix()}?mode=ro"
         conn = sqlite3.connect(uri, uri=True)
         conn.enable_load_extension(True)
-        sqlite_vec.load(conn)
+        conn.load_extension(vec0)
         conn.enable_load_extension(False)
         return conn
     except Exception:
@@ -66,8 +70,12 @@ def _open_ro_checked(db_path: Path):
         )
     conn = None
     enabled = False
+    # vec0 via _kbindex.vec0_extension(), never `import sqlite_vec`: that
+    # package's __init__ imports numpy (~320 ms per prompt, TASK-120), and on
+    # Windows loading numpy's DLLs inside the stdio MCP server deadlocks
+    # against the pending stdin read, so recall never answers (TASK-261).
     try:
-        import sqlite_vec
+        vec0 = _kbindex.vec0_extension()
         uri = f"file:{db_path.as_posix()}?mode=ro"
         conn = sqlite3.connect(uri, uri=True)
         if not hasattr(conn, "enable_load_extension") or not hasattr(conn, "load_extension"):
@@ -77,7 +85,7 @@ def _open_ro_checked(db_path: Path):
             )
         conn.enable_load_extension(True)
         enabled = True
-        sqlite_vec.load(conn)
+        conn.load_extension(vec0)
         conn.enable_load_extension(False)
         enabled = False
         return conn
