@@ -31,6 +31,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`recall` no longer hangs over MCP stdio on Windows (TASK-261).** The
+  read-only index opens in `kb-recall.py` still ran `import sqlite_vec`,
+  whose `__init__` imports numpy. Inside the stdio MCP server on Windows,
+  loading numpy's DLLs during a request blocks behind the pending stdin read,
+  so `recall` never answered (over 120 s from Hermes, 3.8 s in-process). The
+  read path now loads vec0 through `_kbindex.vec0_extension()` like the rest
+  of the code since TASK-120, which also keeps numpy off every prompt hook.
+
 - **`setup.sh` installed into WSL when Windows meant Git Bash.** On Windows a
   plain `bash` can resolve to System32's WSL bash, even inside Git Bash.
   Windows `HOME` and `KENNISBANK_VAULT` do not reach WSL, so setup silently
