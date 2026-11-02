@@ -169,6 +169,12 @@ class RecallOverStdioTest(unittest.TestCase):
         reply = self.client.read_result(rid)  # EOF here == watchdog fired == deadlock
         self.assertNotIn("error", reply, f"recall failed: {reply}")
         self.assertIn("result", reply)
+        # The fixture index is an empty SQLite file: reaching its schema check proves
+        # the embed succeeded and vec0 was loaded, i.e. the path that used to deadlock
+        # ran. An embedding failure returns before the index is opened.
+        text = "".join(c.get("text", "") for c in reply["result"].get("content", []))
+        self.assertIn("indexschema", text, f"recall did not reach the index: {text!r}")
+        self.assertNotIn("embedding", text.lower(), text)
 
 
 if __name__ == "__main__":
