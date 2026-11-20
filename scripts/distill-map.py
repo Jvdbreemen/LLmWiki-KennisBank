@@ -31,10 +31,12 @@ Exit codes: 0 ok, 1 one or more stems failed, 3 toggle off, 4 no API key.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import json
 import os
 import re
+import shutil
 import sys
 import tempfile
 import time
@@ -195,32 +197,37 @@ def parse_candidates(content: str):
 
 def call_chunk(model: str, text: str, key: str, timeout: float, max_tokens: int,
                retries: int = 3) -> dict:
-    """One chunk -> {"ok", "candidates", "usage", "error"}. Errors carry status+body."""
+    """One chunk -> {"ok", "candidates", "usages", "error"}. Errors carry status+body.
+
+    An unparsable answer is retried too: in the 2026-11-20 trial one chunk in 66
+    came back as broken JSON ('"type": " "howto"'), and a repeat call is routed
+    afresh, often to another host. ``usages`` lists every attempt, so the cost of
+    a retried or failed call is still counted."""
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {key}",
                "X-Title": "KennisBank distill-map"}
     payload = build_payload(model, text, max_tokens)
-    last = ""
+    last, usages = "", []
     for attempt in range(retries):
         try:
             status, body = _post(ENDPOINT, payload, headers, timeout)
         except Exception as e:  # timeout, DNS, connection reset
             status, body = 0, f"{type(e).__name__}: {e}"
         if status == 200 and isinstance(body, dict) and body.get("choices"):
-            usage = body.get("usage") or {}
+            usages.append(body.get("usage") or {})
             msg = body["choices"][0].get("message") or {}
             finish = body["choices"][0].get("finish_reason")
             cands = parse_candidates(msg.get("content") or "")
-            if cands is None:
-                return {"ok": False, "usage": usage,
-                        "error": f"unparsable answer (finish_reason={finish}): "
-                                 f"{(msg.get('content') or '')[:300]!r}"}
-            return {"ok": True, "candidates": cands, "usage": usage,
-                    "provider": body.get("provider"), "model": body.get("model")}
+            if cands is not None:
+                return {"ok": True, "candidates": cands, "usages": usages,
+                        "provider": body.get("provider"), "model": body.get("model")}
+            last = (f"unparsable answer (finish_reason={finish}): "
+                    f"{(msg.get('content') or '')[:300]!r}")
+            continue  # re-routed retry, no backoff needed
         last = f"HTTP {status}: {str(body)[:500]}"
         if status not in RETRY_STATUSES and status != 0:
             break
         time.sleep(2 ** attempt * 3)
-    return {"ok": False, "usage": {}, "error": last}
+    return {"ok": False, "usages": usages, "error": last}
 
 
 def _sum_usage(parts: list[dict]) -> dict:
@@ -257,15 +264,27 @@ def map_stem(stem: str, vault: Path, out_dir: Path, *, model: str, key: str,
         rec = {**base, "status": "empty", "candidates": [], "usage": _sum_usage([])}
         _write_json(out_dir / f"{stem}.json", rec)
         return rec
+    # Per-chunk cache: a rerun after a failed chunk redoes only that chunk.
+    # Keyed by model + chunk text, so a changed chunk size or model never reuses.
+    cache_dir = out_dir / "_chunks" / stem
     cands, usages, errors, served = [], [], [], set()
     for i, piece in enumerate(parts):
+        ckey = hashlib.sha1(f"{model}|{piece}".encode("utf-8")).hexdigest()[:16]
+        cfile = cache_dir / f"{ckey}.json"
+        if cfile.exists():
+            cached = json.loads(cfile.read_text(encoding="utf-8"))
+            cands.extend(cached["candidates"])
+            served.update(cached.get("served") or [])
+            continue
         r = call_chunk(model, piece, key, timeout, max_tokens)
-        usages.append(r.get("usage") or {})
+        usages.extend(r.get("usages") or [])
         if not r["ok"]:
             errors.append(f"chunk {i + 1}/{len(parts)}: {r['error']}")
             continue
-        served.add(f"{r.get('model')}@{r.get('provider')}")
+        who = f"{r.get('model')}@{r.get('provider')}"
+        served.add(who)
         cands.extend(r["candidates"])
+        _write_json(cfile, {"candidates": r["candidates"], "served": [who]})
     seen, merged = set(), []
     for c in cands:
         k = str(c.get("title", "")).strip().lower()
@@ -277,6 +296,7 @@ def map_stem(stem: str, vault: Path, out_dir: Path, *, model: str, key: str,
         return {**rec, "status": "error", "error": "; ".join(errors)}
     rec.update(status="ok", candidates=merged)
     _write_json(out_dir / f"{stem}.json", rec)
+    shutil.rmtree(cache_dir, ignore_errors=True)
     return rec
 
 

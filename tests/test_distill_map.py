@@ -111,6 +111,45 @@ class DistillMapTest(unittest.TestCase):
         self.assertIn("HTTP 402", err)
         self.assertIn("no credits", err)
 
+    def test_unparsable_answer_is_retried_and_its_cost_counted(self):
+        self._toggle(True)
+        self._transcript("s1", "vraag", "antwoord")
+        broken = {"choices": [{"message": {"content": '{"candidates": [{"type": " "howto"'},
+                               "finish_reason": "stop"}],
+                  "usage": {"prompt_tokens": 7, "cost": 0.002}}
+        with mock.patch.object(dm, "_post", side_effect=[(200, broken),
+                                                         (200, _ok_body([{"title": "T"}]))]):
+            self.assertEqual(dm.main(["s1"]), 0)
+        rec = json.loads((self.out / "s1.json").read_text(encoding="utf-8"))
+        self.assertEqual(rec["usage"]["cost"], 0.003, "both attempts are paid for")
+
+    def test_rerun_redoes_only_the_failed_chunk(self):
+        # Regression 2026-11-20: one broken chunk in 66 discarded $0.44 of work.
+        self._toggle(True)
+        self._transcript("big", *[f"regel {i} " + "x" * 80 for i in range(30)])
+        broken = (200, {"choices": [{"message": {"content": "kapot"},
+                                     "finish_reason": "stop"}], "usage": {}})
+        first = []
+
+        def fail_second(url, payload, headers, timeout):
+            first.append(1)
+            return broken if len(first) in (2, 3, 4) else (200, _ok_body([{"title": f"T{len(first)}"}]))
+
+        args = ["big", "--chunk-chars", "1000", "--workers", "1"]
+        with mock.patch.object(dm, "_post", side_effect=fail_second):
+            self.assertEqual(dm.main(args), 1)
+        n_chunks = len(first) - 2  # chunk 2 took three attempts
+        self.assertFalse((self.out / "big.json").exists())
+        second = []
+        with mock.patch.object(dm, "_post", side_effect=lambda *a: (
+                second.append(1) or (200, _ok_body([{"title": "Herkansing"}])))):
+            self.assertEqual(dm.main(args), 0)
+        self.assertEqual(len(second), 1, f"only the failed chunk of {n_chunks} is redone")
+        rec = json.loads((self.out / "big.json").read_text(encoding="utf-8"))
+        self.assertEqual(rec["chunks"], n_chunks)
+        self.assertIn("Herkansing", [c["title"] for c in rec["candidates"]])
+        self.assertFalse((self.out / "_chunks" / "big").exists(), "cache cleared after success")
+
     def test_unparsable_answer_is_an_error(self):
         self._toggle(True)
         self._transcript("s1", "vraag", "antwoord")
