@@ -249,6 +249,9 @@ class DistillMapTest(unittest.TestCase):
         self.out.mkdir(parents=True)
         (self.out / "a.json").write_text(json.dumps({"stem": "a", "candidates": [
             {"title": "T1", "project": "otgw", "summary": "s"}]}), encoding="utf-8")
+        # Side files in the same dir crashed the digest after the full run.
+        (self.out / "_triage.json").write_text("[1, 2]", encoding="utf-8")
+        (self.out / "odd.json").write_text("[]", encoding="utf-8")
         path = dm.write_digest(self.out)
         text = path.read_text(encoding="utf-8")
         self.assertIn("## otgw (1)", text)

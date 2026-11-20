@@ -324,9 +324,10 @@ def write_digest(out_dir: Path) -> Path:
     """Group all stored candidates by project into one compact markdown file."""
     by_proj: dict[str, list[str]] = {}
     for f in sorted(out_dir.glob("*.json")):
-        try:
-            rec = json.loads(f.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
+        if f.name.startswith("_"):  # side files (_triage.json, ...), not stem outputs
+            continue
+        rec = _read_json(f)
+        if not isinstance(rec, dict):
             continue
         for c in rec.get("candidates") or []:
             proj = str(c.get("project") or "onbekend").strip() or "onbekend"
