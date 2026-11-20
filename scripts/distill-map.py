@@ -57,6 +57,12 @@ API_KEY_ENV = "OPENROUTER_API_KEY"
 DEFAULT_CHUNK_CHARS = 200_000
 DEFAULT_MAX_TOKENS = 8000
 RETRY_STATUSES = {408, 429, 500, 502, 503, 504}
+#: OpenRouter reasoning setting per --reasoning. Extraction does not need it and
+#: it eats max_tokens, so "off" is the default. Some models refuse that
+#: (glm-5.3-flash: "Reasoning is mandatory for this endpoint", HTTP 400), so
+#: "low" keeps them usable with the smallest budget.
+REASONING_MODES = {"off": {"enabled": False}, "low": {"effort": "low"}}
+REASONING = REASONING_MODES["off"]
 
 REDACTED = "***"
 # Based on kb-copilot-capture.py, extended with key formats seen in transcripts.
@@ -172,8 +178,7 @@ def build_payload(model: str, text: str, max_tokens: int) -> dict:
         "max_tokens": max_tokens,
         # Never route to a provider that may store or train on the content.
         "provider": {"data_collection": "deny"},
-        # Extraction does not need reasoning; it would only eat max_tokens.
-        "reasoning": {"enabled": False},
+        "reasoning": REASONING,
         "usage": {"include": True},
     }
 
@@ -357,11 +362,15 @@ def main(argv=None) -> int:
     ap.add_argument("--chunk-chars", type=int, default=DEFAULT_CHUNK_CHARS)
     ap.add_argument("--max-tokens", type=int, default=DEFAULT_MAX_TOKENS)
     ap.add_argument("--timeout", type=float, default=300.0)
+    ap.add_argument("--reasoning", choices=sorted(REASONING_MODES), default="off",
+                    help="off (default) or low, for models where reasoning is mandatory")
     ap.add_argument("--out", help="output dir (default <vault>/.claude/distill-map)")
     ap.add_argument("--dry-run", action="store_true", help="strip + chunk only, no network")
     ap.add_argument("--digest", action="store_true", help="(re)write _digest.md and exit")
     args = ap.parse_args(argv)
 
+    global REASONING
+    REASONING = REASONING_MODES[args.reasoning]
     vault = vault_root()
     out_dir = Path(args.out) if args.out else vault / ".claude" / "distill-map"
     if args.digest:

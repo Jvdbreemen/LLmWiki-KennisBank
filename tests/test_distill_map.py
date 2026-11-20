@@ -100,6 +100,17 @@ class DistillMapTest(unittest.TestCase):
         self.assertEqual([c["title"] for c in rec["candidates"]], ["Les A"])
         self.assertEqual(rec["usage"]["cost"], 0.001)
 
+    def test_reasoning_off_by_default_low_on_request(self):
+        self._toggle(True)
+        self._transcript("s1", "vraag", "antwoord")
+        sent = []
+        fake = lambda u, p, h, t: (sent.append(p["reasoning"]) or (200, _ok_body([])))
+        with mock.patch.object(dm, "_post", side_effect=fake):
+            dm.main(["s1"])
+            (self.out / "s1.json").unlink()
+            dm.main(["s1", "--reasoning", "low"])
+        self.assertEqual(sent, [{"enabled": False}, {"effort": "low"}])
+
     def test_http_error_is_recorded_not_treated_as_empty(self):
         self._toggle(True)
         self._transcript("s1", "vraag", "antwoord")
