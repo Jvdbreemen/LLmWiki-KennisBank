@@ -355,6 +355,55 @@ class DistillMapTest(unittest.TestCase):
         self.assertEqual(len(sent), 1)
         self.assertFalse((self.out / "late.json").exists())
 
+    # --- PR #186 Copilot review, round 3 ---------------------------------------
+
+    def test_basic_auth_header_is_fully_redacted(self):
+        out = dm.redact("Authorization: Basic dXNlcjpwYXNzd29yZA== verder")
+        self.assertNotIn("dXNlcjpwYXNzd29yZA", out)
+        self.assertIn("verder", out)
+
+    def test_snapshot_holds_exactly_the_limited_preview_and_creates_its_dir(self):
+        for s in ("s1", "s2", "s3"):
+            self._transcript(s, "vraag", "antwoord")
+        snap = self.vault / "nieuw" / "map" / "snap.txt"
+        dm.main(["s1", "s2", "s3", "--dry-run", "--limit", "2", "--write-stems", str(snap)])
+        self.assertEqual(snap.read_text(encoding="utf-8").split(), ["s1", "s2"])
+
+    def test_charge_is_persisted_before_a_kill_mid_retry(self):
+        class Killed(BaseException):
+            pass
+        broken = (200, {"choices": [{"message": {"content": "kapot"}}], "usage": {"cost": 0.002}})
+        ledger = self.vault / "spent.jsonl"
+        with mock.patch.object(dm, "_post", side_effect=[broken, Killed()]):
+            with self.assertRaises(Killed):
+                dm.call_chunk("m", "tekst", "k", 1, 10, ledger=ledger)
+        self.assertEqual([u["cost"] for u in dm._read_ledger(ledger)], [0.002])
+
+    def test_same_title_for_different_projects_is_kept(self):
+        self._toggle(True)
+        self._transcript("s1", "vraag", "antwoord")
+        cands = [{"title": "Pin de versie", "project": "otgw"},
+                 {"title": "Pin de versie", "project": "myscribe"},
+                 {"title": "pin de versie", "project": "otgw"}]
+        with mock.patch.object(dm, "_post", return_value=(200, _ok_body(cands))):
+            dm.main(["s1"])
+        rec = json.loads((self.out / "s1.json").read_text(encoding="utf-8"))
+        self.assertEqual(sorted(c["project"] for c in rec["candidates"]), ["myscribe", "otgw"])
+
+    def test_heartbeat_while_no_stem_finishes(self):
+        import io
+        import threading
+        from concurrent.futures import ThreadPoolExecutor
+        from contextlib import redirect_stdout
+        gate = threading.Event()
+        buf = io.StringIO()
+        with ThreadPoolExecutor(1) as pool, redirect_stdout(buf):
+            fut = pool.submit(gate.wait, 5)
+            it = dm._completed_with_heartbeat([fut], 1, 0.0, every=0.05)
+            threading.Timer(0.2, gate.set).start()
+            list(it)
+        self.assertIn("0/1 done, 1 running", buf.getvalue())
+
     def test_digest_groups_by_project(self):
         self.out.mkdir(parents=True)
         (self.out / "a.json").write_text(json.dumps({"stem": "a", "candidates": [

@@ -198,6 +198,15 @@ class AgentInvocationTest(unittest.TestCase):
             {"type": "session-owner"}, _user("You are evaluating", "sdk-cli")])
         self.assertTrue(imp._is_agent_invocation(judge))
 
+    def test_damaged_later_user_record_keeps_the_session(self):
+        # PR #186 review round 3: a truncated second prompt must not make a
+        # multi-turn SDK session look like a one-shot call.
+        p = self.tmp / "damaged.jsonl"
+        p.write_text(json.dumps(_user("eerste", "sdk-cli")) + "\n"
+                     + '{"type": "user", "entrypoint": "sdk-cli", "message": {"role": "us\n',
+                     encoding="utf-8")
+        self.assertFalse(mod._is_agent_invocation(p))
+
     def test_no_user_record_or_garbage_fails_open(self):
         p = self.tmp / "garbage.jsonl"
         p.write_text("not json\n{\"type\": \"summary\"}\n", encoding="utf-8")

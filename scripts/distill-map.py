@@ -40,7 +40,7 @@ import shutil
 import sys
 import tempfile
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -75,7 +75,7 @@ _SECRET_RE = re.compile(
     # length: a short labelled password is still a password. The optional quote
     # after the key name catches JSON keys such as {"api_key": "..."}.
     r"|(?:token|secret|password|passwd|api[_-]?key|authorization)[\"']?\s*[=:]\s*"
-    r"(?:\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*'|(?:bearer\s+)?[^\s,;}\"']+)"
+    r"(?:\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*'|(?:(?:bearer|basic)\s+)?[^\s,;}\"']+)"
     r"|gh[posru]_[A-Za-z0-9]{16,}"
     r"|github_pat_[A-Za-z0-9_]{20,}"
     r"|sk-[A-Za-z0-9_\-]{16,}"
@@ -214,7 +214,7 @@ def parse_candidates(content: str):
 
 
 def call_chunk(model: str, text: str, key: str, timeout: float, max_tokens: int,
-               retries: int = 3) -> dict:
+               retries: int = 3, ledger: Path | None = None) -> dict:
     """One chunk -> {"ok", "candidates", "usages", "attempts", "error"}.
 
     ``attempts`` lists the diagnostic (status + body) of EVERY failed attempt,
@@ -235,6 +235,8 @@ def call_chunk(model: str, text: str, key: str, timeout: float, max_tokens: int,
             status, body = 0, f"{type(e).__name__}: {e}"
         if status == 200 and isinstance(body, dict) and body.get("choices"):
             usages.append(body.get("usage") or {})
+            if ledger is not None:  # persist the charge now: a kill mid-retry keeps it
+                _append_ledger(ledger, [body.get("usage") or {}])
             msg = body["choices"][0].get("message") or {}
             finish = body["choices"][0].get("finish_reason")
             cands = parse_candidates(msg.get("content") or "")
@@ -343,9 +345,8 @@ def map_stem(stem: str, vault: Path, out_dir: Path, *, model: str, key: str,
             cands.extend(cached["candidates"])
             served.update(cached.get("served") or [])
             continue
-        r = call_chunk(model, piece, key, timeout, max_tokens)
+        r = call_chunk(model, piece, key, timeout, max_tokens, ledger=ledger)
         usages.extend(r.get("usages") or [])
-        _append_ledger(ledger, r.get("usages") or [])
         attempts.extend(f"chunk {i + 1}/{len(parts)}: {a}" for a in r.get("attempts") or [])
         if not r["ok"]:
             errors.append(f"chunk {i + 1}/{len(parts)}: {r['error']}")
@@ -356,8 +357,8 @@ def map_stem(stem: str, vault: Path, out_dir: Path, *, model: str, key: str,
         _write_json(cfile, {"candidates": r["candidates"], "served": [who]})
     seen, merged = set(), []
     for c in cands:
-        k = str(c.get("title", "")).strip().lower()
-        if k and k not in seen:
+        k = (str(c.get("project", "")).strip().lower(), str(c.get("title", "")).strip().lower())
+        if k[1] and k not in seen:
             seen.add(k)
             merged.append(c)
     rec = {**base, "usage": _sum_usage(_read_ledger(ledger)),
@@ -408,6 +409,22 @@ def _positive_int(value: str) -> int:
     return n
 
 
+HEARTBEAT_SECONDS = 60
+
+
+def _completed_with_heartbeat(futures, total, started, every=None):
+    """Yield futures as they finish; print elapsed time and remaining work every
+    ``every`` seconds while none does, so a long stem never leaves the run silent."""
+    every = every or HEARTBEAT_SECONDS
+    pending = set(futures)
+    while pending:
+        done, pending = wait(pending, timeout=every, return_when=FIRST_COMPLETED)
+        if not done:
+            print(f"  ... {total - len(pending)}/{total} done, {len(pending)} running, "
+                  f"{time.monotonic() - started:.0f}s elapsed", flush=True)
+        yield from done
+
+
 def _log_error(out_dir: Path, rec: dict) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     with (out_dir / "_errors.jsonl").open("a", encoding="utf-8") as f:
@@ -453,8 +470,6 @@ def main(argv=None) -> int:
                  .splitlines() if s.strip()]
     else:
         stems = list(args.stems) or (load_pending(vault) if args.pending else [])
-    if args.write_stems:
-        Path(args.write_stems).write_text("\n".join(stems) + "\n", encoding="utf-8")
     if not stems:
         print("nothing to map (give stems or --pending)")
         return 0
@@ -462,6 +477,10 @@ def main(argv=None) -> int:
     skipped = len(stems) - len(todo)
     if args.limit:
         todo = todo[:args.limit]
+    if args.write_stems:  # exactly what this run previews: filtered and limited
+        snap = Path(args.write_stems)
+        snap.parent.mkdir(parents=True, exist_ok=True)
+        snap.write_text("".join(s + "\n" for s in todo), encoding="utf-8")
 
     key = ""
     if not args.dry_run:
@@ -484,7 +503,7 @@ def main(argv=None) -> int:
     results, started = [], time.monotonic()
     with ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
         futures = [pool.submit(run, s) for s in todo]
-        for fut in as_completed(futures):  # report each stem as it finishes
+        for fut in _completed_with_heartbeat(futures, len(todo), started):
             r = fut.result()
             results.append(r)
             spent = (r.get("usage_this_run") or {}).get("cost", 0)

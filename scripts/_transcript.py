@@ -150,7 +150,9 @@ def is_agent_invocation(src) -> bool:
                 try:
                     rec = json.loads(line)
                 except ValueError:
-                    continue
+                    # A damaged record may be a later prompt; never let it turn a
+                    # multi-turn session into a "one-shot" that gets skipped.
+                    return False
                 if not isinstance(rec, dict) or rec.get("type") != "user" \
                         or rec.get("isSidechain"):
                     continue

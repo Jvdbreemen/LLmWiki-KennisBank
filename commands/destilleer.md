@@ -92,9 +92,11 @@ python3 "$VAULT/.claude/scripts/_settings.py" set distill_cloud_map false
 Exitcode 1 = minstens een stem faalde (staat in `_errors.jsonl`, krijgt geen
 output en wordt bij de volgende run opnieuw geprobeerd). Reduce daarna in
 batches per project vanuit `_digest.md`: kruis elke kandidaat tegen de bestaande
-wiki, schrijf of werk artikelen bij, en markeer per afgeronde batch exact die
-stems met `distill-notify.py --mark` (stap 4 per batch in plaats van een keer aan
-het eind). Stap 2 (stubs importeren) blijft nodig.
+wiki, schrijf of werk artikelen bij. Een stem levert vaak kandidaten voor
+meerdere projecten en artikelen; markeer hem met `distill-notify.py --mark` pas
+als ALLE kandidaten van die stem verwerkt zijn, in welke batch ook. Wordt de
+reduce onderbroken, dan blijft zo'n stem pending en komt hij terug. Stap 2
+(stubs importeren) blijft nodig.
 
 De dagelijkse graphify-batch respecteert de `daily_graphify`-toggle: staat die
 uit (`python3 -c "import sys; sys.path.insert(0,'$VAULT/.claude/scripts'); import _settings; print(_settings.get('daily_graphify', True))"` geeft `False`), werk dan alleen `.needs-rebuild` bij en sla de automatische `/graphify --update` over.
