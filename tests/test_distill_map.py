@@ -355,6 +355,22 @@ class DistillMapTest(unittest.TestCase):
         self.assertEqual(len(sent), 1)
         self.assertFalse((self.out / "late.json").exists())
 
+    # --- PR #186 Copilot review, round 4 ---------------------------------------
+
+    def test_compound_secret_names_are_redacted(self):
+        for raw, secret in (("aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "wJalrXUt"),
+                            ('{"client_secret": "abc123def"}', "abc123def"),
+                            ("GITHUB_TOKEN=ghx_not_a_real_prefix_value", "ghx_not")):
+            self.assertNotIn(secret, dm.redact(raw), raw)
+
+    def test_live_pending_cloud_run_is_refused(self):
+        self._toggle(True)
+        self._transcript("s1", "vraag", "antwoord")
+        with mock.patch.object(dm, "_post", side_effect=AssertionError("network!")), \
+                mock.patch.object(dm, "load_pending", return_value=["s1"]):
+            self.assertEqual(dm.main(["--pending"]), 2)
+            self.assertEqual(dm.main(["--pending", "--dry-run"]), 0)
+
     # --- PR #186 Copilot review, round 3 ---------------------------------------
 
     def test_basic_auth_header_is_fully_redacted(self):

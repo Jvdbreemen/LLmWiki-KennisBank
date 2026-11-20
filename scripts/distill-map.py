@@ -74,7 +74,7 @@ _SECRET_RE = re.compile(
     # word by word), otherwise up to whitespace or a separator. No minimum
     # length: a short labelled password is still a password. The optional quote
     # after the key name catches JSON keys such as {"api_key": "..."}.
-    r"|(?:token|secret|password|passwd|api[_-]?key|authorization)[\"']?\s*[=:]\s*"
+    r"|[\w-]*(?:token|secret|password|passwd|api[_-]?key|authorization)[\w-]*[\"']?\s*[=:]\s*"
     r"(?:\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*'|(?:(?:bearer|basic)\s+)?[^\s,;}\"']+)"
     r"|gh[posru]_[A-Za-z0-9]{16,}"
     r"|github_pat_[A-Za-z0-9_]{20,}"
@@ -465,6 +465,10 @@ def main(argv=None) -> int:
         print(f"digest: {write_digest(out_dir)}")
         return 0
 
+    if args.pending and not args.dry_run:
+        print("distill-map: --pending only previews (use --dry-run --write-stems FILE); "
+              "a cloud run takes the approved --stems-file or explicit stems", file=sys.stderr)
+        return 2
     if args.stems_file:
         stems = [s.strip() for s in Path(args.stems_file).read_text(encoding="utf-8")
                  .splitlines() if s.strip()]
