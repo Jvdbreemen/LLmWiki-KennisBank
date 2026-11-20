@@ -83,6 +83,17 @@ def iter_turns(jsonl_path) -> Iterator[tuple[str, str]]:
 
 
 def strip_to_text(jsonl_path) -> str:
-    """Gestript transcript als tekst met '### USER'/'### ASSISTANT'-koppen."""
+    """Gestript transcript als tekst met '### USER'/'### ASSISTANT'-koppen.
+
+    Codex and Copilot transcripts have no Claude Code ``message`` records, so
+    iter_turns() yields nothing for them. Without a fallback 18 archived Codex
+    sessions stripped to 0 characters and /destilleer read them as "nothing to
+    learn" (2026-11-20, the same blind spot TASK-145 fixed in the sweep). Fall
+    back to the sweep's three-format reader, which keeps user/assistant only.
+    """
     chunks = [f"### {role.upper()}\n{text}" for role, text in iter_turns(jsonl_path)]
-    return "\n\n".join(chunks) + ("\n" if chunks else "")
+    if not chunks:
+        from _sweepstate import transcript_text  # lazy: only for non-Claude formats
+        text = transcript_text(jsonl_path)
+        return text + "\n" if text else ""
+    return "\n\n".join(chunks) + "\n"

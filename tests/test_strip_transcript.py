@@ -99,6 +99,24 @@ class StripToTextTest(unittest.TestCase):
         self.assertEqual(out.count("### USER"), 1)
         self.assertEqual(out.count("### ASSISTANT"), 1)
 
+    def test_codex_transcript_is_not_stripped_to_nothing(self):
+        # Regression 2026-11-20: 18 archived Codex sessions stripped to 0 chars.
+        recs = [
+            {"type": "session_meta", "payload": {"id": "x"}},
+            {"type": "response_item", "payload": {"type": "message", "role": "user",
+             "content": [{"type": "input_text", "text": "CODEX VRAAG"}]}},
+            {"type": "response_item", "payload": {"type": "reasoning", "summary": "DENKRUIS"}},
+            {"type": "response_item", "payload": {"type": "message", "role": "assistant",
+             "content": [{"type": "output_text", "text": "CODEX ANTWOORD"}]}},
+            {"type": "event_msg", "payload": {"type": "agent_message", "message": "CODEX ANTWOORD"}},
+        ]
+        p = self.tmp / "codex.jsonl"
+        p.write_text("\n".join(json.dumps(r) for r in recs) + "\n", encoding="utf-8")
+        out = _t.strip_to_text(p)
+        self.assertIn("CODEX VRAAG", out)
+        self.assertEqual(out.count("CODEX ANTWOORD"), 1, "event_msg echo not doubled")
+        self.assertNotIn("DENKRUIS", out)
+
 
 class CliTest(unittest.TestCase):
     def setUp(self):
