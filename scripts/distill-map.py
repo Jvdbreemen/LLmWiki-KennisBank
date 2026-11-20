@@ -69,8 +69,13 @@ REDACTED = "***"
 _SECRET_RE = re.compile(
     r"(?is)(-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----"
     r"|bearer\s+[A-Za-z0-9._\-]{8,}"
-    # The optional quote after the key name catches JSON: {"api_key": "..."}.
-    r"|(?:token|secret|password|passwd|api[_-]?key|authorization)[\"']?\s*[=:]\s*[\"']?[^\s\"']{6,}"
+    # A labelled secret loses its WHOLE value: a quoted value up to its closing
+    # quote (spaces and escaped quotes included, so a passphrase cannot leak
+    # word by word), otherwise up to whitespace or a separator. No minimum
+    # length: a short labelled password is still a password. The optional quote
+    # after the key name catches JSON keys such as {"api_key": "..."}.
+    r"|(?:token|secret|password|passwd|api[_-]?key|authorization)[\"']?\s*[=:]\s*"
+    r"(?:\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*'|(?:bearer\s+)?[^\s,;}\"']+)"
     r"|gh[posru]_[A-Za-z0-9]{16,}"
     r"|github_pat_[A-Za-z0-9_]{20,}"
     r"|sk-[A-Za-z0-9_\-]{16,}"
@@ -273,6 +278,31 @@ def _write_json(path: Path, data: dict) -> None:
     os.replace(tmp, path)
 
 
+def _append_ledger(ledger: Path, usages: list) -> None:
+    if not usages:
+        return
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+    with ledger.open("a", encoding="utf-8") as f:
+        for u in usages:
+            f.write(json.dumps(u) + "\n")
+        f.flush()
+        os.fsync(f.fileno())
+
+
+def _read_ledger(ledger: Path) -> list:
+    try:
+        lines = ledger.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    out = []
+    for line in lines:
+        try:
+            out.append(json.loads(line))
+        except ValueError:
+            continue  # a torn last line after a hard stop
+    return out
+
+
 def _read_json(path: Path):
     """Parsed JSON, or None for a missing, empty, NUL-filled or broken file."""
     try:
@@ -298,10 +328,13 @@ def map_stem(stem: str, vault: Path, out_dir: Path, *, model: str, key: str,
         return rec
     # Per-chunk cache: a rerun after a failed chunk redoes only that chunk.
     # Keyed by model + chunk text, so a changed chunk size or model never reuses.
-    # The cache keeps each chunk's usage too: the stem total stays complete across
-    # a resume, while usage_this_run counts only what this run paid for.
+    # Paid attempts go to an append-only ledger the moment they return, failed
+    # ones included, so the stem total survives a crash or a failed earlier run
+    # and a repeated identical chunk cannot count a cached call twice.
+    # usage_this_run counts only what this run paid for.
     cache_dir = out_dir / "_chunks" / stem
-    cands, earlier, usages, errors, attempts, served = [], [], [], [], [], set()
+    ledger = cache_dir / "_spent.jsonl"
+    cands, usages, errors, attempts, served = [], [], [], [], set()
     for i, piece in enumerate(parts):
         ckey = hashlib.sha1(f"{model}|{piece}".encode("utf-8")).hexdigest()[:16]
         cfile = cache_dir / f"{ckey}.json"
@@ -309,10 +342,10 @@ def map_stem(stem: str, vault: Path, out_dir: Path, *, model: str, key: str,
         if isinstance(cached, dict) and isinstance(cached.get("candidates"), list):
             cands.extend(cached["candidates"])
             served.update(cached.get("served") or [])
-            earlier.extend(cached.get("usages") or [])
             continue
         r = call_chunk(model, piece, key, timeout, max_tokens)
         usages.extend(r.get("usages") or [])
+        _append_ledger(ledger, r.get("usages") or [])
         attempts.extend(f"chunk {i + 1}/{len(parts)}: {a}" for a in r.get("attempts") or [])
         if not r["ok"]:
             errors.append(f"chunk {i + 1}/{len(parts)}: {r['error']}")
@@ -320,15 +353,14 @@ def map_stem(stem: str, vault: Path, out_dir: Path, *, model: str, key: str,
         who = f"{r.get('model')}@{r.get('provider')}"
         served.add(who)
         cands.extend(r["candidates"])
-        _write_json(cfile, {"candidates": r["candidates"], "served": [who],
-                            "usages": r.get("usages") or []})
+        _write_json(cfile, {"candidates": r["candidates"], "served": [who]})
     seen, merged = set(), []
     for c in cands:
         k = str(c.get("title", "")).strip().lower()
         if k and k not in seen:
             seen.add(k)
             merged.append(c)
-    rec = {**base, "usage": _sum_usage(earlier + usages),
+    rec = {**base, "usage": _sum_usage(_read_ledger(ledger)),
            "usage_this_run": _sum_usage(usages), "served_by": sorted(served),
            "attempt_errors": attempts}
     if errors:
@@ -392,6 +424,9 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("stems", nargs="*")
     ap.add_argument("--pending", action="store_true", help="all transcripts not yet watermarked")
+    ap.add_argument("--stems-file", help="read the stems from this file (one per line)")
+    ap.add_argument("--write-stems", help="write the selected stems to this file, so the "
+                    "user-approved dry-run set is exactly what the cloud calls send")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--model", default=os.environ.get("KB_DISTILL_MAP_MODEL", DEFAULT_MODEL))
     ap.add_argument("--workers", type=int, default=4)
@@ -413,7 +448,13 @@ def main(argv=None) -> int:
         print(f"digest: {write_digest(out_dir)}")
         return 0
 
-    stems = list(args.stems) or (load_pending(vault) if args.pending else [])
+    if args.stems_file:
+        stems = [s.strip() for s in Path(args.stems_file).read_text(encoding="utf-8")
+                 .splitlines() if s.strip()]
+    else:
+        stems = list(args.stems) or (load_pending(vault) if args.pending else [])
+    if args.write_stems:
+        Path(args.write_stems).write_text("\n".join(stems) + "\n", encoding="utf-8")
     if not stems:
         print("nothing to map (give stems or --pending)")
         return 0

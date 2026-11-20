@@ -76,12 +76,17 @@ naar OpenRouter mag. Zonder een ja: blijf bij de lokale werkwijze hierboven.
 Staat de toggle al aan (bijvoorbeeld na een afgebroken run), vraag dan alsnog,
 want een vergeten toggle is geen toestemming. Zet hem na de run altijd terug op
 uit en controleer dat met `_settings.py get distill_cloud_map`.
+De toestemming geldt voor precies de set uit de dry-run. Leg die set daarom vast
+met `--write-stems` en geef hem met `--stems-file` aan elke cloud-call; nooit
+`--pending` na de dry-run, want een transcript dat intussen binnenkwam zou dan
+zonder toestemming meegaan. Wil je de set uitbreiden, vraag dan opnieuw.
 ```bash
-python3 "$VAULT/.claude/scripts/distill-map.py" --pending --dry-run   # volume, geen netwerk
-# pas na expliciete toestemming van de gebruiker:
+SNAP="$VAULT/.claude/distill-map/_approved-stems.txt"
+python3 "$VAULT/.claude/scripts/distill-map.py" --pending --dry-run --write-stems "$SNAP"
+# pas na expliciete toestemming van de gebruiker voor deze set:
 python3 "$VAULT/.claude/scripts/_settings.py" set distill_cloud_map true
-python3 "$VAULT/.claude/scripts/distill-map.py" --pending --limit 10  # proefbatch
-python3 "$VAULT/.claude/scripts/distill-map.py" --pending             # rest; hervat zelf
+python3 "$VAULT/.claude/scripts/distill-map.py" --stems-file "$SNAP" --limit 10  # proefbatch
+python3 "$VAULT/.claude/scripts/distill-map.py" --stems-file "$SNAP"             # rest; hervat zelf
 python3 "$VAULT/.claude/scripts/_settings.py" set distill_cloud_map false
 ```
 Exitcode 1 = minstens een stem faalde (staat in `_errors.jsonl`, krijgt geen

@@ -318,6 +318,43 @@ class DistillMapTest(unittest.TestCase):
         self.assertIn("[1/2", buf.getvalue())
         self.assertIn("[2/2", buf.getvalue())
 
+    # --- PR #186 Copilot review, round 2 ---------------------------------------
+
+    def test_labelled_passphrase_and_short_password_are_fully_redacted(self):
+        for raw, secret in (('{"password": "correct horse battery staple"}', "horse"),
+                            ('{"password": "aB7!"}', "aB7!"),
+                            ("authorization: Bearer abcdef123456", "abcdef123456")):
+            self.assertNotIn(secret, dm.redact(raw), raw)
+        self.assertEqual(dm.redact("a token is a word"), "a token is a word")
+
+    def test_failed_attempt_cost_from_an_earlier_run_stays_in_the_total(self):
+        self._toggle(True)
+        self._transcript("s1", "vraag", "antwoord")
+        broken = (200, {"choices": [{"message": {"content": "kapot"}, "finish_reason": "stop"}],
+                        "usage": {"cost": 0.002}})
+        with mock.patch.object(dm, "_post", return_value=broken):
+            self.assertEqual(dm.main(["s1"]), 1)  # three paid, unparsable attempts
+        with mock.patch.object(dm, "_post", return_value=(200, _ok_body([{"title": "T"}]))):
+            self.assertEqual(dm.main(["s1"]), 0)
+        rec = json.loads((self.out / "s1.json").read_text(encoding="utf-8"))
+        self.assertAlmostEqual(rec["usage"]["cost"], 0.007)  # 3 x 0.002 + 0.001
+        self.assertAlmostEqual(rec["usage_this_run"]["cost"], 0.001)
+
+    def test_snapshot_file_fixes_the_stem_set_across_calls(self):
+        self._transcript("s1", "vraag", "antwoord")
+        snap = self.vault / "snap.txt"
+        with mock.patch.object(dm, "load_pending", return_value=["s1"]):
+            dm.main(["--pending", "--dry-run", "--write-stems", str(snap)])
+        self._transcript("late", "nieuw", "transcript")  # archived after consent
+        self._toggle(True)
+        sent = []
+        with mock.patch.object(dm, "_post", side_effect=lambda u, p, h, t: (
+                sent.append(1) or (200, _ok_body([])))), \
+                mock.patch.object(dm, "load_pending", return_value=["s1", "late"]):
+            self.assertEqual(dm.main(["--stems-file", str(snap)]), 0)
+        self.assertEqual(len(sent), 1)
+        self.assertFalse((self.out / "late.json").exists())
+
     def test_digest_groups_by_project(self):
         self.out.mkdir(parents=True)
         (self.out / "a.json").write_text(json.dumps({"stem": "a", "candidates": [
