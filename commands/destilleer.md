@@ -57,6 +57,30 @@ transcript (parallel), laat elk de net-nieuwe kennis kruisen tegen de bestaande
 artikelen en compact terugrapporteren, en laat de HOOFDthread de wiki schrijven —
 zo houd je provenance (`## Sessie-herkomst`) en de lint onder controle.
 
+### Grote achterstand: optionele cloud-map (tijdelijk, opt-in)
+Bij honderden pending transcripts kan de lees-stap uitbesteed worden aan
+`distill-map.py`. Dat script stript en redigeert elk transcript, stuurt het in
+chunks naar EEN expliciet gekozen OpenRouter-model (default
+`deepseek/deepseek-v4-flash-0731`, `data_collection=deny`) en schrijft per stem
+compacte kandidaat-kennis naar `$VAULT/.claude/distill-map/<stem>.json`, plus een
+`_digest.md` gegroepeerd per project. Inhoud verlaat je machine, dus het draait
+ALLEEN als de toggle `distill_cloud_map` aan staat (default uit). Zet hem na het
+inlopen weer uit. De vault-config `kennisbank-llm.json` wordt niet gebruikt:
+achtergrondjobs blijven lokaal.
+```bash
+python3 "$VAULT/.claude/scripts/distill-map.py" --pending --dry-run   # volume, geen netwerk
+python3 "$VAULT/.claude/scripts/_settings.py" set distill_cloud_map true
+python3 "$VAULT/.claude/scripts/distill-map.py" --pending --limit 10  # proefbatch
+python3 "$VAULT/.claude/scripts/distill-map.py" --pending             # rest; hervat zelf
+python3 "$VAULT/.claude/scripts/_settings.py" set distill_cloud_map false
+```
+Exitcode 1 = minstens een stem faalde (staat in `_errors.jsonl`, krijgt geen
+output en wordt bij de volgende run opnieuw geprobeerd). Reduce daarna in
+batches per project vanuit `_digest.md`: kruis elke kandidaat tegen de bestaande
+wiki, schrijf of werk artikelen bij, en markeer per afgeronde batch exact die
+stems met `distill-notify.py --mark` (stap 4 per batch in plaats van een keer aan
+het eind). Stap 2 (stubs importeren) blijft nodig.
+
 De dagelijkse graphify-batch respecteert de `daily_graphify`-toggle: staat die
 uit (`python3 -c "import sys; sys.path.insert(0,'$VAULT/.claude/scripts'); import _settings; print(_settings.get('daily_graphify', True))"` geeft `False`), werk dan alleen `.needs-rebuild` bij en sla de automatische `/graphify --update` over.
 

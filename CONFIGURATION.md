@@ -827,6 +827,7 @@ De achtergrond-automatieken zijn individueel aan/uit te zetten via
 | `checkpoints` | uit | Claude PreCompact schrijft automatisch een werkstand-stub; volgende sessiestart meldt hem (`/checkpoint load`) | alleen handmatige checkpoints via `/checkpoint` |
 | `orientation` | uit | sessiestart toont een compacte vault-orientatie (counts, recente artikelen, veelgebruikte kennis, open backlog-taken) | alleen on-demand via `/sessiestart` |
 | `graph_retrieval` | aan | de `(buur)`-entry in de hook-injectie komt uit de gewogen graafindex `kb-graph.db` (submilliseconde; stale graaf → geen buur, zie doctor) | geen `(buur)`-entry (TASK-93: de legacy wikilink-scan-terugval is verwijderd nadat vier releases met deze default AAN geen regressie meldden) |
+| `distill_cloud_map` | uit | `distill-map.py` mag gestripte, geredigeerde transcripts naar een expliciet gekozen OpenRouter-model sturen (map-stap van `/destilleer` bij een grote achterstand; tijdelijk aanzetten) | `distill-map.py` weigert; `/destilleer` werkt volledig in de agent-sessie |
 
 - **Wijzigen**: draai `/kennisbank:settings` (toont een tabel en zet toggles aan/uit), of bewerk het JSON-bestand (waarden zijn JSON-booleans).
 - **Self-gating**: één SessionStart-coördinator blijft per client statisch

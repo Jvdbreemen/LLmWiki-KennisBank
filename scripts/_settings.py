@@ -67,6 +67,11 @@ DEFAULTS = {
     # (A/B op 329 wiki-vragen: @1 0.745->0.790, @5 0.954->1.000, MRR
     # 0.836->0.882, single-hop@1 0.777->0.831, p95 lager) -> default AAN.
     "graph_retrieval": True,
+    # Cloud map step for /destilleer (TASK-262): distill-map.py sends stripped,
+    # redacted transcripts to one explicitly chosen OpenRouter model to drain a
+    # large backlog. Content leaves the machine, so this is opt-in and meant to be
+    # switched on temporarily, then off again. Off = distill-map.py refuses.
+    "distill_cloud_map": False,
 }
 
 _TRUTHY = ("1", "true", "yes", "y", "on")
