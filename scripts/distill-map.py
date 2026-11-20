@@ -247,7 +247,19 @@ def _write_json(path: Path, data: dict) -> None:
     fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=".dm-", suffix=".tmp")
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=1)
+        # Without fsync a hard stop can leave the rename committed but the data
+        # not: 5 outputs of 322 came back as all-NUL files on 2026-11-20.
+        f.flush()
+        os.fsync(f.fileno())
     os.replace(tmp, path)
+
+
+def _read_json(path: Path):
+    """Parsed JSON, or None for a missing, empty, NUL-filled or broken file."""
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
 
 
 def map_stem(stem: str, vault: Path, out_dir: Path, *, model: str, key: str,
@@ -271,8 +283,8 @@ def map_stem(stem: str, vault: Path, out_dir: Path, *, model: str, key: str,
     for i, piece in enumerate(parts):
         ckey = hashlib.sha1(f"{model}|{piece}".encode("utf-8")).hexdigest()[:16]
         cfile = cache_dir / f"{ckey}.json"
-        if cfile.exists():
-            cached = json.loads(cfile.read_text(encoding="utf-8"))
+        cached = _read_json(cfile)
+        if isinstance(cached, dict) and isinstance(cached.get("candidates"), list):
             cands.extend(cached["candidates"])
             served.update(cached.get("served") or [])
             continue
@@ -359,7 +371,7 @@ def main(argv=None) -> int:
     if not stems:
         print("nothing to map (give stems or --pending)")
         return 0
-    todo = [s for s in stems if not (out_dir / f"{s}.json").exists()]
+    todo = [s for s in stems if _read_json(out_dir / f"{s}.json") is None]
     skipped = len(stems) - len(todo)
     if args.limit:
         todo = todo[:args.limit]

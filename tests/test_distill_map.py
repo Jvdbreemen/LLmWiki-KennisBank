@@ -227,6 +227,18 @@ class DistillMapTest(unittest.TestCase):
         with mock.patch.object(dm, "_post", side_effect=AssertionError("network!")):
             self.assertEqual(dm.main(["s1"]), 0)
 
+    def test_nul_filled_output_from_a_hard_stop_is_redone(self):
+        # Regression 2026-11-20: 5 of 322 outputs were all-NUL after a crash and
+        # an exists() check would have skipped them for good.
+        self._toggle(True)
+        self._transcript("s1", "vraag", "antwoord")
+        self.out.mkdir(parents=True)
+        (self.out / "s1.json").write_bytes(b"\x00" * 300)
+        with mock.patch.object(dm, "_post", return_value=(200, _ok_body([{"title": "T"}]))) as p:
+            self.assertEqual(dm.main(["s1"]), 0)
+        self.assertEqual(p.call_count, 1)
+        self.assertEqual(json.loads((self.out / "s1.json").read_text(encoding="utf-8"))["status"], "ok")
+
     def test_dry_run_needs_no_toggle_and_no_network(self):
         self._transcript("s1", "vraag", "antwoord")
         with mock.patch.object(dm, "_post", side_effect=AssertionError("network!")):
