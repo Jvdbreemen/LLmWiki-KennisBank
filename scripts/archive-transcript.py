@@ -22,6 +22,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _vaultpath import vault_root  # noqa: E402
 from _common import slugify  # noqa: E402
+from _transcript import is_agent_invocation  # noqa: E402
 
 MIN_BYTES = 200  # lege/-p-transcripts overslaan
 
@@ -53,31 +54,8 @@ def dest_path(vault: Path, hook: dict, src: Path) -> Path:
     return vault / "01-raw" / "transcripts" / f"{date}-{slug}-{sid8}.jsonl"
 
 
-def _is_agent_invocation(src: Path) -> bool:
-    """True als dit transcript een plugin- of agent-LLM-aanroep is, geen sessie.
-
-    De runtime geeft zulke aanroepen een eigen session_id, waardoor SessionEnd
-    ze archiveert alsof het gesprekken waren. Ze zijn herkenbaar aan de eerste
-    regel: een queue-operation in plaats van een gewone turn. In een gemeten
-    vault was 337 van de 486 gearchiveerde transcripts van dit type.
-
-    Fail-open: bij twijfel of een leesfout is het antwoord False, zodat een
-    echte sessie nooit verloren gaat.
-    """
-    try:
-        with src.open("r", encoding="utf-8", errors="replace") as fh:
-            first = fh.readline(1_048_576)
-        if not first.strip():
-            return False
-        try:
-            return json.loads(first).get("type") == "queue-operation"
-        except ValueError:
-            # Eerste regel afgekapt of niet-parseerbaar: val terug op een
-            # goedkope substring-check over de kop van de regel. De prompt
-            # zelf staat verderop, dus 4096 tekens is ruim genoeg voor de kop.
-            return '"type":"queue-operation"' in first[:4096].replace(" ", "")
-    except Exception:
-        return False
+# Shared with import-cc-history.py via _transcript so the two cannot drift.
+_is_agent_invocation = is_agent_invocation
 
 
 def archive(hook: dict, vault: Path) -> dict:

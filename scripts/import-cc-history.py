@@ -37,34 +37,14 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _vaultpath import vault_root  # noqa: E402
 from _common import _today_iso, _utcnow_iso, print_summary, slugify  # noqa: E402
-from _transcript import extract_text  # noqa: E402
+from _transcript import extract_text, is_agent_invocation  # noqa: E402
 
 CC_PROJECTS_DIR_DEFAULT = Path.home() / ".claude" / "projects"
 VAULT_DEFAULT = vault_root()
 
 
-def _is_agent_invocation(src: Path) -> bool:
-    """True als dit transcript een plugin- of agent-LLM-aanroep is, geen sessie.
-
-    Tweede verdedigingslinie naast dezelfde check in archive-transcript.py, voor
-    transcripts die al gearchiveerd waren voordat die filter bestond. De
-    ingekapselde prompt lijkt genoeg op een user-turn om de `no user turns`-skip
-    te passeren, dus die vangt ze niet.
-
-    Fail-open: bij twijfel of een leesfout is het antwoord False, zodat een
-    echte sessie nooit wordt overgeslagen.
-    """
-    try:
-        with src.open("r", encoding="utf-8", errors="replace") as fh:
-            first = fh.readline(1_048_576)
-        if not first.strip():
-            return False
-        try:
-            return json.loads(first).get("type") == "queue-operation"
-        except ValueError:
-            return '"type":"queue-operation"' in first[:4096].replace(" ", "")
-    except Exception:
-        return False
+# Shared with import-cc-history.py via _transcript so the two cannot drift.
+_is_agent_invocation = is_agent_invocation
 
 
 def parse_session(jsonl_path: Path) -> dict | None:

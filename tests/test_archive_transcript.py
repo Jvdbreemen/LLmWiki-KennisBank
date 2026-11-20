@@ -136,5 +136,83 @@ class ArchiveTest(unittest.TestCase):
         self.assertEqual(len(files), 1)
 
 
+def _records(path: Path, recs: list) -> Path:
+    path.write_text("\n".join(json.dumps(r) for r in recs) + "\n", encoding="utf-8")
+    return path
+
+
+def _user(text, entrypoint):
+    return {"type": "user", "entrypoint": entrypoint,
+            "message": {"role": "user", "content": text}}
+
+
+def _tool_result():
+    return {"type": "user", "entrypoint": "sdk-cli",
+            "message": {"role": "user", "content": [{"type": "tool_result", "content": "x"}]}}
+
+
+class AgentInvocationTest(unittest.TestCase):
+    """Regression 2026-11-20: a session-owner record ahead of queue-operation made
+    the first-line filter blind; 885 one-shot SDK calls were archived."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = Path(tempfile.mkdtemp(prefix="kb-agent-"))
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_one_shot_sdk_call_behind_session_owner_is_skipped(self):
+        p = _records(self.tmp / "judge.jsonl", [
+            {"type": "session-owner", "sessionId": "s"},
+            {"type": "queue-operation", "operation": "enqueue", "content": "You are evaluating"},
+            _user("You are evaluating whether a staged git diff ...", "sdk-cli"),
+            {"type": "assistant", "message": {"role": "assistant", "content": "{}"}},
+            _tool_result(),
+        ])
+        self.assertTrue(mod._is_agent_invocation(p))
+
+    def test_interactive_session_starting_with_a_queued_prompt_is_kept(self):
+        p = _records(self.tmp / "real.jsonl", [
+            {"type": "queue-operation", "operation": "enqueue", "content": "And it's not you!"},
+            _user("And it's not you!", "cli"),
+            _user("second prompt", "cli"),
+        ])
+        self.assertFalse(mod._is_agent_invocation(p))
+
+    def test_multi_turn_sdk_session_is_kept(self):
+        p = _records(self.tmp / "sdk-work.jsonl", [
+            _user("first", "sdk-cli"), _tool_result(), _user("second", "sdk-cli")])
+        self.assertFalse(mod._is_agent_invocation(p))
+
+    def test_importer_uses_the_same_classifier(self):
+        # PR #186 review: the importer kept the old first-line rule and still
+        # skipped real sessions that start with a queued prompt.
+        imp = load_script("import-cc-history.py")
+        p = _records(self.tmp / "real.jsonl", [
+            {"type": "queue-operation", "operation": "enqueue", "content": "hoi"},
+            _user("hoi", "cli"), _user("tweede", "cli")])
+        self.assertFalse(imp._is_agent_invocation(p))
+        judge = _records(self.tmp / "judge.jsonl", [
+            {"type": "session-owner"}, _user("You are evaluating", "sdk-cli")])
+        self.assertTrue(imp._is_agent_invocation(judge))
+
+    def test_damaged_later_user_record_keeps_the_session(self):
+        # PR #186 review round 3: a truncated second prompt must not make a
+        # multi-turn SDK session look like a one-shot call.
+        p = self.tmp / "damaged.jsonl"
+        p.write_text(json.dumps(_user("eerste", "sdk-cli")) + "\n"
+                     + '{"type": "user", "entrypoint": "sdk-cli", "message": {"role": "us\n',
+                     encoding="utf-8")
+        self.assertFalse(mod._is_agent_invocation(p))
+
+    def test_no_user_record_or_garbage_fails_open(self):
+        p = self.tmp / "garbage.jsonl"
+        p.write_text("not json\n{\"type\": \"summary\"}\n", encoding="utf-8")
+        self.assertFalse(mod._is_agent_invocation(p))
+        self.assertFalse(mod._is_agent_invocation(self.tmp / "missing.jsonl"))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -17,7 +17,7 @@ dagelijkse graphify-gate).
 Lees per toggle de waarde via de helper. Gebruik de canonieke keys en hun default:
 
 ```bash
-for key in auto_archive distill_notify embed_index daily_graphify memory_capture memory_recall experience_capture experience_projection experience_explicit_recall source_explicit_recall usage_telemetry activity_llm_fallback checkpoints orientation graph_retrieval; do
+for key in auto_archive distill_notify embed_index daily_graphify memory_capture memory_recall experience_capture experience_projection experience_explicit_recall source_explicit_recall usage_telemetry activity_llm_fallback checkpoints orientation graph_retrieval distill_cloud_map; do
   val=$(python3 "$VAULT/.claude/scripts/_settings.py" get "$key")
   echo "$key=$val"
 done
@@ -45,12 +45,13 @@ doet:
 - **checkpoints** (default UIT) - schrijf bij context-compaction (Claude PreCompact) automatisch een werkstand-stub en meld die bij de volgende sessiestart. Uit = alleen handmatige checkpoints via `/checkpoint`.
 - **orientation** (default UIT) - toon bij sessiestart een compacte vault-orientatie: documentcounts, recent gewijzigde artikelen, veelgebruikte kennis en open backlog-taken. Uit = alleen on-demand via `/sessiestart`.
 - **graph_retrieval** (default AAN sinds de A/B-poort van 2026-07-29, TASK-87) - haal de (buur)-entry in de hook-injectie uit de gewogen graafindex (kb-graph.db) in plaats van de legacy wikilink-scan. Aanzetten alleen na een kb-eval A/B op sets van >=100 vragen (bewijsregel TASK-86).
+- **distill_cloud_map** (default UIT, tijdelijk) - sta `distill-map.py` toe gestripte, geredigeerde transcripts naar een expliciet gekozen OpenRouter-model te sturen om een grote `/destilleer`-achterstand weg te werken. Inhoud verlaat je machine: een agent zet hem alleen aan na expliciete toestemming van de gebruiker voor die run, en zet hem na het inlopen weer UIT.
 
 Vraag de gewenste staat tekstueel uit (NIET via `AskUserQuestion`: die tool
 staat maximaal 4 opties per vraag toe, en er zijn 11 toggles; een enkele
 multiSelect-vraag met 10 opties faalt met een `InputValidationError`).
 
-Toon de 15 toggles genummerd met hun huidige staat (aan/uit uit stap 1) en vraag
+Toon de 16 toggles genummerd met hun huidige staat (aan/uit uit stap 1) en vraag
 de gebruiker welke moeten wijzigen, bijvoorbeeld: "Noem de toggles die je wilt
 omzetten (bv. `auto_archive uit, memory_recall aan`), of antwoord `niets` om de
 huidige staat te behouden." Neem voor elke niet-genoemde toggle de huidige
@@ -79,6 +80,7 @@ python3 "$VAULT/.claude/scripts/_settings.py" set activity_llm_fallback <true|fa
 python3 "$VAULT/.claude/scripts/_settings.py" set checkpoints <true|false>
 python3 "$VAULT/.claude/scripts/_settings.py" set orientation <true|false>
 python3 "$VAULT/.claude/scripts/_settings.py" set graph_retrieval <true|false>
+python3 "$VAULT/.claude/scripts/_settings.py" set distill_cloud_map <true|false>
 ```
 
 ## Bevestiging

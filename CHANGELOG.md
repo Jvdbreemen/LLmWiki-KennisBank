@@ -29,7 +29,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   follow-up. The skill is rolled out to every agent client by `setup.sh`, and
   an existing personal skill of the same name wins over the shipped one.
 
+- **Opt-in cloud map step for a large `/destilleer` backlog.**
+  `distill-map.py` strips each pending transcript, redacts inline secrets and
+  sends it in chunks to one explicitly chosen OpenRouter model (default
+  `deepseek/deepseek-v4-flash-0731`, `data_collection: deny`), storing compact
+  candidate knowledge per transcript plus a per-project digest that the session
+  reduces into the wiki. It only runs while the new `distill_cloud_map` setting
+  is on (default off, meant to be switched on temporarily) and never reads
+  `kennisbank-llm.json`, so background jobs stay local. Failed calls are
+  recorded with status and body and retried on the next run; finished chunks
+  are cached, so a rerun redoes only what failed. `--reasoning low` serves
+  models where reasoning cannot be disabled. Measured on a 364-transcript
+  backlog: 42.8M characters for about $1.50.
+
 ### Fixed
+
+- **SessionEnd archived one-shot SDK calls as sessions, and could drop real
+  ones.** The agent-invocation filter read only the first line for a
+  `queue-operation`. The runtime now writes a `session-owner` record first, so
+  885 of 1213 archived transcripts were adr-kit judge prompts, KennisBank's own
+  reconcile prompts and probes, refilling the `/destilleer` backlog on every
+  commit. The old rule also dropped an interactive session that starts with a
+  queued prompt. The filter now matches `entrypoint: sdk-cli` with at most one
+  real prompt turn.
+
+- **`strip-transcript.py` returned nothing for Codex and Copilot transcripts.**
+  It only understood Claude Code records, so 18 archived Codex sessions
+  stripped to 0 characters and looked like sessions with nothing to learn. It
+  now falls back to the sweep's three-format reader.
 
 - **`setup.sh` installed into WSL when Windows meant Git Bash.** On Windows a
   plain `bash` can resolve to System32's WSL bash, even inside Git Bash.
