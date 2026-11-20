@@ -256,6 +256,68 @@ class DistillMapTest(unittest.TestCase):
             self.assertEqual(dm.main(["s1", "--dry-run"]), 0)
         self.assertFalse((self.out / "s1.json").exists())
 
+    # --- PR #186 Copilot review -------------------------------------------------
+
+    def test_quoted_json_secret_keys_are_redacted(self):
+        text = dm.redact('{"api_key": "demo-long-secret-value", \'password\': \'hunter2hunter2\'}')
+        self.assertNotIn("demo-long-secret-value", text)
+        self.assertNotIn("hunter2hunter2", text)
+
+    def test_malformed_candidate_entries_are_rejected_not_dropped(self):
+        self.assertIsNone(dm.parse_candidates('{"candidates": ["a durable fact"]}'))
+        self.assertIsNone(dm.parse_candidates('{"candidates": [{"summary": "no title"}]}'))
+        self.assertEqual(dm.parse_candidates('{"candidates": []}'), [])
+
+    def test_failed_attempts_are_logged_even_when_the_retry_succeeds(self):
+        self._toggle(True)
+        self._transcript("s1", "vraag", "antwoord")
+        with mock.patch.object(dm, "_post", side_effect=[(503, "upstream down"),
+                                                         (200, _ok_body([{"title": "T"}]))]), \
+                mock.patch.object(dm.time, "sleep"):
+            self.assertEqual(dm.main(["s1"]), 0)
+        log = (self.out / "_errors.jsonl").read_text(encoding="utf-8")
+        self.assertIn('"status": "retried"', log)
+        self.assertIn("HTTP 503", log)
+
+    def test_cached_chunk_cost_survives_a_resume(self):
+        self._toggle(True)
+        self._transcript("big", *[f"regel {i} " + "x" * 80 for i in range(30)])
+        args = ["big", "--chunk-chars", "1000", "--workers", "1"]
+        calls = []
+
+        def first_ok_rest_fail(url, payload, headers, timeout):
+            calls.append(1)
+            if len(calls) == 1:
+                return 200, _ok_body([{"title": "T1"}])  # cost 0.001, then cached
+            return 400, "bad request"
+
+        with mock.patch.object(dm, "_post", side_effect=first_ok_rest_fail):
+            self.assertEqual(dm.main(args), 1)
+        with mock.patch.object(dm, "_post", return_value=(200, _ok_body([{"title": "T"}]))):
+            self.assertEqual(dm.main(args), 0)
+        rec = json.loads((self.out / "big.json").read_text(encoding="utf-8"))
+        redone = rec["chunks"] - 1
+        self.assertAlmostEqual(rec["usage"]["cost"], 0.001 * rec["chunks"])
+        self.assertAlmostEqual(rec["usage_this_run"]["cost"], 0.001 * redone)
+
+    def test_nonpositive_chunk_size_is_rejected(self):
+        self._transcript("s1", "vraag", "antwoord")
+        with self.assertRaises(SystemExit):
+            dm.main(["s1", "--dry-run", "--chunk-chars", "0"])
+        with self.assertRaises(ValueError):
+            dm.chunk("abc", 0)
+
+    def test_progress_is_reported_per_stem(self):
+        self._transcript("s1", "vraag", "antwoord")
+        self._transcript("s2", "vraag", "antwoord")
+        import io
+        from contextlib import redirect_stdout
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            dm.main(["s1", "s2", "--dry-run"])
+        self.assertIn("[1/2", buf.getvalue())
+        self.assertIn("[2/2", buf.getvalue())
+
     def test_digest_groups_by_project(self):
         self.out.mkdir(parents=True)
         (self.out / "a.json").write_text(json.dumps({"stem": "a", "candidates": [

@@ -67,8 +67,18 @@ compacte kandidaat-kennis naar `$VAULT/.claude/distill-map/<stem>.json`, plus ee
 ALLEEN als de toggle `distill_cloud_map` aan staat (default uit). Zet hem na het
 inlopen weer uit. De vault-config `kennisbank-llm.json` wordt niet gebruikt:
 achtergrondjobs blijven lokaal.
+
+**Toestemming is verplicht en geldt per run.** `/destilleer` zelf is lokaal; een
+aanroep ervan is GEEN toestemming om transcripts naar de cloud te sturen. Zet de
+toggle NOOIT zelf aan. Draai eerst de dry-run, toon de gebruiker het aantal
+transcripts, het volume en het gekozen model, en vraag expliciet of die inhoud
+naar OpenRouter mag. Zonder een ja: blijf bij de lokale werkwijze hierboven.
+Staat de toggle al aan (bijvoorbeeld na een afgebroken run), vraag dan alsnog,
+want een vergeten toggle is geen toestemming. Zet hem na de run altijd terug op
+uit en controleer dat met `_settings.py get distill_cloud_map`.
 ```bash
 python3 "$VAULT/.claude/scripts/distill-map.py" --pending --dry-run   # volume, geen netwerk
+# pas na expliciete toestemming van de gebruiker:
 python3 "$VAULT/.claude/scripts/_settings.py" set distill_cloud_map true
 python3 "$VAULT/.claude/scripts/distill-map.py" --pending --limit 10  # proefbatch
 python3 "$VAULT/.claude/scripts/distill-map.py" --pending             # rest; hervat zelf

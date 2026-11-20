@@ -99,6 +99,15 @@ class StripToTextTest(unittest.TestCase):
         self.assertEqual(out.count("### USER"), 1)
         self.assertEqual(out.count("### ASSISTANT"), 1)
 
+    def test_sidechain_only_claude_transcript_stays_empty(self):
+        # PR #186 review: the non-Claude fallback has no sidechain filter, so it
+        # must not run for a Claude transcript that strips to nothing.
+        p = self.tmp / "side.jsonl"
+        p.write_text(json.dumps({"type": "assistant", "isSidechain": True, "message": {
+            "role": "assistant", "content": [{"type": "text", "text": "SUBAGENT RUIS"}]}}) + "\n",
+            encoding="utf-8")
+        self.assertEqual(_t.strip_to_text(p), "")
+
     def test_codex_transcript_is_not_stripped_to_nothing(self):
         # Regression 2026-11-20: 18 archived Codex sessions stripped to 0 chars.
         recs = [

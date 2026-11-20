@@ -40,7 +40,7 @@ import shutil
 import sys
 import tempfile
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -69,7 +69,8 @@ REDACTED = "***"
 _SECRET_RE = re.compile(
     r"(?is)(-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----"
     r"|bearer\s+[A-Za-z0-9._\-]{8,}"
-    r"|(?:token|secret|password|passwd|api[_-]?key|authorization)\s*[=:]\s*[\"']?[^\s\"']{6,}"
+    # The optional quote after the key name catches JSON: {"api_key": "..."}.
+    r"|(?:token|secret|password|passwd|api[_-]?key|authorization)[\"']?\s*[=:]\s*[\"']?[^\s\"']{6,}"
     r"|gh[posru]_[A-Za-z0-9]{16,}"
     r"|github_pat_[A-Za-z0-9_]{20,}"
     r"|sk-[A-Za-z0-9_\-]{16,}"
@@ -99,6 +100,8 @@ def redact(text: str) -> str:
 
 def chunk(text: str, size: int) -> list[str]:
     """Split on line boundaries into pieces of at most ~size characters."""
+    if size <= 0:
+        raise ValueError(f"chunk size must be positive, got {size}")
     if len(text) <= size:
         return [text] if text.strip() else []
     out, cur, n = [], [], 0
@@ -197,12 +200,20 @@ def parse_candidates(content: str):
     cands = data.get("candidates") if isinstance(data, dict) else None
     if not isinstance(cands, list):
         return None
-    return [c for c in cands if isinstance(c, dict) and c.get("title")]
+    # Reject, never filter: dropping malformed entries turned an invalid answer
+    # into a successful "nothing to learn" that was never retried.
+    if not all(isinstance(c, dict) and isinstance(c.get("title"), str)
+               and c["title"].strip() for c in cands):
+        return None
+    return cands
 
 
 def call_chunk(model: str, text: str, key: str, timeout: float, max_tokens: int,
                retries: int = 3) -> dict:
-    """One chunk -> {"ok", "candidates", "usages", "error"}. Errors carry status+body.
+    """One chunk -> {"ok", "candidates", "usages", "attempts", "error"}.
+
+    ``attempts`` lists the diagnostic (status + body) of EVERY failed attempt,
+    also when a later retry succeeds, so nothing that went wrong is lost.
 
     An unparsable answer is retried too: in the 2026-11-20 trial one chunk in 66
     came back as broken JSON ('"type": " "howto"'), and a repeat call is routed
@@ -211,7 +222,7 @@ def call_chunk(model: str, text: str, key: str, timeout: float, max_tokens: int,
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {key}",
                "X-Title": "KennisBank distill-map"}
     payload = build_payload(model, text, max_tokens)
-    last, usages = "", []
+    last, usages, attempts = "", [], []
     for attempt in range(retries):
         try:
             status, body = _post(ENDPOINT, payload, headers, timeout)
@@ -224,15 +235,18 @@ def call_chunk(model: str, text: str, key: str, timeout: float, max_tokens: int,
             cands = parse_candidates(msg.get("content") or "")
             if cands is not None:
                 return {"ok": True, "candidates": cands, "usages": usages,
-                        "provider": body.get("provider"), "model": body.get("model")}
+                        "attempts": attempts, "provider": body.get("provider"),
+                        "model": body.get("model")}
             last = (f"unparsable answer (finish_reason={finish}): "
                     f"{(msg.get('content') or '')[:300]!r}")
+            attempts.append(last)
             continue  # re-routed retry, no backoff needed
         last = f"HTTP {status}: {str(body)[:500]}"
+        attempts.append(last)
         if status not in RETRY_STATUSES and status != 0:
             break
         time.sleep(2 ** attempt * 3)
-    return {"ok": False, "usages": usages, "error": last}
+    return {"ok": False, "usages": usages, "attempts": attempts, "error": last}
 
 
 def _sum_usage(parts: list[dict]) -> dict:
@@ -276,15 +290,18 @@ def map_stem(stem: str, vault: Path, out_dir: Path, *, model: str, key: str,
     parts = chunk(text, chunk_chars)
     base = {"stem": stem, "model": model, "chars_in": len(text), "chunks": len(parts)}
     if dry_run:
-        return {**base, "status": "dry-run"}
+        return {**base, "status": "dry-run", "usage_this_run": _sum_usage([])}
     if not parts:
-        rec = {**base, "status": "empty", "candidates": [], "usage": _sum_usage([])}
+        rec = {**base, "status": "empty", "candidates": [], "usage": _sum_usage([]),
+               "usage_this_run": _sum_usage([])}
         _write_json(out_dir / f"{stem}.json", rec)
         return rec
     # Per-chunk cache: a rerun after a failed chunk redoes only that chunk.
     # Keyed by model + chunk text, so a changed chunk size or model never reuses.
+    # The cache keeps each chunk's usage too: the stem total stays complete across
+    # a resume, while usage_this_run counts only what this run paid for.
     cache_dir = out_dir / "_chunks" / stem
-    cands, usages, errors, served = [], [], [], set()
+    cands, earlier, usages, errors, attempts, served = [], [], [], [], [], set()
     for i, piece in enumerate(parts):
         ckey = hashlib.sha1(f"{model}|{piece}".encode("utf-8")).hexdigest()[:16]
         cfile = cache_dir / f"{ckey}.json"
@@ -292,23 +309,28 @@ def map_stem(stem: str, vault: Path, out_dir: Path, *, model: str, key: str,
         if isinstance(cached, dict) and isinstance(cached.get("candidates"), list):
             cands.extend(cached["candidates"])
             served.update(cached.get("served") or [])
+            earlier.extend(cached.get("usages") or [])
             continue
         r = call_chunk(model, piece, key, timeout, max_tokens)
         usages.extend(r.get("usages") or [])
+        attempts.extend(f"chunk {i + 1}/{len(parts)}: {a}" for a in r.get("attempts") or [])
         if not r["ok"]:
             errors.append(f"chunk {i + 1}/{len(parts)}: {r['error']}")
             continue
         who = f"{r.get('model')}@{r.get('provider')}"
         served.add(who)
         cands.extend(r["candidates"])
-        _write_json(cfile, {"candidates": r["candidates"], "served": [who]})
+        _write_json(cfile, {"candidates": r["candidates"], "served": [who],
+                            "usages": r.get("usages") or []})
     seen, merged = set(), []
     for c in cands:
         k = str(c.get("title", "")).strip().lower()
         if k and k not in seen:
             seen.add(k)
             merged.append(c)
-    rec = {**base, "usage": _sum_usage(usages), "served_by": sorted(served)}
+    rec = {**base, "usage": _sum_usage(earlier + usages),
+           "usage_this_run": _sum_usage(usages), "served_by": sorted(served),
+           "attempt_errors": attempts}
     if errors:
         return {**rec, "status": "error", "error": "; ".join(errors)}
     rec.update(status="ok", candidates=merged)
@@ -347,6 +369,20 @@ def write_digest(out_dir: Path) -> Path:
     return path
 
 
+def _positive_int(value: str) -> int:
+    n = int(value)
+    if n <= 0:
+        raise argparse.ArgumentTypeError(f"must be a positive integer, got {value}")
+    return n
+
+
+def _log_error(out_dir: Path, rec: dict) -> None:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    with (out_dir / "_errors.jsonl").open("a", encoding="utf-8") as f:
+        f.write(json.dumps({"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), **rec},
+                           ensure_ascii=False) + "\n")
+
+
 def main(argv=None) -> int:
     for stream in (sys.stdout, sys.stderr):
         try:
@@ -359,7 +395,7 @@ def main(argv=None) -> int:
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--model", default=os.environ.get("KB_DISTILL_MAP_MODEL", DEFAULT_MODEL))
     ap.add_argument("--workers", type=int, default=4)
-    ap.add_argument("--chunk-chars", type=int, default=DEFAULT_CHUNK_CHARS)
+    ap.add_argument("--chunk-chars", type=_positive_int, default=DEFAULT_CHUNK_CHARS)
     ap.add_argument("--max-tokens", type=int, default=DEFAULT_MAX_TOKENS)
     ap.add_argument("--timeout", type=float, default=300.0)
     ap.add_argument("--reasoning", choices=sorted(REASONING_MODES), default="off",
@@ -404,20 +440,25 @@ def main(argv=None) -> int:
                         chunk_chars=args.chunk_chars, timeout=args.timeout,
                         max_tokens=args.max_tokens, dry_run=args.dry_run)
 
-    results = []
+    results, started = [], time.monotonic()
     with ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
-        for r in pool.map(run, todo):
+        futures = [pool.submit(run, s) for s in todo]
+        for fut in as_completed(futures):  # report each stem as it finishes
+            r = fut.result()
             results.append(r)
+            spent = (r.get("usage_this_run") or {}).get("cost", 0)
+            print(f"  [{len(results)}/{len(todo)} {time.monotonic() - started:.0f}s] "
+                  f"{r['status']} {r['stem']} cand {len(r.get('candidates') or [])} "
+                  f"${spent:.4f}", flush=True)
             if r["status"] == "error":
-                print(f"  FAIL {r['stem']}: {r.get('error')}", file=sys.stderr)
-                out_dir.mkdir(parents=True, exist_ok=True)
-                with (out_dir / "_errors.jsonl").open("a", encoding="utf-8") as f:
-                    f.write(json.dumps({"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), **r},
-                                       ensure_ascii=False) + "\n")
+                print(f"  FAIL {r['stem']}: {r.get('error')}", file=sys.stderr, flush=True)
+                _log_error(out_dir, r)
+            elif r.get("attempt_errors"):
+                _log_error(out_dir, {**r, "status": "retried"})
 
     count = {s: sum(r["status"] == s for r in results)
              for s in ("ok", "empty", "error", "dry-run")}
-    usage = {k: sum((r.get("usage") or {}).get(k, 0) for r in results)
+    usage = {k: sum((r.get("usage_this_run") or {}).get(k, 0) for r in results)
              for k in ("prompt_tokens", "completion_tokens", "reasoning_tokens", "cost")}
     ncand = sum(len(r.get("candidates") or []) for r in results)
     chars = sum(r.get("chars_in", 0) for r in results)

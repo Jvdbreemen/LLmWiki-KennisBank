@@ -22,6 +22,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _vaultpath import vault_root  # noqa: E402
 from _common import slugify  # noqa: E402
+from _transcript import is_agent_invocation  # noqa: E402
 
 MIN_BYTES = 200  # lege/-p-transcripts overslaan
 
@@ -53,52 +54,8 @@ def dest_path(vault: Path, hook: dict, src: Path) -> Path:
     return vault / "01-raw" / "transcripts" / f"{date}-{slug}-{sid8}.jsonl"
 
 
-def _is_agent_invocation(src: Path) -> bool:
-    """True als dit transcript een plugin- of agent-LLM-aanroep is, geen sessie.
-
-    De runtime geeft zulke aanroepen een eigen session_id, waardoor SessionEnd
-    ze archiveert alsof het gesprekken waren.
-
-    Signal: the user records carry ``entrypoint == "sdk-cli"`` AND there is at
-    most one real prompt turn (tool_result-only user records do not count).
-    The earlier signal, "the first line is a queue-operation", broke both ways
-    once the runtime started writing a ``session-owner`` record first: 885 of
-    1213 archived transcripts on 2026-11-20 were one-shot SDK calls (adr-kit
-    judge, KennisBank's own reconcile prompts, probes) that it let through,
-    while a real ``cli`` session that starts with a queued prompt (10 prompts,
-    first record queue-operation) was dropped while that line still came first.
-    Measured over the same archive the new rule matched 885 files, all
-    automated, and no interactive session.
-
-    Fail-open: bij twijfel of een leesfout is het antwoord False, zodat een
-    echte sessie nooit verloren gaat.
-    """
-    try:
-        entrypoint, prompts = None, 0
-        with src.open("r", encoding="utf-8", errors="replace") as fh:
-            for line in fh:
-                if '"user"' not in line:
-                    continue
-                try:
-                    rec = json.loads(line)
-                except ValueError:
-                    continue
-                if rec.get("type") != "user" or rec.get("isSidechain"):
-                    continue
-                entrypoint = entrypoint or rec.get("entrypoint")
-                if entrypoint != "sdk-cli":
-                    return False
-                content = (rec.get("message") or {}).get("content")
-                if isinstance(content, list) and content and all(
-                        isinstance(b, dict) and b.get("type") == "tool_result"
-                        for b in content):
-                    continue
-                prompts += 1
-                if prompts > 1:
-                    return False
-        return entrypoint == "sdk-cli" and prompts == 1
-    except Exception:
-        return False
+# Shared with import-cc-history.py via _transcript so the two cannot drift.
+_is_agent_invocation = is_agent_invocation
 
 
 def archive(hook: dict, vault: Path) -> dict:

@@ -186,6 +186,18 @@ class AgentInvocationTest(unittest.TestCase):
             _user("first", "sdk-cli"), _tool_result(), _user("second", "sdk-cli")])
         self.assertFalse(mod._is_agent_invocation(p))
 
+    def test_importer_uses_the_same_classifier(self):
+        # PR #186 review: the importer kept the old first-line rule and still
+        # skipped real sessions that start with a queued prompt.
+        imp = load_script("import-cc-history.py")
+        p = _records(self.tmp / "real.jsonl", [
+            {"type": "queue-operation", "operation": "enqueue", "content": "hoi"},
+            _user("hoi", "cli"), _user("tweede", "cli")])
+        self.assertFalse(imp._is_agent_invocation(p))
+        judge = _records(self.tmp / "judge.jsonl", [
+            {"type": "session-owner"}, _user("You are evaluating", "sdk-cli")])
+        self.assertTrue(imp._is_agent_invocation(judge))
+
     def test_no_user_record_or_garbage_fails_open(self):
         p = self.tmp / "garbage.jsonl"
         p.write_text("not json\n{\"type\": \"summary\"}\n", encoding="utf-8")
